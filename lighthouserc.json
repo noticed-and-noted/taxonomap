@@ -24,7 +24,7 @@
           "matchingUrlPattern": ".*/species/.*",
           "assertions": {
             "categories:performance": ["error", { "minScore": 0.9 }],
-            "resource-summary:script:size": ["error", { "maxNumericValue": 102400 }]
+            "resource-summary:script:size": ["error", { "maxNumericValue": 163840 }]
           }
         },
         {

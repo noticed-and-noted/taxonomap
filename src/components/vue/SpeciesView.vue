@@ -9,7 +9,9 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
 import { loadSpeciesManifest, speciesPath, type SpeciesManifest } from '~/lib/species/links';
+import { speciesCharts } from '~/lib/species/charts';
 import MiniMap from './MiniMap.vue';
+import PlotChart from './PlotChart.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesGallery from './SpeciesGallery.vue';
 import SpeciesPage from './SpeciesPage.vue';
@@ -53,6 +55,21 @@ onMounted(load);
     </template>
     <template v-if="data.count > 0" #map>
       <MiniMap :taxon-key="data.key" :label="data.commonName ?? data.canonicalName" />
+    </template>
+    <template #years>
+      <PlotChart kind="years" title="Records per year" :years="data.years" />
+    </template>
+    <template #countries>
+      <PlotChart kind="bars" title="Top countries" :bars="speciesCharts(data).countries" :total="data.count" />
+    </template>
+    <template #datasets>
+      <PlotChart
+        kind="bars"
+        title="Top datasets"
+        caption="publishers of the records"
+        :bars="speciesCharts(data).datasets"
+        :total="data.count"
+      />
     </template>
   </SpeciesPage>
 

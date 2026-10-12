@@ -4,11 +4,13 @@
  * HTML at build; only the gallery and mini-map hydrate (client:visible).
  */
 import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
+import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData } from '~/lib/species/data';
 import { full } from '~/lib/format';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/components/PageShell.astro';
 import MiniMap from '~/components/vue/MiniMap.vue';
+import PlotChart from '~/components/vue/PlotChart.vue';
 import SpeciesGallery from '~/components/vue/SpeciesGallery.vue';
 import SpeciesPage from '~/components/vue/SpeciesPage.vue';
 
@@ -22,6 +24,7 @@ const [names, manifest] = await Promise.all([bakedCommonNames(), bakeSpeciesMani
 const data = await loadSpeciesData(key, names);
 
 const label = data.commonName ?? data.canonicalName;
+const charts = speciesCharts(data);
 const title = data.commonName ? `${data.commonName} (${data.canonicalName})` : data.canonicalName;
 const topCountries = data.countries
   .slice(0, 3)
@@ -54,6 +57,24 @@ const jsonLd = {
     <SpeciesPage data={data} manifest={manifest}>
       {data.images.length > 0 && <SpeciesGallery slot="gallery" client:visible images={data.images} name={label} />}
       {data.count > 0 && <MiniMap slot="map" client:visible taxonKey={data.key} label={label} />}
+      <PlotChart slot="years" client:visible kind="years" title="Records per year" years={data.years} />
+      <PlotChart
+        slot="countries"
+        client:visible
+        kind="bars"
+        title="Top countries"
+        bars={charts.countries}
+        total={data.count}
+      />
+      <PlotChart
+        slot="datasets"
+        client:visible
+        kind="bars"
+        title="Top datasets"
+        caption="publishers of the records"
+        bars={charts.datasets}
+        total={data.count}
+      />
     </SpeciesPage>
   </PageShell>
 </BaseLayout>

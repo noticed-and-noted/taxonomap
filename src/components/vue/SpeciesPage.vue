@@ -6,22 +6,16 @@
  * pre-rendered page can hydrate just those as islands.
  */
 import { computed } from 'vue';
-import { compact, countryName, full, RANK_LABELS } from '~/lib/format';
+import { compact, full, RANK_LABELS } from '~/lib/format';
 import type { SpeciesData } from '~/lib/species/data';
 import { speciesPath, type SpeciesManifest } from '~/lib/species/links';
-import BarList from './BarList.vue';
 import RadialSeasonality from './RadialSeasonality.vue';
 import SpeciesCard from './SpeciesCard.vue';
-import YearChart from './YearChart.vue';
 
 const props = defineProps<{ data: SpeciesData; manifest?: SpeciesManifest | null }>();
 
 const d = computed(() => props.data);
 const displayName = computed(() => d.value.commonName ?? d.value.canonicalName);
-const countries = computed(() => d.value.countries.map(([c, v]) => ({ label: countryName(c), value: v })));
-const datasets = computed(() =>
-  d.value.datasets.map((ds) => ({ label: ds.title, value: ds.count, href: `https://www.gbif.org/dataset/${ds.key}` })),
-);
 const generated = computed(() => d.value.generated.slice(0, 10));
 const otherNames = computed(() => d.value.vernacular.filter((g) => g.code !== 'eng' && g.code !== 'en'));
 const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'eng' || g.code === 'en')?.names ?? []);
@@ -107,10 +101,11 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
     <section v-if="d.count > 0" class="mt-10" aria-labelledby="records-h">
       <h2 id="records-h" class="mb-4 font-display text-2xl">Records</h2>
       <div class="grid gap-8 md:grid-cols-2">
-        <YearChart :years="d.years" />
+        <!-- Plot charts hydrate as islands (client:visible); see PlotChart.vue. -->
+        <slot name="years" />
         <RadialSeasonality :counts="d.months" :size="240" title="Records by month" />
-        <BarList title="Top countries" :items="countries" :total="d.count" />
-        <BarList title="Top datasets" :items="datasets" :total="d.count" caption="publishers of the records" />
+        <slot name="countries" />
+        <slot name="datasets" />
       </div>
     </section>
     <p v-else class="mt-10 rounded-md bg-surface-2 p-4 text-sm text-muted">
