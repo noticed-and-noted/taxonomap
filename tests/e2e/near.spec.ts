@@ -1,0 +1,40 @@
+import { expect, test } from '@playwright/test';
+
+test('explains location use before asking', async ({ page }) => {
+  await page.goto('/near');
+  await expect(page.getByText('About your location')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use my location' })).toBeVisible();
+});
+
+test('geolocation is rounded to ~100 m before use', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 51.5073509, longitude: -0.1277583 });
+  await page.goto('/near');
+  await page.getByRole('button', { name: 'Use my location' }).click();
+  await expect(page).toHaveURL(/at=51\.507%2C-0\.128|at=51\.507,-0\.128/);
+  // No request to GBIF carries more precise coordinates.
+  const precise: string[] = [];
+  page.on('request', (r) => {
+    if (/5073509|1277583/.test(decodeURIComponent(r.url()))) precise.push(r.url());
+  });
+  await expect(page.getByText(/records within 2 km/)).toBeVisible({ timeout: 20_000 });
+  expect(precise).toEqual([]);
+});
+
+test('lists species by group, ticks a checklist and exports it', async ({ page }) => {
+  await page.goto('/near?at=51.507,-0.128&r=2');
+  await expect(page.getByRole('heading', { name: 'Birds' })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('checkbox', { name: /Seen/ }).first().check();
+  await page.getByRole('tab', { name: 'Seen (1)' }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  expect((await download).suggestedFilename()).toMatch(/checklist.*\.csv$/);
+});
+
+test('this-month filter and radius live in the URL', async ({ page }) => {
+  await page.goto('/near?at=51.507,-0.128&r=2');
+  await page.getByRole('button', { name: /Recorded in/ }).click();
+  await expect(page).toHaveURL(/month=1/);
+  await page.getByRole('slider').first().fill('3');
+  await expect(page).toHaveURL(/r=10/);
+});

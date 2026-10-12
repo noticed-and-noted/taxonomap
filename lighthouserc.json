@@ -1,0 +1,40 @@
+{
+  "ci": {
+    "collect": {
+      "staticDistDir": "./dist",
+      "numberOfRuns": 1,
+      "maxAutodiscoverUrls": 0,
+      "url": [
+        "http://localhost/index.html",
+        "http://localhost/tree/index.html",
+        "http://localhost/near/index.html",
+        "http://localhost/species/view/index.html"
+      ],
+      "settings": { "formFactor": "mobile", "throttlingMethod": "simulate" }
+    },
+    "assert": {
+      "assertMatrix": [
+        {
+          "matchingUrlPattern": ".*",
+          "assertions": {
+            "categories:accessibility": ["error", { "minScore": 0.95 }]
+          }
+        },
+        {
+          "matchingUrlPattern": ".*/species/.*",
+          "assertions": {
+            "categories:performance": ["error", { "minScore": 0.9 }],
+            "resource-summary:script:size": ["error", { "maxNumericValue": 102400 }]
+          }
+        },
+        {
+          "matchingUrlPattern": "^(?!.*/species/).*",
+          "assertions": {
+            "categories:performance": ["warn", { "minScore": 0.9 }]
+          }
+        }
+      ]
+    },
+    "upload": { "target": "temporary-public-storage" }
+  }
+}

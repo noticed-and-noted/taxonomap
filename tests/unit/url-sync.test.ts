@@ -73,3 +73,17 @@ describe('url-sync', () => {
     expect(hrefWith('/tree', { taxon: null })).toBe('/tree');
   });
 });
+
+describe('withHistoryMode', () => {
+  it('forces replace for writes inside the callback', async () => {
+    const { withHistoryMode } = await import('~/stores/url-sync');
+    vi.useFakeTimers();
+    const n = urlAtom(codecs.int('anim', 0));
+    const before = history.length;
+    withHistoryMode('replace', () => n.set(5));
+    vi.advanceTimersByTime(350);
+    expect(location.search).toBe('?anim=5');
+    expect(history.length).toBe(before);
+    vi.useRealTimers();
+  });
+});

@@ -2,6 +2,8 @@
 import { ClientRouter } from 'astro:transitions';
 import { GBIF_API_BASE, GBIF_FALLBACK_BASE } from '~/lib/gbif/config';
 import '~/styles/global.css';
+import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import serifLatin from '@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-normal.woff2?url';
 
 interface Props {
   title: string;
@@ -38,6 +40,9 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href={GBIF_API_BASE} crossorigin />
+    <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+    <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={serifLatin} as="font" type="font/woff2" crossorigin />
     {GBIF_FALLBACK_BASE !== GBIF_API_BASE && <link rel="dns-prefetch" href={GBIF_FALLBACK_BASE} />}
 
     <meta property="og:site_name" content={siteName} />

@@ -8,6 +8,7 @@ import { useStore } from '@nanostores/vue';
 import { computed } from 'vue';
 import {
   $basisOfRecord,
+  $compareMode,
   $country,
   $hasPhoto,
   $panel,
@@ -16,6 +17,7 @@ import {
   clearHexSelection,
 } from '~/stores/explorer';
 import BasemapSwitcher from './BasemapSwitcher.vue';
+import CompareControls from './CompareControls.vue';
 import FilterChips from './FilterChips.vue';
 import HexPanel from './HexPanel.vue';
 import MapLegend from './MapLegend.vue';
@@ -29,7 +31,18 @@ const record = useStore($selectedRecord);
 const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
 const country = useStore($country);
+const compare = useStore($compareMode);
 const { counts, loading, error, live } = useYearHistogram();
+
+const compareOpen = computed(() => panel.value === 'compare' || compare.value !== 'off');
+function openCompare() {
+  if (compareOpen.value) {
+    $compareMode.set('off');
+    if (panel.value === 'compare') $panel.set('none');
+  } else {
+    $compareMode.set('species');
+  }
+}
 
 const hexOpen = computed(() => panel.value === 'hex' && hex.value !== null);
 const filtersOpen = computed(() => panel.value === 'filters');
@@ -54,7 +67,10 @@ function closePanel() {
     >
       <!-- Desktop/tablet: chips inline. -->
       <div class="hidden min-w-0 sm:block"><FilterChips /></div>
-      <div class="hidden sm:block"><BasemapSwitcher /></div>
+      <div class="ml-auto hidden items-start gap-2 sm:flex">
+        <button type="button" class="compare-btn" :aria-pressed="compareOpen" @click="openCompare">Compare</button>
+        <BasemapSwitcher />
+      </div>
       <!-- Phone: selected taxon + Filters button. -->
       <div class="min-w-0 sm:hidden"><FilterChips parts="taxon" /></div>
       <button
@@ -71,17 +87,22 @@ function closePanel() {
       </button>
     </div>
 
+    <div v-if="compareOpen" class="compare-wrap pointer-events-auto absolute left-3 top-14">
+      <CompareControls />
+    </div>
+
     <div
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 w-[min(34rem,calc(100%-1.5rem))] rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
     >
       <TimeSlider :counts="counts" :loading="loading" :failed="error !== null" :live="live" />
-      <MapLegend class="mt-3 w-full max-w-56" />
+      <MapLegend v-if="compare !== 'species'" class="mt-3 w-full max-w-56" />
     </div>
 
     <div class="pointer-events-auto">
       <ResponsivePanel :title="panelTitle" :open="panelOpen" @close="closePanel">
         <div v-if="filtersOpen" class="space-y-5">
           <FilterChips parts="filters" stacked />
+          <button type="button" class="compare-btn" :aria-pressed="compareOpen" @click="openCompare">Compare</button>
           <div>
             <p class="mb-2 text-sm font-medium">Basemap</p>
             <BasemapSwitcher />
@@ -106,6 +127,22 @@ function closePanel() {
   color: var(--text-muted);
   font-size: 0.8125rem;
   box-shadow: var(--shadow);
+}
+
+.compare-btn {
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  box-shadow: var(--shadow);
+}
+
+.compare-btn[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .filters-btn.active {

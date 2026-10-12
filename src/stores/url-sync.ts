@@ -34,6 +34,21 @@ let pendingPush = false;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let microtaskQueued = false;
 let listening = false;
+let forcedMode: 'push' | 'replace' | null = null;
+
+/**
+ * Run `fn` with every URL write using `mode` (e.g. animations write with
+ * 'replace' so they don't flood the back-button history).
+ */
+export function withHistoryMode(mode: 'push' | 'replace', fn: () => void): void {
+  const prev = forcedMode;
+  forcedMode = mode;
+  try {
+    fn();
+  } finally {
+    forcedMode = prev;
+  }
+}
 
 const isBrowser = () => typeof window !== 'undefined' && typeof history !== 'undefined';
 
@@ -79,8 +94,9 @@ function flush(): void {
   pendingPush = false;
 }
 
-function schedule(mode: 'push' | 'replace'): void {
+function schedule(requested: 'push' | 'replace'): void {
   if (!isBrowser() || applyingFromUrl) return;
+  const mode = forcedMode ?? requested;
   if (mode === 'push') {
     pendingPush = true;
     if (flushTimer) clearTimeout(flushTimer);

@@ -1,0 +1,21 @@
+---
+import PageShell from '~/components/PageShell.astro';
+import BaseLayout from '~/layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Page not found" noindex>
+  <PageShell>
+    <section class="mx-auto max-w-xl px-4 py-16 text-center">
+      <p class="font-display text-6xl text-accent">404</p>
+      <h1 class="mt-2 font-display text-3xl">This page isn’t here</h1>
+      <p class="mt-4 text-muted">
+        It may have moved, or the species may not have a page of its own. Try searching for it in the box above.
+      </p>
+      <p class="mt-8">
+        <a href="/" class="rounded-md bg-accent px-4 py-2 font-medium text-accent-contrast">
+          Back to the map
+        </a>
+      </p>
+    </section>
+  </PageShell>
+</BaseLayout>

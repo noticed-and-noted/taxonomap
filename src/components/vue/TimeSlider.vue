@@ -5,9 +5,10 @@
  * therefore the map tiles) only updates on commit, not on every drag step.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { compact, full } from '~/lib/format';
 import { $yearRange } from '~/stores/explorer';
+import { withHistoryMode } from '~/stores/url-sync';
 import ChartFrame from './ChartFrame.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import type { YearCounts } from './useYearHistogram';
@@ -71,6 +72,37 @@ function reset() {
   hi.value = MAX;
   commit();
 }
+
+/* ---- Decade animation ---- */
+const DECADE_MS = 1600;
+const playing = ref(false);
+let timer: ReturnType<typeof setTimeout> | undefined;
+
+function step(start: number) {
+  const end = Math.min(start + 9, MAX);
+  // Replace history while animating so Back isn't flooded with decades.
+  withHistoryMode('replace', () => $yearRange.set([start, end]));
+  if (start + 10 > MAX) {
+    playing.value = false;
+    return;
+  }
+  timer = setTimeout(() => step(start + 10), DECADE_MS);
+}
+
+function togglePlay() {
+  if (playing.value) {
+    playing.value = false;
+    clearTimeout(timer);
+    return;
+  }
+  playing.value = true;
+  // Continue from the current decade if one is showing, otherwise start at 1900.
+  const r = range.value;
+  const from = r && r[1] - r[0] === 9 && r[0] % 10 === 0 && r[0] + 10 <= MAX ? r[0] + 10 : MIN;
+  step(from);
+}
+
+onBeforeUnmount(() => clearTimeout(timer));
 
 const label = computed(() =>
   lo.value === MIN && hi.value === MAX
@@ -153,7 +185,23 @@ const label = computed(() =>
       </template>
     </ChartFrame>
     <div class="mt-1.5 flex items-center justify-between text-xs">
-      <span class="font-medium text-text" aria-live="polite">{{ label }}</span>
+      <span class="flex items-center gap-2">
+        <button
+          type="button"
+          class="grid size-6 place-items-center rounded-full border border-border text-text hover:border-accent"
+          :aria-pressed="playing"
+          :aria-label="playing ? 'Pause the decade animation' : 'Play through the decades'"
+          @click="togglePlay"
+        >
+          <svg v-if="!playing" viewBox="0 0 12 12" class="size-3" aria-hidden="true">
+            <path d="M3 2l7 4-7 4z" fill="currentColor" />
+          </svg>
+          <svg v-else viewBox="0 0 12 12" class="size-3" aria-hidden="true">
+            <path d="M3 2h2v8H3zM7 2h2v8H7z" fill="currentColor" />
+          </svg>
+        </button>
+        <span class="font-medium text-text" aria-live="polite">{{ label }}</span>
+      </span>
       <span class="text-subtle">
         {{ compact(inRangeTotal) }} dated records
         <button

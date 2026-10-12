@@ -219,7 +219,7 @@ const share = (n: TreeNode) => {
 
 <template>
   <section
-    class="tree-explorer mx-auto flex h-full max-w-7xl flex-col gap-3 px-3 py-3 sm:px-5"
+    class="tree-explorer mx-auto flex max-w-7xl flex-col gap-3 px-3 py-3 sm:px-5 md:h-full"
     aria-labelledby="tree-h"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -315,7 +315,7 @@ const share = (n: TreeNode) => {
       <SkeletonBlock height="20rem" />
     </div>
 
-    <div v-else class="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(0,1fr)_22rem]">
+    <div v-else class="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
       <div class="relative min-h-[22rem]">
         <TreeChart
           :root="root"
@@ -338,7 +338,7 @@ const share = (n: TreeNode) => {
       </div>
 
       <aside
-        class="flex min-h-0 flex-col gap-4 overflow-hidden rounded-lg border border-border bg-surface p-4"
+        class="flex flex-col gap-4 md:min-h-0 md:overflow-hidden rounded-lg border border-border bg-surface p-4"
         aria-label="Details"
       >
         <div v-if="detail" class="flex gap-3">
@@ -376,11 +376,11 @@ const share = (n: TreeNode) => {
           >
         </div>
 
-        <div class="flex min-h-0 flex-1 flex-col">
+        <div class="flex flex-col md:min-h-0 md:flex-1">
           <h3 class="mb-1.5 text-sm font-medium">
             {{ children.length }} {{ children.length === 1 ? 'group' : 'groups' }} in {{ focus.common ?? focus.name }}
           </h3>
-          <ol class="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1 text-sm">
+          <ol class="max-h-[60vh] space-y-0.5 overflow-y-auto pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1">
             <li v-for="c in children" :key="c.key">
               <button
                 type="button"

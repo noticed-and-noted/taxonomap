@@ -4,7 +4,7 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 **Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
 
-> Status: **Phase 5 (what's near me)** is complete. Phase 6 (polish) follows.
+> Status: all six phases are built. Lighthouse scores have not been measured yet (see Phase 6).
 
 ## Local setup
 
@@ -108,6 +108,20 @@ npm run dev             # http://localhost:4321
 - **Recent sightings.** Photographed records from the past year, newest first, each showing its dataset and photo licence. GBIF ignores sort parameters, so the feed filters by date range and sorts on the client.
 - **Share card.** Drawn on a `<canvas>` using only CORS-enabled GBIF imagery (basemap and density tiles), so it can be exported. It's shared as an image with the Web Share API where supported, otherwise downloaded, or the link copied. It doesn't print coordinates. The per-group species tallies are fetched when the dialog opens.
 - **Checklist.** "Seen" ticks are kept in `localStorage` only (every access wrapped in try/catch, with a notice when storage is blocked) and can be exported as CSV.
+
+## Polish (Phase 6)
+
+- **Compare mode** (`?compare=`).
+  - _Two species:_ the main taxon and `taxonB` are overlaid in Okabe–Ito orange and blue, with opacity scaled to log(records). Overlaps mix.
+  - _Two time ranges:_ a second, non-interactive map, clipped to the right of a draggable, keyboard-operable handle, shows `yearsB` and follows the main map's camera. It's only created while swiping.
+- **Decade animation.** The play button on the time slider steps through 1900s → 2020s. While it plays, URL writes use `replaceState` (`withHistoryMode`), so Back isn't flooded.
+- **Offline.**
+  - Pages are network-first, falling back to the last copy, or to `/offline` for pages never visited.
+  - Page shells (`/tree`, `/species/view?key=…`) are served from the precache whatever the query string.
+  - A notice shows while offline. `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
+  - There's a 404 page.
+- **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 100 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. CI runs it on each push. **Not yet measured locally.**
+- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox, filters, hex panel, species pages and fallback, 404, tree, near me (including that geolocation is rounded before any request), compare, the decade animation and offline. All 38 pass on desktop and mobile locally (`PW_CHANNEL=chrome` uses an installed Chrome instead of downloading one). CI runs them after the build.
 
 ## GBIF API findings (verified 2026-10-12)
 

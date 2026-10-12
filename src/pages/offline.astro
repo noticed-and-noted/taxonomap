@@ -1,0 +1,27 @@
+---
+import PageShell from '~/components/PageShell.astro';
+import BaseLayout from '~/layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Offline" noindex>
+  <PageShell>
+    <section class="mx-auto max-w-xl px-4 py-16 text-center">
+      <h1 class="font-display text-4xl">You’re offline</h1>
+      <p class="mt-4 text-muted">
+        This page hasn’t been saved on this device yet. Pages and map areas you’ve already visited still work, using the
+        data saved when you last viewed them.
+      </p>
+      <p class="mt-8 flex flex-wrap justify-center gap-3 text-sm">
+        <a href="/" class="rounded-md bg-accent px-4 py-2 font-medium text-accent-contrast">
+          Open the map
+        </a>
+        <a href="/tree" class="rounded-md border border-border px-4 py-2 hover:border-accent">
+          Tree of life
+        </a>
+        <a href="/near" class="rounded-md border border-border px-4 py-2 hover:border-accent">
+          Near me
+        </a>
+      </p>
+    </section>
+  </PageShell>
+</BaseLayout>

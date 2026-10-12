@@ -6,8 +6,8 @@
  * ARIA 1.2 combobox with a listbox popup.
  */
 import { navigate } from 'astro:transitions/client';
-import { computed, onBeforeUnmount, ref } from 'vue';
-import { bakedIndexProvider, loadNameIndex } from '~/lib/data/name-index';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { bakedIndexProvider, loadNameIndex, nameIndexWithin } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { searchPlaces, type Place } from '~/lib/geocode';
 import { gbifSuggestProvider, gbifVernacularProvider, mapCapabilities, type NameHit } from '~/lib/gbif';
@@ -72,6 +72,11 @@ const runLive = debounce(async (q: string) => {
   liveAbort = ctrl;
   liveLoading.value = true;
   liveFailed.value = false;
+  // Let the local index answer first, so live results never reorder the list
+  // under the pointer, and decide on the vernacular search with it loaded.
+  await nameIndexWithin(1500);
+  await runIndex(q);
+  if (ctrl.signal.aborted) return;
   const results = await Promise.allSettled([
     gbifSuggestProvider.search(q, ctrl.signal),
     // Vernacular search ranks poorly, so only use it when the index is thin.
@@ -195,6 +200,16 @@ function onBlur(e: FocusEvent) {
   const next = e.relatedTarget as Node | null;
   if (!next || !(e.currentTarget as HTMLElement).parentElement?.contains(next)) close();
 }
+
+// The omnibox hydrates on idle: pick up anything typed before that.
+onMounted(() => {
+  const typed = input.value?.value ?? '';
+  if (typed && !query.value) {
+    query.value = typed;
+    if (document.activeElement === input.value) onFocus();
+    onInput();
+  }
+});
 
 onBeforeUnmount(() => {
   runLive.cancel();

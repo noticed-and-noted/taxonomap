@@ -97,6 +97,12 @@ const hexCodec: UrlCodec<HexPoint> = {
 
 export const $selectedHex = urlAtom(hexCodec);
 export const $panel = urlAtom(codecs.enumOf('panel', PANELS, 'none'));
+/** Compare mode: overlay a second species, or swipe between two year ranges. */
+export const $compareMode = urlAtom(codecs.enumOf('compare', ['off', 'species', 'years'] as const, 'off'));
+/** Second taxon for species comparison (shown in blue; the main taxon in orange). */
+export const $taxonB = urlAtom(codecs.int('taxonB', null));
+/** Second year range for the swipe comparison. */
+export const $yearRangeB = urlAtom({ ...yearsCodec, key: 'yearsB', scope: 'page' as const });
 export const $basemap = urlAtom(codecs.enumOf('base', BASEMAP_IDS, 'plain', { history: 'replace' }));
 /** Show individual (clustered) records for the selected hex. */
 export const $showRecords = urlAtom(codecs.bool('pts'));

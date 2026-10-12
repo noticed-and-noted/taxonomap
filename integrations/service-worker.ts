@@ -9,7 +9,9 @@
  *  - Map tiles:  CacheFirst, 7 days, 2000 entries
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
  *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX, OpenTopoMap)
- *  - App shell:  precached (main routes, JS/CSS, Latin font subsets, baked data)
+ *  - Pages:      NetworkFirst (4 s timeout), 50 entries; offline fallback page
+ *  - Baked data: StaleWhileRevalidate (/data/*.json, on demand)
+ *  - App shell:  precached (main routes, offline/404 pages, JS/CSS, Latin font subsets)
  */
 import type { AstroIntegration } from 'astro';
 import { existsSync } from 'node:fs';
@@ -36,24 +38,53 @@ export default function serviceWorker(): AstroIntegration {
           globDirectory: outDir,
           // Routes and baked data appear in later phases; only glob what exists.
           globPatterns: [
-            ...['index.html', 'tree/index.html', 'near/index.html', 'species/view/index.html'].filter((f) =>
-              existsSync(`${outDir}/${f}`),
-            ),
+            ...[
+              'index.html',
+              'tree/index.html',
+              'near/index.html',
+              'species/view/index.html',
+              'offline/index.html',
+              '404.html',
+            ].filter((f) => existsSync(`${outDir}/${f}`)),
             '_astro/*.{js,css}',
             '_astro/*-latin-*-normal*.woff2',
             'favicon.svg',
             'manifest.webmanifest',
-            ...(existsSync(`${outDir}/data`) ? ['data/*.json'] : []),
           ],
           globIgnores: ['_astro/*-latin-ext-*'],
           maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           // Astro hashes everything in _astro/, so the URL is the revision.
           dontCacheBustURLsMatching: /\/_astro\//,
+          // Serve page shells for "/tree", "/species/view?key=1" etc.: for pages the
+          // query string is client-side state, and precached assets are hashed.
+          templatedURLs: Object.fromEntries(
+            ['tree', 'near', 'species/view', 'offline']
+              .filter((p) => existsSync(`${outDir}/${p}/index.html`))
+              .map((p) => [`/${p}`, [`${p}/index.html`]]),
+          ),
+          ignoreURLParametersMatching: [/.*/],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
           sourcemap: false,
           runtimeCaching: [
+            {
+              // Baked snapshots: fetched on demand (not precached, to keep installs light).
+              urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/data/'),
+              handler: 'StaleWhileRevalidate',
+              options: { cacheName: 'baked-data', expiration: { maxEntries: 20, maxAgeSeconds: 7 * 24 * 3600 } },
+            },
+            {
+              // Pages: fresh when online, last copy (or the offline page) when not.
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'pages',
+                networkTimeoutSeconds: 4,
+                expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 3600 },
+                precacheFallback: { fallbackURL: '/offline/index.html' },
+              },
+            },
             {
               urlPattern: new RegExp(`^${any(tileBase, fallback)}/v2/map/.*\\.(png|mvt)(\\?|$)`),
               handler: 'CacheFirst',

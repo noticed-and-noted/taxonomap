@@ -14,9 +14,12 @@ test('omnibox finds a species by common name and filters the map', async ({ page
   await expect(page.getByRole('button', { name: /Remove taxon filter European Robin/i })).toBeVisible();
 });
 
-test('filters and year range live in the URL and survive reload', async ({ page }) => {
+test('filters and year range live in the URL and survive reload', async ({ page }, info) => {
   await page.goto('/?taxon=2492462&photo=1&years=2000-2010&basis=HUMAN_OBSERVATION');
+  // On phones the filter chips live in the Filters sheet.
+  if (info.project.name === 'mobile') await page.getByRole('button', { name: /Filters/ }).click();
   await expect(page.getByRole('button', { name: 'Has photo' })).toHaveAttribute('aria-pressed', 'true');
+  if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Close panel' }).click();
   await expect(page.getByText('2000–2010')).toBeVisible();
   await page.reload();
   await expect(page.getByText('2000–2010')).toBeVisible();

@@ -10,6 +10,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type {
   ExpressionSpecification,
+  FillLayerSpecification,
   GeoJSONSource,
   LayerSpecification,
   Map as MlMap,
@@ -37,6 +38,7 @@ import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import {
   $basemap,
+  $compareMode,
   $flyTo,
   $hexGeometry,
   $mapBounds,
@@ -46,8 +48,10 @@ import {
   $selectedHex,
   $selectedRecord,
   $showRecords,
+  $taxonB,
   $tileFilter,
   $panel,
+  $yearRangeB,
   clearHexSelection,
   type FlyRequest,
   type HexGeometry,
@@ -105,19 +109,63 @@ function fetchStyle(url: string): Promise<StyleSpecification | null> {
   return p;
 }
 
+interface StyleOpts {
+  /** Override the occurrence filter (the swipe map shows the second year range). */
+  filter?: TileFilter;
+  /** Only basemap + density (no selection, records or pins). */
+  bare?: boolean;
+}
+
+/** Single-hue layer for species comparison: opacity grows with log(records). */
+function compareFill(colour: string): NonNullable<FillLayerSpecification['paint']> {
+  return {
+    'fill-color': colour,
+    'fill-opacity': ['interpolate', ['linear'], ['ln', ['max', 1, ['get', 'total']]], 0, 0.18, 12, 0.8],
+  };
+}
+
+const comparingSpecies = () => $compareMode.get() === 'species' && $taxonB.get() !== null;
+
+/** Tiles for the second species (same filters, different taxon). */
+function occTilesB(): string[] {
+  return occTiles({ ...$tileFilter.get(), taxonKey: $taxonB.get() ?? undefined });
+}
+
 /** Our data sources and layers, shared by every basemap. */
-function overlay(): { sources: StyleSpecification['sources']; data: LayerSpecification[]; top: LayerSpecification[] } {
+function overlay(opts: StyleOpts = {}): {
+  sources: StyleSpecification['sources'];
+  data: LayerSpecification[];
+  top: LayerSpecification[];
+} {
   const accent = css('--accent', '#f0b443');
   const bg = css('--bg', '#0e1813');
   const text = css('--text', '#e9f0ea');
+  const occ = {
+    type: 'vector' as const,
+    tiles: occTiles(opts.filter ?? $tileFilter.get()),
+    maxzoom: 14,
+    attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
+  };
+  if (opts.bare) {
+    return {
+      sources: { occ },
+      data: [
+        {
+          id: 'occ-fill',
+          type: 'fill',
+          source: 'occ',
+          'source-layer': 'occurrence',
+          paint: { 'fill-color': fillColor(), 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.78, 8, 0.66] },
+        },
+      ],
+      top: [],
+    };
+  }
+  const species = comparingSpecies();
   return {
     sources: {
-      occ: {
-        type: 'vector',
-        tiles: occTiles($tileFilter.get()),
-        maxzoom: 14,
-        attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
-      },
+      occ,
+      ...(species && { occB: { type: 'vector', tiles: occTilesB(), maxzoom: 14 } }),
       hover: { type: 'geojson', data: EMPTY },
       selected: { type: 'geojson', data: selectedGeoJson($hexGeometry.get()) },
       records: { type: 'geojson', data: lastRecords, cluster: true, clusterRadius: 40, clusterMaxZoom: 14 },
@@ -130,12 +178,25 @@ function overlay(): { sources: StyleSpecification['sources']; data: LayerSpecifi
         type: 'fill',
         source: 'occ',
         'source-layer': 'occurrence',
-        paint: {
-          'fill-color': fillColor(),
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.78, 8, 0.66],
-          'fill-antialias': true,
-        },
+        paint: species
+          ? compareFill(css('--compare-a', '#e69f00'))
+          : {
+              'fill-color': fillColor(),
+              'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.78, 8, 0.66],
+              'fill-antialias': true,
+            },
       },
+      ...(species
+        ? [
+            {
+              id: 'occB-fill',
+              type: 'fill' as const,
+              source: 'occB',
+              'source-layer': 'occurrence',
+              paint: compareFill(css('--compare-b', '#56b4e9')),
+            } as LayerSpecification,
+          ]
+        : []),
     ],
     // Drawn above everything.
     top: [
@@ -194,11 +255,11 @@ function overlay(): { sources: StyleSpecification['sources']; data: LayerSpecifi
   };
 }
 
-async function buildStyle(basemap: BasemapId): Promise<StyleSpecification> {
+async function buildStyle(basemap: BasemapId, opts: StyleOpts = {}): Promise<StyleSpecification> {
   const t = theme();
   const bg = css('--bg', '#0e1813');
   const src = BASEMAPS[basemap].source(t);
-  const ours = overlay();
+  const ours = overlay(opts);
   const globe: Pick<StyleSpecification, 'projection' | 'sky'> = {
     projection: { type: 'globe' },
     sky: {
@@ -451,6 +512,61 @@ async function rebuildStyle() {
   const mine = ++styleSeq;
   const style = await buildStyle($basemap.get());
   if (map && mine === styleSeq) map.setStyle(style, { diff: false });
+  if (mapB) void syncSwipe(true);
+}
+
+/* ---- Swipe comparison: a second, non-interactive map clipped to the right ---- */
+const swipeBox = ref<HTMLDivElement>();
+const swipeAt = ref(50);
+const swiping = ref(false);
+let mapB: MlMap | undefined;
+let mlModule: typeof import('maplibre-gl') | undefined;
+
+function swipeFilter(): TileFilter {
+  return { ...$tileFilter.get(), year: $yearRangeB.get() ?? [2000, new Date().getFullYear()] };
+}
+
+function followCamera() {
+  if (!map || !mapB) return;
+  mapB.jumpTo({ center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() });
+}
+
+async function syncSwipe(restyle = false) {
+  const on = $compareMode.get() === 'years';
+  swiping.value = on;
+  if (!on) {
+    mapB?.remove();
+    mapB = undefined;
+    return;
+  }
+  if (!mlModule || !swipeBox.value || !map) return;
+  const style = await buildStyle($basemap.get(), { filter: swipeFilter(), bare: true });
+  if (!mapB) {
+    mapB = new mlModule.Map({
+      container: swipeBox.value,
+      style,
+      center: map.getCenter(),
+      zoom: map.getZoom(),
+      interactive: false,
+      attributionControl: false,
+      renderWorldCopies: false,
+      fadeDuration: 0,
+    });
+    return;
+  }
+  if (restyle) mapB.setStyle(style, { diff: false });
+  else (mapB.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles(swipeFilter()));
+}
+
+function onSwipeDrag(e: PointerEvent) {
+  const box = container.value?.getBoundingClientRect();
+  if (!box || !(e.buttons & 1)) return;
+  swipeAt.value = Math.max(2, Math.min(98, ((e.clientX - box.left) / box.width) * 100));
+}
+
+function onSwipeKey(e: KeyboardEvent) {
+  if (e.key === 'ArrowLeft') swipeAt.value = Math.max(2, swipeAt.value - 5);
+  else if (e.key === 'ArrowRight') swipeAt.value = Math.min(98, swipeAt.value + 5);
 }
 
 onMounted(async () => {
@@ -461,6 +577,7 @@ onMounted(async () => {
     import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
   ]);
   ml.setWorkerUrl(worker.default);
+  mlModule = ml;
   if (!container.value) return;
   const v = $mapView.get();
   const style = await buildStyle($basemap.get());
@@ -524,6 +641,8 @@ onMounted(async () => {
     ]);
   };
   map.once('load', publishBounds);
+  map.on('move', followCamera);
+  map.once('load', () => void syncSwipe());
   map.on('moveend', () => {
     if (!map) return;
     publishBounds();
@@ -559,7 +678,17 @@ onMounted(async () => {
 
   // Store → map
   cleanups.push(
-    $tileFilter.listen((f) => (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles(f))),
+    $tileFilter.listen((f) => {
+      (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles(f));
+      (map?.getSource('occB') as VectorTileSource | undefined)?.setTiles(occTilesB());
+      void syncSwipe();
+    }),
+    $compareMode.listen(() => {
+      void rebuildStyle();
+      void syncSwipe();
+    }),
+    $taxonB.listen(() => void rebuildStyle()),
+    $yearRangeB.listen(() => void syncSwipe()),
     // Edge went down or came back: re-point the tile source.
     onEdgeChange(() => (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles($tileFilter.get()))),
     $basemap.listen(() => void rebuildStyle()),
@@ -602,6 +731,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   cleanups.forEach((fn) => fn());
+  mapB?.remove();
   map?.remove();
   map = undefined;
 });
@@ -610,6 +740,29 @@ onBeforeUnmount(() => {
 <template>
   <div class="map-canvas relative size-full" data-testid="map">
     <div ref="container" class="size-full" role="region" aria-label="Occurrence map"></div>
+    <div
+      v-show="swiping"
+      ref="swipeBox"
+      class="pointer-events-none absolute inset-0"
+      :style="{ clipPath: `inset(0 0 0 ${swipeAt}%)` }"
+      aria-hidden="true"
+    ></div>
+    <div v-if="swiping" class="swipe-handle absolute bottom-0 top-0 z-10 w-0" :style="{ left: `${swipeAt}%` }">
+      <div
+        role="slider"
+        tabindex="0"
+        aria-label="Swipe between the two year ranges"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="Math.round(swipeAt)"
+        class="absolute top-1/2 grid size-9 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize place-items-center rounded-full border-2 border-[var(--bg)] bg-accent text-accent-contrast shadow-panel"
+        @pointerdown="($event.target as HTMLElement).setPointerCapture($event.pointerId)"
+        @pointermove="onSwipeDrag"
+        @keydown="onSwipeKey"
+      >
+        ⇆
+      </div>
+    </div>
     <div class="crosshair" aria-hidden="true"></div>
     <div v-if="loading" class="map-progress" role="status" aria-label="Loading map data"></div>
     <div
@@ -629,6 +782,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.swipe-handle {
+  border-left: 2px solid var(--accent);
+}
+
 .map-progress {
   position: absolute;
   inset: 0 0 auto 0;
