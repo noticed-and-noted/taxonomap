@@ -65,3 +65,16 @@ export function mapCapabilities(f: Pick<TileFilter, 'taxonKey' | 'country'> = {}
     country: f.country,
   });
 }
+
+/** GBIF's own raster basemap (CORS-enabled), used by the static mini-map. */
+export function gbifBasemapTile(z: number, x: number, y: number, theme: 'dark' | 'light' = 'dark'): string {
+  return `https://tile.gbif.org/3857/omt/${z}/${x}/${y}@1x.png?style=gbif-${theme === 'dark' ? 'dark' : 'light'}`;
+}
+
+/** A concrete density PNG tile (not a template). */
+export function occurrenceTileUrl(f: TileFilter, z: number, x: number, y: number, s: TileStyle = {}): string {
+  return occurrenceTileTemplate(f, s, 'png')
+    .replace('{z}', String(z))
+    .replace('{x}', String(x))
+    .replace('{y}', String(y));
+}

@@ -13,6 +13,8 @@ import {
   type VernacularName,
 } from '~/lib/gbif/server';
 import type { CountriesSnapshot, NameRow, NamesSnapshot, RankCode, YearsSnapshot } from '~/lib/data/types';
+import { englishName } from '~/lib/species/names';
+import { speciesSlug } from '~/lib/species/data';
 
 const memo = new Map<string, Promise<unknown>>();
 function once<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -71,32 +73,7 @@ const RANK_CODE: Record<string, RankCode> = {
   SPECIES: 'S',
 };
 
-const ENGLISH = new Set(['eng', 'en']);
-
-/** Most frequent English name (case-insensitive); preferred flag wins. */
-export function englishName(names: readonly VernacularName[]): string | null {
-  const eng = names.filter((n) => n.language && ENGLISH.has(n.language) && n.vernacularName.trim());
-  const preferred = eng.find((n) => n.preferred);
-  if (preferred) return tidy(preferred.vernacularName);
-  const tally = new Map<string, { name: string; n: number }>();
-  for (const v of eng) {
-    const k = v.vernacularName.trim().toLowerCase();
-    const t = tally.get(k);
-    if (t) t.n++;
-    // Keep the capitalised variant when there is one.
-    else tally.set(k, { name: v.vernacularName.trim(), n: 1 });
-    if (t && /^[A-Z]/.test(v.vernacularName) && !/^[A-Z]/.test(t.name)) t.name = v.vernacularName.trim();
-  }
-  const best = [...tally.values()].sort((a, b) => b.n - a.n || a.name.length - b.name.length)[0];
-  return best ? tidy(best.name) : null;
-}
-
-function tidy(s: string): string {
-  const t = s.trim().replace(/\s+/g, ' ');
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
-function isDev(): boolean {
+export function isDev(): boolean {
   return !!(import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV;
 }
 
@@ -172,7 +149,8 @@ async function higherRanks(): Promise<NameRow[]> {
     const rank = u && RANK_CODE[u.rank];
     if (!u || !rank || count < 1000) continue;
     const common =
-      (u.vernacularNames && englishName(u.vernacularNames)) ?? (u.vernacularName ? tidy(u.vernacularName) : null);
+      (u.vernacularNames && englishName(u.vernacularNames)) ??
+      (u.vernacularName ? u.vernacularName.charAt(0).toUpperCase() + u.vernacularName.slice(1) : null);
     rows.push([key, rank, u.canonicalName ?? u.scientificName, common, count]);
   }
   return rows;
@@ -201,4 +179,99 @@ export function bakeNames(): Promise<NamesSnapshot> {
     const names = [...higher, ...species].sort((a, b) => b[4] - a[4]);
     return { ...meta(), names };
   });
+}
+
+/* ---------------- Pre-rendered species ---------------- */
+
+/**
+ * Major classes and their share of the pre-render budget, so pages cover
+ * what naturalists look up (birds, insects, plants…) rather than only the
+ * globally most-recorded species, which are overwhelmingly birds.
+ */
+const PRERENDER_CLASSES: { key: number; share: number }[] = [
+  { key: 212, share: 0.3 }, // Aves
+  { key: 216, share: 0.14 }, // Insecta
+  { key: 220, share: 0.16 }, // Magnoliopsida
+  { key: 196, share: 0.04 }, // Liliopsida
+  { key: 359, share: 0.06 }, // Mammalia
+  { key: 131, share: 0.02 }, // Amphibia
+  { key: 11592253, share: 0.02 }, // Squamata
+  { key: 204, share: 0.03 }, // Actinopterygii
+  { key: 367, share: 0.02 }, // Arachnida
+  { key: 225, share: 0.02 }, // Gastropoda
+  { key: 186, share: 0.03 }, // Agaricomycetes
+  { key: 180, share: 0.01 }, // Lecanoromycetes
+  { key: 194, share: 0.01 }, // Pinopsida
+  { key: 7228684, share: 0.01 }, // Polypodiopsida
+];
+
+export function prerenderCount(): number {
+  const n = Number(process.env['SPECIES_PRERENDER_COUNT']);
+  if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  return isDev() ? 12 : 2000;
+}
+
+export interface PrerenderSpecies {
+  key: number;
+  slug: string;
+  count: number;
+}
+
+/** The species that get static pages (memoised; shared by pages, OG images and the manifest). */
+export function bakeSpeciesList(): Promise<PrerenderSpecies[]> {
+  return once('species-list', async () => {
+    const total = prerenderCount();
+    if (total === 0) return [];
+    const picked = new Map<number, number>();
+    const take = (rows: { name: string; count: number }[] | undefined, want: number) => {
+      let added = 0;
+      for (const r of rows ?? []) {
+        if (added >= want || picked.size >= total) break;
+        const k = Number(r.name);
+        if (!picked.has(k)) {
+          picked.set(k, r.count);
+          added++;
+        }
+      }
+    };
+    for (const c of PRERENDER_CLASSES) {
+      const want = Math.ceil(total * c.share);
+      const r = await occurrenceFacets({ taxonKey: c.key }, ['speciesKey'], { facetLimit: want + 20 });
+      take(r.facets['speciesKey'], want);
+    }
+    // Fill the remainder from the global ranking.
+    if (picked.size < total) {
+      const r = await occurrenceFacets({}, ['speciesKey'], { facetLimit: total * 2 });
+      take(r.facets['speciesKey'], total - picked.size);
+    }
+    const limit = pLimit(5);
+    const rows = await Promise.all(
+      [...picked].map(([key, count]) =>
+        limit(async (): Promise<PrerenderSpecies | null> => {
+          try {
+            const u = await getSpecies(key);
+            // Only accepted species get a canonical page.
+            if (u.rank !== 'SPECIES') return null;
+            return { key, slug: speciesSlug(u), count };
+          } catch {
+            return null;
+          }
+        }),
+      ),
+    );
+    return rows.filter((r): r is PrerenderSpecies => r !== null).sort((a, b) => b.count - a.count);
+  });
+}
+
+/** key → slug for every pre-rendered species (links elsewhere use /species/view). */
+export async function bakeSpeciesManifest(): Promise<Record<string, string>> {
+  const list = await bakeSpeciesList();
+  return Object.fromEntries(list.map((s) => [String(s.key), s.slug]));
+}
+
+/** Common-name lookup from the baked name index (build time). */
+export async function bakedCommonNames(): Promise<(key: number) => string | null> {
+  const { names } = await bakeNames();
+  const map = new Map(names.filter((r) => r[3]).map((r) => [r[0], r[3] as string]));
+  return (key) => map.get(key) ?? null;
 }

@@ -4,7 +4,9 @@
  * radial seasonality, and a switch to individual (clustered) records.
  */
 import { useStore } from '@nanostores/vue';
+import { onMounted } from 'vue';
 import { full } from '~/lib/format';
+import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $hexGeometry, $selectedRecord, $showRecords, $taxonKey } from '~/stores/explorer';
 import { $taxonInfo } from '~/stores/taxon';
 import RadialSeasonality from './RadialSeasonality.vue';
@@ -17,6 +19,8 @@ const { loading, error, count, months, species, reload } = useHexSummary();
 const showRecords = useStore($showRecords);
 const record = useStore($selectedRecord);
 const taxon = useStore($taxonInfo);
+const manifest = useStore($speciesManifest);
+onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
 
 function focusSpecies(key: number) {
@@ -80,6 +84,7 @@ const closeRecord = () => $selectedRecord.set(null);
               :count="s.count"
               :image="s.image"
               :selected="taxon?.key === s.key"
+              :page-href="speciesPath(s.key, manifest)"
               size="200x"
               @select="focusSpecies"
             />

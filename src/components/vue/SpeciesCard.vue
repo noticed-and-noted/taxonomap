@@ -18,6 +18,10 @@ const props = defineProps<{
   /** Width class for the thumbnail request. */
   size?: '200x' | '400x';
   selected?: boolean;
+  /** Render the card as a link (species pages) instead of a select button. */
+  href?: string | undefined;
+  /** Secondary link to the species page when the card is a button. */
+  pageHref?: string | undefined;
 }>();
 
 const emit = defineEmits<{ select: [key: number] }>();
@@ -37,7 +41,12 @@ const initials = computed(() =>
     class="species-card group overflow-hidden rounded-md border bg-surface-2 transition-colors duration-200"
     :class="selected ? 'border-accent' : 'border-transparent hover:border-border-strong'"
   >
-    <button type="button" class="block w-full text-left" :aria-pressed="selected" @click="emit('select', speciesKey)">
+    <component
+      :is="href ? 'a' : 'button'"
+      v-bind="href ? { href } : { type: 'button', 'aria-pressed': selected }"
+      class="block w-full text-left"
+      @click="!href && emit('select', speciesKey)"
+    >
       <span class="relative block aspect-[4/3] overflow-hidden bg-photo">
         <ThumbImage
           v-if="image && !broken"
@@ -58,9 +67,17 @@ const initials = computed(() =>
           >{{ compact(count) }} records</span
         >
       </span>
-    </button>
-    <span v-if="image" class="block px-2.5 pb-2">
-      <LicenceBadge :licence="image.licence" :creator="image.creator" :rights-holder="image.rightsHolder" />
+    </component>
+    <span v-if="image || pageHref" class="flex flex-wrap items-center justify-between gap-1 px-2.5 pb-2">
+      <LicenceBadge
+        v-if="image"
+        :licence="image.licence"
+        :creator="image.creator"
+        :rights-holder="image.rightsHolder"
+      />
+      <a v-if="pageHref" :href="pageHref" class="text-[11px] text-accent underline-offset-2 hover:underline">
+        About<span class="sr-only"> {{ commonName ?? scientificName }}</span> →
+      </a>
     </span>
   </article>
 </template>

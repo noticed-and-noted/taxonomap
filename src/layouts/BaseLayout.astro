@@ -62,6 +62,16 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
         };
         apply(document);
         document.addEventListener('astro:before-swap', (e) => apply(e.newDocument));
+        // Hide photos that fail to load (some GBIF media are gone), including
+        // on static, non-hydrated cards. Error events don't bubble; capture does.
+        document.addEventListener(
+          'error',
+          (e) => {
+            const t = e.target;
+            if (t instanceof HTMLImageElement && t.hasAttribute('data-hide-on-error')) t.style.visibility = 'hidden';
+          },
+          true,
+        );
       })();
     </script>
     <ClientRouter fallback="swap" />

@@ -24,6 +24,9 @@ export const GBIF_TILE_BASE = stripSlash(env['PUBLIC_GBIF_TILE_BASE'] || GBIF_AP
 /** Where requests go when the edge cache (if configured) is unavailable. */
 export const GBIF_FALLBACK_BASE = stripSlash(env['PUBLIC_GBIF_FALLBACK_BASE'] || 'https://api.gbif.org');
 
+/** iNaturalist Research-grade Observations: well-framed photos with per-photo CC licences. */
+export const INATURALIST_DATASET_KEY = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
+
 /** GBIF Backbone Taxonomy dataset key. */
 export const BACKBONE_DATASET_KEY = 'd7dddbf4-2cf0-4f39-9b2a-bb099caae36c';
 

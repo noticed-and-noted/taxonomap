@@ -1,0 +1,31 @@
+---
+/**
+ * Frame for content pages (species): the site header and a scrolling main
+ * area. No map, so these pages stay within the JS budget.
+ */
+import SiteHeader from './SiteHeader.astro';
+import RequestMeter from './vue/RequestMeter.vue';
+import StaleNotice from './vue/StaleNotice.vue';
+---
+
+<div class="page-shell">
+  <SiteHeader />
+  <main id="main" tabindex="-1">
+    <slot />
+  </main>
+  <StaleNotice client:idle />
+  <RequestMeter client:idle />
+</div>
+
+<style>
+  .page-shell {
+    min-height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+
+  .page-shell :global(.app-header) {
+    position: sticky;
+    top: 0;
+  }
+</style>

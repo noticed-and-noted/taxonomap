@@ -2,38 +2,24 @@
 /**
  * Wraps every chart in a <figure> with a caption and a data-table fallback
  * (WCAG: the same information must be available without the graphic).
+ * Uses <details>, so it works on pre-rendered pages without any JavaScript.
  */
-import { ref, useId } from 'vue';
-
 defineProps<{ title: string; caption?: string | undefined; compact?: boolean }>();
-
-const showTable = ref(false);
-const tableId = useId();
 </script>
 
 <template>
   <figure class="chart-frame" :class="compact ? 'text-xs' : 'text-sm'">
-    <figcaption class="mb-2 flex items-baseline justify-between gap-3">
-      <span>
-        <span class="font-medium text-text">{{ title }}</span>
-        <span v-if="caption" class="ml-2 text-subtle">{{ caption }}</span>
-      </span>
-      <button
-        type="button"
-        class="shrink-0 text-xs text-muted underline-offset-2 hover:text-text hover:underline"
-        :aria-expanded="showTable"
-        :aria-controls="tableId"
-        @click="showTable = !showTable"
-      >
-        {{ showTable ? 'Hide table' : 'Table' }}
-      </button>
+    <figcaption class="mb-2">
+      <span class="font-medium text-text">{{ title }}</span>
+      <span v-if="caption" class="ml-2 text-subtle">{{ caption }}</span>
     </figcaption>
-    <div :aria-hidden="showTable ? 'true' : undefined">
-      <slot />
-    </div>
-    <div v-show="showTable" :id="tableId" class="mt-2 max-h-56 overflow-auto rounded-sm border border-border">
-      <slot name="table" />
-    </div>
+    <slot />
+    <details class="mt-1.5">
+      <summary class="cursor-pointer text-xs text-muted hover:text-text">Show data table</summary>
+      <div class="mt-2 max-h-56 overflow-auto rounded-sm border border-border">
+        <slot name="table" />
+      </div>
+    </details>
   </figure>
 </template>
 
@@ -59,5 +45,17 @@ const tableId = useId();
   position: sticky;
   top: 0;
   background: var(--surface);
+}
+summary {
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary::before {
+  content: '▸ ';
+}
+details[open] > summary::before {
+  content: '▾ ';
 }
 </style>

@@ -1,0 +1,59 @@
+---
+/**
+ * Pre-rendered species page (top SPECIES_PRERENDER_COUNT species). Static
+ * HTML at build; only the gallery and mini-map hydrate (client:visible).
+ */
+import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
+import { loadSpeciesData } from '~/lib/species/data';
+import { full } from '~/lib/format';
+import BaseLayout from '~/layouts/BaseLayout.astro';
+import PageShell from '~/components/PageShell.astro';
+import MiniMap from '~/components/vue/MiniMap.vue';
+import SpeciesGallery from '~/components/vue/SpeciesGallery.vue';
+import SpeciesPage from '~/components/vue/SpeciesPage.vue';
+
+export async function getStaticPaths() {
+  const list = await bakeSpeciesList();
+  return list.map((s) => ({ params: { key: String(s.key), slug: s.slug } }));
+}
+
+const key = Number(Astro.params.key);
+const [names, manifest] = await Promise.all([bakedCommonNames(), bakeSpeciesManifest()]);
+const data = await loadSpeciesData(key, names);
+
+const label = data.commonName ?? data.canonicalName;
+const title = data.commonName ? `${data.commonName} (${data.canonicalName})` : data.canonicalName;
+const topCountries = data.countries
+  .slice(0, 3)
+  .map(([c]) => c)
+  .join(', ');
+const description =
+  `${title}: ${full(data.count)} occurrence records on GBIF` +
+  (topCountries ? `, most from ${topCountries}` : '') +
+  '. See where and when it has been recorded, photos, common names and similar species.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Taxon',
+  name: data.canonicalName,
+  ...(data.commonName && { alternateName: data.commonName }),
+  taxonRank: data.rank.toLowerCase(),
+  identifier: `https://www.gbif.org/species/${data.key}`,
+  ...(data.classification.length && {
+    parentTaxon: {
+      '@type': 'Taxon',
+      name: data.classification[data.classification.length - 1]?.name,
+    },
+  }),
+};
+---
+
+<BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <PageShell>
+    <SpeciesPage data={data} manifest={manifest}>
+      {data.images.length > 0 && <SpeciesGallery slot="gallery" client:visible images={data.images} name={label} />}
+      {data.count > 0 && <MiniMap slot="map" client:visible taxonKey={data.key} label={label} />}
+    </SpeciesPage>
+  </PageShell>
+</BaseLayout>

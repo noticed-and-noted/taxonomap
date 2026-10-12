@@ -20,6 +20,8 @@ export interface OccurrenceFilter {
   datasetKey?: string | undefined;
   /** Restrict to records with usable coordinates (matches what the map shows). */
   georeferenced?: boolean | undefined;
+  /** GBIF date range "YYYY-MM-DD,YYYY-MM-DD". */
+  eventDate?: string | undefined;
 }
 
 export function filterToParams(f: OccurrenceFilter): Params {
@@ -33,6 +35,7 @@ export function filterToParams(f: OccurrenceFilter): Params {
     mediaType: f.hasImage ? 'StillImage' : undefined,
     geometry: f.geometry,
     datasetKey: f.datasetKey,
+    eventDate: f.eventDate,
     hasCoordinate: f.georeferenced ? true : undefined,
     hasGeospatialIssue: f.georeferenced ? false : undefined,
   };
@@ -56,11 +59,26 @@ export type FacetField =
 export async function occurrenceFacets(
   filter: OccurrenceFilter,
   facets: readonly FacetField[],
-  opts: { facetLimit?: number; signal?: AbortSignal } = {},
+  opts: {
+    facetLimit?: number;
+    /** Per-field limits (GBIF's `<field>.facetLimit`), e.g. { year: 600, country: 10 }. */
+    limits?: Partial<Record<FacetField, number>>;
+    /** Offset into facet values, for paging (applies to every facet). */
+    facetOffset?: number;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<{ count: number; facets: Record<string, FacetCount[]> }> {
+  const perField = Object.fromEntries(Object.entries(opts.limits ?? {}).map(([k, v]) => [`${k}.facetLimit`, v]));
   const res = await http().getJson<OccurrenceSearch>(
     '/v1/occurrence/search',
-    { ...filterToParams(filter), limit: 0, facet: facets, facetLimit: opts.facetLimit ?? 200 },
+    {
+      ...filterToParams(filter),
+      limit: 0,
+      facet: facets,
+      facetLimit: opts.facetLimit ?? 200,
+      facetOffset: opts.facetOffset || undefined,
+      ...perField,
+    },
     { ttlMs: HOUR, ...(opts.signal && { signal: opts.signal }) },
   );
   return { count: res.count, facets: indexFacets(res.facets ?? []) };

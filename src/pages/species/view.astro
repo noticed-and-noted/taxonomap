@@ -1,0 +1,15 @@
+---
+/**
+ * Client-rendered fallback for species without a pre-rendered page.
+ * Same components as /species/[key]/[slug]; not indexed.
+ */
+import BaseLayout from '~/layouts/BaseLayout.astro';
+import PageShell from '~/components/PageShell.astro';
+import SpeciesView from '~/components/vue/SpeciesView.vue';
+---
+
+<BaseLayout title="Species" noindex>
+  <PageShell>
+    <SpeciesView client:only="vue" />
+  </PageShell>
+</BaseLayout>

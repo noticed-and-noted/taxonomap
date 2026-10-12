@@ -32,6 +32,10 @@ export type ThumbSize = '200x' | '400x' | '800x' | `${number}x${number}`;
  * Thumbnail via GBIF's image cache (verified: ~19 KB vs ~145 KB original).
  * Addressed by occurrence key and the MD5 of the media identifier.
  */
-export function thumbnailUrl(img: Pick<UsableImage, 'url' | 'occurrenceKey'>, size: ThumbSize = '400x'): string {
-  return `${apiBase()}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
+export function thumbnailUrl(
+  img: Pick<UsableImage, 'url' | 'occurrenceKey'>,
+  size: ThumbSize = '400x',
+  base: string = apiBase(),
+): string {
+  return `${base}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
 }

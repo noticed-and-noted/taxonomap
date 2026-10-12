@@ -18,6 +18,9 @@ export default defineConfig({
   site,
   output: 'static',
   trailingSlash: 'ignore',
+  // Species pages wait on GBIF; render several at once (requests are still
+  // capped at 5 concurrent by the build transport).
+  build: { concurrency: 8 },
   integrations: [
     vue(),
     sitemap({
@@ -29,5 +32,8 @@ export default defineConfig({
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },
   vite: {
     plugins: [tailwindcss()],
+    // Native/WASM build-time renderers for Open Graph images stay external.
+    ssr: { external: ['@resvg/resvg-js', 'satori'] },
+    optimizeDeps: { exclude: ['@resvg/resvg-js'] },
   },
 });

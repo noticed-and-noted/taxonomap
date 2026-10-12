@@ -4,7 +4,7 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 **Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
 
-> Status: **Phase 2 (map explorer MVP)** is complete. Species pages, tree of life and near-me features arrive in phases 3 to 5.
+> Status: **Phase 3 (species pages)** is complete. The tree of life and near-me features arrive in phases 4 and 5.
 
 ## Local setup
 
@@ -78,9 +78,18 @@ npm run dev             # http://localhost:4321
 | Build disk cache              | `.cache/gbif/`      | Keyed by URL hash. Concurrency 5. CI persists it with `actions/cache`, so nightly builds are incremental                                                                                                                              |
 | Cloudflare Pages              | `_astro/*`          | Immutable; see `public/_headers`                                                                                                                                                                                                      |
 
-## Pre-rendering (Phase 3)
+## Species pages (Phase 3)
 
-The top `SPECIES_PRERENDER_COUNT` species are pre-rendered at `/species/[key]/[slug]`; every other species uses `/species/view?key=` (client-rendered, `noindex`). A cold build makes roughly 6 GBIF requests per species, which comes to about 15–25 minutes for 2000 species. Warm-cache builds are well under 10 minutes.
+- **Pre-rendered pages.** `/species/{key}/{slug}` is built for `SPECIES_PRERENDER_COUNT` species (default 2000; 12 in dev). They are chosen by record count, with a quota for each major class (birds, insects, flowering plants, mammals, fungi and so on), so the set isn't nearly all birds (`src/lib/bake/index.ts`).
+- **Fallback page.** Every other species uses `/species/view?key=`. It is client-rendered with the same components and marked `noindex`; if the species does have a static page, it redirects there.
+- **Linking.** The build writes `/data/species-manifest.json` (key → slug) so links can choose between the two routes.
+- **Requests per species.** About 10, with no per-record loops (`src/lib/species/data.ts`): detail, vernacular names, synonyms, one facet request (years, months, countries, datasets), photos (iNaturalist research-grade first, topped up from other datasets), genus siblings (one facet request, the genus's children, one photo request), and dataset titles.
+- **Build time.** A cold build of 2000 species makes about 20,000 cached GBIF requests: roughly 25 minutes at concurrency 5 (`build.concurrency: 8` renders routes in parallel). Warm builds reuse `.cache/gbif` and `.cache/og`.
+- **JavaScript.** The page body is rendered at build time. Only the gallery (lightbox) and the mini-map hydrate (`client:visible`), so a page ships about 60 KB of gzipped JS.
+- **Charts.** Records per year, seasonality, top countries and top datasets are small Vue/SVG components with `<details>` data tables, so they need no JavaScript. Observable Plot was dropped: tree-shaken, it is 86 KB gzipped on its own, which would nearly exhaust the 100 KB page budget.
+- **Mini-map.** GBIF's own basemap tiles (`tile.gbif.org`) with the same hex density layer as PNG. There's no MapLibre on species pages.
+- **Open Graph images.** Rendered at build per pre-rendered species with satori and resvg (`src/lib/og/species-card.ts`). Photos and rendered PNGs are cached in `.cache/`, so unchanged cards aren't re-rendered.
+- **Sitemap.** `@astrojs/sitemap` covers the main routes and pre-rendered species. `/sitemap.xml` redirects to `/sitemap-index.xml` via `public/_redirects`.
 
 ## GBIF API findings (verified 2026-10-12)
 
