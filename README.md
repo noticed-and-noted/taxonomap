@@ -104,9 +104,11 @@ Configure the repository with:
 - **Secrets:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 - **Variables:** `CF_PAGES_PROJECT`, `GBIF_CONTACT_EMAIL`, `PUBLIC_SITE_URL`, and optionally `PUBLIC_GBIF_API_BASE`, `PUBLIC_GBIF_TILE_BASE`, `SPECIES_PRERENDER_COUNT`
 
-## Optional Worker
+## Edge cache Worker (optional)
 
-Phase 6 adds `/worker`: a Cloudflare Worker that caches GBIF JSON at the edge and adds a `User-Agent`. It is not deployed by default. To enable it, deploy the Worker and set `PUBLIC_GBIF_API_BASE` (and optionally `PUBLIC_GBIF_TILE_BASE`) to its URL.
+`worker/` contains a Cloudflare Worker that caches GBIF responses at the edge for all visitors. The app falls back to `api.gbif.org` automatically whenever it is unavailable. Setup, requirements (a custom domain on Cloudflare) and local testing are in [worker/README.md](worker/README.md). Enable it by deploying the Worker and pointing `PUBLIC_GBIF_API_BASE` and `PUBLIC_GBIF_TILE_BASE` at it; `PUBLIC_GBIF_FALLBACK_BASE` (default `https://api.gbif.org`) is where requests go when it is down.
+
+**Request meter.** In dev, or with `?debug=requests` on any build, a small panel counts the tile, JSON and image requests made this session and how many went via the edge. Use it to size the Worker quota.
 
 ## Data and attribution
 

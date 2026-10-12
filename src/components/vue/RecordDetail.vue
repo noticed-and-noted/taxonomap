@@ -12,7 +12,6 @@ import {
   getOccurrence,
   getOrganization,
   parseLicence,
-  thumbnailUrl,
   usableImages,
   type Dataset,
   type Occurrence,
@@ -21,6 +20,7 @@ import {
 } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
+import ThumbImage from './ThumbImage.vue';
 
 const props = defineProps<{ occurrenceKey: number }>();
 const emit = defineEmits<{ back: [] }>();
@@ -109,13 +109,7 @@ const date = computed(() => {
           :key="img.url"
           class="relative shrink-0 snap-start overflow-hidden rounded-md bg-photo"
         >
-          <img
-            :src="thumbnailUrl(img, '400x')"
-            alt=""
-            loading="lazy"
-            decoding="async"
-            class="h-40 w-auto object-cover"
-          />
+          <ThumbImage :image="img" size="400x" class="h-40 w-auto object-cover" />
           <figcaption class="absolute bottom-1 left-1 right-1">
             <LicenceBadge :licence="img.licence" :creator="img.creator" :rights-holder="img.rightsHolder" />
           </figcaption>

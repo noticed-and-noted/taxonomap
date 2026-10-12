@@ -21,7 +21,17 @@ import type {
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { BASEMAPS, type BasemapId } from '~/lib/basemaps';
 import { compact } from '~/lib/format';
-import { $gbifStale, occurrenceTileTemplate, polygonToWkt, searchOccurrences, type TileFilter } from '~/lib/gbif';
+import {
+  $gbifStale,
+  countRequest,
+  isEdgeUrl,
+  markEdgeDown,
+  occurrenceTileTemplate,
+  onEdgeChange,
+  polygonToWkt,
+  searchOccurrences,
+  type TileFilter,
+} from '~/lib/gbif';
 import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
 import {
   $basemap,
@@ -416,6 +426,11 @@ onMounted(async () => {
     dragRotate: false,
     renderWorldCopies: false,
     fadeDuration: reducedMotion() ? 0 : 200,
+    // Called on the main thread for every request, including worker-loaded tiles.
+    transformRequest: (url, type) => {
+      if (type === 'Tile' && url.includes('/v2/map/occurrence/')) countRequest('tile', url);
+      return { url };
+    },
   });
   map.addControl(new ml.NavigationControl({ showCompass: false }), 'bottom-right');
   if (import.meta.env.DEV) (window as unknown as { __map?: MlMap }).__map = map;
@@ -450,7 +465,13 @@ onMounted(async () => {
   });
   map.on('error', (e) => {
     // Tile failures: keep the map usable and show the quiet stale note.
-    const status = (e.error as { status?: number } | undefined)?.status;
+    const err = e.error as { status?: number; url?: string } | undefined;
+    const status = err?.status;
+    // Edge cache failing (quota, outage, CORS-less error page): go straight to GBIF.
+    if (err?.url && isEdgeUrl(err.url) && (!status || status === 429 || status >= 500)) {
+      markEdgeDown();
+      return;
+    }
     if (status === 429 || (status !== undefined && status >= 500)) $gbifStale.set(true);
     if ((e as { sourceId?: string }).sourceId === 'occ' && status === undefined) failed.value = true;
   });
@@ -460,6 +481,8 @@ onMounted(async () => {
   // Store → map
   cleanups.push(
     $tileFilter.listen((f) => (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles(f))),
+    // Edge went down or came back: re-point the tile source.
+    onEdgeChange(() => (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles($tileFilter.get()))),
     $basemap.listen(() => void rebuildStyle()),
     $mapView.listen((v) => {
       if (!map) return;

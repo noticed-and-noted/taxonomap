@@ -17,7 +17,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:contract": "vitest run --config vitest.contract.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "worker:dev": "wrangler dev --config worker/wrangler.toml",
+    "worker:deploy": "wrangler deploy --config worker/wrangler.toml"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
@@ -58,6 +60,7 @@
     "vitest": "^4.1.11",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.13",
-    "workbox-build": "^7.4.1"
+    "workbox-build": "^7.4.1",
+    "wrangler": "^4.149.0"
   }
 }

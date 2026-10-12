@@ -10,6 +10,7 @@
  */
 import MapCanvas from './vue/MapCanvas.vue';
 import Omnibox from './vue/Omnibox.vue';
+import RequestMeter from './vue/RequestMeter.vue';
 import StaleNotice from './vue/StaleNotice.vue';
 import ThemeToggle from './ThemeToggle.astro';
 
@@ -98,6 +99,7 @@ const nav = [
   </div>
 
   <StaleNotice client:idle />
+  <RequestMeter client:idle />
 </div>
 
 <style>

@@ -1,0 +1,19 @@
+# GBIF Explorer edge cache. Fill in the TODOs, then `npm run worker:deploy`.
+name = "gbif-explorer-edge"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+
+# TODO: your hostname on a domain managed by Cloudflare. The Cache API does
+# nothing on *.workers.dev, so a custom domain is required.
+routes = [{ pattern = "gbif-edge.example.org", custom_domain = true }]
+
+[vars]
+UPSTREAM = "https://api.gbif.org"
+# TODO: contact address sent to GBIF in the User-Agent.
+CONTACT_EMAIL = "you@example.org"
+# TODO: your site origins (comma-separated), e.g. the Pages URL and custom domain. "*" allows any site.
+ALLOWED_ORIGINS = "https://gbif-explorer.pages.dev"
+
+[observability]
+enabled = true

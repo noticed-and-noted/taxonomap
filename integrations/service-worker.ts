@@ -26,6 +26,9 @@ export default function serviceWorker(): AstroIntegration {
       'astro:build:done': async ({ dir, logger }) => {
         const apiBase = trim(process.env['PUBLIC_GBIF_API_BASE'] || 'https://api.gbif.org');
         const tileBase = trim(process.env['PUBLIC_GBIF_TILE_BASE'] || apiBase);
+        const fallback = trim(process.env['PUBLIC_GBIF_FALLBACK_BASE'] || 'https://api.gbif.org');
+        // Requests go to the edge cache when configured, or GBIF directly when it is bypassed.
+        const any = (...bases: string[]) => `(${[...new Set(bases)].map(escape).join('|')})`;
         const outDir = fileURLToPath(dir);
 
         const { count, size, warnings } = await generateSW({
@@ -52,7 +55,7 @@ export default function serviceWorker(): AstroIntegration {
           sourcemap: false,
           runtimeCaching: [
             {
-              urlPattern: new RegExp(`^${escape(tileBase)}/v2/map/.*\\.(png|mvt)(\\?|$)`),
+              urlPattern: new RegExp(`^${any(tileBase, fallback)}/v2/map/.*\\.(png|mvt)(\\?|$)`),
               handler: 'CacheFirst',
               options: {
                 cacheName: 'gbif-tiles',
@@ -61,7 +64,7 @@ export default function serviceWorker(): AstroIntegration {
               },
             },
             {
-              urlPattern: new RegExp(`^${escape(apiBase)}/v[12]/(?!image/)`),
+              urlPattern: new RegExp(`^${any(apiBase, fallback)}/v[12]/(?!image/)`),
               handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: 'gbif-json',

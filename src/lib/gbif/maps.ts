@@ -1,4 +1,4 @@
-import { GBIF_TILE_BASE } from './config';
+import { tileBase } from './edge';
 import { http } from './http';
 import { toQueryString, yearRangeParam, type Params } from './params';
 import type { BasisOfRecord, MapCapabilities } from './types';
@@ -56,7 +56,7 @@ export function tileParams(f: TileFilter, s: TileStyle = {}, format: TileFormat 
 export function occurrenceTileTemplate(f: TileFilter, s: TileStyle = {}, format: TileFormat = 'png'): string {
   const kind = needsAdhoc(f) ? 'adhoc' : 'density';
   const qs = toQueryString(tileParams(f, s, format));
-  return `${GBIF_TILE_BASE}/v2/map/occurrence/${kind}/{z}/{x}/{y}${suffix(format)}${qs ? `?${qs}` : ''}`;
+  return `${tileBase()}/v2/map/occurrence/${kind}/{z}/{x}/{y}${suffix(format)}${qs ? `?${qs}` : ''}`;
 }
 
 export function mapCapabilities(f: Pick<TileFilter, 'taxonKey' | 'country'> = {}): Promise<MapCapabilities> {

@@ -5,8 +5,9 @@
  */
 import { computed, ref } from 'vue';
 import { compact } from '~/lib/format';
-import { thumbnailUrl, type UsableImage } from '~/lib/gbif';
+import type { UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
+import ThumbImage from './ThumbImage.vue';
 
 const props = defineProps<{
   speciesKey: number;
@@ -21,9 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [key: number] }>();
 
-const loaded = ref(false);
 const broken = ref(false);
-const src = computed(() => (props.image ? thumbnailUrl(props.image, props.size ?? '400x') : undefined));
 const initials = computed(() =>
   (props.commonName ?? props.scientificName)
     .split(/\s+/)
@@ -40,16 +39,13 @@ const initials = computed(() =>
   >
     <button type="button" class="block w-full text-left" :aria-pressed="selected" @click="emit('select', speciesKey)">
       <span class="relative block aspect-[4/3] overflow-hidden bg-photo">
-        <img
-          v-if="src && !broken"
-          :src="src"
+        <ThumbImage
+          v-if="image && !broken"
+          :image="image"
+          :size="size ?? '400x'"
           :alt="commonName ? `${commonName} (${scientificName})` : scientificName"
-          loading="lazy"
-          decoding="async"
-          class="size-full object-cover transition-opacity duration-300"
-          :class="loaded ? 'opacity-100' : 'opacity-0'"
-          @load="loaded = true"
-          @error="broken = true"
+          class="size-full object-cover"
+          @broken="broken = true"
         />
         <span v-else class="grid size-full place-items-center font-display text-2xl text-subtle" aria-hidden="true">
           {{ initials }}

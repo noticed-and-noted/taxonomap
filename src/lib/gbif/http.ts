@@ -1,14 +1,16 @@
 import { atom } from 'nanostores';
-import { GBIF_API_BASE } from './config';
+import { apiBase, isEdgeUrl, markEdgeDown, servedByEdge } from './edge';
 import { GbifNotFoundError, GbifRequestError, GbifUnavailableError } from './errors';
 import { LruCache } from './lru';
+import { countRequest } from './metrics';
 import { buildUrl, type Params } from './params';
 
 /** Fetch-compatible transport. Browser uses fetch; build time uses node-transport. */
 export type Transport = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
 
 export interface HttpOptions {
-  base: string;
+  /** Base URL, or a function so the edge fallback can switch it per attempt. */
+  base: string | (() => string);
   transport: Transport;
   maxRetries: number;
   baseDelayMs: number;
@@ -39,7 +41,7 @@ export function parseRetryAfter(header: string | null, now = Date.now()): number
 
 export function createHttp(overrides: Partial<HttpOptions> = {}) {
   const opts: HttpOptions = {
-    base: GBIF_API_BASE,
+    base: apiBase,
     transport: (url, init) => globalThis.fetch(url, init),
     maxRetries: 3,
     baseDelayMs: 500,
@@ -59,16 +61,32 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     return step / 2 + opts.random() * (step / 2);
   }
 
-  async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<unknown> {
+  const baseUrl = () => (typeof opts.base === 'function' ? opts.base() : opts.base);
+
+  async function fetchWithRetry(rel: string, signal?: AbortSignal): Promise<unknown> {
     let lastStatus: number | undefined;
+    let url = `${baseUrl()}${rel}`;
     for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+      url = `${baseUrl()}${rel}`;
       let res: Response;
+      countRequest('json', url);
       try {
         res = await opts.transport(url, signal ? { signal } : undefined);
       } catch (err) {
         if (signal?.aborted) throw err;
         lastStatus = undefined;
+        // Edge unreachable (or a CORS-less platform error): go direct, no wait.
+        if (isEdgeUrl(url)) {
+          markEdgeDown();
+          continue;
+        }
         if (attempt < opts.maxRetries) await opts.sleep(backoff(attempt));
+        continue;
+      }
+      if (!res.ok && isEdgeUrl(url) && !servedByEdge(res)) {
+        // Cloudflare platform error (e.g. quota exceeded), not GBIF: go direct.
+        markEdgeDown();
+        lastStatus = res.status;
         continue;
       }
       if (res.ok) return res.json();
@@ -86,13 +104,16 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     throw new GbifUnavailableError(url, lastStatus);
   }
 
+  /** Cache key and path+query, independent of which base serves it. */
+  const relative = (path: string, params?: Params) => buildUrl('', path, params);
+
   /**
    * GET JSON from GBIF. Identical concurrent requests share one promise; fresh
    * results come from the LRU; on persistent failure a stale copy is returned
    * and $gbifStale is raised.
    */
   async function getJson<T>(path: string, params?: Params, ro: RequestOptions = {}): Promise<T> {
-    const url = buildUrl(opts.base, path, params);
+    const url = relative(path, params);
     const fresh = cache.get(url);
     if (fresh !== undefined) return fresh as T;
 
@@ -122,7 +143,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
 
   return {
     getJson,
-    url: (path: string, params?: Params) => buildUrl(opts.base, path, params),
+    url: (path: string, params?: Params) => buildUrl(baseUrl(), path, params),
     clear: () => cache.clear(),
     get options(): Readonly<HttpOptions> {
       return opts;

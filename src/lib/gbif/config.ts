@@ -21,6 +21,8 @@ const env = readEnv();
 
 export const GBIF_API_BASE = stripSlash(env['PUBLIC_GBIF_API_BASE'] || 'https://api.gbif.org');
 export const GBIF_TILE_BASE = stripSlash(env['PUBLIC_GBIF_TILE_BASE'] || GBIF_API_BASE);
+/** Where requests go when the edge cache (if configured) is unavailable. */
+export const GBIF_FALLBACK_BASE = stripSlash(env['PUBLIC_GBIF_FALLBACK_BASE'] || 'https://api.gbif.org');
 
 /** GBIF Backbone Taxonomy dataset key. */
 export const BACKBONE_DATASET_KEY = 'd7dddbf4-2cf0-4f39-9b2a-bb099caae36c';

@@ -1,4 +1,4 @@
-import { GBIF_API_BASE } from './config';
+import { apiBase } from './edge';
 import { http } from './http';
 import { md5 } from './md5';
 import { ALLOWED_LICENCE_ENUMS, usableImages, type UsableImage } from './licence';
@@ -33,5 +33,5 @@ export type ThumbSize = '200x' | '400x' | '800x' | `${number}x${number}`;
  * Addressed by occurrence key and the MD5 of the media identifier.
  */
 export function thumbnailUrl(img: Pick<UsableImage, 'url' | 'occurrenceKey'>, size: ThumbSize = '400x'): string {
-  return `${GBIF_API_BASE}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
+  return `${apiBase()}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
 }

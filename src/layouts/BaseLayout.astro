@@ -1,6 +1,6 @@
 ---
 import { ClientRouter } from 'astro:transitions';
-import { GBIF_API_BASE } from '~/lib/gbif/config';
+import { GBIF_API_BASE, GBIF_FALLBACK_BASE } from '~/lib/gbif/config';
 import '~/styles/global.css';
 
 interface Props {
@@ -38,6 +38,7 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href={GBIF_API_BASE} crossorigin />
+    {GBIF_FALLBACK_BASE !== GBIF_API_BASE && <link rel="dns-prefetch" href={GBIF_FALLBACK_BASE} />}
 
     <meta property="og:site_name" content={siteName} />
     <meta property="og:title" content={fullTitle} />
