@@ -10,6 +10,7 @@ import {
   getChildren,
   getDataset,
   getOccurrence,
+  getOrganization,
   getParents,
   getSpecies,
   getSynonyms,
@@ -24,6 +25,7 @@ import {
   searchVernacular,
   speciesInRadius,
   suggestSpecies,
+  thumbnailUrl,
 } from '~/lib/gbif';
 import { userAgent } from '~/lib/gbif/node-transport';
 
@@ -39,6 +41,8 @@ beforeAll(() => {
 });
 
 const tile = (template: string) => template.replace('{z}', '0').replace('{x}', '0').replace('{y}', '0');
+
+const thumb = (u: string) => fetch(u).then((r) => [r.status, r.headers.get('content-type')]);
 
 describe('maps', () => {
   it('density PNG tile', async () => {
@@ -149,6 +153,8 @@ describe('occurrences', () => {
     expect(r.count).toBeGreaterThan(0);
     expect(r.images.length).toBeGreaterThan(0);
     expect(r.images[0]).toMatchObject({ url: expect.stringMatching(/^https?:/), licence: expect.any(String) });
+    // GBIF image cache thumbnail (occurrence key + md5 of identifier).
+    expect(await thumb(thumbnailUrl(r.images[0]!, '200x'))).toEqual([200, 'image/jpeg']);
   });
 
   it('records search + single record', async () => {
@@ -170,5 +176,11 @@ describe('datasets', () => {
   it('detail', async () => {
     const d = await getDataset(BACKBONE_DATASET_KEY);
     expect(d).toMatchObject({ key: BACKBONE_DATASET_KEY, title: expect.any(String) });
+  });
+
+  it('organization', async () => {
+    const d = await getDataset(BACKBONE_DATASET_KEY);
+    const o = await getOrganization(d.publishingOrganizationKey as string);
+    expect(o).toMatchObject({ key: d.publishingOrganizationKey, title: expect.any(String) });
   });
 });

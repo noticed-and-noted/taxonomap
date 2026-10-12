@@ -32,6 +32,8 @@ export interface UsableImage {
   creator?: string;
   rightsHolder?: string;
   occurrenceKey: number;
+  /** Species of the record the image belongs to (for grouping). */
+  speciesKey?: number;
   datasetKey: string;
   publisher?: string;
   references?: string;
@@ -56,6 +58,7 @@ export function usableImages(occ: Occurrence): UsableImage[] {
       licence,
       occurrenceKey: occ.key,
       datasetKey: occ.datasetKey,
+      ...(occ.speciesKey !== undefined && { speciesKey: occ.speciesKey }),
       ...(m.creator && { creator: m.creator }),
       ...((m.rightsHolder ?? occ.rightsHolder) && { rightsHolder: (m.rightsHolder ?? occ.rightsHolder) as string }),
       ...((m.publisher ?? occ.publisher) && { publisher: (m.publisher ?? occ.publisher) as string }),

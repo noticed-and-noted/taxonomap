@@ -5,31 +5,39 @@
  * The map island sits in a `transition:persist` slot so that it (and its
  * WebGL context, camera and loaded tiles) survives ClientRouter navigation.
  * Visibility is controlled by the non-persisted wrapper, because a persisted
- * element keeps its old attributes across swaps.
+ * element keeps its old attributes across swaps. Panels (side panel /
+ * bottom sheet) are rendered by the page's overlay island.
  */
-import MapPlaceholder from './vue/MapPlaceholder.vue';
+import MapCanvas from './vue/MapCanvas.vue';
+import Omnibox from './vue/Omnibox.vue';
 import StaleNotice from './vue/StaleNotice.vue';
 import ThemeToggle from './ThemeToggle.astro';
 
 interface Props {
   /** full: map is the page; hidden: map stays alive offscreen (e.g. /tree). */
   map?: 'full' | 'hidden';
-  /** Show the right panel / bottom sheet region. */
-  panel?: boolean;
 }
 
-const { map = 'full', panel = true } = Astro.props;
+const { map = 'full' } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 const nav = [
-  { href: '/', label: 'Map' },
-  { href: '/tree', label: 'Tree of life' },
-  { href: '/near', label: 'Near me' },
+  { href: '/', label: 'Map', icon: 'M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14' },
+  {
+    href: '/tree',
+    label: 'Tree of life',
+    icon: 'M12 21V11M12 11c0-4 3-6 7-6 0 4-3 6-7 6zM12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z',
+  },
+  {
+    href: '/near',
+    label: 'Near me',
+    icon: 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  },
 ];
 ---
 
 <div class="app-shell" data-map={map}>
   <header class="app-header">
-    <a href="/" class="flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
+    <a href="/" class="brand flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
       <svg
         viewBox="0 0 24 24"
         class="size-6 text-accent"
@@ -41,11 +49,11 @@ const nav = [
         <circle cx="12" cy="12" r="9"></circle>
         <path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path>
       </svg>
-      <span>GBIF Explorer</span>
+      <span class="brand-label">GBIF Explorer</span>
     </a>
 
     <div class="min-w-0 flex-1">
-      <slot name="omnibox" />
+      <Omnibox client:idle />
     </div>
 
     <nav aria-label="Main">
@@ -54,10 +62,21 @@ const nav = [
           <li>
             <a
               href={item.href}
-              class="rounded-md px-3 py-2 text-muted transition-colors duration-200 hover:bg-surface-2 hover:text-text aria-[current=page]:text-text aria-[current=page]:shadow-[inset_0_-2px_0_var(--accent)]"
+              class="flex items-center gap-1.5 rounded-md px-2.5 py-2 text-muted transition-colors duration-200 hover:bg-surface-2 hover:text-text aria-[current=page]:text-text aria-[current=page]:shadow-[inset_0_-2px_0_var(--accent)]"
               aria-current={path === item.href ? 'page' : undefined}
             >
-              {item.label}
+              <svg
+                viewBox="0 0 24 24"
+                class="nav-icon size-5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d={item.icon} />
+              </svg>
+              <span class="nav-label">{item.label}</span>
             </a>
           </li>
         ))}
@@ -69,19 +88,13 @@ const nav = [
   <div class="app-body">
     <div class="map-region" aria-hidden={map === 'hidden' ? 'true' : undefined}>
       <div id="map-slot" class="size-full" transition:persist="map">
-        <MapPlaceholder client:only="vue" />
+        <MapCanvas client:only="vue" />
       </div>
     </div>
 
     <main id="main" class="app-main" tabindex="-1">
       <slot />
     </main>
-
-    {panel && (
-      <aside class="app-panel" aria-label="Details">
-        <slot name="panel" />
-      </aside>
-    )}
   </div>
 
   <StaleNotice client:idle />
@@ -98,11 +111,11 @@ const nav = [
   .app-header {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0 1rem;
+    gap: 0.75rem;
+    padding: 0 0.75rem;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
-    z-index: 20;
+    z-index: 30;
   }
 
   .app-body {
@@ -138,44 +151,31 @@ const nav = [
     overflow: auto;
   }
 
-  .app-panel {
-    position: absolute;
-    z-index: 10;
-    background: var(--surface);
-    box-shadow: var(--shadow);
-    overflow: auto;
-  }
-
-  .app-panel:empty {
+  .nav-icon {
     display: none;
   }
 
-  /* Desktop: 400px right panel. */
-  @media (min-width: 768px) {
-    .app-panel {
-      top: 0.75rem;
-      right: 0.75rem;
-      bottom: 0.75rem;
-      width: var(--panel-width);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
+  @media (max-width: 1023.98px) {
+    .nav-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .nav-icon {
+      display: block;
     }
   }
 
-  /* Mobile: bottom sheet (snap behaviour arrives with BottomSheet in Phase 2). */
-  @media (max-width: 767.98px) {
-    .app-header nav span,
-    .app-header > a span {
+  @media (max-width: 639.98px) {
+    .brand-label {
       display: none;
     }
-
-    .app-panel {
-      left: 0;
-      right: 0;
-      bottom: 0;
-      max-height: 45dvh;
-      border-top: 1px solid var(--border);
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    .app-header {
+      gap: 0.375rem;
+      padding: 0 0.5rem;
     }
   }
 </style>

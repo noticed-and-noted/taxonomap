@@ -171,6 +171,13 @@ export interface Dataset {
   citation?: { text?: string };
 }
 
+export interface Organization {
+  key: string;
+  title: string;
+  country?: string;
+  homepage?: string[];
+}
+
 export interface MapCapabilities {
   minLat: number;
   maxLat: number;

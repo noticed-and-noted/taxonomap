@@ -91,3 +91,33 @@ export function yearRangeParam(range: readonly [number, number] | null | undefin
   const [a, b] = range;
   return a === b ? String(a) : `${Math.min(a, b)},${Math.max(a, b)}`;
 }
+
+export type LngLat = readonly [lng: number, lat: number];
+
+function signedArea(ring: readonly LngLat[]): number {
+  let a = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const p = ring[i] as LngLat;
+    const q = ring[i + 1] as LngLat;
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a / 2;
+}
+
+/**
+ * WKT for a single polygon ring: rounded to 4 dp (~10 m), consecutive
+ * duplicates removed, closed, and wound counter-clockwise as GBIF requires.
+ */
+export function polygonToWkt(ring: readonly LngLat[], dp = 4): string {
+  const pts: LngLat[] = [];
+  for (const [x, y] of ring) {
+    const p: LngLat = [round(x, dp), round(y, dp)];
+    const last = pts[pts.length - 1];
+    if (!last || last[0] !== p[0] || last[1] !== p[1]) pts.push(p);
+  }
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) pts.push(first);
+  if (signedArea(pts) < 0) pts.reverse();
+  return `POLYGON((${pts.map(([x, y]) => `${x} ${y}`).join(',')}))`;
+}

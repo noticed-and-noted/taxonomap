@@ -8,6 +8,8 @@ const HOUR = 3_600_000;
 /** Shared occurrence filter used by maps, panels and charts. */
 export interface OccurrenceFilter {
   taxonKey?: number | undefined;
+  /** Several species at once (repeated speciesKey param). */
+  speciesKeys?: readonly number[] | undefined;
   year?: readonly [number, number] | null | undefined;
   month?: number | undefined;
   basisOfRecord?: readonly BasisOfRecord[] | undefined;
@@ -23,6 +25,7 @@ export interface OccurrenceFilter {
 export function filterToParams(f: OccurrenceFilter): Params {
   return {
     taxonKey: f.taxonKey,
+    speciesKey: f.speciesKeys,
     year: yearRangeParam(f.year),
     month: f.month,
     basisOfRecord: f.basisOfRecord,

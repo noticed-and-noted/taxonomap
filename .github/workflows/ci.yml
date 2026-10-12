@@ -24,6 +24,7 @@ permissions:
 
 env:
   NODE_VERSION: '24'
+  ASTRO_TELEMETRY_DISABLED: '1'
 
 jobs:
   verify:
@@ -52,6 +53,7 @@ jobs:
       PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
       GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
       SPECIES_PRERENDER_COUNT: ${{ vars.SPECIES_PRERENDER_COUNT || '2000' }}
+      NAME_INDEX_SIZE: ${{ vars.NAME_INDEX_SIZE || '6000' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -2,7 +2,8 @@
  * Shared explorer state. Every field lives in the URL (see url-sync.ts), so
  * any view is reproducible from its link and the back button works.
  */
-import { computed } from 'nanostores';
+import { atom, computed } from 'nanostores';
+import { BASEMAP_IDS } from '~/lib/basemaps';
 import type { BasisOfRecord, OccurrenceFilter, TileFilter } from '~/lib/gbif';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
@@ -17,7 +18,7 @@ export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
   'OCCURRENCE',
 ];
 
-export const PANELS = ['none', 'hex', 'filters', 'layers', 'compare'] as const;
+export const PANELS = ['none', 'hex', 'filters', 'compare'] as const;
 export type Panel = (typeof PANELS)[number];
 
 export interface MapView {
@@ -56,7 +57,8 @@ const yearsCodec: UrlCodec<YearRange> = {
   key: 'years',
   default: null,
   scope: 'global',
-  history: 'replace',
+  // The slider commits on release, so each change is a deliberate step.
+  history: 'push',
   parse(raw) {
     const m = /^(\d{4})-(\d{4})$/.exec(raw);
     if (!m) return undefined;
@@ -73,9 +75,61 @@ export const $yearRange = urlAtom(yearsCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
 export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
 export const $country = urlAtom(codecs.string('country', { pattern: /^[A-Z]{2}$/, scope: 'global' }));
-/** Selected hex cell id ("z/x/y/i" or similar; set by MapCanvas in Phase 2). */
-export const $selectedHex = urlAtom(codecs.string('hex', { pattern: /^[\w./:-]{1,64}$/ }));
+export type HexPoint = readonly [lng: number, lat: number] | null;
+
+/**
+ * Selected hex, stored as the clicked point ("lng,lat", 4 dp). Hex ids are
+ * not stable across zooms, so MapCanvas re-resolves the cell under this point
+ * at the URL's zoom and publishes its geometry to $hexGeometry.
+ */
+const hexCodec: UrlCodec<HexPoint> = {
+  key: 'hex',
+  default: null,
+  parse(raw) {
+    const [lng, lat] = raw.split(',').map(Number);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat as number) > 90) return undefined;
+    return [lng as number, lat as number];
+  },
+  serialize: (v) => (v ? `${v[0].toFixed(4)},${v[1].toFixed(4)}` : ''),
+};
+
+export const $selectedHex = urlAtom(hexCodec);
 export const $panel = urlAtom(codecs.enumOf('panel', PANELS, 'none'));
+export const $basemap = urlAtom(codecs.enumOf('base', BASEMAP_IDS, 'plain', { history: 'replace' }));
+/** Show individual (clustered) records for the selected hex. */
+export const $showRecords = urlAtom(codecs.bool('pts'));
+/** Selected occurrence record (shown in the panel). */
+export const $selectedRecord = urlAtom(codecs.int('rec', null));
+
+/* ---- Ephemeral (not in the URL): derived from URL state or one-shot requests ---- */
+
+export interface HexGeometry {
+  /** Outer ring, lng/lat. */
+  ring: [number, number][];
+  /** CCW WKT for GBIF geometry filters. */
+  wkt: string;
+  /** Count shown on the tile (before live refinement). */
+  tileTotal: number;
+}
+
+/** Geometry of the selected hex, published by MapCanvas. */
+export const $hexGeometry = atom<HexGeometry | null>(null);
+
+export type FlyRequest =
+  | { kind: 'bounds'; bbox: readonly [number, number, number, number]; maxZoom?: number }
+  | { kind: 'point'; lng: number; lat: number; zoom: number };
+
+/** One-shot camera requests (place search, taxon extent). */
+export const $flyTo = atom<FlyRequest | null>(null);
+
+/** Clear the hex selection and anything that depends on it. */
+export function clearHexSelection(): void {
+  $selectedHex.set(null);
+  $showRecords.set(false);
+  $selectedRecord.set(null);
+  $hexGeometry.set(null);
+  if ($panel.get() === 'hex') $panel.set('none');
+}
 
 export const $occurrenceFilter = computed(
   [$taxonKey, $yearRange, $basisOfRecord, $hasPhoto, $country],

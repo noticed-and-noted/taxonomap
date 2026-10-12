@@ -10,7 +10,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check",
+    "check": "astro check && vue-tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -27,6 +27,9 @@
     "@nanostores/vue": "^1.1.0",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.3.8",
+    "d3-scale": "^4.0.2",
+    "d3-shape": "^3.2.0",
+    "maplibre-gl": "^6.14.0",
     "nanostores": "^1.5.5",
     "p-limit": "^7.3.3",
     "tailwindcss": "^4.3.3",
@@ -37,6 +40,9 @@
     "@astrojs/check": "^0.9.10",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-shape": "^3.2.0",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^26.6.5",
     "eslint": "^10.12.0",
     "eslint-plugin-astro": "^3.2.1",
@@ -51,6 +57,7 @@
     "vite": "^8.3.4",
     "vitest": "^4.1.11",
     "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.3.13",
     "workbox-build": "^7.4.1"
   }
 }

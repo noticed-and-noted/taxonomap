@@ -19,7 +19,7 @@ const who = computed(() => props.creator ?? props.rightsHolder);
       :href="LICENCE_URLS[licence]"
       target="_blank"
       rel="license noopener"
-      class="font-semibold tracking-wide hover:underline"
+      class="whitespace-nowrap font-semibold tracking-wide hover:underline"
       >{{ licence }}</a
     >
     <span v-if="who" class="truncate">© {{ who }}</span>

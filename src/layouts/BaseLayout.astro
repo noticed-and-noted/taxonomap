@@ -76,6 +76,10 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
       if (import.meta.env.PROD && 'serviceWorker' in navigator) {
         void import('workbox-window').then(({ Workbox }) => {
           const wb = new Workbox('/sw.js');
+          // A new deploy took over: reload once so the page matches the new shell.
+          wb.addEventListener('controlling', (e) => {
+            if (e.isUpdate) window.location.reload();
+          });
           void wb.register();
         });
       }

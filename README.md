@@ -4,7 +4,7 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 **Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
 
-> Status: **Phase 1 (foundations)** is complete. The map, species pages, tree of life and near-me features arrive in phases 2 to 5.
+> Status: **Phase 2 (map explorer MVP)** is complete. Species pages, tree of life and near-me features arrive in phases 3 to 5.
 
 ## Local setup
 
@@ -28,15 +28,18 @@ npm run dev             # http://localhost:4321
 
 ## Environment variables
 
-| Variable                  | Default                           | Used for                                                     |
-| ------------------------- | --------------------------------- | ------------------------------------------------------------ |
-| `PUBLIC_GBIF_API_BASE`    | `https://api.gbif.org`            | JSON API base (browser and build)                            |
-| `PUBLIC_GBIF_TILE_BASE`   | = API base                        | Map tile base                                                |
-| `PUBLIC_SITE_URL`         | `https://gbif-explorer.pages.dev` | Canonical URLs, sitemap, Open Graph                          |
-| `GBIF_CONTACT_EMAIL`      | none                              | Build-time `User-Agent: GBIFExplorer/<version> (contact: …)` |
-| `GBIF_CACHE_TTL_HOURS`    | `168`                             | Build-time disk-cache freshness                              |
-| `GBIF_CACHE_REFRESH`      | `0`                               | `1` ignores the disk cache for this build                    |
-| `SPECIES_PRERENDER_COUNT` | `2000`                            | Number of pre-rendered species pages (Phase 3)               |
+| Variable                                  | Default                           | Used for                                                               |
+| ----------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`            | JSON API base (browser and build)                                      |
+| `PUBLIC_GBIF_TILE_BASE`                   | = API base                        | Map tile base                                                          |
+| `PUBLIC_SITE_URL`                         | `https://gbif-explorer.pages.dev` | Canonical URLs, sitemap, Open Graph                                    |
+| `GBIF_CONTACT_EMAIL`                      | none                              | Build-time `User-Agent: GBIFExplorer/<version> (contact: …)`           |
+| `GBIF_CACHE_TTL_HOURS`                    | `168`                             | Build-time disk-cache freshness                                        |
+| `GBIF_CACHE_REFRESH`                      | `0`                               | `1` ignores the disk cache for this build                              |
+| `SPECIES_PRERENDER_COUNT`                 | `2000`                            | Number of pre-rendered species pages (Phase 3)                         |
+| `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)               | Species in the baked common-name index (`/data/names.json`)            |
+| `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `nominatim`                       | Place search provider (`nominatim` or `photon`); called on submit only |
+| `PUBLIC_BASEMAP_*`                        | see `.env.example`                | Override the Plain (dark/light), Terrain and Satellite basemaps        |
 
 `PUBLIC_*` values are inlined into the client bundle. Point the two bases at a caching proxy (see "Optional Worker") to change where requests go, with no code changes.
 
@@ -48,6 +51,18 @@ npm run dev             # http://localhost:4321
   - `view` uses `replaceState`, throttled to 300 ms.
   - `hex` and `panel` push history entries, so the back button works.
 - **The map survives navigation.** The map island lives in a `transition:persist="map"` slot inside `AppShell.astro`.
+- **Islands talk only through stores.** `MapCanvas` (persisted, `client:only`), `ExplorerOverlay` (`client:only`) and `Omnibox` (`client:idle`) are separate Vue apps; camera requests use the ephemeral `$flyTo` store and the selected cell's geometry is published on `$hexGeometry`.
+
+## Map explorer (Phase 2)
+
+- **Density layer.** GBIF hex-binned **vector** tiles (`.mvt`), styled on the client so the legend matches exactly and cells can be queried on click. Because a cell covers more ground when zoomed out, the log-scale bins scale by 4^(6 − zoom) and the legend shows the bins for the current zoom (`src/lib/ramp.ts`). Viridis ramp, colour-blind safe.
+- **"Has photo"** switches the layer from `density` to `adhoc` tiles (density ignores `mediaType`).
+- **Basemaps.** Plain is an OpenFreeMap vector style (`dark` / `positron`, following the theme) with its labels drawn above the data and roads/rivers hidden below zoom 8. Terrain is OpenTopoMap and Satellite is EOX Sentinel-2 cloudless (CC BY-NC-SA). All are keyless; CARTO now returns "API key required" tiles.
+- **Omnibox.** The baked common-name index answers instantly, ranked by record count. Live GBIF suggest (scientific names) and vernacular search are debounced by 250 ms. Place search runs only on Enter.
+- **Time slider.** Its histogram comes from `/data/years.json` and goes live (one facet request) when other filters apply. It commits on release, so each change is one history step.
+- **Hex panel.** One facet request (count, top 10 species, months), one image request for all 10 species (plus at most one follow-up), and names from the index. "Show individual records" loads up to 300 records as clustered points. Selecting a point shows the record with its dataset, publisher and licence.
+- **Mobile.** Filters and basemap move into a bottom sheet with three snap points.
+- **Photos** use GBIF's image cache (`/v1/image/cache/{size}/occurrence/{key}/media/{md5(identifier)}`), about 19 KB instead of a 145 KB original.
 
 ## Caching strategy
 
@@ -58,6 +73,7 @@ npm run dev             # http://localhost:4321
 | Service Worker (`dist/sw.js`) | GBIF JSON           | Stale-while-revalidate, 24 h, 300 entries                                                                                                                                                                                             |
 |                               | Map tiles           | Cache-first, 7 days, 2000 entries                                                                                                                                                                                                     |
 |                               | Images              | Cache-first, 30 days, 300 entries                                                                                                                                                                                                     |
+|                               | Basemaps            | Cache-first, 30 days, 1500 entries (OpenFreeMap tiles, styles, sprites and glyphs; EOX; OpenTopoMap)                                                                                                                                  |
 |                               | App shell           | Precached (main routes, JS/CSS, Latin font subsets, baked data)                                                                                                                                                                       |
 | Build disk cache              | `.cache/gbif/`      | Keyed by URL hash. Concurrency 5. CI persists it with `actions/cache`, so nightly builds are incremental                                                                                                                              |
 | Cloudflare Pages              | `_astro/*`          | Immutable; see `public/_headers`                                                                                                                                                                                                      |
@@ -76,6 +92,8 @@ These are cases where the live API differs from the original brief:
 4. `offset + limit` is capped at 100,001.
 5. `@vite-pwa/astro` doesn't support Astro 7, so `integrations/service-worker.ts` calls `workbox-build` directly.
 6. TypeScript is pinned to 6.0.x because `@astrojs/check` and `typescript-eslint` don't support TypeScript 7 yet.
+7. Species detail (`/v1/species/{key}`) has no `vernacularName` at species rank (higher ranks do), and occurrence records carry only `publishingOrgKey`. Publisher names come from `/v1/organization/{key}`.
+8. MapLibre 6 derives its worker URL from `import.meta.url`, which breaks once bundled. The worker is shipped as an asset (`?url`) and passed to `setWorkerUrl`. MapLibre is about 285 KB gzipped plus a 144 KB worker, which is the largest risk to the 3 s first-map target; it is tracked for Phase 6.
 
 ## Deployment
 

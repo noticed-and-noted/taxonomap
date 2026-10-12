@@ -16,6 +16,12 @@ export default defineConfig(
   {
     files: ['**/*.vue'],
     languageOptions: { parserOptions: { parser: tseslint.parser, extraFileExtensions: ['.vue'] } },
+    rules: {
+      // TypeScript (vue-tsc) checks undefined identifiers, including type namespaces.
+      'no-undef': 'off',
+      // Component names follow the design brief (e.g. Omnibox).
+      'vue/multi-word-component-names': 'off',
+    },
   },
   {
     languageOptions: { globals: { ...globals.browser, ...globals.node } },

@@ -3,11 +3,10 @@
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": ["dist", "node_modules", ".cache", "playwright-report", "test-results"],
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "~/*": ["src/*"]
+      "~/*": ["./src/*"]
     },
     "jsx": "preserve",
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals", "geojson"]
   }
 }

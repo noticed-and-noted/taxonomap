@@ -2,6 +2,7 @@ import {
   bboxToWkt,
   buildUrl,
   circleToWkt,
+  polygonToWkt,
   round,
   roundBbox,
   roundLatLng,
@@ -52,5 +53,28 @@ describe('params', () => {
     expect(yearRangeParam([2010, 2000])).toBe('2000,2010');
     expect(yearRangeParam([2020, 2020])).toBe('2020');
     expect(yearRangeParam(null)).toBeUndefined();
+  });
+});
+
+describe('polygonToWkt', () => {
+  it('rounds, closes and winds counter-clockwise', () => {
+    const cw: [number, number][] = [
+      [0, 0],
+      [0, 1.000049],
+      [1, 1],
+      [1, 0],
+    ];
+    expect(polygonToWkt(cw)).toBe('POLYGON((0 0,1 0,1 1,0 1,0 0))');
+  });
+});
+
+describe('ramp', () => {
+  it('scales thresholds by zoom and keeps them increasing', async () => {
+    const { thresholdsAt, nice, binLabels } = await import('~/lib/ramp');
+    expect(thresholdsAt(6)).toEqual([10, 100, 1_000, 10_000, 100_000, 1_000_000]);
+    expect(thresholdsAt(5)).toEqual([50, 500, 5_000, 50_000, 500_000, 5_000_000]);
+    expect(thresholdsAt(12)).toEqual([1, 10, 100, 1_000, 10_000, 100_000]);
+    expect(nice(37)).toBe(50);
+    expect(binLabels(6)).toEqual(['1', '10', '100', '1K', '10K', '100K', '1M']);
   });
 });

@@ -8,6 +8,7 @@
  *  - GBIF JSON:  StaleWhileRevalidate, 24 h max age, 300 entries
  *  - Map tiles:  CacheFirst, 7 days, 2000 entries
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
+ *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX, OpenTopoMap)
  *  - App shell:  precached (main routes, JS/CSS, Latin font subsets, baked data)
  */
 import type { AstroIntegration } from 'astro';
@@ -66,6 +67,16 @@ export default function serviceWorker(): AstroIntegration {
                 cacheName: 'gbif-json',
                 expiration: { maxEntries: 300, maxAgeSeconds: 24 * 3600, purgeOnQuotaError: true },
                 cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              // Basemap vector tiles, styles, sprites, glyphs and raster tiles.
+              urlPattern: /^https:\/\/(tiles\.openfreemap\.org|tiles\.maps\.eox\.at|[a-c]?\.?tile\.opentopomap\.org)\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'basemap',
+                expiration: { maxEntries: 1500, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true },
+                cacheableResponse: { statuses: [0, 200] },
               },
             },
             {
