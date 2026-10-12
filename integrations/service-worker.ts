@@ -1,0 +1,88 @@
+/**
+ * Generates dist/sw.js with Workbox after the static build.
+ *
+ * @vite-pwa/astro does not support Astro 7 (its peer range stops at ^5), so
+ * this small integration calls workbox-build directly.
+ *
+ * Strategies:
+ *  - GBIF JSON:  StaleWhileRevalidate, 24 h max age, 300 entries
+ *  - Map tiles:  CacheFirst, 7 days, 2000 entries
+ *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
+ *  - App shell:  precached (main routes, JS/CSS, Latin font subsets, baked data)
+ */
+import type { AstroIntegration } from 'astro';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { generateSW } from 'workbox-build';
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+const trim = (s: string) => s.replace(/\/+$/, '');
+
+export default function serviceWorker(): AstroIntegration {
+  return {
+    name: 'gbif-explorer:service-worker',
+    hooks: {
+      'astro:build:done': async ({ dir, logger }) => {
+        const apiBase = trim(process.env['PUBLIC_GBIF_API_BASE'] || 'https://api.gbif.org');
+        const tileBase = trim(process.env['PUBLIC_GBIF_TILE_BASE'] || apiBase);
+        const outDir = fileURLToPath(dir);
+
+        const { count, size, warnings } = await generateSW({
+          swDest: `${outDir}/sw.js`,
+          globDirectory: outDir,
+          // Routes and baked data appear in later phases; only glob what exists.
+          globPatterns: [
+            ...['index.html', 'tree/index.html', 'near/index.html', 'species/view/index.html'].filter((f) =>
+              existsSync(`${outDir}/${f}`),
+            ),
+            '_astro/*.{js,css}',
+            '_astro/*-latin-*-normal*.woff2',
+            'favicon.svg',
+            'manifest.webmanifest',
+            ...(existsSync(`${outDir}/data`) ? ['data/*.json'] : []),
+          ],
+          globIgnores: ['_astro/*-latin-ext-*'],
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+          // Astro hashes everything in _astro/, so the URL is the revision.
+          dontCacheBustURLsMatching: /\/_astro\//,
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          sourcemap: false,
+          runtimeCaching: [
+            {
+              urlPattern: new RegExp(`^${escape(tileBase)}/v2/map/.*\\.(png|mvt)(\\?|$)`),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'gbif-tiles',
+                expiration: { maxEntries: 2000, maxAgeSeconds: 7 * 24 * 3600, purgeOnQuotaError: true },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: new RegExp(`^${escape(apiBase)}/v[12]/(?!image/)`),
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'gbif-json',
+                expiration: { maxEntries: 300, maxAgeSeconds: 24 * 3600, purgeOnQuotaError: true },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+            {
+              urlPattern: ({ request }) => request.destination === 'image',
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'images',
+                expiration: { maxEntries: 300, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
+        });
+
+        for (const w of warnings) logger.warn(w);
+        logger.info(`sw.js: precached ${count} files (${(size / 1024).toFixed(0)} KB)`);
+      },
+    },
+  };
+}

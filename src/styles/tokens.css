@@ -1,0 +1,82 @@
+/*
+ * Design tokens. Dark "forest" is the default; light "paper" applies when the
+ * user picks it ([data-theme='light'] on <html>). One accent, used for
+ * selection and focus. Text pairs meet WCAG 2.2 AA (≥4.5:1) on --bg and
+ * --surface in both themes.
+ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0e1813;
+  --surface: #14221b;
+  --surface-2: #1b2d24;
+  --surface-3: #243a2f;
+  --border: #2c4437;
+  --border-strong: #3f5c4c;
+  --text: #e9f0ea; /* 15.6:1 on bg */
+  --text-muted: #a9bbb0; /* 8.9:1 on bg */
+  --text-subtle: #84998c; /* 5.6:1 on bg */
+  --accent: #f0b443; /* amber: selection */
+  --accent-contrast: #1d1404;
+  --accent-soft: rgb(240 180 67 / 0.16);
+  --focus: #f6c86a;
+  --danger: #ff8a7a;
+  --overlay: rgb(6 12 9 / 0.72);
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+  --photo-placeholder: #1f3329;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5efe3;
+  --surface: #fdfaf3;
+  --surface-2: #efe7d7;
+  --surface-3: #e5dbc6;
+  --border: #d8ccb5;
+  --border-strong: #b9a989;
+  --text: #1d2720; /* 14.2:1 on bg */
+  --text-muted: #4f5d54; /* 6.6:1 on bg */
+  --text-subtle: #66726a; /* 4.7:1 on bg */
+  --accent: #9c5200; /* 5.6:1 on bg */
+  --accent-contrast: #fffaf0;
+  --accent-soft: rgb(156 82 0 / 0.12);
+  --focus: #9c5200;
+  --danger: #b3261e;
+  --overlay: rgb(245 239 227 / 0.8);
+  --shadow: 0 8px 24px rgb(60 45 20 / 0.16);
+  --photo-placeholder: #e2d8c4;
+}
+
+:root {
+  /* Perceptually uniform, colour-blind-safe sequential ramp (viridis). */
+  --ramp-0: #440154;
+  --ramp-1: #46327e;
+  --ramp-2: #365c8d;
+  --ramp-3: #277f8e;
+  --ramp-4: #1fa187;
+  --ramp-5: #4ac16d;
+  --ramp-6: #a0da39;
+  --ramp-7: #fde725;
+  /* Compare mode: Okabe–Ito orange / blue. */
+  --compare-a: #e69f00;
+  --compare-b: #56b4e9;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --panel-width: 400px;
+  --header-height: 56px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 200ms;
+  --dur: 250ms;
+  --dur-slow: 300ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}

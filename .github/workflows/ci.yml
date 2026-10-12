@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Nightly rebuild refreshes baked data and pre-rendered species pages.
+    - cron: '0 3 * * *'
+    # Weekly live contract tests (Monday 04:00 UTC).
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      contract:
+        description: Run live GBIF contract tests
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  verify:
+    name: Lint, typecheck, unit tests
+    if: github.event.schedule != '0 4 * * 1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run check
+      - run: npm test
+
+  build:
+    name: Build
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      PUBLIC_GBIF_API_BASE: ${{ vars.PUBLIC_GBIF_API_BASE || 'https://api.gbif.org' }}
+      PUBLIC_GBIF_TILE_BASE: ${{ vars.PUBLIC_GBIF_TILE_BASE || 'https://api.gbif.org' }}
+      PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+      GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
+      SPECIES_PRERENDER_COUNT: ${{ vars.SPECIES_PRERENDER_COUNT || '2000' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+
+      # GBIF response cache persists between runs. A new key is saved each day;
+      # restore-keys picks up the most recent previous cache.
+      - name: Date stamp
+        id: date
+        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: .cache/gbif
+          key: gbif-${{ steps.date.outputs.today }}-${{ github.run_id }}
+          restore-keys: |
+            gbif-${{ steps.date.outputs.today }}-
+            gbif-
+
+      - run: npm run build
+        timeout-minutes: 40
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 3
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: build
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT }} --branch=main
+
+  contract:
+    name: GBIF contract tests (live)
+    if: github.event.schedule == '0 4 * * 1' || inputs.contract
+    runs-on: ubuntu-latest
+    env:
+      GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run test:contract

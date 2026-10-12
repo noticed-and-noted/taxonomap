@@ -1,0 +1,84 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import { GBIF_API_BASE } from '~/lib/gbif/config';
+import '~/styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+  noindex?: boolean;
+  canonical?: string;
+}
+
+const {
+  title,
+  description = 'Explore where the world’s species have been recorded, with maps and charts built on GBIF occurrence data.',
+  ogImage,
+  noindex = false,
+  canonical,
+} = Astro.props;
+
+const siteName = 'GBIF Explorer';
+const fullTitle = title === siteName ? title : `${title} · ${siteName}`;
+const canonicalUrl = canonical ?? (Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined);
+const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : undefined;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    {canonicalUrl && !noindex && <link rel="canonical" href={canonicalUrl} />}
+    <meta name="theme-color" content="#0e1813" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href={GBIF_API_BASE} crossorigin />
+
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+    {ogImageUrl && <meta property="og:image" content={ogImageUrl} />}
+    <meta name="twitter:card" content={ogImageUrl ? 'summary_large_image' : 'summary'} />
+
+    <!-- Apply the saved theme before first paint, and again after each client-side swap. -->
+    <script is:inline>
+      (() => {
+        const apply = (doc) => {
+          let t = null;
+          try {
+            t = localStorage.getItem('theme');
+          } catch {
+            /* storage blocked: fall back to the dark default */
+          }
+          doc.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+        };
+        apply(document);
+        document.addEventListener('astro:before-swap', (e) => apply(e.newDocument));
+      })();
+    </script>
+    <ClientRouter fallback="swap" />
+    <slot name="head" />
+  </head>
+  <body class="bg-bg text-text">
+    <a class="skip-link" href="#main">
+      Skip to content
+    </a>
+    <slot />
+
+    <script>
+      if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+        void import('workbox-window').then(({ Workbox }) => {
+          const wb = new Workbox('/sw.js');
+          void wb.register();
+        });
+      }
+    </script>
+  </body>
+</html>

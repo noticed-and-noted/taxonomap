@@ -1,0 +1,10 @@
+{
+  "name": "GBIF Explorer",
+  "short_name": "GBIF Explorer",
+  "description": "Explore where the world's species have been recorded.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e1813",
+  "theme_color": "#0e1813",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

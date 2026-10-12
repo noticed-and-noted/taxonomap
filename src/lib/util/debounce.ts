@@ -1,0 +1,57 @@
+export interface Debounced<A extends unknown[]> {
+  (...args: A): void;
+  cancel(): void;
+  flush(): void;
+}
+
+/** Trailing-edge debounce. Autocomplete uses 250 ms. */
+export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 250): Debounced<A> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: A | undefined;
+  const run = () => {
+    timer = undefined;
+    if (pending) {
+      const args = pending;
+      pending = undefined;
+      fn(...args);
+    }
+  };
+  const d = ((...args: A) => {
+    pending = args;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(run, ms);
+  }) as Debounced<A>;
+  d.cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    pending = undefined;
+  };
+  d.flush = () => {
+    if (timer) clearTimeout(timer);
+    run();
+  };
+  return d;
+}
+
+/** Leading + trailing throttle, used for map-move → URL updates. */
+export function throttle<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
+  let last = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: A | undefined;
+  return (...args: A) => {
+    const now = Date.now();
+    const wait = ms - (now - last);
+    if (wait <= 0) {
+      last = now;
+      fn(...args);
+      return;
+    }
+    pending = args;
+    timer ??= setTimeout(() => {
+      timer = undefined;
+      last = Date.now();
+      if (pending) fn(...pending);
+      pending = undefined;
+    }, wait);
+  };
+}

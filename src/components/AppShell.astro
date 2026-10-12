@@ -1,0 +1,181 @@
+---
+/**
+ * App frame for the interactive routes (/, /tree, /near).
+ *
+ * The map island sits in a `transition:persist` slot so that it (and its
+ * WebGL context, camera and loaded tiles) survives ClientRouter navigation.
+ * Visibility is controlled by the non-persisted wrapper, because a persisted
+ * element keeps its old attributes across swaps.
+ */
+import MapPlaceholder from './vue/MapPlaceholder.vue';
+import StaleNotice from './vue/StaleNotice.vue';
+import ThemeToggle from './ThemeToggle.astro';
+
+interface Props {
+  /** full: map is the page; hidden: map stays alive offscreen (e.g. /tree). */
+  map?: 'full' | 'hidden';
+  /** Show the right panel / bottom sheet region. */
+  panel?: boolean;
+}
+
+const { map = 'full', panel = true } = Astro.props;
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const nav = [
+  { href: '/', label: 'Map' },
+  { href: '/tree', label: 'Tree of life' },
+  { href: '/near', label: 'Near me' },
+];
+---
+
+<div class="app-shell" data-map={map}>
+  <header class="app-header">
+    <a href="/" class="flex items-center gap-2 font-display text-lg font-semibold tracking-tight">
+      <svg
+        viewBox="0 0 24 24"
+        class="size-6 text-accent"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path>
+      </svg>
+      <span>GBIF Explorer</span>
+    </a>
+
+    <div class="min-w-0 flex-1">
+      <slot name="omnibox" />
+    </div>
+
+    <nav aria-label="Main">
+      <ul class="flex items-center gap-1 text-sm">
+        {nav.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              class="rounded-md px-3 py-2 text-muted transition-colors duration-200 hover:bg-surface-2 hover:text-text aria-[current=page]:text-text aria-[current=page]:shadow-[inset_0_-2px_0_var(--accent)]"
+              aria-current={path === item.href ? 'page' : undefined}
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+    <ThemeToggle />
+  </header>
+
+  <div class="app-body">
+    <div class="map-region" aria-hidden={map === 'hidden' ? 'true' : undefined}>
+      <div id="map-slot" class="size-full" transition:persist="map">
+        <MapPlaceholder client:only="vue" />
+      </div>
+    </div>
+
+    <main id="main" class="app-main" tabindex="-1">
+      <slot />
+    </main>
+
+    {panel && (
+      <aside class="app-panel" aria-label="Details">
+        <slot name="panel" />
+      </aside>
+    )}
+  </div>
+
+  <StaleNotice client:idle />
+</div>
+
+<style>
+  .app-shell {
+    display: grid;
+    grid-template-rows: var(--header-height) 1fr;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    z-index: 20;
+  }
+
+  .app-body {
+    position: relative;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .map-region {
+    grid-area: 1 / 1;
+    min-height: 0;
+  }
+
+  .app-shell[data-map='hidden'] .map-region {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .app-main {
+    grid-area: 1 / 1;
+    min-height: 0;
+    position: relative;
+    pointer-events: none;
+  }
+
+  .app-main > :global(*) {
+    pointer-events: auto;
+  }
+
+  .app-shell[data-map='hidden'] .app-main {
+    pointer-events: auto;
+    overflow: auto;
+  }
+
+  .app-panel {
+    position: absolute;
+    z-index: 10;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    overflow: auto;
+  }
+
+  .app-panel:empty {
+    display: none;
+  }
+
+  /* Desktop: 400px right panel. */
+  @media (min-width: 768px) {
+    .app-panel {
+      top: 0.75rem;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      width: var(--panel-width);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+    }
+  }
+
+  /* Mobile: bottom sheet (snap behaviour arrives with BottomSheet in Phase 2). */
+  @media (max-width: 767.98px) {
+    .app-header nav span,
+    .app-header > a span {
+      display: none;
+    }
+
+    .app-panel {
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 45dvh;
+      border-top: 1px solid var(--border);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+  }
+</style>
