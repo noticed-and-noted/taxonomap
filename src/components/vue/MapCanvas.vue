@@ -37,6 +37,7 @@ import {
   $basemap,
   $flyTo,
   $hexGeometry,
+  $mapBounds,
   $mapView,
   $occurrenceFilter,
   $selectedHex,
@@ -446,8 +447,38 @@ onMounted(async () => {
       'Map of occurrence records. Use arrow keys to pan, plus and minus to zoom, Enter to select the cell under the crosshair, Escape to clear.',
     );
 
+  // Visible extent from the canvas corners (getBounds() is world-wide under
+  // the globe projection). At very low zoom, corners miss the globe: world.
+  const publishBounds = () => {
+    if (!map) return;
+    const c = map.getCanvas();
+    const w = c.clientWidth;
+    const h = c.clientHeight;
+    if (map.getZoom() < 2.5 || !w || !h) {
+      $mapBounds.set([-180, -85, 180, 85]);
+      return;
+    }
+    const pts = [
+      [0, 0],
+      [w, 0],
+      [0, h],
+      [w, h],
+      [w / 2, 0],
+      [w / 2, h],
+    ].map(([x, y]) => map!.unproject([x as number, y as number]));
+    const lngs = pts.map((p) => p.lng);
+    const lats = pts.map((p) => p.lat);
+    $mapBounds.set([
+      Math.min(...lngs),
+      Math.max(-85, Math.min(...lats)),
+      Math.max(...lngs),
+      Math.min(85, Math.max(...lats)),
+    ]);
+  };
+  map.once('load', publishBounds);
   map.on('moveend', () => {
     if (!map) return;
+    publishBounds();
     const c = map.getCenter();
     const next = { lng: c.lng, lat: c.lat, zoom: map.getZoom() };
     if (!sameView(next, $mapView.get())) $mapView.set(next);

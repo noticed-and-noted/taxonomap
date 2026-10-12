@@ -75,3 +75,29 @@ export function pickCommonName(names: readonly VernacularName[], langs = ['eng',
   const inLang = names.filter((n) => n.language && langs.includes(n.language));
   return (inLang.find((n) => n.preferred) ?? inLang[0])?.vernacularName;
 }
+
+/**
+ * Accepted species under each descendant of `key` (or under every taxon,
+ * if no key), from one species-search facet on higherTaxonKey. Used as the
+ * tree's "species" size metric without a request per node.
+ */
+export async function speciesCountsUnder(
+  key?: number,
+  facetLimit = 3000,
+  signal?: AbortSignal,
+): Promise<Map<number, number>> {
+  const res = await http().getJson<{ facets?: { field: string; counts: { name: string; count: number }[] }[] }>(
+    '/v1/species/search',
+    {
+      datasetKey: BACKBONE_DATASET_KEY,
+      status: 'ACCEPTED',
+      rank: 'SPECIES',
+      highertaxonKey: key,
+      facet: 'higherTaxonKey',
+      facetLimit,
+      limit: 0,
+    },
+    { ttlMs: DAY, ...(signal && { signal }) },
+  );
+  return new Map((res.facets?.[0]?.counts ?? []).map((c) => [Number(c.name), c.count]));
+}

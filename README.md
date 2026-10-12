@@ -4,7 +4,7 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 **Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
 
-> Status: **Phase 3 (species pages)** is complete. The tree of life and near-me features arrive in phases 4 and 5.
+> Status: **Phase 4 (tree of life)** is complete. The near-me features arrive in Phase 5.
 
 ## Local setup
 
@@ -90,6 +90,15 @@ npm run dev             # http://localhost:4321
 - **Mini-map.** GBIF's own basemap tiles (`tile.gbif.org`) with the same hex density layer as PNG. There's no MapLibre on species pages.
 - **Open Graph images.** Rendered at build per pre-rendered species with satori and resvg (`src/lib/og/species-card.ts`). Photos and rendered PNGs are cached in `.cache/`, so unchanged cards aren't re-rendered.
 - **Sitemap.** `@astrojs/sitemap` covers the main routes and pre-rendered species. `/sitemap.xml` redirects to `/sitemap-index.xml` via `public/_redirects`.
+
+## Tree of life (Phase 4)
+
+- **Baked levels.** Kingdom → order (about 3,700 nodes, 68 KB gzipped) come from `/data/tree.json`. Records come from one occurrence facet request. Species counts come from one species-search facet on `higherTaxonKey` per kingdom, which counts accepted species under every taxon without a request per node. Orders with very few species can fall outside the facet limit; they get a floor of 1.
+- **Live levels.** Below order, each expansion makes three requests (children for names, an occurrence facet for records, a species facet for counts), whatever the number of children.
+- **Charts.** A zoomable sunburst, or an icicle (the default on narrow screens). Both are drawn from a `d3-hierarchy` partition, and zooming tweens a focus window. Hover tooltips use loaded data only; the selected node's photo is fetched on click.
+- **URL state:** `focus`, `layout`, `metric` (records/species) and `scope`. Selecting a node sets the shared `taxon`, so the map follows. Species pages link in with `?focus=`.
+- **"Only the map view."** Replaces record counts with counts inside the persisted map's current bounds (one facet request). Lazily loaded levels reload with the same geometry filter. Species counts stay global.
+- **Accessibility.** The child list beside the chart is both the keyboard navigation and the data-table fallback.
 
 ## GBIF API findings (verified 2026-10-12)
 

@@ -1,9 +1,10 @@
-import type { CountriesSnapshot, NamesSnapshot, YearsSnapshot } from './types';
+import type { CountriesSnapshot, NamesSnapshot, TreeSnapshot, YearsSnapshot } from './types';
 
 interface Snapshots {
   years: YearsSnapshot;
   countries: CountriesSnapshot;
   names: NamesSnapshot;
+  tree: TreeSnapshot;
 }
 
 const cache = new Map<string, Promise<unknown>>();

@@ -60,8 +60,10 @@ const { map = 'full' } = Astro.props;
     min-height: 0;
   }
 
-  .app-shell[data-map='hidden'] .map-region {
-    visibility: hidden;
+  .app-shell[data-map='hidden'] .map-region,
+  .app-shell[data-map='hidden'] .map-region :global(*) {
+    /* MapLibre controls set their own visibility; keep the whole map hidden. */
+    visibility: hidden !important;
     pointer-events: none;
   }
 

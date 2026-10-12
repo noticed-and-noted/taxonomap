@@ -34,7 +34,9 @@ const viewCodec: UrlCodec<MapView> = {
   key: 'view',
   default: DEFAULT_VIEW,
   history: 'replace',
-  scope: 'page',
+  // The map persists across pages, so its view travels with navigation
+  // (the tree's "only the map view" scope depends on it).
+  scope: 'global',
   parse(raw) {
     const [lng, lat, zoom] = raw.split(',').map(Number);
     if (![lng, lat, zoom].every((n) => Number.isFinite(n))) return undefined;
@@ -118,6 +120,9 @@ export const $hexGeometry = atom<HexGeometry | null>(null);
 export type FlyRequest =
   | { kind: 'bounds'; bbox: readonly [number, number, number, number]; maxZoom?: number }
   | { kind: 'point'; lng: number; lat: number; zoom: number };
+
+/** Current map bounds [west, south, east, north], published by MapCanvas. */
+export const $mapBounds = atom<readonly [number, number, number, number] | null>(null);
 
 /** One-shot camera requests (place search, taxon extent). */
 export const $flyTo = atom<FlyRequest | null>(null);

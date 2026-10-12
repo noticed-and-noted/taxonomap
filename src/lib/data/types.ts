@@ -28,3 +28,28 @@ export type NameRow = [number, RankCode, string, string | null, number];
 export interface NamesSnapshot extends BakedMeta {
   names: NameRow[];
 }
+
+/** Tree node rank codes (baked levels are K–O; lazy levels add F, G, S). */
+export type TreeRank = 'K' | 'P' | 'C' | 'O' | 'F' | 'G' | 'S';
+
+/** Compact tree node. */
+export interface TreeNodeRow {
+  /** GBIF key */
+  k: number;
+  /** scientific name */
+  n: string;
+  /** English common name */
+  c?: string;
+  r: TreeRank;
+  /** occurrence records */
+  o: number;
+  /** accepted species (backbone) */
+  s: number;
+  /** parent key (absent for kingdoms) */
+  p?: number;
+}
+
+/** /data/tree.json — kingdom → order with counts. */
+export interface TreeSnapshot extends BakedMeta {
+  nodes: TreeNodeRow[];
+}

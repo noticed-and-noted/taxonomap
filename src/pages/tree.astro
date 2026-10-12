@@ -1,16 +1,14 @@
 ---
 import AppShell from '~/components/AppShell.astro';
+import TreeExplorer from '~/components/vue/TreeExplorer.vue';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 ---
 
 <BaseLayout
   title="Tree of life"
-  description="Browse the tree of life, sized by how often each group has been recorded."
+  description="Browse the tree of life, from kingdoms to species, sized by how often each group has been recorded."
 >
   <AppShell map="hidden">
-    <section class="mx-auto max-w-3xl px-4 py-10">
-      <h1 class="font-display text-3xl">Tree of life</h1>
-      <p class="mt-3 text-muted">The zoomable sunburst arrives in Phase 4.</p>
-    </section>
+    <TreeExplorer client:only="vue" />
   </AppShell>
 </BaseLayout>

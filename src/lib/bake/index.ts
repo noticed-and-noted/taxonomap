@@ -9,10 +9,19 @@ import {
   getVernacularNames,
   listByRank,
   occurrenceFacets,
+  speciesCountsUnder,
   type NameUsage,
   type VernacularName,
 } from '~/lib/gbif/server';
-import type { CountriesSnapshot, NameRow, NamesSnapshot, RankCode, YearsSnapshot } from '~/lib/data/types';
+import type {
+  CountriesSnapshot,
+  NameRow,
+  NamesSnapshot,
+  RankCode,
+  TreeNodeRow,
+  TreeSnapshot,
+  YearsSnapshot,
+} from '~/lib/data/types';
 import { englishName } from '~/lib/species/names';
 import { speciesSlug } from '~/lib/species/data';
 
@@ -274,4 +283,72 @@ export async function bakedCommonNames(): Promise<(key: number) => string | null
   const { names } = await bakeNames();
   const map = new Map(names.filter((r) => r[3]).map((r) => [r[0], r[3] as string]));
   return (key) => map.get(key) ?? null;
+}
+
+/* ---------------- Tree of life (kingdom → order) ---------------- */
+
+const TREE_RANKS = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER'] as const;
+
+/**
+ * Upper four ranks with record and species counts. Requests: one occurrence
+ * facet request, ~6 paged name listings (shared with the name index), and one
+ * species-count facet per kingdom. Orders with very few species may fall
+ * outside the species facet limit; they get a floor of 1.
+ */
+export function bakeTree(): Promise<TreeSnapshot> {
+  return once('tree', async () => {
+    const occ = await occurrenceFacets({}, ['kingdomKey', 'phylumKey', 'classKey', 'orderKey'], {
+      limits: { kingdomKey: 20, phylumKey: 400, classKey: 2000, orderKey: 5000 },
+    });
+    const records = new Map<number, number>();
+    for (const f of ['kingdomKey', 'phylumKey', 'classKey', 'orderKey']) {
+      for (const c of occ.facets[f] ?? []) records.set(Number(c.name), c.count);
+    }
+
+    const usages: (NameUsage & { vernacularNames?: VernacularName[] })[] = [];
+    for (const rank of TREE_RANKS) {
+      for (let offset = 0; ; offset += 1000) {
+        const page = await listByRank(rank, offset, 1000);
+        usages.push(...page.results);
+        if (page.endOfRecords || page.results.length === 0) break;
+      }
+    }
+
+    const kingdoms = usages.filter((u) => u.rank === 'KINGDOM');
+    const species = new Map<number, number>();
+    for (const k of kingdoms) {
+      const counts = await speciesCountsUnder(k.key, 20_000);
+      for (const [key, n] of counts) species.set(key, n);
+    }
+
+    const code = { KINGDOM: 'K', PHYLUM: 'P', CLASS: 'C', ORDER: 'O' } as const;
+    const nodes: TreeNodeRow[] = [];
+    for (const u of usages) {
+      const r = code[u.rank as keyof typeof code];
+      const o = records.get(u.key) ?? 0;
+      const s = species.get(u.key) ?? (o > 0 ? 1 : 0);
+      if (!r || (o === 0 && s === 0)) continue;
+      const parent =
+        u.rank === 'PHYLUM'
+          ? u.kingdomKey
+          : u.rank === 'CLASS'
+            ? u.phylumKey
+            : u.rank === 'ORDER'
+              ? (u.classKey ?? u.phylumKey)
+              : undefined;
+      const common = u.vernacularNames ? englishName(u.vernacularNames) : null;
+      nodes.push({
+        k: u.key,
+        n: u.canonicalName ?? u.scientificName,
+        r,
+        o,
+        s,
+        ...(common && { c: common }),
+        ...(parent !== undefined && { p: parent }),
+      });
+    }
+    // Drop nodes whose parent is missing (e.g. unplaced taxa without counts).
+    const keys = new Set(nodes.map((n) => n.k));
+    return { ...meta(), nodes: nodes.filter((n) => n.p === undefined || keys.has(n.p)) };
+  });
 }
