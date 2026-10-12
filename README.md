@@ -4,7 +4,7 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 **Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
 
-> Status: **Phase 4 (tree of life)** is complete. The near-me features arrive in Phase 5.
+> Status: **Phase 5 (what's near me)** is complete. Phase 6 (polish) follows.
 
 ## Local setup
 
@@ -99,6 +99,15 @@ npm run dev             # http://localhost:4321
 - **URL state:** `focus`, `layout`, `metric` (records/species) and `scope`. Selecting a node sets the shared `taxon`, so the map follows. Species pages link in with `?focus=`.
 - **"Only the map view."** Replaces record counts with counts inside the persisted map's current bounds (one facet request). Lazily loaded levels reload with the same geometry filter. Species counts stay global.
 - **Accessibility.** The child list beside the chart is both the keyboard navigation and the data-table fallback.
+
+## What's near me (Phase 5)
+
+- **Choosing a place.** The persisted map switches to pin mode: click to drop a pin, or use your location after an explainer. The location is rounded to 3 dp (~100 m) before it's stored, put in the URL (`at=`) or sent anywhere. The radius snaps to 1/2/5/10/25/50 km and is drawn on the map.
+- **Species by class.** One facet request gives the classes in the area. Each page of species is one facet request (`facetOffset` paging) plus one photo search for the whole page; names come from the index or the photo results. Further groups load as you scroll.
+- **"Recorded in {month}".** Restricts to records from the current calendar month in any year.
+- **Recent sightings.** Photographed records from the past year, newest first, each showing its dataset and photo licence. GBIF ignores sort parameters, so the feed filters by date range and sorts on the client.
+- **Share card.** Drawn on a `<canvas>` using only CORS-enabled GBIF imagery (basemap and density tiles), so it can be exported. It's shared as an image with the Web Share API where supported, otherwise downloaded, or the link copied. It doesn't print coordinates. The per-group species tallies are fetched when the dialog opens.
+- **Checklist.** "Seen" ticks are kept in `localStorage` only (every access wrapped in try/catch, with a notice when storage is blocked) and can be exported as CSV.
 
 ## GBIF API findings (verified 2026-10-12)
 

@@ -48,17 +48,23 @@ export function bboxToWkt(bbox: BBox): string {
  * 3 dp (~100 m) so nearby users share cache entries.
  */
 export function circleToWkt(lat: number, lng: number, radiusKm: number, sides = 24): string {
+  const ring = circleRing(lat, lng, radiusKm, sides).map(([x, y]) => `${round(x, 3)} ${round(y, 3)}`);
+  return `POLYGON((${ring.join(',')}))`;
+}
+
+/** Closed counter-clockwise ring [lng, lat][] for a (snapped, rounded) circle. */
+export function circleRing(lat: number, lng: number, radiusKm: number, sides = 24): [number, number][] {
   const r = snapRadiusKm(radiusKm);
   const c = roundLatLng(lat, lng);
   const dLat = r / 110.574;
   const dLng = r / (111.32 * Math.max(Math.cos((c.lat * Math.PI) / 180), 1e-6));
-  const pts: string[] = [];
+  const pts: [number, number][] = [];
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * 2 * Math.PI;
-    pts.push(`${round(c.lng + dLng * Math.cos(a), 3)} ${round(c.lat + dLat * Math.sin(a), 3)}`);
+    pts.push([c.lng + dLng * Math.cos(a), c.lat + dLat * Math.sin(a)]);
   }
-  pts.push(pts[0] as string);
-  return `POLYGON((${pts.join(',')}))`;
+  pts.push(pts[0] as [number, number]);
+  return pts;
 }
 
 function isPresent(v: ParamValue): v is string | number | boolean {

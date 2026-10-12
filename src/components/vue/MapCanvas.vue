@@ -32,12 +32,15 @@ import {
   searchOccurrences,
   type TileFilter,
 } from '~/lib/gbif';
+import { circleRing } from '~/lib/gbif/params';
 import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
+import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import {
   $basemap,
   $flyTo,
   $hexGeometry,
   $mapBounds,
+  $mapMode,
   $mapView,
   $occurrenceFilter,
   $selectedHex,
@@ -118,6 +121,7 @@ function overlay(): { sources: StyleSpecification['sources']; data: LayerSpecifi
       hover: { type: 'geojson', data: EMPTY },
       selected: { type: 'geojson', data: selectedGeoJson($hexGeometry.get()) },
       records: { type: 'geojson', data: lastRecords, cluster: true, clusterRadius: 40, clusterMaxZoom: 14 },
+      near: { type: 'geojson', data: nearGeoJson() },
     },
     // Drawn below basemap labels.
     data: [
@@ -137,6 +141,27 @@ function overlay(): { sources: StyleSpecification['sources']; data: LayerSpecifi
     top: [
       { id: 'hover-line', type: 'line', source: 'hover', paint: { 'line-color': text, 'line-width': 1.5 } },
       { id: 'selected-line', type: 'line', source: 'selected', paint: { 'line-color': accent, 'line-width': 3 } },
+      {
+        id: 'near-area',
+        type: 'fill',
+        source: 'near',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': accent, 'fill-opacity': 0.08 },
+      },
+      {
+        id: 'near-edge',
+        type: 'line',
+        source: 'near',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'line-color': accent, 'line-width': 2, 'line-dasharray': [2, 1.5] },
+      },
+      {
+        id: 'near-pin',
+        type: 'circle',
+        source: 'near',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: { 'circle-color': accent, 'circle-radius': 7, 'circle-stroke-color': bg, 'circle-stroke-width': 3 },
+      },
       {
         id: 'record-clusters',
         type: 'circle',
@@ -239,6 +264,23 @@ async function buildStyle(basemap: BasemapId): Promise<StyleSpecification> {
       ...(raster ? [{ id: 'base', type: 'raster' as const, source: 'base', paint: { 'raster-opacity': 0.9 } }] : []),
       ...ours.data,
       ...ours.top,
+    ],
+  };
+}
+
+/** Pin + radius circle for "near me" (only while the map is in pin mode). */
+function nearGeoJson(): GeoJSON.FeatureCollection {
+  const at = $nearAt.get();
+  if ($mapMode.get() !== 'pin' || !at) return EMPTY;
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'Polygon', coordinates: [circleRing(at.lat, at.lng, $nearRadius.get())] },
+      },
+      { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [at.lng, at.lat] } },
     ],
   };
 }
@@ -359,6 +401,10 @@ function onMove(e: MapMouseEvent) {
 
 function onClick(e: MapMouseEvent) {
   if (!map) return;
+  if ($mapMode.get() === 'pin') {
+    setNearLocation(e.lngLat.lat, e.lngLat.lng);
+    return;
+  }
   const cluster = map.queryRenderedFeatures(e.point, { layers: ['record-clusters'] })[0];
   if (cluster) {
     const src = map.getSource('records') as GeoJSONSource;
@@ -383,7 +429,9 @@ function onKey(e: KeyboardEvent) {
     e.preventDefault();
     const c = map.getCanvas();
     const point = { x: c.clientWidth / 2, y: c.clientHeight / 2 };
-    selectAt(point, map.unproject([point.x, point.y]));
+    const ll = map.unproject([point.x, point.y]);
+    if ($mapMode.get() === 'pin') setNearLocation(ll.lat, ll.lng);
+    else selectAt(point, ll);
   } else if (e.key === 'Escape') {
     clearHexSelection();
   }
@@ -530,6 +578,9 @@ onMounted(async () => {
       else if (!$hexGeometry.get()) pendingHexRestore = true;
     }),
     $showRecords.listen(() => void loadRecords()),
+    ...[$nearAt, $nearRadius, $mapMode].map((s) =>
+      s.listen(() => (map?.getSource('near') as GeoJSONSource | undefined)?.setData(nearGeoJson())),
+    ),
     $occurrenceFilter.listen(() => void loadRecords()),
     $flyTo.subscribe((req) => {
       if (!req) return;

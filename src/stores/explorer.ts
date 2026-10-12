@@ -121,6 +121,9 @@ export type FlyRequest =
   | { kind: 'bounds'; bbox: readonly [number, number, number, number]; maxZoom?: number }
   | { kind: 'point'; lng: number; lat: number; zoom: number };
 
+/** What a click on the map does: select a hex (explorer) or drop a pin (near me). */
+export const $mapMode = atom<'explore' | 'pin'>('explore');
+
 /** Current map bounds [west, south, east, north], published by MapCanvas. */
 export const $mapBounds = atom<readonly [number, number, number, number] | null>(null);
 

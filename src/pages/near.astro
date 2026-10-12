@@ -1,13 +1,15 @@
 ---
 import AppShell from '~/components/AppShell.astro';
+import NearExplorer from '~/components/vue/NearExplorer.vue';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="What’s near me" description="See which species have been recorded around you.">
-  <AppShell map="hidden">
-    <section class="mx-auto max-w-3xl px-4 py-10">
-      <h1 class="font-display text-3xl">What’s near me</h1>
-      <p class="mt-3 text-muted">Location-based species lists arrive in Phase 5.</p>
-    </section>
+<BaseLayout
+  title="What’s near me"
+  description="See which species have been recorded around you, by group, this month, and in recent sightings."
+>
+  <AppShell map="full">
+    <h1 class="sr-only">What’s near me</h1>
+    <NearExplorer client:only="vue" />
   </AppShell>
 </BaseLayout>

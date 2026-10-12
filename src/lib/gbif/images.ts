@@ -12,7 +12,7 @@ import type { OccurrenceSearch } from './types';
 export async function findImages(
   filter: OccurrenceFilter,
   opts: { limit?: number; offset?: number; signal?: AbortSignal } = {},
-): Promise<{ images: UsableImage[]; count: number; endOfRecords: boolean }> {
+): Promise<{ images: UsableImage[]; count: number; endOfRecords: boolean; names: Map<number, string> }> {
   const res = await http().getJson<OccurrenceSearch>(
     '/v1/occurrence/search',
     {
@@ -23,7 +23,10 @@ export async function findImages(
     },
     { ttlMs: 6 * 3_600_000, ...(opts.signal && { signal: opts.signal }) },
   );
-  return { images: res.results.flatMap(usableImages), count: res.count, endOfRecords: res.endOfRecords };
+  // Species names come free with the records (useful when batching species).
+  const names = new Map<number, string>();
+  for (const r of res.results) if (r.speciesKey !== undefined && r.species) names.set(r.speciesKey, r.species);
+  return { images: res.results.flatMap(usableImages), count: res.count, endOfRecords: res.endOfRecords, names };
 }
 
 export type ThumbSize = '200x' | '400x' | '800x' | `${number}x${number}`;
