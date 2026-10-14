@@ -2,23 +2,25 @@
 /**
  * What's near me (client:only). The persisted map switches to "pin" mode:
  * click to drop a pin, or use geolocation after an explainer. Location is
- * rounded to 3 dp before any use. Panel: species by class (infinite
- * scroll), recent sightings, personal checklist, share card.
+ * rounded to 3 dp before any use. Panel: sortable species table, recent
+ * sightings, personal checklist, share card.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import { compact, full } from '~/lib/format';
+import { full } from '~/lib/format';
 import { classifyError, RADIUS_STEPS_KM, type UiErrorKind } from '~/lib/gbif';
 import { checklistCsv, $checklist, clearChecklist, storageAvailable, toggleSeen } from '~/lib/near/checklist';
 import {
   classesNear,
+  NEAR_CLASSES,
+  NEAR_PER_CLASS,
   recentSightings,
-  speciesPage,
+  speciesNear,
   speciesTallies,
   type Area,
   type ClassGroup,
-  type NearSpecies,
   type Sighting,
+  type SpeciesRow,
 } from '~/lib/near/data';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, $mapMode } from '~/stores/explorer';
@@ -27,7 +29,7 @@ import LicenceBadge from './LicenceBadge.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import ShareDialog from './ShareDialog.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
-import SpeciesCard from './SpeciesCard.vue';
+import SpeciesTable from './SpeciesTable.vue';
 import ThumbImage from './ThumbImage.vue';
 
 const at = useStore($nearAt);
@@ -46,23 +48,17 @@ const loading = ref(false);
 const error = ref<UiErrorKind | null>(null);
 const total = ref(0);
 
-interface Section {
-  group: ClassGroup;
-  species: NearSpecies[];
-  more: boolean;
-  loading: boolean;
-}
-const sections = shallowRef<Section[]>([]);
-const visibleSections = ref(0);
+const classes = shallowRef<ClassGroup[]>([]);
+const species = shallowRef<SpeciesRow[]>([]);
 const recent = shallowRef<Sighting[] | null>(null);
 const recentLoading = ref(false);
 const recentError = ref(false);
 const shareOpen = ref(false);
 const tallies = shallowRef<Awaited<ReturnType<typeof speciesTallies>> | null>(null);
 const canStore = ref(true);
-const sentinel = ref<HTMLElement>();
-let io: IntersectionObserver | undefined;
 let seq = 0;
+/** Aborts the previous area's remaining requests when the pin or radius changes. */
+let ctrl: AbortController | undefined;
 
 const area = computed<Area | null>(() =>
   at.value
@@ -70,6 +66,11 @@ const area = computed<Area | null>(() =>
     : null,
 );
 const radiusIndex = computed(() => (RADIUS_STEPS_KM as readonly number[]).indexOf(radius.value));
+const tableNote = computed(() =>
+  classes.value.length > NEAR_CLASSES
+    ? `top ${NEAR_PER_CLASS} in each of the ${NEAR_CLASSES} most-recorded groups`
+    : `top ${NEAR_PER_CLASS} in each group`,
+);
 const checklistEntries = computed(() => Object.values(checklist.value).sort((a, b) => b.seen.localeCompare(a.seen)));
 
 function onRadius(e: Event) {
@@ -99,7 +100,11 @@ function locate() {
 async function loadArea() {
   const a = area.value;
   const mine = ++seq;
-  sections.value = [];
+  ctrl?.abort();
+  ctrl = new AbortController();
+  const { signal } = ctrl;
+  classes.value = [];
+  species.value = [];
   recent.value = null;
   tallies.value = null;
   error.value = null;
@@ -107,45 +112,20 @@ async function loadArea() {
   $flyTo.set({ kind: 'point', lng: a.lng, lat: a.lat, zoom: zoomForRadius(a.radiusKm) });
   loading.value = true;
   try {
-    const r = await classesNear(a);
+    const r = await classesNear(a, signal);
     if (mine !== seq) return;
     total.value = r.records;
-    sections.value = r.classes.map((group) => ({ group, species: [], more: true, loading: false }));
-    visibleSections.value = 0;
-    await revealMore(mine);
     if (tab.value === 'recent') void loadRecent();
+    const rows = await speciesNear(a, r.classes, signal);
+    if (mine !== seq) return;
+    classes.value = r.classes;
+    species.value = rows;
+    loading.value = false;
   } catch (e) {
     if (mine === seq) error.value = classifyError(e);
   } finally {
     if (mine === seq) loading.value = false;
   }
-}
-
-async function loadSection(i: number, mine = seq) {
-  const s = sections.value[i];
-  const a = area.value;
-  if (!s || !a || s.loading || !s.more) return;
-  s.loading = true;
-  sections.value = [...sections.value];
-  try {
-    const page = await speciesPage(a, s.group.key, s.species.length);
-    if (mine !== seq) return;
-    s.species = [...s.species, ...page.species];
-    s.more = page.more;
-  } catch {
-    s.more = false;
-  } finally {
-    s.loading = false;
-    if (mine === seq) sections.value = [...sections.value];
-  }
-}
-
-/** Infinite scroll: reveal (and load) the next class section. */
-async function revealMore(mine = seq) {
-  if (visibleSections.value >= sections.value.length) return;
-  const i = visibleSections.value;
-  visibleSections.value++;
-  await loadSection(i, mine);
 }
 
 async function loadRecent() {
@@ -166,11 +146,7 @@ async function openShare() {
   const a = area.value;
   if (!a) return;
   shareOpen.value = true;
-  if (!tallies.value)
-    tallies.value = await speciesTallies(
-      a,
-      sections.value.map((s) => s.group),
-    ).catch(() => null);
+  if (!tallies.value) tallies.value = await speciesTallies(a, classes.value).catch(() => null);
 }
 
 function exportCsv() {
@@ -191,7 +167,6 @@ const setTab = (t: 'species' | 'recent' | 'checklist') => {
   if (t === 'recent' && !recent.value) void loadRecent();
 };
 const toggleMonth = () => $nearThisMonth.set(!thisMonth.value);
-const seen = (k: number) => !!checklist.value[String(k)];
 
 watch(area, () => void loadArea(), { deep: true });
 
@@ -200,22 +175,11 @@ onMounted(() => {
   canStore.value = storageAvailable();
   void loadSpeciesManifest();
   void loadArea();
-  io = new IntersectionObserver((entries) => {
-    if (entries.some((e) => e.isIntersecting)) void revealMore();
-  });
-  watch(
-    sentinel,
-    (el, old) => {
-      if (old) io?.unobserve(old);
-      if (el) io?.observe(el);
-    },
-    { immediate: true },
-  );
 });
 
 onBeforeUnmount(() => {
   $mapMode.set('explore');
-  io?.disconnect();
+  ctrl?.abort();
 });
 </script>
 
@@ -291,7 +255,7 @@ onBeforeUnmount(() => {
                 Recorded in {{ monthName }}
               </button>
               <button type="button" class="chip" @click="locate">Use my location</button>
-              <button type="button" class="chip ml-auto" :disabled="!sections.length" @click="openShare">Share</button>
+              <button type="button" class="chip ml-auto" :disabled="!classes.length" @click="openShare">Share</button>
             </div>
             <p class="text-xs text-subtle">Click the map to move the pin.</p>
           </div>
@@ -319,70 +283,17 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <!-- Species by class -->
+          <!-- Species -->
           <div v-if="tab === 'species'" role="tabpanel">
             <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
               GBIF is busy right now. <button type="button" class="underline" @click="loadArea">Try again</button>
             </div>
-            <div v-else-if="loading" class="grid grid-cols-2 gap-2">
-              <SkeletonBlock v-for="i in 6" :key="i" height="10rem" />
-            </div>
-            <p v-else-if="!sections.length" class="rounded-md bg-surface-2 p-3 text-sm text-muted">
+            <p v-else-if="!loading && !species.length" class="rounded-md bg-surface-2 p-3 text-sm text-muted">
               No records here yet{{ thisMonth ? ` for ${monthName}` : '' }}. Try a larger radius{{
                 thisMonth ? ' or all months' : ''
               }}.
             </p>
-            <template v-else>
-              <section v-for="s in sections.slice(0, visibleSections)" :key="s.group.key" class="mb-6">
-                <h3 class="mb-2 flex items-baseline justify-between gap-2">
-                  <span class="font-display text-lg">{{ s.group.common ?? s.group.name }}</span>
-                  <span class="text-xs text-subtle">{{ compact(s.group.records) }} records</span>
-                </h3>
-                <ul class="grid grid-cols-2 gap-2">
-                  <li v-for="sp in s.species" :key="sp.key" class="relative">
-                    <SpeciesCard
-                      :species-key="sp.key"
-                      :scientific-name="sp.scientificName"
-                      :common-name="sp.commonName"
-                      :count="sp.records"
-                      :image="sp.image"
-                      size="200x"
-                      :href="speciesPath(sp.key, manifest)"
-                    />
-                    <label
-                      class="seen absolute right-1.5 top-1.5 flex cursor-pointer items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white"
-                    >
-                      <input
-                        type="checkbox"
-                        class="accent-[var(--accent)]"
-                        :checked="seen(sp.key)"
-                        @change="
-                          toggleSeen({
-                            key: sp.key,
-                            scientificName: sp.scientificName,
-                            ...(sp.commonName && { commonName: sp.commonName }),
-                          })
-                        "
-                      />
-                      Seen<span class="sr-only"> {{ sp.commonName ?? sp.scientificName }}</span>
-                    </label>
-                  </li>
-                </ul>
-                <button
-                  v-if="s.more"
-                  type="button"
-                  class="mt-2 w-full rounded-md border border-border py-1.5 text-xs text-muted hover:border-accent"
-                  :disabled="s.loading"
-                  @click="loadSection(sections.indexOf(s))"
-                >
-                  {{ s.loading ? 'Loading…' : `More ${s.group.common ?? s.group.name}` }}
-                </button>
-              </section>
-              <div ref="sentinel" class="h-8" aria-hidden="true"></div>
-              <p v-if="visibleSections < sections.length" class="text-center text-xs text-subtle">
-                Scroll for more groups…
-              </p>
-            </template>
+            <SpeciesTable v-else :rows="species" :groups="classes" :loading="loading" :note="tableNote" checklist />
           </div>
 
           <!-- Recent sightings -->

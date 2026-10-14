@@ -35,9 +35,15 @@ test('geolocation is rounded to ~100 m before use', async ({ page, context }) =>
   expect(precise).toEqual([]);
 });
 
-test('lists species by group, ticks a checklist and exports it', async ({ page }) => {
+test('lists species in a sortable table, ticks a checklist and exports it', async ({ page }) => {
   await page.goto('/?near=1&at=51.507,-0.128&r=2');
-  await expect(page.getByRole('heading', { name: 'Birds' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('cell', { name: 'Birds' }).first()).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: /^Species/ }).click();
+  await expect(page.getByRole('columnheader', { name: /Species/ })).toHaveAttribute('aria-sort', 'ascending');
+  await page.getByRole('button', { name: 'Filter' }).click();
+  await page.getByRole('dialog', { name: 'Filter species' }).getByRole('checkbox', { name: /Birds/ }).check();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /Filter · 1/ })).toBeVisible();
   await page.getByRole('checkbox', { name: /Seen/ }).first().check();
   await page.getByRole('tab', { name: 'Seen (1)' }).click();
   const download = page.waitForEvent('download');

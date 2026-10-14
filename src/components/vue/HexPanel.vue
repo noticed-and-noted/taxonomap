@@ -1,25 +1,30 @@
 <script setup lang="ts">
 /**
- * Selected cell summary: record count, top 10 species as photo cards,
- * radial seasonality, and a switch to individual (clustered) records.
+ * Selected cell summary: record count, a sortable and filterable species
+ * table, radial seasonality, and a switch to individual (clustered) records.
  */
 import { useStore } from '@nanostores/vue';
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { full } from '~/lib/format';
-import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
+import { loadSpeciesManifest } from '~/lib/species/links';
 import { $hexGeometry, $selectedRecord, $showRecords } from '~/stores/explorer';
 import { $taxa } from '~/stores/taxon';
 import RadialSeasonality from './RadialSeasonality.vue';
 import RecordDetail from './RecordDetail.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
-import SpeciesCard from './SpeciesCard.vue';
-import { useHexSummary } from './useHexSummary';
+import SpeciesTable from './SpeciesTable.vue';
+import { HEX_CLASSES, HEX_PER_CLASS, useHexSummary } from './useHexSummary';
 
-const { loading, error, count, months, species, reload } = useHexSummary();
+const { loading, error, count, months, classes, species, reload } = useHexSummary();
 const showRecords = useStore($showRecords);
 const record = useStore($selectedRecord);
 const taxa = useStore($taxa);
-const manifest = useStore($speciesManifest);
+const selectedKeys = computed(() => taxa.value.map((t) => t.key));
+const tableNote = computed(() =>
+  classes.value.length > HEX_CLASSES
+    ? `top ${HEX_PER_CLASS} in each of the ${HEX_CLASSES} most-recorded groups`
+    : `top ${HEX_PER_CLASS} in each group`,
+);
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
 
@@ -64,26 +69,8 @@ const closeRecord = () => $selectedRecord.set(null);
       </p>
 
       <section v-if="loading || species.length" aria-labelledby="top-species-h">
-        <h3 id="top-species-h" class="mb-2 text-sm font-medium">
-          {{ species.length === 1 ? 'Species' : 'Most-recorded species' }}
-        </h3>
-        <div v-if="loading && !species.length" class="grid grid-cols-2 gap-2">
-          <SkeletonBlock v-for="i in 4" :key="i" height="9rem" />
-        </div>
-        <ul v-else class="grid grid-cols-2 gap-2">
-          <li v-for="s in species" :key="s.key">
-            <SpeciesCard
-              :species-key="s.key"
-              :scientific-name="s.scientificName"
-              :common-name="s.commonName"
-              :count="s.count"
-              :image="s.image"
-              :selected="taxa.some((t) => t.key === s.key)"
-              :href="speciesPath(s.key, manifest)"
-              size="200x"
-            />
-          </li>
-        </ul>
+        <h3 id="top-species-h" class="mb-2 text-sm font-medium">Species</h3>
+        <SpeciesTable :rows="species" :groups="classes" :loading="loading" :selected="selectedKeys" :note="tableNote" />
       </section>
 
       <RadialSeasonality v-if="count" :counts="months" title="Records by month" />

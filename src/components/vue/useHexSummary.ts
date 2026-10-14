@@ -1,33 +1,20 @@
 /**
  * Data for the selected hex, with no N+1 calls:
- *  1. one facet request (limit=0): total count, top species, months
- *  2. one image request for all top species (repeated speciesKey), plus at
- *     most one follow-up for species that got no photo
- *  3. names from the baked index; any misses are resolved with one cached
- *     detail call each (at most 10)
+ *  1. one facet request (limit=0): total count, classes, months
+ *  2. one facet request per leading class for its top species (2 at a time)
+ *  3. names from the baked index, with a batched fallback (see species/groups.ts)
+ *  4. photos, and any names still missing, are looked up by the table as rows
+ *     scroll into view
+ * Selecting another cell aborts the previous load's remaining requests.
  */
 import { useStore } from '@nanostores/vue';
-import { ref, shallowRef, watch } from 'vue';
-import { loadNameIndex, nameIndexWithin } from '~/lib/data/name-index';
-import {
-  classifyError,
-  findImages,
-  getSpecies,
-  occurrenceFacets,
-  type UiErrorKind,
-  type UsableImage,
-} from '~/lib/gbif';
+import { onScopeDispose, ref, shallowRef, watch } from 'vue';
+import { classifyError, occurrenceFacets, type UiErrorKind } from '~/lib/gbif';
+import { namedClasses, speciesInClasses, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 
-export interface HexSpecies {
-  key: number;
-  count: number;
-  scientificName: string;
-  commonName?: string;
-  image?: UsableImage;
-}
-
-const TOP = 10;
+export const HEX_CLASSES = 8;
+export const HEX_PER_CLASS = 25;
 
 export function useHexSummary() {
   const geometry = useStore($hexGeometry);
@@ -37,49 +24,41 @@ export function useHexSummary() {
   const error = ref<UiErrorKind | null>(null);
   const count = ref<number | null>(null);
   const months = ref<number[]>(Array(12).fill(0));
-  const species = shallowRef<HexSpecies[]>([]);
-  const imagesLoading = ref(false);
+  const classes = shallowRef<ClassGroup[]>([]);
+  const species = shallowRef<SpeciesRow[]>([]);
   let seq = 0;
+  let ctrl: AbortController | undefined;
 
   async function load() {
     const g = geometry.value;
     const mine = ++seq;
+    ctrl?.abort();
+    ctrl = new AbortController();
+    const { signal } = ctrl;
     if (!g) {
       count.value = null;
+      classes.value = [];
       species.value = [];
       return;
     }
     loading.value = true;
     error.value = null;
+    species.value = [];
     try {
       const f = { ...filter.value, geometry: g.wkt };
-      const r = await occurrenceFacets(f, ['speciesKey', 'month'], { facetLimit: 12 });
+      const r = await occurrenceFacets(f, ['classKey', 'month'], { facetLimit: 12, signal });
       if (mine !== seq) return;
       count.value = r.count;
       const m = Array(12).fill(0) as number[];
       for (const c of r.facets['month'] ?? []) m[Number(c.name) - 1] = c.count;
       months.value = m;
 
-      const top = (r.facets['speciesKey'] ?? []).slice(0, TOP).map((c) => ({ key: Number(c.name), count: c.count }));
-      const idx = await nameIndexWithin();
-      const named = await Promise.all(
-        top.map(async ({ key, count: n }): Promise<HexSpecies> => {
-          const row = idx?.get(key);
-          if (row) return { key, count: n, scientificName: row[2], ...(row[3] && { commonName: row[3] }) };
-          try {
-            const u = await getSpecies(key);
-            return { key, count: n, scientificName: u.canonicalName ?? u.scientificName };
-          } catch {
-            return { key, count: n, scientificName: `Species ${key}` };
-          }
-        }),
-      );
+      const groups = await namedClasses(r.facets['classKey'] ?? []);
+      const rows = await speciesInClasses(f, groups, { maxClasses: HEX_CLASSES, perClass: HEX_PER_CLASS, signal });
       if (mine !== seq) return;
-      species.value = named;
+      classes.value = groups;
+      species.value = rows;
       loading.value = false;
-      void loadImages(named, mine);
-      // If the index was slow, add common names once it arrives (no extra calls).
-      if (!idx) void enrichNames(mine);
     } catch (e) {
       if (mine === seq) {
         error.value = classifyError(e);
@@ -88,44 +67,8 @@ export function useHexSummary() {
     }
   }
 
-  async function enrichNames(mine: number) {
-    const idx = await loadNameIndex();
-    if (!idx || mine !== seq) return;
-    species.value = species.value.map((s) => {
-      const common = s.commonName ?? idx.get(s.key)?.[3];
-      return common ? { ...s, commonName: common } : s;
-    });
-  }
-
-  async function loadImages(list: HexSpecies[], mine: number) {
-    if (!list.length) return;
-    imagesLoading.value = true;
-    const byKey = new Map<number, UsableImage>();
-    const fetchFor = async (keys: number[], limit: number) => {
-      const res = await findImages({ speciesKeys: keys }, { limit });
-      // Records carry speciesKey; map each image back to its species.
-      for (const img of res.images) {
-        const k = img.speciesKey;
-        if (k !== undefined && keys.includes(k) && !byKey.has(k)) byKey.set(k, img);
-      }
-    };
-    try {
-      const keys = list.map((s) => s.key);
-      await fetchFor(keys, 100);
-      const missing = keys.filter((k) => !byKey.has(k));
-      if (missing.length) await fetchFor(missing, 60);
-    } catch {
-      /* photos are optional; cards fall back to initials */
-    }
-    if (mine !== seq) return;
-    species.value = species.value.map((s) => {
-      const image = byKey.get(s.key);
-      return image ? { ...s, image } : s;
-    });
-    imagesLoading.value = false;
-  }
-
+  onScopeDispose(() => ctrl?.abort());
   watch([geometry, () => JSON.stringify(filter.value)], () => void load(), { immediate: true });
 
-  return { loading, error, count, months, species, imagesLoading, reload: load };
+  return { loading, error, count, months, classes, species, reload: load };
 }

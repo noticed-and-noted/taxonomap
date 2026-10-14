@@ -19,6 +19,7 @@ export interface HttpOptions {
   cacheSize: number;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
+  now: () => number;
 }
 
 export interface RequestOptions {
@@ -30,6 +31,7 @@ export interface RequestOptions {
 export const $gbifStale = atom(false);
 
 const RETRYABLE = (status: number) => status === 429 || status >= 500;
+const MIN_429_DELAY_MS = 1000;
 
 export function parseRetryAfter(header: string | null, now = Date.now()): number | undefined {
   if (!header) return undefined;
@@ -50,10 +52,17 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     cacheSize: 300,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     random: Math.random,
+    now: Date.now,
     ...overrides,
   };
   const cache = new LruCache<unknown>(opts.cacheSize);
   const inFlight = new Map<string, Promise<unknown>>();
+  /**
+   * Shared cool-down after a 429: GBIF rate-limits per client, so once one
+   * request is throttled every other request waits too, instead of each
+   * hitting the limit again on its own schedule.
+   */
+  let coolUntil = 0;
 
   /** Exponential back-off with full jitter, floored at half the step. */
   function backoff(attempt: number): number {
@@ -66,7 +75,12 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
   async function fetchWithRetry(rel: string, signal?: AbortSignal): Promise<unknown> {
     let lastStatus: number | undefined;
     let url = `${baseUrl()}${rel}`;
+    let waited = false;
     for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+      // A request that just slept its own back-off has already waited.
+      const cool = coolUntil - opts.now();
+      if (cool > 0 && !waited) await opts.sleep(cool);
+      waited = false;
       url = `${baseUrl()}${rel}`;
       let res: Response;
       countRequest('json', url);
@@ -80,7 +94,10 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
           markEdgeDown();
           continue;
         }
-        if (attempt < opts.maxRetries) await opts.sleep(backoff(attempt));
+        if (attempt < opts.maxRetries) {
+          await opts.sleep(backoff(attempt));
+          waited = true;
+        }
         continue;
       }
       if (!res.ok && isEdgeUrl(url) && !servedByEdge(res)) {
@@ -98,7 +115,12 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
       }
       if (attempt < opts.maxRetries) {
         const retryAfter = parseRetryAfter(res.headers.get('retry-after'));
-        await opts.sleep(Math.min(opts.maxDelayMs, retryAfter ?? backoff(attempt)));
+        // GBIF sends no Retry-After; its 429 window outlasts the first back-off step.
+        const fallback = res.status === 429 ? Math.max(MIN_429_DELAY_MS, backoff(attempt)) : backoff(attempt);
+        const delay = Math.min(opts.maxDelayMs, retryAfter ?? fallback);
+        if (res.status === 429) coolUntil = Math.max(coolUntil, opts.now() + delay);
+        await opts.sleep(delay);
+        waited = true;
       }
     }
     throw new GbifUnavailableError(url, lastStatus);

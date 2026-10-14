@@ -60,6 +60,40 @@ describe('http client', () => {
     expect(sleeps).toEqual([375, 2000, 1500]);
   });
 
+  it('after a 429, other requests wait out the same cool-down', async () => {
+    const calls: string[] = [];
+    const sleeps: number[] = [];
+    let throttled = false;
+    const client = createHttp({
+      base: 'https://api.test',
+      transport: async (url) => {
+        calls.push(url);
+        if (url.endsWith('/a') && !throttled) {
+          throttled = true;
+          return json({}, 429, { 'retry-after': '3' });
+        }
+        return json(url.endsWith('/a') ? { a: 1 } : { b: 1 });
+      },
+      sleep: async (ms) => void sleeps.push(ms),
+      random: () => 0.5,
+      now: () => 0,
+    });
+    // /a is throttled and sleeps its Retry-After; /b, started meanwhile, waits too.
+    const a = client.getJson('/v1/a');
+    await Promise.resolve();
+    await Promise.resolve();
+    const b = client.getJson('/v1/b');
+    await expect(Promise.all([a, b])).resolves.toEqual([{ a: 1 }, { b: 1 }]);
+    expect(sleeps).toEqual([3000, 3000]);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('waits at least a second before retrying a 429 without Retry-After', async () => {
+    const { client, sleeps } = setup([json({}, 429), json({ ok: true })]);
+    await client.getJson('/v1/x');
+    expect(sleeps).toEqual([1000]);
+  });
+
   it('gives up after 3 retries and throws GbifUnavailableError when nothing is cached', async () => {
     const { client, calls } = setup([json({}, 500), json({}, 500), json({}, 500), json({}, 500)]);
     await expect(client.getJson('/v1/x')).rejects.toBeInstanceOf(GbifUnavailableError);

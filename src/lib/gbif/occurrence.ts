@@ -54,6 +54,8 @@ export interface OccurrenceFilter extends Refinements {
   taxonKeys?: readonly number[] | undefined;
   /** Several species at once (repeated speciesKey param). */
   speciesKeys?: readonly number[] | undefined;
+  /** Narrow to one class (AND'd with any taxa, unlike taxonKey). */
+  classKey?: number | undefined;
   year?: readonly [number, number] | null | undefined;
   month?: number | undefined;
   basisOfRecord?: readonly BasisOfRecord[] | undefined;
@@ -71,6 +73,7 @@ export function filterToParams(f: OccurrenceFilter): Params {
   return {
     taxonKey: f.taxonKeys ?? f.taxonKey,
     speciesKey: f.speciesKeys,
+    classKey: f.classKey,
     year: yearRangeParam(f.year),
     ...refinementParams(f),
     // A single month (e.g. a chart drill-down) narrows any month refinement.
