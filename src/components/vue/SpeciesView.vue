@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * /species/view?key= — renders any species in the browser with the same
- * components as the pre-rendered pages. If the species does have a static
- * page, it redirects there instead.
+ * /species/view?key= — renders any taxon (species or group) in the browser
+ * with the same components as the pre-rendered pages. If it does have a
+ * static page, it redirects there instead; if GBIF cannot give us the taxon
+ * at all, it falls back to the tree of life, focused on that key. Transient
+ * failures keep the retry, with the tree offered as an alternative.
  */
 import { onMounted, ref, shallowRef } from 'vue';
 import { loadNameIndex } from '~/lib/data/name-index';
@@ -41,9 +43,16 @@ async function load() {
     const d = data.value;
     document.title = `${d.commonName ? `${d.commonName} (${d.canonicalName})` : d.canonicalName} · GBIF Explorer`;
   } catch (e) {
-    error.value = classifyError(e);
+    const kind = classifyError(e);
+    if (kind === 'not-found' || kind === 'bad-request') {
+      window.location.replace(treeHref(k));
+      return;
+    }
+    error.value = kind;
   }
 }
+
+const treeHref = (k: number) => `/tree?focus=${k}`;
 
 onMounted(load);
 </script>
@@ -90,7 +99,12 @@ onMounted(load);
     >
       Try again
     </button>
-    <p class="mt-6"><a href="/" class="text-accent underline-offset-2 hover:underline">Back to the map</a></p>
+    <p class="mt-6 flex justify-center gap-6">
+      <a v-if="key !== null" :href="treeHref(key)" class="text-accent underline-offset-2 hover:underline"
+        >Open in the tree of life</a
+      >
+      <a href="/" class="text-accent underline-offset-2 hover:underline">Back to the map</a>
+    </p>
   </div>
 
   <div v-else class="mx-auto max-w-6xl space-y-4 px-4 pt-6 sm:px-6" role="status" aria-label="Loading species">

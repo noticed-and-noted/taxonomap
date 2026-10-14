@@ -1,28 +1,30 @@
 <script setup lang="ts">
 /**
- * Map-page controls (client:only): filter chips, basemap switcher, time
- * slider + histogram, legend, and the side panel / bottom sheet.
+ * Map-page controls (client:only): taxon chip, filter rail, basemap
+ * switcher, time slider + histogram, legend, and the side panel / bottom sheet.
  * On small screens the filters move into the sheet behind a Filters button.
  * "Near me" (`?near=1`) swaps these controls for the NearExplorer panel.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
-import { $basisOfRecord, $hasPhoto, $panel, $selectedHex, $selectedRecord, clearHexSelection } from '~/stores/explorer';
+import { $panel, $selectedHex, $selectedRecord, clearFilters, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
 import BasemapSwitcher from './BasemapSwitcher.vue';
-import FilterChips from './FilterChips.vue';
+import FilterGroup from './FilterGroup.vue';
+import { $activeFilterCount, FILTER_GROUPS } from './filterGroups';
+import FilterRail from './FilterRail.vue';
 import HexPanel from './HexPanel.vue';
 import MapLegend from './MapLegend.vue';
 import NearExplorer from './NearExplorer.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
+import TaxonChip from './TaxonChip.vue';
 import TimeSlider from './TimeSlider.vue';
 import { useYearHistogram } from './useYearHistogram';
 
 const panel = useStore($panel);
 const hex = useStore($selectedHex);
 const record = useStore($selectedRecord);
-const basis = useStore($basisOfRecord);
-const photo = useStore($hasPhoto);
+const activeFilters = useStore($activeFilterCount);
 const near = useStore($nearMode);
 const { counts, loading, error, live } = useYearHistogram();
 
@@ -61,7 +63,6 @@ const hexOpen = computed(() => panel.value === 'hex' && hex.value !== null);
 const filtersOpen = computed(() => panel.value === 'filters');
 const panelOpen = computed(() => hexOpen.value || filtersOpen.value);
 const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : record.value !== null ? 'Record' : 'Selected cell'));
-const activeFilters = computed(() => (basis.value.length ? 1 : 0) + (photo.value ? 1 : 0));
 
 function openFilters() {
   $panel.set(filtersOpen.value ? (hex.value ? 'hex' : 'none') : 'filters');
@@ -96,8 +97,7 @@ function closePanel() {
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
-      <!-- Desktop/tablet: chips inline. -->
-      <div class="hidden min-w-0 sm:block"><FilterChips /></div>
+      <div class="min-w-0"><TaxonChip /></div>
       <div class="ml-auto hidden items-start gap-2 sm:flex">
         <button type="button" class="near-btn" aria-pressed="false" @click="toggleNear">
           <svg
@@ -114,8 +114,7 @@ function closePanel() {
         </button>
         <BasemapSwitcher />
       </div>
-      <!-- Phone: selected taxon + Filters button. -->
-      <div class="min-w-0 sm:hidden"><FilterChips parts="taxon" /></div>
+      <!-- Phone: Near me + Filters button (the rail is hidden). -->
       <button type="button" class="near-btn near-phone ml-auto" aria-pressed="false" @click="toggleNear">
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path :d="pinIcon" />
@@ -164,10 +163,18 @@ function closePanel() {
       <MapLegend class="w-full max-w-56" :class="{ 'mt-3': timelineOpen }" />
     </div>
 
+    <div class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block">
+      <FilterRail />
+    </div>
+
     <div class="pointer-events-auto">
       <ResponsivePanel :title="panelTitle" :open="panelOpen" @close="closePanel">
-        <div v-if="filtersOpen" class="space-y-5">
-          <FilterChips parts="filters" stacked />
+        <div v-if="filtersOpen" class="space-y-6">
+          <section v-for="g in FILTER_GROUPS" :key="g.id">
+            <h3 class="mb-2 font-display text-base">{{ g.title }}</h3>
+            <FilterGroup :group="g.id" />
+          </section>
+          <button v-if="activeFilters" type="button" class="clear-all" @click="clearFilters">Clear all filters</button>
           <div>
             <p class="mb-2 text-sm font-medium">Basemap</p>
             <BasemapSwitcher />
@@ -264,10 +271,32 @@ function closePanel() {
   }
 }
 
-/* Keep the dock clear of the desktop side panel. */
+/* The rail's region spans the map's height; only the rail and flyout take clicks. */
+.rail-region {
+  /* Rail (3.75rem + borders) plus gaps, so the flyout never reaches the right edge. */
+  --flyout-max: calc(100vw - 6.5rem);
+}
+
+.clear-all {
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+.clear-all:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* Keep the dock and flyout clear of the desktop side panel. */
 @media (min-width: 768px) {
   .panel-open .top-bar {
     right: calc(var(--panel-width) + 1.5rem);
+  }
+  .panel-open .rail-region {
+    --flyout-max: calc(100vw - var(--panel-width) - 7.5rem);
   }
   .panel-open .bottom-dock:not(.collapsed) {
     width: min(34rem, calc(100% - var(--panel-width) - 2.25rem));

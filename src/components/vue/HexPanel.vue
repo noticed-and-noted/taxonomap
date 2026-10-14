@@ -8,7 +8,7 @@ import { onMounted } from 'vue';
 import { full } from '~/lib/format';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $hexGeometry, $selectedRecord, $showRecords } from '~/stores/explorer';
-import { $taxonInfo } from '~/stores/taxon';
+import { $taxa } from '~/stores/taxon';
 import RadialSeasonality from './RadialSeasonality.vue';
 import RecordDetail from './RecordDetail.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -18,7 +18,7 @@ import { useHexSummary } from './useHexSummary';
 const { loading, error, count, months, species, reload } = useHexSummary();
 const showRecords = useStore($showRecords);
 const record = useStore($selectedRecord);
-const taxon = useStore($taxonInfo);
+const taxa = useStore($taxa);
 const manifest = useStore($speciesManifest);
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
@@ -51,10 +51,10 @@ const closeRecord = () => $selectedRecord.set(null);
         <template v-else-if="count !== null">
           <p class="font-display text-3xl leading-none tabular-nums">{{ full(count) }}</p>
           <p class="mt-1 text-sm text-muted">
-            record{{ count === 1 ? '' : 's' }} in this cell<span v-if="taxon">
-              for <span v-if="taxon.commonName">{{ taxon.commonName }}</span
-              ><span v-else class="sci-name">{{ taxon.scientificName }}</span></span
-            >
+            record{{ count === 1 ? '' : 's' }} in this cell<span v-if="taxa.length === 1">
+              for <span v-if="taxa[0]?.commonName">{{ taxa[0].commonName }}</span
+              ><span v-else class="sci-name">{{ taxa[0]?.scientificName }}</span></span
+            ><span v-else-if="taxa.length"> for {{ taxa.length }} selected taxa</span>
           </p>
         </template>
       </section>
@@ -78,7 +78,7 @@ const closeRecord = () => $selectedRecord.set(null);
               :common-name="s.commonName"
               :count="s.count"
               :image="s.image"
-              :selected="taxon?.key === s.key"
+              :selected="taxa.some((t) => t.key === s.key)"
               :href="speciesPath(s.key, manifest)"
               size="200x"
             />

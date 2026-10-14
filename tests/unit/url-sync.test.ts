@@ -86,4 +86,10 @@ describe('withHistoryMode', () => {
     expect(history.length).toBe(before);
     vi.useRealTimers();
   });
+
+  it('intSet parses a bounded, de-duplicated, numerically sorted list', () => {
+    const c = codecs.intSet('months', { min: 1, max: 12, limit: 3 });
+    expect(c.parse('12,4,x,4,13,2,1')).toEqual([1, 2, 4]);
+    expect(c.serialize([10, 2])).toBe('2,10');
+  });
 });

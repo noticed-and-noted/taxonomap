@@ -1,20 +1,63 @@
 import { LIMITS } from './config';
 import { http } from './http';
 import { circleToWkt, yearRangeParam, type Params } from './params';
-import type { BasisOfRecord, Facet, FacetCount, Occurrence, OccurrenceSearch } from './types';
+import type {
+  BasisOfRecord,
+  Continent,
+  Facet,
+  FacetCount,
+  IucnCategory,
+  LicenceEnum,
+  Occurrence,
+  OccurrenceSearch,
+} from './types';
 
 const HOUR = 3_600_000;
 
+/**
+ * Filters that both the search API and the adhoc map tiles accept, but the
+ * (cheaper) density tiles ignore. Repeated values are OR'd by GBIF.
+ */
+export interface Refinements {
+  hasImage?: boolean | undefined;
+  hasSound?: boolean | undefined;
+  /** Months 1–12. */
+  months?: readonly number[] | undefined;
+  continents?: readonly Continent[] | undefined;
+  /** Keep records whose stated coordinate uncertainty is at most this; drops records without one. */
+  maxUncertaintyM?: number | undefined;
+  licences?: readonly LicenceEnum[] | undefined;
+  iucn?: readonly IucnCategory[] | undefined;
+}
+
+export function refinementParams(r: Refinements): Params {
+  const media = [r.hasImage && 'StillImage', r.hasSound && 'Sound'].filter((m): m is string => !!m);
+  return {
+    mediaType: media.length ? media : undefined,
+    month: r.months,
+    continent: r.continents,
+    coordinateUncertaintyInMeters: r.maxUncertaintyM ? `0,${r.maxUncertaintyM}` : undefined,
+    license: r.licences,
+    iucnRedListCategory: r.iucn,
+  };
+}
+
+/** True when any refinement applies (so map tiles must use the adhoc endpoint). */
+export function hasRefinements(r: Refinements): boolean {
+  return Object.values(refinementParams(r)).some((v) => v !== undefined);
+}
+
 /** Shared occurrence filter used by maps, panels and charts. */
-export interface OccurrenceFilter {
+export interface OccurrenceFilter extends Refinements {
   taxonKey?: number | undefined;
+  /** Several taxa of any rank (repeated taxonKey, OR'd); takes precedence over taxonKey. */
+  taxonKeys?: readonly number[] | undefined;
   /** Several species at once (repeated speciesKey param). */
   speciesKeys?: readonly number[] | undefined;
   year?: readonly [number, number] | null | undefined;
   month?: number | undefined;
   basisOfRecord?: readonly BasisOfRecord[] | undefined;
   country?: string | undefined;
-  hasImage?: boolean | undefined;
   /** WKT polygon (already rounded via params helpers). */
   geometry?: string | undefined;
   datasetKey?: string | undefined;
@@ -26,13 +69,14 @@ export interface OccurrenceFilter {
 
 export function filterToParams(f: OccurrenceFilter): Params {
   return {
-    taxonKey: f.taxonKey,
+    taxonKey: f.taxonKeys ?? f.taxonKey,
     speciesKey: f.speciesKeys,
     year: yearRangeParam(f.year),
-    month: f.month,
+    ...refinementParams(f),
+    // A single month (e.g. a chart drill-down) narrows any month refinement.
+    month: f.month ?? f.months,
     basisOfRecord: f.basisOfRecord,
     country: f.country,
-    mediaType: f.hasImage ? 'StillImage' : undefined,
     geometry: f.geometry,
     datasetKey: f.datasetKey,
     eventDate: f.eventDate,

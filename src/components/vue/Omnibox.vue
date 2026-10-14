@@ -1,19 +1,26 @@
 <script setup lang="ts">
 /**
- * Header search (client:idle). Species: the baked common-name index answers
+ * Header search (client:idle). On the map, a species or group pick adds it
+ * to the What filter's taxa (records of any are shown); elsewhere a pick
+ * replaces the taxon. Species: the baked common-name index answers
  * instantly; live GBIF providers (scientific suggest + vernacular search)
  * are debounced 250 ms. Places: geocoder on submit only (Nominatim policy).
- * ARIA 1.2 combobox with a listbox popup.
+ * The highlighted species result (or the first, before you arrow) is
+ * previewed beside the list, with a link to its About page; Cmd/Ctrl-Enter
+ * opens that page. ARIA 1.2 combobox with a listbox popup.
  */
 import { navigate } from 'astro:transitions/client';
+import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { bakedIndexProvider, loadNameIndex, nameIndexWithin } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { searchPlaces, type Place } from '~/lib/geocode';
 import { gbifSuggestProvider, gbifVernacularProvider, mapCapabilities, type NameHit } from '~/lib/gbif';
 import { debounce } from '~/lib/util/debounce';
-import { $flyTo, $taxonKey, clearHexSelection } from '~/stores/explorer';
-import { primeTaxonInfo } from '~/stores/taxon';
+import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
+import { $flyTo, MAX_TAXA as MAX_SELECTED } from '~/stores/explorer';
+import { addTaxon, setOnlyTaxon, type TaxonInfo } from '~/stores/taxon';
+import TaxonPreview from './TaxonPreview.vue';
 
 type Option =
   | { kind: 'taxon'; id: string; hit: NameHit }
@@ -33,6 +40,15 @@ const placeLoading = ref(false);
 const placeFailed = ref(false);
 const input = ref<HTMLInputElement>();
 let liveAbort: AbortController | undefined;
+
+/* Short note shown under the box when a pick could not be applied (the What list is full). */
+const notice = ref('');
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+function announce(text: string) {
+  notice.value = text;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => (notice.value = ''), 5000);
+}
 
 const taxa = computed(() => {
   const seen = new Set<number>();
@@ -56,6 +72,40 @@ const options = computed<Option[]>(() => {
 });
 
 const activeId = computed(() => options.value[active.value]?.id);
+
+/** The result to preview: the highlighted species/group, or the first one before you arrow. */
+const previewHit = computed<NameHit | null>(() => {
+  if (places.value) return null;
+  const o = active.value >= 0 ? options.value[active.value] : options.value[0];
+  return o?.kind === 'taxon' ? o.hit : null;
+});
+
+const manifest = useStore($speciesManifest);
+/**
+ * Every rank has an About page (pre-rendered, or /species/view); that page
+ * falls back to the tree if it cannot load the taxon.
+ */
+const aboutHref = (hit: NameHit) => speciesPath(hit.key, manifest.value);
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+const modKey = isMac ? '⌘' : 'Ctrl';
+/** What Enter does right now, for the hint bar. */
+const enterLabel = computed(() => {
+  const o = options.value[active.value];
+  if (o?.kind === 'taxon') return onMapPage() ? 'Add to map' : 'Select';
+  if (o?.kind === 'place') return 'Go to place';
+  return 'Search places';
+});
+
+function openAbout(hit: NameHit) {
+  const href = aboutHref(hit);
+  query.value = '';
+  indexHits.value = [];
+  liveHits.value = [];
+  close();
+  input.value?.blur();
+  void navigate(href);
+}
 
 async function runIndex(q: string) {
   indexHits.value = await bakedIndexProvider.search(q);
@@ -100,6 +150,7 @@ function onInput() {
 
 function onFocus() {
   void loadNameIndex(); // warm the index on first focus
+  void loadSpeciesManifest(); // so About links go to pre-rendered pages
   if (query.value) open.value = true;
 }
 
@@ -130,20 +181,27 @@ function onMapPage() {
 }
 
 async function pickTaxon(hit: NameHit) {
-  primeTaxonInfo({
+  const info: TaxonInfo = {
     key: hit.key,
     scientificName: hit.scientificName,
     rank: hit.rank,
     ...(hit.commonName && { commonName: hit.commonName }),
-  });
-  clearHexSelection();
-  $taxonKey.set(hit.key);
+  };
   query.value = '';
   indexHits.value = [];
   liveHits.value = [];
   close();
   input.value?.blur();
-  if (!onMapPage()) return;
+  // The tree and species pages follow a single taxon, so a pick there replaces it.
+  if (!onMapPage()) {
+    setOnlyTaxon(info);
+    return;
+  }
+  const result = addTaxon(info);
+  if (result === 'full') {
+    announce(`You can show up to ${MAX_SELECTED} species or groups. Remove one in the What filter first.`);
+    return;
+  }
   try {
     const cap = await mapCapabilities({ taxonKey: hit.key });
     if (cap.total > 0) {
@@ -188,7 +246,8 @@ function onKeydown(e: KeyboardEvent) {
     active.value = n ? (active.value - 1 + n) % n : -1;
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if (active.value >= 0) choose(options.value[active.value]);
+    if ((e.metaKey || e.ctrlKey) && previewHit.value) openAbout(previewHit.value);
+    else if (active.value >= 0) choose(options.value[active.value]);
     else void runPlaceSearch();
   } else if (e.key === 'Escape') {
     if (open.value) close();
@@ -214,6 +273,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   runLive.cancel();
   liveAbort?.abort();
+  clearTimeout(noticeTimer);
 });
 </script>
 
@@ -257,72 +317,151 @@ onBeforeUnmount(() => {
 
     <div
       v-show="open && (options.length > 0 || placeFailed || (places && !places.length))"
-      class="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-border bg-surface shadow-panel"
+      class="dropdown absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-border bg-surface shadow-panel"
+      :class="{ 'with-preview': previewHit }"
     >
-      <ul
-        id="omnibox-listbox"
-        role="listbox"
-        :aria-label="places ? 'Places' : 'Species and places'"
-        class="max-h-[60vh] overflow-auto py-1"
-      >
-        <li
-          v-for="(o, i) in options"
-          :id="o.id"
-          :key="o.id"
-          role="option"
-          :aria-selected="i === active"
-          class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
-          @mousedown.prevent
-          @click="choose(o)"
-          @mousemove="active = i"
+      <div :class="{ 'with-preview': previewHit }" class="results">
+        <ul
+          id="omnibox-listbox"
+          role="listbox"
+          :aria-label="places ? 'Places' : 'Species and places'"
+          class="max-h-[60vh] min-w-0 overflow-auto py-1"
         >
-          <template v-if="o.kind === 'taxon'">
-            <span class="min-w-0 flex-1">
-              <span v-if="o.hit.commonName" class="block truncate font-medium text-text">{{ o.hit.commonName }}</span>
-              <span class="sci-name block truncate" :class="o.hit.commonName ? 'text-xs text-muted' : 'text-text'">{{
-                o.hit.scientificName
-              }}</span>
-            </span>
-            <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
-              <span class="block">{{ RANK_LABELS[o.hit.rank] ?? o.hit.rank }}</span>
-              <span v-if="o.hit.count" class="block">{{ compact(o.hit.count) }}</span>
-            </span>
-          </template>
-          <template v-else-if="o.kind === 'place-search'">
-            <svg
-              viewBox="0 0 24 24"
-              class="size-4 text-subtle"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
-              <circle cx="12" cy="10" r="2.5" />
-            </svg>
-            <span class="text-muted">Search places for “{{ query.trim() }}”</span>
-          </template>
-          <template v-else>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-text">{{ o.place.name }}</span>
-              <span v-if="o.place.detail" class="block truncate text-xs text-muted">{{ o.place.detail }}</span>
-            </span>
-          </template>
-        </li>
-      </ul>
+          <li
+            v-for="(o, i) in options"
+            :id="o.id"
+            :key="o.id"
+            role="option"
+            :aria-selected="i === active"
+            class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
+            @mousedown.prevent
+            @click="choose(o)"
+            @mousemove="active = i"
+          >
+            <template v-if="o.kind === 'taxon'">
+              <span class="min-w-0 flex-1">
+                <span v-if="o.hit.commonName" class="block truncate font-medium text-text">{{ o.hit.commonName }}</span>
+                <span class="sci-name block truncate" :class="o.hit.commonName ? 'text-xs text-muted' : 'text-text'">{{
+                  o.hit.scientificName
+                }}</span>
+              </span>
+              <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
+                <span class="block">{{ RANK_LABELS[o.hit.rank] ?? o.hit.rank }}</span>
+                <span v-if="o.hit.count" class="block">{{ compact(o.hit.count) }}</span>
+              </span>
+            </template>
+            <template v-else-if="o.kind === 'place-search'">
+              <svg
+                viewBox="0 0 24 24"
+                class="size-4 text-subtle"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </svg>
+              <span class="text-muted">Search places for “{{ query.trim() }}”</span>
+            </template>
+            <template v-else>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-text">{{ o.place.name }}</span>
+                <span v-if="o.place.detail" class="block truncate text-xs text-muted">{{ o.place.detail }}</span>
+              </span>
+            </template>
+          </li>
+        </ul>
+        <TaxonPreview
+          v-if="previewHit"
+          :hit="previewHit"
+          :href="aboutHref(previewHit)"
+          :about-label="'About'"
+          :select-label="onMapPage() ? 'Add to map' : 'Select'"
+          @select="pickTaxon(previewHit)"
+          @about="close"
+        />
+      </div>
       <p v-if="places && !places.length && !placeFailed" class="px-3 py-2 text-sm text-muted">No places found.</p>
       <p v-if="placeFailed" class="px-3 py-2 text-sm text-muted">Place search is unavailable right now.</p>
       <p v-if="liveFailed && !places" class="border-t border-border px-3 py-1.5 text-xs text-subtle">
         Live species search is busy; showing saved names only.
       </p>
+      <p v-if="options.length" class="hint-bar" aria-hidden="true">
+        <span><kbd>↵</kbd> {{ enterLabel }}</span>
+        <span v-if="previewHit"
+          ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
+        >
+        <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
+      </p>
     </div>
+    <p
+      v-if="notice && !open"
+      class="notice absolute left-0 right-0 top-full z-40 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
+    >
+      {{ notice }}
+    </p>
     <p class="sr-only" aria-live="polite">
-      {{ open ? `${taxa.length} species result${taxa.length === 1 ? '' : 's'}` : '' }}
+      {{ open ? `${taxa.length} species result${taxa.length === 1 ? '' : 's'}` : notice }}
     </p>
   </div>
 </template>
 
 <style scoped>
+/* Phones: the box is narrow between the header pills, so the dropdown anchors
+   to the (positioned) header instead and spans its full width. */
+@media (max-width: 639.98px) {
+  .omnibox {
+    position: static;
+  }
+}
+
+@media (min-width: 640px) {
+  .results.with-preview {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 13rem;
+  }
+}
+
+/* Wide screens: the preview extends past the bar's right edge (over the nav
+   pills), so the results keep the bar's full width. */
+@media (min-width: 1024px) {
+  .dropdown.with-preview {
+    right: auto;
+    width: calc(100% + 14rem);
+  }
+  .results.with-preview {
+    grid-template-columns: minmax(0, 1fr) 14rem;
+  }
+}
+
+/* Keyboard hints: only where there is likely a keyboard. */
+.hint-bar {
+  display: none;
+  gap: 1rem;
+  padding: 0.375rem 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.6875rem;
+  color: var(--text-subtle);
+}
+@media (min-width: 640px) and (hover: hover) {
+  .hint-bar {
+    display: flex;
+  }
+}
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  font-family: inherit;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+
 .spinner {
   width: 14px;
   height: 14px;

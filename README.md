@@ -47,7 +47,7 @@ npm run dev             # http://localhost:4321
 
 - **`src/lib/gbif/` is the only code that knows GBIF URLs.** An ESLint rule rejects `api.gbif.org` string literals anywhere else in `src/`. The same client runs in the browser (`~/lib/gbif`) and at build time (`~/lib/gbif/server`, which switches to the Node transport).
 - **URL is the source of truth.** `src/stores/url-sync.ts` binds Nano Stores to query-string keys:
-  - `taxon`, `years`, `basis` and `photo` are _global_: they are carried onto internal navigations.
+  - `taxon` (a comma-separated list; a single key from older links still works), `years` and the filters (`basis`, `photo`, `sound`, `months`, `continent`, `uncert`, `licence`, `iucn`) are _global_: they are carried onto internal navigations.
   - `view` uses `replaceState`, throttled to 300 ms.
   - `hex` and `panel` push history entries, so the back button works.
 - **The map survives navigation.** The map island lives in a `transition:persist="map"` slot inside `AppShell.astro`.
@@ -56,12 +56,13 @@ npm run dev             # http://localhost:4321
 ## Map explorer (Phase 2)
 
 - **Density layer.** GBIF hex-binned **vector** tiles (`.mvt`), styled on the client so the legend matches exactly and cells can be queried on click. Because a cell covers more ground when zoomed out, the log-scale bins scale by 4^(6 − zoom) and the legend shows the bins for the current zoom (`src/lib/ramp.ts`). Viridis ramp, colour-blind safe.
-- **"Has photo"** switches the layer from `density` to `adhoc` tiles (density ignores `mediaType`).
+- **Filter rail.** A vertical rail on the map's left edge groups the filters: What (up to 10 species or groups of any rank, records of any shown; IUCN Red List category), When (years, months), Where (continent, maximum coordinate uncertainty), How recorded (record type, has photo, has sound) and Source (licence). Each icon opens its group in a flyout that stays open beside the cell panel; badges count the active filters per group. On the map, the omnibox adds to the What list rather than replacing it; on the tree and species pages, which follow one taxon, it replaces it. More than one taxon needs `adhoc` tiles (density rejects a repeated `taxonKey`).
+- **Density vs adhoc tiles.** Density tiles honour only taxon, year and record type. Any other filter (`refinementParams` in `src/lib/gbif/occurrence.ts`) switches the layer to `adhoc` tiles.
 - **Basemaps.** Plain is an OpenFreeMap vector style (`dark` / `positron`, following the theme) with its labels drawn above the data and roads/rivers hidden below zoom 8. Terrain is OpenTopoMap and Satellite is EOX Sentinel-2 cloudless (CC BY-NC-SA). All are keyless; CARTO now returns "API key required" tiles.
 - **Omnibox.** The baked common-name index answers instantly, ranked by record count. Live GBIF suggest (scientific names) and vernacular search are debounced by 250 ms. Place search runs only on Enter.
 - **Time slider.** Its histogram comes from `/data/years.json` and goes live (one facet request) when other filters apply. It commits on release, so each change is one history step.
 - **Hex panel.** One facet request (count, top 10 species, months), one image request for all 10 species (plus at most one follow-up), and names from the index. "Show individual records" loads up to 300 records as clustered points. Selecting a point shows the record with its dataset, publisher and licence.
-- **Mobile.** Filters and basemap move into a bottom sheet with three snap points.
+- **Mobile.** The rail is hidden; every filter group and the basemap stack in a bottom sheet with three snap points.
 - **Photos** use GBIF's image cache (`/v1/image/cache/{size}/occurrence/{key}/media/{md5(identifier)}`), about 19 KB instead of a 145 KB original.
 
 ## Caching strategy
@@ -126,7 +127,7 @@ npm run dev             # http://localhost:4321
 These are cases where the live API differs from the original brief:
 
 1. **`/v1/species/suggest` matches scientific names only** ("robin" → _Robinsonia_). Common-name search instead uses a baked index plus live vernacular search, behind a swappable `NameSearchProvider`.
-2. **Density tiles ignore `mediaType`.** The "has photo" filter switches the layer to `adhoc` tiles, which are about 8× heavier.
+2. **Density tiles ignore `mediaType`, `month` and the other refinements.** Those filters switch the layer to `adhoc` tiles, which are about 8× heavier.
 3. **`media[].license` is often free text** (for example "Copyright by the creator…"). A photo's own licence is used when it is a recognisable Creative Commons licence (CC0, CC-BY and CC-BY-NC are allowed; any other CC licence is rejected). Otherwise the record's licence decides.
 4. `offset + limit` is capped at 100,001.
 5. `@vite-pwa/astro` doesn't support Astro 7, so `integrations/service-worker.ts` calls `workbox-build` directly.

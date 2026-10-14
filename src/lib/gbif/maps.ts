@@ -1,5 +1,6 @@
 import { tileBase } from './edge';
 import { http } from './http';
+import { hasRefinements, refinementParams, type Refinements } from './occurrence';
 import { toQueryString, yearRangeParam, type Params } from './params';
 import type { BasisOfRecord, MapCapabilities } from './types';
 
@@ -8,16 +9,18 @@ import type { BasisOfRecord, MapCapabilities } from './types';
  * query string is built here and appended.
  *
  * Verified behaviour: the density endpoint honours taxonKey, year,
- * basisOfRecord and country, but silently ignores mediaType. A "has photo"
- * filter therefore needs the (heavier) adhoc endpoint.
+ * basisOfRecord and country, but silently ignores mediaType, month and the
+ * other refinements, and rejects a repeated taxonKey (400). Those filters
+ * therefore need the (heavier) adhoc endpoint.
  */
 
-export interface TileFilter {
+export interface TileFilter extends Refinements {
   taxonKey?: number | undefined;
+  /** Several taxa, OR'd (adhoc only when more than one). */
+  taxonKeys?: readonly number[] | undefined;
   year?: readonly [number, number] | null | undefined;
   basisOfRecord?: readonly BasisOfRecord[] | undefined;
   country?: string | undefined;
-  hasImage?: boolean | undefined;
 }
 
 export interface TileStyle {
@@ -35,17 +38,17 @@ function suffix(format: TileFormat): string {
 }
 
 export function needsAdhoc(f: TileFilter): boolean {
-  return !!f.hasImage;
+  return hasRefinements(f) || (f.taxonKeys?.length ?? 0) > 1;
 }
 
 export function tileParams(f: TileFilter, s: TileStyle = {}, format: TileFormat = 'png'): Params {
   return {
     srs: s.srs ?? 'EPSG:3857',
-    taxonKey: f.taxonKey,
+    taxonKey: f.taxonKeys ?? f.taxonKey,
     year: yearRangeParam(f.year),
     basisOfRecord: f.basisOfRecord,
     country: f.country,
-    mediaType: f.hasImage ? 'StillImage' : undefined,
+    ...refinementParams(f),
     bin: 'hex',
     hexPerTile: s.hexPerTile ?? 60,
     style: format === 'png' ? (s.style ?? 'purpleYellow-noborder.poly') : undefined,

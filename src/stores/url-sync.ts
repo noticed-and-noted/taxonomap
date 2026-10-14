@@ -214,6 +214,27 @@ export const codecs = {
       ...opts,
     };
   },
+  /** Comma-separated set of integers in [min, max], numeric order, at most `limit` items. */
+  intSet(
+    key: string,
+    { min = -Infinity, max = Infinity, limit = Infinity }: { min?: number; max?: number; limit?: number } = {},
+    opts: Partial<UrlCodec<number[]>> = {},
+  ): UrlCodec<number[]> {
+    return {
+      key,
+      default: [],
+      parse: (raw) => {
+        const items = raw
+          .split(',')
+          .filter((v) => /^-?\d+$/.test(v))
+          .map(Number)
+          .filter((n) => n >= min && n <= max);
+        return [...new Set(items)].sort((a, b) => a - b).slice(0, limit);
+      },
+      serialize: (v) => [...v].sort((a, b) => a - b).join(','),
+      ...opts,
+    };
+  },
   string(key: string, opts: Partial<UrlCodec<string | null>> & { pattern?: RegExp } = {}): UrlCodec<string | null> {
     const { pattern, ...rest } = opts;
     return {

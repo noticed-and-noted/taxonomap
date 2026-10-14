@@ -27,6 +27,14 @@ export type BasisOfRecord =
   | 'OCCURRENCE'
   | 'OBSERVATION';
 
+export type Continent = 'AFRICA' | 'ANTARCTICA' | 'ASIA' | 'EUROPE' | 'NORTH_AMERICA' | 'OCEANIA' | 'SOUTH_AMERICA';
+
+/** IUCN Red List categories as GBIF's `iucnRedListCategory` filter spells them. */
+export type IucnCategory = 'EX' | 'EW' | 'CR' | 'EN' | 'VU' | 'NT' | 'LC' | 'DD';
+
+/** GBIF `license` enum values for the three licences GBIF accepts for data. */
+export type LicenceEnum = 'CC0_1_0' | 'CC_BY_4_0' | 'CC_BY_NC_4_0';
+
 export interface Paged<T> {
   offset: number;
   limit: number;

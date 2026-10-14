@@ -4,7 +4,7 @@
  */
 import { atom, computed } from 'nanostores';
 import { BASEMAP_IDS } from '~/lib/basemaps';
-import type { BasisOfRecord, OccurrenceFilter, TileFilter } from '~/lib/gbif';
+import type { BasisOfRecord, Continent, IucnCategory, LicenceEnum, OccurrenceFilter, TileFilter } from '~/lib/gbif';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
@@ -17,6 +17,27 @@ export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
   'MATERIAL_CITATION',
   'OCCURRENCE',
 ];
+
+export const CONTINENTS: readonly Continent[] = [
+  'AFRICA',
+  'ANTARCTICA',
+  'ASIA',
+  'EUROPE',
+  'NORTH_AMERICA',
+  'OCEANIA',
+  'SOUTH_AMERICA',
+];
+
+/** Most to least threatened. */
+export const IUCN_CATEGORIES: readonly IucnCategory[] = ['EX', 'EW', 'CR', 'EN', 'VU', 'NT', 'LC', 'DD'];
+
+export const LICENCES: readonly LicenceEnum[] = ['CC0_1_0', 'CC_BY_4_0', 'CC_BY_NC_4_0'];
+
+/** Allowed "max coordinate uncertainty" steps, in metres. */
+/** Most taxa the What filter accepts (keeps URLs and requests short). */
+export const MAX_TAXA = 10;
+
+export const UNCERTAINTY_STEPS_M = [10, 100, 1000, 10000] as const;
 
 export const PANELS = ['none', 'hex', 'filters'] as const;
 export type Panel = (typeof PANELS)[number];
@@ -70,11 +91,26 @@ const yearsCodec: UrlCodec<YearRange> = {
   serialize: (v) => (v ? `${v[0]}-${v[1]}` : ''),
 };
 
-export const $taxonKey = urlAtom(codecs.int('taxon', null, { scope: 'global' }));
+/**
+ * Taxa to show, of any rank (records of any of them). "taxon=212" links from
+ * before multi-select still parse as a one-item list.
+ */
+export const $taxonKeys = urlAtom(codecs.intSet('taxon', { min: 0, limit: MAX_TAXA }, { scope: 'global' }));
+/** The taxon when exactly one is selected (the tree and species pages follow it), else null. */
+export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? (keys[0] ?? null) : null));
 export const $mapView = urlAtom(viewCodec);
 export const $yearRange = urlAtom(yearsCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
 export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
+export const $hasSound = urlAtom(codecs.bool('sound', { scope: 'global' }));
+export const $months = urlAtom(codecs.intSet('months', { min: 1, max: 12 }, { scope: 'global' }));
+export const $continents = urlAtom(codecs.setOf('continent', CONTINENTS, { scope: 'global' }));
+export const $maxUncertainty = urlAtom({
+  ...codecs.int('uncert', null, { scope: 'global' }),
+  parse: (raw) => (UNCERTAINTY_STEPS_M as readonly number[]).find((m) => String(m) === raw),
+});
+export const $licences = urlAtom(codecs.setOf('licence', LICENCES, { scope: 'global' }));
+export const $iucn = urlAtom(codecs.setOf('iucn', IUCN_CATEGORIES, { scope: 'global' }));
 export type HexPoint = readonly [lng: number, lat: number] | null;
 
 /**
@@ -137,14 +173,48 @@ export function clearHexSelection(): void {
   if ($panel.get() === 'hex') $panel.set('none');
 }
 
+const nonEmpty = <T>(v: readonly T[]) => (v.length ? v : undefined);
+
 export const $occurrenceFilter = computed(
-  [$taxonKey, $yearRange, $basisOfRecord, $hasPhoto],
-  (taxonKey, year, basis, photo): OccurrenceFilter => ({
-    taxonKey: taxonKey ?? undefined,
+  [
+    $taxonKeys,
+    $yearRange,
+    $basisOfRecord,
+    $hasPhoto,
+    $hasSound,
+    $months,
+    $continents,
+    $maxUncertainty,
+    $licences,
+    $iucn,
+  ],
+  (taxa, year, basis, photo, sound, months, continents, uncert, licences, iucn): OccurrenceFilter => ({
+    taxonKeys: nonEmpty(taxa),
     year,
-    basisOfRecord: basis.length ? basis : undefined,
+    basisOfRecord: nonEmpty(basis),
     hasImage: photo || undefined,
+    hasSound: sound || undefined,
+    months: nonEmpty(months),
+    continents: nonEmpty(continents),
+    maxUncertaintyM: uncert ?? undefined,
+    licences: nonEmpty(licences),
+    iucn: nonEmpty(iucn),
   }),
 );
+
+/** Reset every filter, taxa included (one history step). */
+export function clearFilters(): void {
+  clearHexSelection();
+  $taxonKeys.set([]);
+  $yearRange.set(null);
+  $basisOfRecord.set([]);
+  $hasPhoto.set(false);
+  $hasSound.set(false);
+  $months.set([]);
+  $continents.set([]);
+  $maxUncertainty.set(null);
+  $licences.set([]);
+  $iucn.set([]);
+}
 
 export const $tileFilter = computed($occurrenceFilter, (f): TileFilter => ({ ...f }));

@@ -30,6 +30,53 @@ export function countryName(code: string): string {
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
+export const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const;
+
+export const CONTINENT_LABELS: Record<string, string> = {
+  AFRICA: 'Africa',
+  ANTARCTICA: 'Antarctica',
+  ASIA: 'Asia',
+  EUROPE: 'Europe',
+  NORTH_AMERICA: 'North America',
+  OCEANIA: 'Oceania',
+  SOUTH_AMERICA: 'South America',
+};
+
+export const IUCN_LABELS: Record<string, string> = {
+  EX: 'Extinct',
+  EW: 'Extinct in the wild',
+  CR: 'Critically endangered',
+  EN: 'Endangered',
+  VU: 'Vulnerable',
+  NT: 'Near threatened',
+  LC: 'Least concern',
+  DD: 'Data deficient',
+};
+
+export const LICENCE_LABELS: Record<string, string> = {
+  CC0_1_0: 'CC0 (public domain)',
+  CC_BY_4_0: 'CC BY 4.0',
+  CC_BY_NC_4_0: 'CC BY-NC 4.0',
+};
+
+/** "10 m", "1 km". */
+export function distance(m: number): string {
+  return m >= 1000 ? `${m / 1000} km` : `${m} m`;
+}
+
 export const BASIS_LABELS: Record<string, string> = {
   HUMAN_OBSERVATION: 'Human observation',
   PRESERVED_SPECIMEN: 'Preserved specimen',
