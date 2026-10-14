@@ -112,9 +112,6 @@ npm run dev             # http://localhost:4321
 
 ## Polish (Phase 6)
 
-- **Compare mode** (`?compare=`).
-  - _Two species:_ the main taxon and `taxonB` are overlaid in Okabe–Ito orange and blue, with opacity scaled to log(records). Overlaps mix.
-  - _Two time ranges:_ a second, non-interactive map, clipped to the right of a draggable, keyboard-operable handle, shows `yearsB` and follows the main map's camera. It's only created while swiping.
 - **Decade animation.** The play button on the time slider steps through 1900s → 2020s. While it plays, URL writes use `replaceState` (`withHistoryMode`), so Back isn't flooded.
 - **Offline.**
   - Pages are network-first, falling back to the last copy, or to `/offline` for pages never visited.
@@ -122,7 +119,7 @@ npm run dev             # http://localhost:4321
   - A notice shows while offline. `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
   - There's a 404 page.
 - **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. CI runs it on each push. **Not yet measured locally.**
-- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox, filters, hex panel, species pages and fallback, 404, tree, near me (including that geolocation is rounded before any request), compare, the decade animation and offline. All 38 pass on desktop and mobile locally (`PW_CHANNEL=chrome` uses an installed Chrome instead of downloading one). CI runs them after the build.
+- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox, filters, hex panel, species pages and fallback, 404, tree, near me (including that geolocation is rounded before any request), the decade animation and offline. All 38 pass on desktop and mobile locally (`PW_CHANNEL=chrome` uses an installed Chrome instead of downloading one). CI runs them after the build.
 
 ## GBIF API findings (verified 2026-10-12)
 

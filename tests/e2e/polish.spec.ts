@@ -1,22 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-test('compare two species from the URL', async ({ page }, info) => {
-  test.skip(info.project.name === 'mobile', 'compare card is the same on mobile');
-  await page.goto('/?compare=species&taxon=2492462&taxonB=9510564');
-  const card = page.getByRole('region', { name: 'Compare' });
-  await expect(card).toContainText('European Robin', { timeout: 15_000 });
-  await expect(card).toContainText('American Robin');
-});
-
-test('swipe between two year ranges with the keyboard', async ({ page }) => {
-  await page.goto('/?compare=years&years=1900-1999&yearsB=2000-2026');
-  const handle = page.getByRole('slider', { name: 'Swipe between the two year ranges' });
-  await expect(handle).toBeVisible({ timeout: 15_000 });
-  await handle.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(handle).toHaveAttribute('aria-valuenow', '55');
-});
-
 test('decade animation steps through years without flooding history', async ({ page }) => {
   await page.goto('/');
   const before = await page.evaluate(() => history.length);

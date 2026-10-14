@@ -7,18 +7,9 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
-import {
-  $basisOfRecord,
-  $compareMode,
-  $hasPhoto,
-  $panel,
-  $selectedHex,
-  $selectedRecord,
-  clearHexSelection,
-} from '~/stores/explorer';
+import { $basisOfRecord, $hasPhoto, $panel, $selectedHex, $selectedRecord, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
 import BasemapSwitcher from './BasemapSwitcher.vue';
-import CompareControls from './CompareControls.vue';
 import FilterChips from './FilterChips.vue';
 import HexPanel from './HexPanel.vue';
 import MapLegend from './MapLegend.vue';
@@ -32,7 +23,6 @@ const hex = useStore($selectedHex);
 const record = useStore($selectedRecord);
 const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
-const compare = useStore($compareMode);
 const near = useStore($nearMode);
 const { counts, loading, error, live } = useYearHistogram();
 
@@ -54,24 +44,13 @@ watch(timelineOpen, (open) => {
   }
 });
 
-const compareOpen = computed(() => panel.value === 'compare' || compare.value !== 'off');
-function openCompare() {
-  if (compareOpen.value) {
-    $compareMode.set('off');
-    if (panel.value === 'compare') $panel.set('none');
-  } else {
-    $compareMode.set('species');
-  }
-}
-
 function toggleNear() {
   if (near.value) {
     exitNearMode();
     return;
   }
-  // Pin mode replaces hex selection and compare; one history step.
+  // Pin mode replaces hex selection; one history step.
   clearHexSelection();
-  $compareMode.set('off');
   $panel.set('none');
   $nearMode.set(true);
 }
@@ -133,7 +112,6 @@ function closePanel() {
           </svg>
           Near me
         </button>
-        <button type="button" class="compare-btn" :aria-pressed="compareOpen" @click="openCompare">Compare</button>
         <BasemapSwitcher />
       </div>
       <!-- Phone: selected taxon + Filters button. -->
@@ -156,10 +134,6 @@ function closePanel() {
         </svg>
         Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
       </button>
-    </div>
-
-    <div v-if="compareOpen" class="compare-wrap pointer-events-auto absolute left-3 top-14">
-      <CompareControls />
     </div>
 
     <div
@@ -187,14 +161,13 @@ function closePanel() {
       <div v-show="timelineOpen" id="timeline">
         <TimeSlider :counts="counts" :loading="loading" :failed="error !== null" :live="live" />
       </div>
-      <MapLegend v-if="compare !== 'species'" class="w-full max-w-56" :class="{ 'mt-3': timelineOpen }" />
+      <MapLegend class="w-full max-w-56" :class="{ 'mt-3': timelineOpen }" />
     </div>
 
     <div class="pointer-events-auto">
       <ResponsivePanel :title="panelTitle" :open="panelOpen" @close="closePanel">
         <div v-if="filtersOpen" class="space-y-5">
           <FilterChips parts="filters" stacked />
-          <button type="button" class="compare-btn" :aria-pressed="compareOpen" @click="openCompare">Compare</button>
           <div>
             <p class="mb-2 text-sm font-medium">Basemap</p>
             <BasemapSwitcher />
@@ -245,22 +218,6 @@ function closePanel() {
   width: 2rem;
   justify-content: center;
   padding: 0;
-}
-
-.compare-btn {
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  box-shadow: var(--shadow);
-}
-
-.compare-btn[aria-pressed='true'] {
-  color: var(--text);
-  border-color: var(--accent);
 }
 
 .filters-btn.active {
