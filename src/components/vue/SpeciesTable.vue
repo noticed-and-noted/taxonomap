@@ -423,13 +423,14 @@ function toggleRowSeen(r: SpeciesRow) {
               <td class="truncate py-1.5 pr-1 text-xs text-muted">{{ groupLabel(r.classKey) }}</td>
               <td class="py-1.5 text-right tabular-nums">
                 <span class="flex items-center justify-end gap-1.5">
-                  <span class="h-1 w-6 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
+                  <span class="h-1 w-6 shrink-0 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
                     <span
                       class="block h-full rounded-full bg-accent"
                       :style="{ width: `${Math.max(4, (r.records / maxRecords) * 100)}%` }"
                     ></span>
                   </span>
-                  {{ compact(r.records) }}
+                  <!-- Fixed width so bars line up whether or not the count has a decimal. -->
+                  <span class="w-[2.75rem] shrink-0">{{ compact(r.records) }}</span>
                 </span>
               </td>
               <td v-if="checklist" class="py-1.5 text-right">
