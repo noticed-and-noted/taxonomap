@@ -11,7 +11,6 @@ import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { compact } from '~/lib/format';
 import { normalise } from '~/lib/data/name-index';
 import { debounce } from '~/lib/util/debounce';
-import { $checklist, toggleSeen } from '~/lib/near/checklist';
 import type { UsableImage } from '~/lib/gbif';
 import { photosForKeys, resolveNames, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
@@ -24,26 +23,20 @@ const props = defineProps<{
   loading?: boolean;
   /** Keys to highlight (taxa selected on the map). */
   selected?: readonly number[];
-  /** Show the "Seen" checklist column and the "Hide seen" filter. */
-  checklist?: boolean;
   /** How the list was cut, e.g. "Top 25 species in each group". */
   note?: string;
 }>();
 
 type SortKey = 'name' | 'group' | 'records';
 const PAGE = 50;
-const MIN_RECORDS = [0, 10, 100] as const;
 
 const manifest = useStore($speciesManifest);
-const seen = useStore($checklist);
 const id = useId();
 
 const query = ref('');
 const sortKey = ref<SortKey>('records');
 const sortDesc = ref(true);
 const groupsOn = ref<number[]>([]);
-const minRecords = ref<(typeof MIN_RECORDS)[number]>(0);
-const hideSeen = ref(false);
 const limit = ref(PAGE);
 const filterOpen = ref(false);
 const filterBtn = ref<HTMLButtonElement>();
@@ -75,26 +68,22 @@ const initials = (r: SpeciesRow) =>
     .map((w) => w[0]?.toUpperCase())
     .join('');
 
-/** Groups that have rows, with how many species each contributes. */
+/** Groups that have rows, with their share of the largest group's records. */
 const groupOptions = computed(() => {
-  const n = new Map<number, number>();
-  for (const r of props.rows) n.set(r.classKey, (n.get(r.classKey) ?? 0) + 1);
-  return props.groups.filter((g) => n.has(g.key)).map((g) => ({ ...g, species: n.get(g.key) ?? 0 }));
+  const present = new Set(props.rows.map((r) => r.classKey));
+  const gs = props.groups.filter((g) => present.has(g.key));
+  const max = Math.max(1, ...gs.map((g) => g.records));
+  return gs.map((g) => ({ ...g, bar: g.records / max }));
 });
+const canFilter = computed(() => groupOptions.value.length > 1);
 
-const activeFilters = computed(
-  () => (groupsOn.value.length ? 1 : 0) + (minRecords.value ? 1 : 0) + (hideSeen.value ? 1 : 0),
-);
+const activeFilters = computed(() => (groupsOn.value.length ? 1 : 0));
 
 const filtered = computed(() => {
   const q = normalise(query.value);
   const on = new Set(groupsOn.value);
   return props.rows.filter(
-    (r) =>
-      (!on.size || on.has(r.classKey)) &&
-      r.records >= minRecords.value &&
-      !(props.checklist && hideSeen.value && seen.value[String(r.key)]) &&
-      (!q || normalise(`${r.commonName ?? ''} ${sciName(r)}`).includes(q)),
+    (r) => (!on.size || on.has(r.classKey)) && (!q || normalise(`${r.commonName ?? ''} ${sciName(r)}`).includes(q)),
   );
 });
 
@@ -205,8 +194,6 @@ const ariaSort = (key: SortKey) =>
 
 function resetFilters() {
   groupsOn.value = [];
-  minRecords.value = 0;
-  hideSeen.value = false;
 }
 function resetAll() {
   resetFilters();
@@ -250,14 +237,10 @@ watch(
     broken.value = new Set();
   },
 );
-watch([query, groupsOn, minRecords, hideSeen, sortKey, sortDesc], () => {
+watch([query, groupsOn, sortKey, sortDesc], () => {
   limit.value = PAGE;
   scroller.value?.scrollTo({ top: 0 });
 });
-
-function toggleRowSeen(r: SpeciesRow) {
-  toggleSeen({ key: r.key, scientificName: sciName(r), ...(r.commonName && { commonName: r.commonName }) });
-}
 </script>
 
 <template>
@@ -286,6 +269,7 @@ function toggleRowSeen(r: SpeciesRow) {
         </span>
       </label>
       <button
+        v-if="canFilter"
         ref="filterBtn"
         type="button"
         class="flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors duration-200"
@@ -301,40 +285,38 @@ function toggleRowSeen(r: SpeciesRow) {
       </button>
 
       <div
-        v-if="filterOpen"
+        v-if="filterOpen && canFilter"
         :id="`${id}-filters`"
         ref="popover"
         role="dialog"
         aria-label="Filter species"
-        class="absolute right-0 top-full z-20 mt-1 w-64 space-y-3 rounded-lg border border-border-strong bg-surface-3 p-3 text-sm shadow-panel"
+        class="absolute right-0 top-full z-20 mt-1 w-64 space-y-3 rounded-lg border border-border-strong bg-surface p-3 text-sm shadow-panel"
       >
-        <fieldset v-if="groupOptions.length > 1">
-          <legend class="mb-1 text-xs text-subtle">Groups</legend>
-          <div class="max-h-48 space-y-0.5 overflow-y-auto">
-            <label v-for="g in groupOptions" :key="g.key" class="flex cursor-pointer items-center gap-2 py-0.5">
-              <input v-model="groupsOn" type="checkbox" :value="g.key" class="accent-[var(--accent)]" />
-              <span class="min-w-0 flex-1 truncate">{{ g.common ?? g.name }}</span>
-              <span class="text-xs tabular-nums text-subtle">{{ g.species }}</span>
-            </label>
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend class="mb-1 text-xs text-subtle">Records</legend>
-          <div class="flex rounded-md border border-border p-0.5">
+        <!-- min-w-0: a fieldset is otherwise as wide as its longest group name. -->
+        <fieldset v-if="groupOptions.length > 1" class="min-w-0">
+          <legend class="sr-only">Groups</legend>
+          <p class="mb-1 flex justify-between px-1.5 text-xs text-subtle" aria-hidden="true">
+            <span>Groups</span><span>Records</span>
+          </p>
+          <div class="-mx-1 max-h-56 space-y-0.5 overflow-y-auto px-1">
             <label
-              v-for="m in MIN_RECORDS"
-              :key="m"
-              class="flex-1 cursor-pointer rounded-sm py-0.5 text-center text-xs text-muted has-[:checked]:bg-accent has-[:checked]:text-accent-contrast has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)]"
+              v-for="g in groupOptions"
+              :key="g.key"
+              class="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-200 hover:bg-surface-2 has-[:checked]:bg-accent-soft has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)]"
             >
-              <input v-model="minRecords" type="radio" :name="`${id}-min`" :value="m" class="sr-only" />
-              {{ m ? `${m}+` : 'Any' }}
+              <input v-model="groupsOn" type="checkbox" :value="g.key" class="sr-only" />
+              <span class="min-w-0 flex-1 truncate">{{ g.common ?? g.name }}</span>
+              <span class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+                <span
+                  class="block h-full rounded-full"
+                  :class="groupsOn.includes(g.key) ? 'bg-accent' : 'bg-border-strong'"
+                  :style="{ width: `${Math.max(4, g.bar * 100)}%` }"
+                ></span>
+              </span>
+              <span class="w-11 shrink-0 text-right text-xs tabular-nums text-muted">{{ compact(g.records) }}</span>
             </label>
           </div>
         </fieldset>
-        <label v-if="checklist" class="flex cursor-pointer items-center gap-2">
-          <input v-model="hideSeen" type="checkbox" class="accent-[var(--accent)]" />
-          Hide species I’ve seen
-        </label>
         <div class="flex justify-between border-t border-border pt-2 text-xs">
           <button type="button" class="text-muted underline hover:text-text" @click="resetFilters">Reset</button>
           <button type="button" class="font-medium" @click="closeFilter(true)">Done</button>
@@ -380,7 +362,6 @@ function toggleRowSeen(r: SpeciesRow) {
                   Records<span aria-hidden="true">{{ sortKey === 'records' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
                 </button>
               </th>
-              <th v-if="checklist" class="th w-9 py-1.5 text-right font-normal">Seen</th>
             </tr>
           </thead>
           <tbody>
@@ -432,15 +413,6 @@ function toggleRowSeen(r: SpeciesRow) {
                   <!-- Fixed width so bars line up whether or not the count has a decimal. -->
                   <span class="w-[2.75rem] shrink-0">{{ compact(r.records) }}</span>
                 </span>
-              </td>
-              <td v-if="checklist" class="py-1.5 text-right">
-                <input
-                  type="checkbox"
-                  class="accent-[var(--accent)]"
-                  :checked="!!seen[String(r.key)]"
-                  :aria-label="`Seen ${displayName(r)}`"
-                  @change="toggleRowSeen(r)"
-                />
               </td>
             </tr>
           </tbody>

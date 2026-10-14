@@ -40,7 +40,7 @@ export const $nearAt = urlAtom(atCodec);
 export const $nearRadius = urlAtom(radiusCodec);
 /** Only species recorded in the current calendar month (any year). */
 export const $nearThisMonth = urlAtom(codecs.bool('month', { history: 'replace' }));
-export const $nearTab = urlAtom(codecs.enumOf('tab', ['species', 'recent', 'checklist'] as const, 'species'));
+export const $nearTab = urlAtom(codecs.enumOf('tab', ['species', 'recent'] as const, 'species'));
 
 /** Set the location, rounding first (privacy rule). */
 export function setNearLocation(lat: number, lng: number): void {

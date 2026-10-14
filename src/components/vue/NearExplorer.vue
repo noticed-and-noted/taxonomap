@@ -3,13 +3,12 @@
  * What's near me (client:only). The persisted map switches to "pin" mode:
  * click to drop a pin, or use geolocation after an explainer. Location is
  * rounded to 3 dp before any use. Panel: sortable species table, recent
- * sightings, personal checklist, share card.
+ * sightings, share card.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { full } from '~/lib/format';
 import { classifyError, RADIUS_STEPS_KM, type UiErrorKind } from '~/lib/gbif';
-import { checklistCsv, $checklist, clearChecklist, storageAvailable, toggleSeen } from '~/lib/near/checklist';
 import {
   classesNear,
   NEAR_CLASSES,
@@ -22,7 +21,7 @@ import {
   type Sighting,
   type SpeciesRow,
 } from '~/lib/near/data';
-import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
+import { loadSpeciesManifest } from '~/lib/species/links';
 import { $flyTo, $mapMode } from '~/stores/explorer';
 import { $nearAt, $nearRadius, $nearTab, $nearThisMonth, setNearLocation, zoomForRadius } from '~/stores/near';
 import LicenceBadge from './LicenceBadge.vue';
@@ -36,8 +35,6 @@ const at = useStore($nearAt);
 const radius = useStore($nearRadius);
 const thisMonth = useStore($nearThisMonth);
 const tab = useStore($nearTab);
-const checklist = useStore($checklist);
-const manifest = useStore($speciesManifest);
 
 const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
@@ -55,7 +52,6 @@ const recentLoading = ref(false);
 const recentError = ref(false);
 const shareOpen = ref(false);
 const tallies = shallowRef<Awaited<ReturnType<typeof speciesTallies>> | null>(null);
-const canStore = ref(true);
 let seq = 0;
 /** Aborts the previous area's remaining requests when the pin or radius changes. */
 let ctrl: AbortController | undefined;
@@ -71,7 +67,6 @@ const tableNote = computed(() =>
     ? `top ${NEAR_PER_CLASS} in each of the ${NEAR_CLASSES} most-recorded groups`
     : `top ${NEAR_PER_CLASS} in each group`,
 );
-const checklistEntries = computed(() => Object.values(checklist.value).sort((a, b) => b.seen.localeCompare(a.seen)));
 
 function onRadius(e: Event) {
   const i = Number((e.target as HTMLInputElement).value);
@@ -149,20 +144,7 @@ async function openShare() {
   if (!tallies.value) tallies.value = await speciesTallies(a, classes.value).catch(() => null);
 }
 
-function exportCsv() {
-  const blob = new Blob([checklistCsv(checklistEntries.value)], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `gbif-explorer-checklist-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-}
-
-function confirmClear() {
-  if (window.confirm('Remove every species from your checklist?')) clearChecklist();
-}
-
-const setTab = (t: 'species' | 'recent' | 'checklist') => {
+const setTab = (t: 'species' | 'recent') => {
   $nearTab.set(t);
   if (t === 'recent' && !recent.value) void loadRecent();
 };
@@ -172,7 +154,6 @@ watch(area, () => void loadArea(), { deep: true });
 
 onMounted(() => {
   $mapMode.set('pin');
-  canStore.value = storageAvailable();
   void loadSpeciesManifest();
   void loadArea();
 });
@@ -270,7 +251,7 @@ onBeforeUnmount(() => {
 
           <div role="tablist" aria-label="Lists" class="flex gap-1 border-b border-border text-sm">
             <button
-              v-for="t in ['species', 'recent', 'checklist'] as const"
+              v-for="t in ['species', 'recent'] as const"
               :key="t"
               role="tab"
               type="button"
@@ -279,7 +260,7 @@ onBeforeUnmount(() => {
               :class="tab === t ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
               @click="setTab(t)"
             >
-              {{ t === 'checklist' ? `Seen (${checklistEntries.length})` : t === 'species' ? 'Species' : 'Recent' }}
+              {{ t === 'species' ? 'Species' : 'Recent' }}
             </button>
           </div>
 
@@ -293,11 +274,11 @@ onBeforeUnmount(() => {
                 thisMonth ? ' or all months' : ''
               }}.
             </p>
-            <SpeciesTable v-else :rows="species" :groups="classes" :loading="loading" :note="tableNote" checklist />
+            <SpeciesTable v-else :rows="species" :groups="classes" :loading="loading" :note="tableNote" />
           </div>
 
           <!-- Recent sightings -->
-          <div v-else-if="tab === 'recent'" role="tabpanel">
+          <div v-else role="tabpanel">
             <div v-if="recentLoading" class="space-y-2"><SkeletonBlock v-for="i in 4" :key="i" height="5rem" /></div>
             <p v-else-if="recentError" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
               Recent sightings are unavailable right now.
@@ -338,53 +319,6 @@ onBeforeUnmount(() => {
                 </div>
               </li>
             </ul>
-          </div>
-
-          <!-- Checklist -->
-          <div v-else role="tabpanel" class="space-y-3 text-sm">
-            <p v-if="!canStore" class="rounded-md bg-surface-2 p-3 text-xs text-muted">
-              This browser won’t let the site save data, so your checklist lasts only until you leave the page.
-            </p>
-            <p v-if="!checklistEntries.length" class="text-muted">
-              Tick “Seen” on any species card to build your checklist. It stays in this browser only.
-            </p>
-            <template v-else>
-              <ul class="divide-y divide-border">
-                <li v-for="e in checklistEntries" :key="e.key" class="flex items-center justify-between gap-2 py-1.5">
-                  <a :href="speciesPath(e.key, manifest)" class="min-w-0 truncate hover:underline">
-                    {{ e.commonName ?? e.scientificName }}
-                    <span v-if="e.commonName" class="sci-name text-xs text-subtle">{{ e.scientificName }}</span>
-                  </a>
-                  <span class="flex shrink-0 items-center gap-2 text-xs text-subtle">
-                    {{ e.seen }}
-                    <button
-                      type="button"
-                      class="rounded px-1 hover:bg-surface-2"
-                      :aria-label="`Remove ${e.commonName ?? e.scientificName}`"
-                      @click="toggleSeen(e)"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                </li>
-              </ul>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-contrast"
-                  @click="exportCsv"
-                >
-                  Export CSV
-                </button>
-                <button
-                  type="button"
-                  class="rounded-md border border-border px-3 py-1.5 text-xs hover:border-accent"
-                  @click="confirmClear"
-                >
-                  Clear
-                </button>
-              </div>
-            </template>
           </div>
         </section>
       </ResponsivePanel>

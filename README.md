@@ -109,7 +109,6 @@ npm run dev             # http://localhost:4321
 - **"Recorded in {month}".** Restricts to records from the current calendar month in any year.
 - **Recent sightings.** Photographed records from the past year, newest first, each showing its dataset and photo licence. GBIF ignores sort parameters, so the feed filters by date range and sorts on the client.
 - **Share card.** Drawn on a `<canvas>` using only CORS-enabled GBIF imagery (basemap and density tiles), so it can be exported. It's shared as an image with the Web Share API where supported, otherwise downloaded, or the link copied. It doesn't print coordinates. The per-group species tallies are fetched when the dialog opens.
-- **Checklist.** "Seen" ticks are kept in `localStorage` only (every access wrapped in try/catch, with a notice when storage is blocked) and can be exported as CSV.
 
 ## Polish (Phase 6)
 

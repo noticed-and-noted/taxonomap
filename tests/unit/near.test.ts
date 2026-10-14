@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { checklistCsv } from '~/lib/near/checklist';
 import { circleRing, roundLatLng } from '~/lib/gbif/params';
 import { __resetUrlSync } from '~/stores/url-sync';
 
@@ -27,14 +26,5 @@ describe('near me', () => {
     expect(ring[0]).toEqual(ring[ring.length - 1]);
     const lats = ring.map((p) => p[1]);
     expect(Math.max(...lats) - 51.507).toBeCloseTo(2 / 110.574, 3);
-  });
-
-  it('exports the checklist as CSV with escaping', () => {
-    const csv = checklistCsv([
-      { key: 1, scientificName: 'Erithacus rubecula', commonName: 'European Robin, "redbreast"', seen: '2026-10-12' },
-    ]);
-    expect(csv.split('\n')[0]).toBe('gbif_taxon_key,scientific_name,common_name,date_ticked,gbif_url');
-    expect(csv).toContain('"European Robin, ""redbreast"""');
-    expect(csv).toContain('https://www.gbif.org/species/1');
   });
 });
