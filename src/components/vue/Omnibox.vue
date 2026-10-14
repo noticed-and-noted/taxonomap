@@ -218,10 +218,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="omnibox relative mx-auto w-full max-w-xl" @focusout="onBlur">
+  <div class="omnibox relative w-full max-w-xl" @focusout="onBlur">
     <label for="omnibox-input" class="sr-only">Search species or places</label>
     <div
-      class="flex items-center gap-2 rounded-md border border-border bg-bg px-3 transition-colors duration-200 focus-within:border-accent"
+      class="flex items-center gap-2 rounded-[var(--radius)] border border-border bg-surface px-3 shadow-panel transition-colors duration-200 focus-within:border-accent"
     >
       <svg
         viewBox="0 0 24 24"
@@ -243,7 +243,7 @@ onBeforeUnmount(() => {
         autocomplete="off"
         spellcheck="false"
         placeholder="Search species or places…"
-        class="h-9 w-full min-w-0 bg-transparent text-sm text-text placeholder:text-subtle focus:outline-none"
+        class="h-[calc(var(--header-height)-2px)] w-full min-w-0 bg-transparent text-sm text-text placeholder:text-subtle focus:outline-none"
         aria-autocomplete="list"
         aria-controls="omnibox-listbox"
         :aria-expanded="open && options.length > 0"

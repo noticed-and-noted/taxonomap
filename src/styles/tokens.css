@@ -65,7 +65,10 @@
   --radius: 10px;
   --radius-lg: 16px;
   --panel-width: 400px;
-  --header-height: 56px;
+  --header-height: 44px;
+  --header-gap: 0.75rem;
+  /* Space the floating header occupies above page content. */
+  --header-offset: calc(var(--header-height) + var(--header-gap));
 
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 200ms;

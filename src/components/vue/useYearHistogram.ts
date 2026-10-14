@@ -1,6 +1,6 @@
 /**
  * Records-per-year for the time slider. With no filters the baked global
- * snapshot is used; once taxon/basis/photo/country filters apply, one live
+ * snapshot is used; once taxon/basis/photo filters apply, one live
  * facet request (limit=0) replaces it. The year filter itself is excluded so
  * the histogram always shows the full range.
  */

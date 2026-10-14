@@ -7,7 +7,6 @@
       "url": [
         "http://localhost/index.html",
         "http://localhost/tree/index.html",
-        "http://localhost/near/index.html",
         "http://localhost/species/view/index.html"
       ],
       "settings": { "formFactor": "mobile", "throttlingMethod": "simulate" }

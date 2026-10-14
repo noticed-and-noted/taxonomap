@@ -12,12 +12,6 @@ export interface YearsSnapshot extends BakedMeta {
   years: [number, number][];
 }
 
-/** /data/countries.json — records per country. */
-export interface CountriesSnapshot extends BakedMeta {
-  /** [ISO2, count] descending by count. */
-  countries: [string, number][];
-}
-
 /** Rank codes used in the name index. */
 export type RankCode = 'K' | 'P' | 'C' | 'O' | 'F' | 'G' | 'S';
 

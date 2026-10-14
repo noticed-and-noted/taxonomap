@@ -34,6 +34,8 @@ const radiusCodec: UrlCodec<RadiusKm> = {
   serialize: (v) => String(v),
 };
 
+/** "Near me" mode on the map page (`?near=1`). */
+export const $nearMode = urlAtom(codecs.bool('near'));
 export const $nearAt = urlAtom(atCodec);
 export const $nearRadius = urlAtom(radiusCodec);
 /** Only species recorded in the current calendar month (any year). */
@@ -43,6 +45,15 @@ export const $nearTab = urlAtom(codecs.enumOf('tab', ['species', 'recent', 'chec
 /** Set the location, rounding first (privacy rule). */
 export function setNearLocation(lat: number, lng: number): void {
   $nearAt.set(roundLatLng(lat, lng));
+}
+
+/** Leave near-me mode, dropping its params from the URL (one history step). */
+export function exitNearMode(): void {
+  $nearMode.set(false);
+  $nearAt.set(null);
+  $nearRadius.set(radiusCodec.default);
+  $nearThisMonth.set(false);
+  $nearTab.set('species');
 }
 
 /** Map zoom that frames a radius comfortably. */

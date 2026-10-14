@@ -1,14 +1,13 @@
 <script setup lang="ts">
 /**
- * Filter chips: selected taxon, basis of record (multi), has photo, country.
+ * Filter chips: selected taxon, basis of record (multi), has photo.
  * Every chip writes a URL-synced store.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, onMounted, ref } from 'vue';
-import { loadSnapshot } from '~/lib/data/load';
-import { BASIS_LABELS, compact, countryName } from '~/lib/format';
+import { computed, ref } from 'vue';
+import { BASIS_LABELS } from '~/lib/format';
 import type { BasisOfRecord } from '~/lib/gbif';
-import { $basisOfRecord, $country, $hasPhoto, $taxonKey, BASIS_OF_RECORD, clearHexSelection } from '~/stores/explorer';
+import { $basisOfRecord, $hasPhoto, $taxonKey, BASIS_OF_RECORD, clearHexSelection } from '~/stores/explorer';
 import { $taxonInfo } from '~/stores/taxon';
 
 const props = withDefaults(defineProps<{ parts?: 'all' | 'taxon' | 'filters'; stacked?: boolean }>(), {
@@ -21,17 +20,8 @@ const showFilters = props.parts !== 'taxon';
 const taxon = useStore($taxonInfo);
 const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
-const country = useStore($country);
 
 const basisOpen = ref(false);
-const countries = ref<{ code: string; name: string; count: number }[]>([]);
-
-onMounted(async () => {
-  const snap = await loadSnapshot('countries');
-  countries.value = (snap?.countries ?? [])
-    .map(([code, count]) => ({ code, name: countryName(code), count }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-});
 
 const basisLabel = computed(() => {
   if (!basis.value.length) return 'Any record type';
@@ -51,11 +41,6 @@ const togglePhoto = () => $hasPhoto.set(!photo.value);
 function clearTaxon() {
   clearHexSelection();
   $taxonKey.set(null);
-}
-
-function onCountry(e: Event) {
-  const v = (e.target as HTMLSelectElement).value;
-  $country.set(v || null);
 }
 
 function onBasisKey(e: KeyboardEvent) {
@@ -146,18 +131,6 @@ function onBasisBlur(e: FocusEvent) {
         </svg>
         Has photo
       </button>
-
-      <label class="chip" :class="{ 'chip-active': country }">
-        <span class="sr-only">Country</span>
-        <select
-          class="max-w-[11rem] cursor-pointer bg-transparent text-inherit focus:outline-none"
-          :value="country ?? ''"
-          @change="onCountry"
-        >
-          <option value="">Any country</option>
-          <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }} ({{ compact(c.count) }})</option>
-        </select>
-      </label>
     </template>
   </div>
 </template>
@@ -206,10 +179,5 @@ function onBasisBlur(e: FocusEvent) {
 
 .chip-x:hover {
   background: var(--surface-3);
-}
-
-select option {
-  background: var(--surface);
-  color: var(--text);
 }
 </style>

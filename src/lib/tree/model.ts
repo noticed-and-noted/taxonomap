@@ -202,28 +202,3 @@ export async function resolve(root: TreeNode, key: number, wkt?: string): Promis
   }
   return current;
 }
-
-/**
- * Replace record counts on the baked levels with counts inside `wkt`
- * (one facet request), and drop live-loaded levels so they reload scoped.
- */
-export async function applyScope(root: TreeNode, wkt: string, signal?: AbortSignal): Promise<void> {
-  const r = await occurrenceFacets({ geometry: wkt }, ['kingdomKey', 'phylumKey', 'classKey', 'orderKey'], {
-    limits: { kingdomKey: 20, phylumKey: 400, classKey: 2000, orderKey: 5000 },
-    ...(signal && { signal }),
-  });
-  const counts = new Map<number, number>();
-  for (const f of ['kingdomKey', 'phylumKey', 'classKey', 'orderKey']) {
-    for (const c of r.facets[f] ?? []) counts.set(Number(c.name), c.count);
-  }
-  const visit = (n: TreeNode) => {
-    if (n.rank !== 'ROOT') n.records = counts.get(n.key) ?? 0;
-    if (n.rank === 'O') {
-      delete n.children;
-      n.loaded = false;
-    }
-    n.children?.forEach(visit);
-  };
-  visit(root);
-  root.records = r.count;
-}

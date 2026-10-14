@@ -7,7 +7,7 @@ import { useStore } from '@nanostores/vue';
 import { onMounted } from 'vue';
 import { full } from '~/lib/format';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
-import { $hexGeometry, $selectedRecord, $showRecords, $taxonKey } from '~/stores/explorer';
+import { $hexGeometry, $selectedRecord, $showRecords } from '~/stores/explorer';
 import { $taxonInfo } from '~/stores/taxon';
 import RadialSeasonality from './RadialSeasonality.vue';
 import RecordDetail from './RecordDetail.vue';
@@ -22,11 +22,6 @@ const taxon = useStore($taxonInfo);
 const manifest = useStore($speciesManifest);
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
-
-function focusSpecies(key: number) {
-  // Filter the map to this species; the cell stays selected.
-  $taxonKey.set($taxonKey.get() === key ? null : key);
-}
 
 const toggleRecords = () => $showRecords.set(!showRecords.value);
 const closeRecord = () => $selectedRecord.set(null);
@@ -84,13 +79,11 @@ const closeRecord = () => $selectedRecord.set(null);
               :count="s.count"
               :image="s.image"
               :selected="taxon?.key === s.key"
-              :page-href="speciesPath(s.key, manifest)"
+              :href="speciesPath(s.key, manifest)"
               size="200x"
-              @select="focusSpecies"
             />
           </li>
         </ul>
-        <p class="mt-2 text-xs text-subtle">Select a species to show only its records on the map.</p>
       </section>
 
       <RadialSeasonality v-if="count" :counts="months" title="Records by month" />

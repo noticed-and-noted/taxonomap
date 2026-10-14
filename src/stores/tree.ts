@@ -9,5 +9,3 @@ export const $treeLayout = urlAtom(
 export const $treeMetric = urlAtom(
   codecs.enumOf('metric', ['records', 'species'] as const, 'records', { history: 'replace' }),
 );
-/** Count only records inside the current map view. */
-export const $treeScope = urlAtom(codecs.bool('scope', { history: 'replace' }));

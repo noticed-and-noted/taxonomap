@@ -6,7 +6,7 @@ test('tree loads the baked levels and zooms via the keyboard-accessible list', a
   await expect(animals).toBeVisible();
   await animals.click();
   await expect(page).toHaveURL(/focus=1(&|$)/);
-  await expect(page).toHaveURL(/taxon=1(&|$)/);
+  await expect(page).not.toHaveURL(/taxon=/);
   await expect(page.getByRole('navigation', { name: 'Tree position' })).toContainText('Animals');
 });
 

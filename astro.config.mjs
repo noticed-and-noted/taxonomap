@@ -25,7 +25,7 @@ export default defineConfig({
     vue(),
     sitemap({
       // The /species/view fallback is noindex; keep it out of the sitemap.
-      filter: (page) => !/\/(species\/view|offline|404)/.test(page),
+      filter: (page) => !/\/(species\/view|offline|near|404)/.test(page),
     }),
     serviceWorker(),
   ],

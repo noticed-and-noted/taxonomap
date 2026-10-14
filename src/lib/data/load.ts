@@ -1,8 +1,7 @@
-import type { CountriesSnapshot, NamesSnapshot, TreeSnapshot, YearsSnapshot } from './types';
+import type { NamesSnapshot, TreeSnapshot, YearsSnapshot } from './types';
 
 interface Snapshots {
   years: YearsSnapshot;
-  countries: CountriesSnapshot;
   names: NamesSnapshot;
   tree: TreeSnapshot;
 }

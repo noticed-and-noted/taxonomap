@@ -774,7 +774,7 @@ onBeforeUnmount(() => {
     </div>
     <p
       v-if="failed"
-      class="absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
+      class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
     >
       Occurrence tiles are unavailable right now. The basemap still works.
     </p>
@@ -788,7 +788,7 @@ onBeforeUnmount(() => {
 
 .map-progress {
   position: absolute;
-  inset: 0 0 auto 0;
+  inset: var(--header-offset) 0 auto 0;
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
   background-size: 40% 100%;

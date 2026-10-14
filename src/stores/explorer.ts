@@ -34,8 +34,7 @@ const viewCodec: UrlCodec<MapView> = {
   key: 'view',
   default: DEFAULT_VIEW,
   history: 'replace',
-  // The map persists across pages, so its view travels with navigation
-  // (the tree's "only the map view" scope depends on it).
+  // The map persists across pages, so its view travels with navigation.
   scope: 'global',
   parse(raw) {
     const [lng, lat, zoom] = raw.split(',').map(Number);
@@ -76,7 +75,6 @@ export const $mapView = urlAtom(viewCodec);
 export const $yearRange = urlAtom(yearsCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
 export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
-export const $country = urlAtom(codecs.string('country', { pattern: /^[A-Z]{2}$/, scope: 'global' }));
 export type HexPoint = readonly [lng: number, lat: number] | null;
 
 /**
@@ -146,13 +144,12 @@ export function clearHexSelection(): void {
 }
 
 export const $occurrenceFilter = computed(
-  [$taxonKey, $yearRange, $basisOfRecord, $hasPhoto, $country],
-  (taxonKey, year, basis, photo, country): OccurrenceFilter => ({
+  [$taxonKey, $yearRange, $basisOfRecord, $hasPhoto],
+  (taxonKey, year, basis, photo): OccurrenceFilter => ({
     taxonKey: taxonKey ?? undefined,
     year,
     basisOfRecord: basis.length ? basis : undefined,
     hasImage: photo || undefined,
-    country: country ?? undefined,
   }),
 );
 

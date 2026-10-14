@@ -20,8 +20,6 @@ const props = defineProps<{
   selected?: boolean;
   /** Render the card as a link (species pages) instead of a select button. */
   href?: string | undefined;
-  /** Secondary link to the species page when the card is a button. */
-  pageHref?: string | undefined;
 }>();
 
 const emit = defineEmits<{ select: [key: number] }>();
@@ -68,16 +66,13 @@ const initials = computed(() =>
         >
       </span>
     </component>
-    <span v-if="image || pageHref" class="flex flex-wrap items-center justify-between gap-1 px-2.5 pb-2">
+    <span v-if="image" class="flex flex-wrap items-center justify-between gap-1 px-2.5 pb-2">
       <LicenceBadge
         v-if="image"
         :licence="image.licence"
         :creator="image.creator"
         :rights-holder="image.rightsHolder"
       />
-      <a v-if="pageHref" :href="pageHref" class="text-[11px] text-accent underline-offset-2 hover:underline">
-        About<span class="sr-only"> {{ commonName ?? scientificName }}</span> →
-      </a>
     </span>
   </article>
 </template>

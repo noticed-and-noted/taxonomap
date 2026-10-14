@@ -47,7 +47,7 @@ npm run dev             # http://localhost:4321
 
 - **`src/lib/gbif/` is the only code that knows GBIF URLs.** An ESLint rule rejects `api.gbif.org` string literals anywhere else in `src/`. The same client runs in the browser (`~/lib/gbif`) and at build time (`~/lib/gbif/server`, which switches to the Node transport).
 - **URL is the source of truth.** `src/stores/url-sync.ts` binds Nano Stores to query-string keys:
-  - `taxon`, `years`, `basis`, `photo` and `country` are _global_: they are carried onto internal navigations.
+  - `taxon`, `years`, `basis` and `photo` are _global_: they are carried onto internal navigations.
   - `view` uses `replaceState`, throttled to 300 ms.
   - `hex` and `panel` push history entries, so the back button works.
 - **The map survives navigation.** The map island lives in a `transition:persist="map"` slot inside `AppShell.astro`.
@@ -102,7 +102,8 @@ npm run dev             # http://localhost:4321
 
 ## What's near me (Phase 5)
 
-- **Choosing a place.** The persisted map switches to pin mode: click to drop a pin, or use your location after an explainer. The location is rounded to 3 dp (~100 m) before it's stored, put in the URL (`at=`) or sent anywhere. The radius snaps to 1/2/5/10/25/50 km and is drawn on the map.
+- **A mode of the map page** (`/?near=1`), toggled by the Near me button in the map's top bar; it replaces the filters, timeline and hex panel. Leaving it drops its params from the URL. The old `/near` route redirects, keeping its query.
+- **Choosing a place.** The map switches to pin mode: click to drop a pin, or use your location after an explainer. The location is rounded to 3 dp (~100 m) before it's stored, put in the URL (`at=`) or sent anywhere. The radius snaps to 1/2/5/10/25/50 km and is drawn on the map.
 - **Species by class.** One facet request gives the classes in the area. Each page of species is one facet request (`facetOffset` paging) plus one photo search for the whole page; names come from the index or the photo results. Further groups load as you scroll.
 - **"Recorded in {month}".** Restricts to records from the current calendar month in any year.
 - **Recent sightings.** Photographed records from the past year, newest first, each showing its dataset and photo licence. GBIF ignores sort parameters, so the feed filters by date range and sorts on the client.

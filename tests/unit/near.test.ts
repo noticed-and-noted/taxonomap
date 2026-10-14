@@ -6,7 +6,7 @@ import { __resetUrlSync } from '~/stores/url-sync';
 describe('near me', () => {
   beforeEach(() => {
     __resetUrlSync();
-    history.replaceState(null, '', '/near');
+    history.replaceState(null, '', '/?near=1');
   });
 
   it('rounds any location to 3 dp before it is stored', async () => {

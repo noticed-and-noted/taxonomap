@@ -14,7 +14,6 @@ import {
   type VernacularName,
 } from '~/lib/gbif/server';
 import type {
-  CountriesSnapshot,
   NameRow,
   NamesSnapshot,
   RankCode,
@@ -44,13 +43,6 @@ export function bakeYears(): Promise<YearsSnapshot> {
       .map((c) => [Number(c.name), c.count] as [number, number])
       .sort((a, b) => a[0] - b[0]);
     return { ...meta(), total: r.count, years };
-  });
-}
-
-export function bakeCountries(): Promise<CountriesSnapshot> {
-  return once('countries', async () => {
-    const r = await occurrenceFacets({}, ['country'], { facetLimit: 300 });
-    return { ...meta(), countries: (r.facets['country'] ?? []).map((c) => [c.name, c.count] as [string, number]) };
   });
 }
 

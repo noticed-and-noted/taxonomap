@@ -1,15 +1,19 @@
 ---
-import AppShell from '~/components/AppShell.astro';
-import NearExplorer from '~/components/vue/NearExplorer.vue';
-import BaseLayout from '~/layouts/BaseLayout.astro';
+/** "Near me" is now a mode of the map page; keep old links (with their query) working. */
 ---
 
-<BaseLayout
-  title="What’s near me"
-  description="See which species have been recorded around you, by group, this month, and in recent sightings."
->
-  <AppShell map="full">
-    <h1 class="sr-only">What’s near me</h1>
-    <NearExplorer client:only="vue" />
-  </AppShell>
-</BaseLayout>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content="0; url=/?near=1" />
+    <title>What’s near me · GBIF Explorer</title>
+    <script is:inline>
+      location.replace('/?near=1' + location.search.replace(/^\?/, '&') + location.hash);
+    </script>
+  </head>
+  <body>
+    <a href="/?near=1">What’s near me</a>
+  </body>
+</html>

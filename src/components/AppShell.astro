@@ -1,6 +1,6 @@
 ---
 /**
- * App frame for the interactive routes (/, /tree, /near).
+ * App frame for the interactive routes (/, /tree).
  *
  * The map island sits in a `transition:persist` slot so that it (and its
  * WebGL context, camera and loaded tiles) survives ClientRouter navigation.
@@ -42,10 +42,16 @@ const { map = 'full' } = Astro.props;
 
 <style>
   .app-shell {
+    position: relative;
     display: grid;
-    grid-template-rows: var(--header-height) 1fr;
     height: 100dvh;
     overflow: hidden;
+  }
+
+  /* The header floats over the full-bleed map. */
+  .app-shell > :global(.app-header) {
+    position: absolute;
+    inset: 0 0 auto;
   }
 
   .app-body {
@@ -69,6 +75,7 @@ const { map = 'full' } = Astro.props;
 
   .app-main {
     grid-area: 1 / 1;
+    margin-top: var(--header-offset);
     min-height: 0;
     position: relative;
     pointer-events: none;

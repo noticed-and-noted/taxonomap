@@ -2,17 +2,16 @@
 /**
  * Tree of life browser (client:only). Baked kingdom→order levels, live
  * lazy-loading below; sunburst or icicle (icicle by default on narrow
- * screens); records vs species sizing; optional scoping to the map view.
- * Selecting a node sets the shared taxon (so the map follows) and offers
- * "view on map". The child list is the keyboard path and data-table fallback.
+ * screens); records vs species sizing.
+ * Selecting a node only moves the tree; it leaves the shared taxon filter
+ * alone ("view on map" applies it). The child list is the keyboard path and data-table fallback.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
-import { bboxToWkt, classifyError, findImages, type UiErrorKind, type UsableImage } from '~/lib/gbif';
+import { classifyError, findImages, type UiErrorKind, type UsableImage } from '~/lib/gbif';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import {
-  applyScope,
   findNode,
   isExpandable,
   loadBakedTree,
@@ -22,8 +21,8 @@ import {
   ROOT_KEY,
   type TreeNode,
 } from '~/lib/tree/model';
-import { $mapBounds, $taxonKey } from '~/stores/explorer';
-import { $treeFocus, $treeLayout, $treeMetric, $treeScope } from '~/stores/tree';
+import { $taxonKey } from '~/stores/explorer';
+import { $treeFocus, $treeLayout, $treeMetric } from '~/stores/tree';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import TreeChart from './TreeChart.vue';
@@ -31,8 +30,6 @@ import TreeChart from './TreeChart.vue';
 const focusKey = useStore($treeFocus);
 const layoutPref = useStore($treeLayout);
 const metric = useStore($treeMetric);
-const scope = useStore($treeScope);
-const bounds = useStore($mapBounds);
 const taxonKey = useStore($taxonKey);
 const manifest = useStore($speciesManifest);
 
@@ -42,7 +39,6 @@ const selected = shallowRef<TreeNode | null>(null);
 const version = ref(0);
 const loadingKey = ref<number | null>(null);
 const error = ref<UiErrorKind | 'no-data' | null>(null);
-const scopeNote = ref<string | null>(null);
 const photo = shallowRef<UsableImage | null>(null);
 const narrow = ref(false);
 let mq: MediaQueryList | undefined;
@@ -58,38 +54,12 @@ const children = computed(() => {
 });
 const metricOf = (n: TreeNode) => (metric.value === 'records' ? n.records : n.species);
 
-/** WKT for the current map view, or null (with a note) when it can't be used. */
-function scopeWkt(): string | null {
-  const b = bounds.value;
-  if (!b) {
-    scopeNote.value = 'Open the map first to choose an area.';
-    return null;
-  }
-  const [w, s, e, n] = b;
-  if (e - w >= 300 || w > e) {
-    scopeNote.value = 'Zoom the map in to a region (the current view spans the whole world).';
-    return null;
-  }
-  scopeNote.value = null;
-  return bboxToWkt([Math.max(-180, w), Math.max(-85, s), Math.min(180, e), Math.min(85, n)]);
-}
-
 async function build() {
   error.value = null;
   const fresh = await loadBakedTree();
   if (!fresh) {
     error.value = 'no-data';
     return;
-  }
-  if (scope.value) {
-    const wkt = scopeWkt();
-    if (wkt) {
-      try {
-        await applyScope(fresh, wkt);
-      } catch (e) {
-        error.value = classifyError(e);
-      }
-    }
   }
   root.value = fresh;
   version.value++;
@@ -107,14 +77,14 @@ async function syncFocus() {
   }
   loadingKey.value = wanted;
   try {
-    const node = await resolve(r, wanted, scope.value ? (scopeWkt() ?? undefined) : undefined);
+    const node = await resolve(r, wanted);
     version.value++;
     if (!node) {
       focus.value = r;
       return;
     }
     if (isExpandable(node)) {
-      if (!node.loaded) await loadChildren(node, scope.value ? (scopeWkt() ?? undefined) : undefined);
+      if (!node.loaded) await loadChildren(node);
       version.value++;
       focus.value = node.children?.length ? node : (node.parent ?? r);
     } else {
@@ -130,12 +100,11 @@ async function syncFocus() {
 
 async function pick(node: TreeNode) {
   selected.value = node;
-  $taxonKey.set(node.key);
   if (!isExpandable(node)) return;
   if (!node.loaded) {
     loadingKey.value = node.key;
     try {
-      await loadChildren(node, scope.value ? (scopeWkt() ?? undefined) : undefined);
+      await loadChildren(node);
       version.value++;
     } catch (e) {
       error.value = classifyError(e);
@@ -189,14 +158,8 @@ watch(taxonKey, (k) => {
   if (k !== null && k !== selected.value?.key) $treeFocus.set(k);
 });
 
-watch(scope, () => void build());
-watch(bounds, () => {
-  if (scope.value) void build();
-});
-
 const setMetric = (m: 'records' | 'species') => $treeMetric.set(m);
 const setLayout = (l: 'sunburst' | 'icicle') => $treeLayout.set(l);
-const toggleScope = () => $treeScope.set(!scope.value);
 
 onMounted(() => {
   mq = window.matchMedia('(max-width: 639.98px)');
@@ -263,13 +226,6 @@ const share = (n: TreeNode) => {
             />Icicle</label
           >
         </fieldset>
-        <label
-          class="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5"
-          :class="{ 'border-accent': scope }"
-        >
-          <input type="checkbox" class="accent-[var(--accent)]" :checked="scope" @change="toggleScope" />
-          Only the map view
-        </label>
       </div>
     </div>
 
@@ -288,11 +244,6 @@ const share = (n: TreeNode) => {
         </li>
       </ol>
     </nav>
-
-    <p v-if="scope && scopeNote" class="rounded-md bg-surface-2 px-3 py-2 text-xs text-muted">{{ scopeNote }}</p>
-    <p v-if="scope && !scopeNote && metric === 'species'" class="text-xs text-subtle">
-      Species counts are global (described species); record counts are limited to the map view.
-    </p>
 
     <div v-if="error && !root" class="grid flex-1 place-items-center" role="alert">
       <div class="text-center">
