@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Preview of the highlighted header-search result: photo, rank, record count
- * and two actions (add/select, and its About page, for any rank). Data loads after a short
+ * and up to two actions (add/select if offered, and its About page, for any rank). Data loads after a short
  * pause on a result, so arrowing through the list stays cheap; both requests
  * go through the cached client.
  */
@@ -12,7 +12,7 @@ import { leadPhoto } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
 import ThumbImage from './ThumbImage.vue';
 
-const props = defineProps<{ hit: NameHit; href: string; aboutLabel: string; selectLabel: string }>();
+const props = defineProps<{ hit: NameHit; href: string; aboutLabel: string; selectLabel?: string | undefined }>();
 const emit = defineEmits<{ select: []; about: [] }>();
 
 const image = ref<UsableImage>();
@@ -66,7 +66,9 @@ onBeforeUnmount(() => load.cancel());
         }}<span v-if="count !== null" class="tabular-nums"> · {{ compact(count) }} records</span>
       </p>
       <div class="actions">
-        <button type="button" class="action" @mousedown.prevent @click="emit('select')">{{ selectLabel }}</button>
+        <button v-if="selectLabel" type="button" class="action" @mousedown.prevent @click="emit('select')">
+          {{ selectLabel }}
+        </button>
         <a :href="href" class="action primary" @click="emit('about')">{{ aboutLabel }}</a>
       </div>
     </div>

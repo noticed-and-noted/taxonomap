@@ -146,18 +146,13 @@ watch(selected, async (n) => {
   }
 });
 
-// Back/forward.
+// Back/forward, and header-search picks (which move the tree, not the filter).
 watch(focusKey, (k) => {
   if (!root.value) return;
   if ((k ?? ROOT_KEY) === focus.value?.key) return;
   const known = k === null ? root.value : findNode(root.value, k);
-  if (known) focus.value = known;
+  if (known && (known === root.value || known.children?.length)) focus.value = known;
   else void syncFocus();
-});
-
-// A taxon chosen elsewhere (e.g. the omnibox) moves the tree to it.
-watch(taxonKey, (k) => {
-  if (k !== null && k !== selected.value?.key) $treeFocus.set(k);
 });
 
 const setMetric = (m: 'records' | 'species') => $treeMetric.set(m);
@@ -315,10 +310,9 @@ const share = (n: TreeNode) => {
             >View on map</a
           >
           <a
-            v-if="detail.rank === 'S'"
             :href="speciesPath(detail.key, manifest)"
             class="rounded-md border border-border px-2.5 py-1.5 hover:border-accent"
-            >Species page</a
+            >About page</a
           >
           <a
             :href="`https://www.gbif.org/species/${detail.key}`"

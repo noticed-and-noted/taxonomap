@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
  * Header search (client:idle). On the map, a species or group pick adds it
- * to the What filter's taxa (records of any are shown); elsewhere a pick
- * replaces the taxon. Species: the baked common-name index answers
- * instantly; live GBIF providers (scientific suggest + vernacular search)
+ * to the What filter's taxa (records of any are shown); on the tree it moves
+ * the tree there (the filter is left alone); on About pages it opens that
+ * result's About page; elsewhere a pick replaces the taxon. Species: the
+ * baked common-name index answers instantly; live GBIF providers (scientific suggest + vernacular search)
  * are debounced 250 ms. Places: geocoder on submit only (Nominatim policy).
  * The highlighted species result (or the first, before you arrow) is
  * previewed beside the list, with a link to its About page; Cmd/Ctrl-Enter
@@ -20,6 +21,7 @@ import { debounce } from '~/lib/util/debounce';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, MAX_TAXA as MAX_SELECTED } from '~/stores/explorer';
 import { addTaxon, setOnlyTaxon, type TaxonInfo } from '~/stores/taxon';
+import { $treeFocus } from '~/stores/tree';
 import TaxonPreview from './TaxonPreview.vue';
 
 type Option =
@@ -92,7 +94,7 @@ const modKey = isMac ? '⌘' : 'Ctrl';
 /** What Enter does right now, for the hint bar. */
 const enterLabel = computed(() => {
   const o = options.value[active.value];
-  if (o?.kind === 'taxon') return onMapPage() ? 'Add to map' : 'Select';
+  if (o?.kind === 'taxon') return selectLabel() ?? 'About';
   if (o?.kind === 'place') return 'Go to place';
   return 'Search places';
 });
@@ -179,8 +181,22 @@ async function runPlaceSearch() {
 function onMapPage() {
   return window.location.pathname === '/' || window.location.pathname === '';
 }
+const onTreePage = () => /^\/tree\/?$/.test(window.location.pathname);
+const onAboutPage = () => window.location.pathname.startsWith('/species/');
+
+/** Label for picking a result in place; undefined on About pages, where a pick opens its About page. */
+function selectLabel(): string | undefined {
+  if (onMapPage()) return 'Add to map';
+  if (onTreePage()) return 'Show in tree';
+  if (onAboutPage()) return undefined;
+  return 'Select';
+}
 
 async function pickTaxon(hit: NameHit) {
+  if (onAboutPage()) {
+    openAbout(hit);
+    return;
+  }
   const info: TaxonInfo = {
     key: hit.key,
     scientificName: hit.scientificName,
@@ -192,7 +208,12 @@ async function pickTaxon(hit: NameHit) {
   liveHits.value = [];
   close();
   input.value?.blur();
-  // The tree and species pages follow a single taxon, so a pick there replaces it.
+  // The tree browses on its own; only "View on map" there touches the filter.
+  if (onTreePage()) {
+    $treeFocus.set(hit.key);
+    return;
+  }
+  // Other pages follow a single taxon, so a pick there replaces it.
   if (!onMapPage()) {
     setOnlyTaxon(info);
     return;
@@ -377,7 +398,7 @@ onBeforeUnmount(() => {
           :hit="previewHit"
           :href="aboutHref(previewHit)"
           :about-label="'About'"
-          :select-label="onMapPage() ? 'Add to map' : 'Select'"
+          :select-label="selectLabel()"
           @select="pickTaxon(previewHit)"
           @about="close"
         />
@@ -389,7 +410,7 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="options.length" class="hint-bar" aria-hidden="true">
         <span><kbd>↵</kbd> {{ enterLabel }}</span>
-        <span v-if="previewHit"
+        <span v-if="previewHit && selectLabel()"
           ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
         >
         <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
