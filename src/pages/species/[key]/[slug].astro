@@ -1,16 +1,20 @@
 ---
 /**
  * Pre-rendered species page (top SPECIES_PRERENDER_COUNT species). Static
- * HTML at build; only the gallery and mini-map hydrate (client:visible).
+ * HTML at build; only the gallery, similar species and mini-map hydrate.
+ * Photos are never fetched at build: the gallery and similar species cards
+ * look them up in the browser (see ~/lib/photos/taxon-photos).
  */
 import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData } from '~/lib/species/data';
+import { similarItems } from '~/lib/species/links';
 import { full } from '~/lib/format';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/components/PageShell.astro';
 import MiniMap from '~/components/vue/MiniMap.vue';
 import PlotChart from '~/components/vue/PlotChart.vue';
+import SimilarSpecies from '~/components/vue/SimilarSpecies.vue';
 import SpeciesGallery from '~/components/vue/SpeciesGallery.vue';
 import SpeciesPage from '~/components/vue/SpeciesPage.vue';
 
@@ -54,8 +58,11 @@ const jsonLd = {
 <BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   <PageShell>
-    <SpeciesPage data={data} manifest={manifest}>
-      {data.images.length > 0 && <SpeciesGallery slot="gallery" client:visible images={data.images} name={label} />}
+    <SpeciesPage data={data}>
+      <SpeciesGallery slot="gallery" client:load taxonKey={data.key} rank={data.rank} name={label} />
+      {data.siblings.length > 0 && (
+        <SimilarSpecies slot="similar" client:visible species={similarItems(data.siblings, manifest)} />
+      )}
       {data.count > 0 && <MiniMap slot="map" client:visible taxonKey={data.key} label={label} />}
       <PlotChart slot="years" client:visible kind="years" title="Records per year" years={data.years} />
       <PlotChart

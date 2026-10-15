@@ -6,15 +6,14 @@
  *   names              → baked index, then one batched record search for misses;
  *                         the table calls `resolveNames` for any it still needs to show
  *                         (cached detail lookups, 2 at a time)
- *   photos             → the table calls `photosForKeys` for rows in view (also supplies names)
+ *   photos             → the table calls `photosForKeys` for rows in view: each species'
+ *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
  */
 import { loadSnapshot } from '~/lib/data/load';
 import { loadNameIndex } from '~/lib/data/name-index';
 import pLimit from 'p-limit';
 import {
-  findImages,
-  INATURALIST_DATASET_KEY,
   getSpecies,
   occurrenceFacets,
   searchOccurrences,
@@ -22,6 +21,7 @@ import {
   type OccurrenceFilter,
   type UsableImage,
 } from '~/lib/gbif';
+import { leadPhotos } from '~/lib/photos/taxon-photos';
 
 export interface ClassGroup {
   key: number;
@@ -145,39 +145,15 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
 }
 
 /**
- * One photo per species where one exists. A batched search returns records in
- * no useful order, so a few well-photographed species can fill every result
- * (a robin took 54 of 100); each further round asks only for the species still
- * missing, up to `rounds` searches per pass.
- *
- * Like the species page lead photo (see speciesImages), iNaturalist comes
- * first and only species without one fall back to all datasets, so a row
- * shows the same photo as the page it links to.
+ * Each species' lead photo (see leadPhotos), so a row shows the same photo
+ * as the first one on the page it links to. Also supplies species names.
  */
-export async function photosForKeys(
+export function photosForKeys(
   keys: readonly number[],
   signal?: AbortSignal,
-  rounds = 3,
 ): Promise<{ images: Map<number, UsableImage>; names: Map<number, string> }> {
-  const images = new Map<number, UsableImage>();
-  const names = new Map<number, string>();
-  let left = [...keys];
-  for (const datasetKey of [INATURALIST_DATASET_KEY, undefined]) {
-    for (let i = 0; i < rounds && left.length && !signal?.aborted; i++) {
-      const res = await findImages({ speciesKeys: left, datasetKey }, { limit: 50, ...(signal && { signal }) }).catch(
-        () => null,
-      );
-      if (!res) break;
-      for (const [k, n] of res.names) names.set(k, n);
-      for (const img of res.images) {
-        const k = img.speciesKey;
-        if (k !== undefined && left.includes(k) && !images.has(k)) images.set(k, img);
-      }
-      const before = left.length;
-      left = left.filter((k) => !images.has(k));
-      // Nothing new: what's left has no photos we can use from this source.
-      if (left.length === before) break;
-    }
-  }
-  return { images, names };
+  return leadPhotos(
+    keys.map((key) => ({ key, rank: 'SPECIES' as const })),
+    { ...(signal && { signal }) },
+  );
 }

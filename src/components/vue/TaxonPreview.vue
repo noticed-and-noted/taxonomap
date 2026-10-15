@@ -7,7 +7,8 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { compact, RANK_LABELS } from '~/lib/format';
-import { findImages, occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
+import { occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
+import { leadPhoto } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
 import ThumbImage from './ThumbImage.vue';
 
@@ -26,12 +27,12 @@ const load = debounce(async (hit: NameHit) => {
   const mine = ++seq;
   imageLoading.value = true;
   const [img, total] = await Promise.allSettled([
-    findImages({ taxonKey: hit.key }, { limit: 1 }),
+    leadPhoto({ key: hit.key, rank: hit.rank }),
     // The baked index knows counts; live suggestions need one cheap count request.
     hit.count === undefined ? occurrenceFacets({ taxonKey: hit.key }, []) : Promise.resolve(null),
   ]);
   if (mine !== seq) return;
-  image.value = img.status === 'fulfilled' ? img.value.images[0] : undefined;
+  image.value = img.status === 'fulfilled' ? img.value : undefined;
   liveCount.value = total.status === 'fulfilled' && total.value ? total.value.count : null;
   imageLoading.value = false;
 }, 200);

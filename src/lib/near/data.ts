@@ -12,7 +12,7 @@ import {
   searchOccurrences,
   usableImages,
   type Occurrence,
-  type UsableImage,
+  type GbifImage,
 } from '~/lib/gbif';
 import { namedClasses, speciesInClasses, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 
@@ -51,7 +51,7 @@ export function speciesNear(a: Area, classes: readonly ClassGroup[], signal?: Ab
 
 export interface Sighting {
   occurrence: Occurrence;
-  image: UsableImage;
+  image: GbifImage;
   date: string;
   commonName?: string;
   datasetTitle?: string;
@@ -72,7 +72,7 @@ export async function recentSightings(a: Area, limit = 24, signal?: AbortSignal)
   const idx = await nameIndexWithin(800);
   const rows = res.results
     .map((o) => ({ o, img: usableImages(o)[0] }))
-    .filter((x): x is { o: Occurrence; img: UsableImage } => !!x.img && !!x.o.eventDate)
+    .filter((x): x is { o: Occurrence; img: GbifImage } => !!x.img && !!x.o.eventDate)
     .sort((x, y) => (y.o.eventDate ?? '').localeCompare(x.o.eventDate ?? ''))
     .slice(0, limit);
   // Titles for the handful of datasets involved (attribution on every card).

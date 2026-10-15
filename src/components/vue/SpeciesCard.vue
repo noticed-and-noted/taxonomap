@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * Photo card: edge-to-edge image (GBIF thumbnail), common name first,
+ * Photo card: edge-to-edge image (the taxon's lead photo), common name first,
  * scientific name in italic serif, record count, licence + creator badge.
  */
 import { computed, ref } from 'vue';
 import { compact } from '~/lib/format';
 import type { UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
+import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 
 const props = defineProps<{
@@ -15,6 +16,8 @@ const props = defineProps<{
   commonName?: string | undefined;
   count?: number | undefined;
   image?: UsableImage | undefined;
+  /** The photo is still being looked up: show a skeleton, not the initials. */
+  loading?: boolean;
   /** Width class for the thumbnail request. */
   size?: '200x' | '400x';
   selected?: boolean;
@@ -54,6 +57,7 @@ const initials = computed(() =>
           class="size-full object-cover"
           @broken="broken = true"
         />
+        <SkeletonBlock v-else-if="loading" class="absolute inset-0" height="100%" rounded="sm" label="Loading photo" />
         <span v-else class="grid size-full place-items-center font-display text-2xl text-subtle" aria-hidden="true">
           {{ initials }}
         </span>

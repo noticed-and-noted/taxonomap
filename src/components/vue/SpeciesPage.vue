@@ -2,17 +2,15 @@
 /**
  * Species page body, shared by the pre-rendered route (rendered at build,
  * no hydration) and the /species/view fallback (rendered in the browser).
- * Interactive parts (gallery, mini-map) come in through named slots so the
+ * Interactive parts (gallery, mini-map, similar species) come in through named slots so the
  * pre-rendered page can hydrate just those as islands.
  */
 import { computed } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import type { SpeciesData } from '~/lib/species/data';
-import { speciesPath, type SpeciesManifest } from '~/lib/species/links';
 import RadialSeasonality from './RadialSeasonality.vue';
-import SpeciesCard from './SpeciesCard.vue';
 
-const props = defineProps<{ data: SpeciesData; manifest?: SpeciesManifest | null }>();
+const props = defineProps<{ data: SpeciesData }>();
 
 const d = computed(() => props.data);
 const displayName = computed(() => d.value.commonName ?? d.value.canonicalName);
@@ -119,19 +117,8 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
         <span class="sci-name">{{ d.classification.find((c) => c.rank === 'GENUS')?.name }}</span
         >, by records.
       </p>
-      <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <li v-for="s in d.siblings" :key="s.key">
-          <SpeciesCard
-            :species-key="s.key"
-            :scientific-name="s.scientificName"
-            :common-name="s.commonName"
-            :count="s.count"
-            :image="s.image"
-            size="400x"
-            :href="speciesPath(s.key, manifest)"
-          />
-        </li>
-      </ul>
+      <!-- Cards hydrate as an island (SimilarSpecies), which looks up their photos. -->
+      <slot name="similar" />
     </section>
 
     <section v-if="d.synonyms.length" class="mt-10" aria-labelledby="syn-h">

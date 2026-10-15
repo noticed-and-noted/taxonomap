@@ -10,10 +10,11 @@ import { onMounted, ref, shallowRef } from 'vue';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
-import { loadSpeciesManifest, speciesPath, type SpeciesManifest } from '~/lib/species/links';
+import { loadSpeciesManifest, similarItems, speciesPath, type SpeciesManifest } from '~/lib/species/links';
 import { speciesCharts } from '~/lib/species/charts';
 import MiniMap from './MiniMap.vue';
 import PlotChart from './PlotChart.vue';
+import SimilarSpecies from './SimilarSpecies.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesGallery from './SpeciesGallery.vue';
 import SpeciesPage from './SpeciesPage.vue';
@@ -58,9 +59,12 @@ onMounted(load);
 </script>
 
 <template>
-  <SpeciesPage v-if="data" :data="data" :manifest="manifest">
-    <template v-if="data.images.length" #gallery>
-      <SpeciesGallery :images="data.images" :name="data.commonName ?? data.canonicalName" />
+  <SpeciesPage v-if="data" :data="data">
+    <template #gallery>
+      <SpeciesGallery :taxon-key="data.key" :rank="data.rank" :name="data.commonName ?? data.canonicalName" />
+    </template>
+    <template v-if="data.siblings.length" #similar>
+      <SimilarSpecies :species="similarItems(data.siblings, manifest)" />
     </template>
     <template v-if="data.count > 0" #map>
       <MiniMap :taxon-key="data.key" :label="data.commonName ?? data.canonicalName" />

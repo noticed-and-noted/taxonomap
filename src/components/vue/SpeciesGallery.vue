@@ -1,25 +1,50 @@
 <script setup lang="ts">
 /**
- * Hero gallery (client:visible): a lead photo plus a strip; opens a
- * <dialog> lightbox with keyboard navigation. Every photo shows its licence
- * and creator, and links to the source record. The first photo renders on
- * the server, so the page has an image before hydration. The lightbox
- * swaps photos immediately, showing a skeleton until the new one loads, and
- * preloads its neighbours so stepping through is usually instant.
+ * Hero gallery (client island): the taxon's photos (see taxonPhotos), looked
+ * up in the browser, with a skeleton until they arrive. A lead photo plus a
+ * strip; opens a <dialog> lightbox with keyboard navigation. Every photo
+ * shows its licence and creator, and links to where it came from. The
+ * lightbox swaps photos immediately, showing a skeleton until the new one
+ * loads, and preloads its neighbours so stepping through is usually instant.
  */
-import { computed, reactive, ref } from 'vue';
-import { countRequest, thumbnailUrl, type UsableImage } from '~/lib/gbif';
+import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
+import { countRequest, thumbnailUrl, type Rank, type UsableImage } from '~/lib/gbif';
+import { taxonPhotos } from '~/lib/photos/taxon-photos';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 
-const props = defineProps<{ images: readonly UsableImage[]; name: string }>();
+const props = defineProps<{ taxonKey: number; rank: Rank; name: string }>();
+
+const images = shallowRef<UsableImage[]>([]);
+const loading = ref(true);
+
+onMounted(async () => {
+  try {
+    images.value = await taxonPhotos({ key: props.taxonKey, rank: props.rank });
+  } catch {
+    images.value = [];
+  } finally {
+    loading.value = false;
+  }
+});
+
+/** Where a photo came from: its GBIF record, or its iNaturalist observation (or photo page). */
+function sourceOf(img: UsableImage): { href: string; label: string } {
+  if (img.source === 'inat') {
+    return {
+      href: img.observationUrl ?? `https://www.inaturalist.org/photos/${img.photoId}`,
+      label: img.observationUrl ? 'Observation' : 'Photo',
+    };
+  }
+  return { href: `https://www.gbif.org/occurrence/${img.occurrenceKey}`, label: 'Source record' };
+}
 
 const dialog = ref<HTMLDialogElement>();
 const index = ref(0);
 /** The lightbox renders its photo only while open, so none is fetched (or server-rendered) up front. */
 const isOpen = ref(false);
-const current = computed(() => props.images[index.value]);
+const current = computed(() => images.value[index.value]);
 const currentSrc = computed(() => (current.value ? thumbnailUrl(current.value, '800x') : undefined));
 
 /** Lightbox URLs that have finished loading (or failed), so their skeletons can go. */
@@ -35,7 +60,7 @@ function settle(url: string, ok: boolean) {
 }
 
 function preload(i: number) {
-  const img = props.images[i];
+  const img = images.value[i];
   if (!img) return;
   const url = thumbnailUrl(img, '800x');
   if (settled.has(url) || preloading.has(url)) return;
@@ -48,7 +73,7 @@ function preload(i: number) {
 }
 
 function preloadAround(i: number) {
-  const n = props.images.length;
+  const n = images.value.length;
   preload((i + 1) % n);
   preload((i - 1 + n) % n);
 }
@@ -61,7 +86,7 @@ function open(i: number) {
 }
 
 function step(d: number) {
-  const n = props.images.length;
+  const n = images.value.length;
   index.value = (index.value + d + n) % n;
   preloadAround(index.value);
 }
@@ -77,7 +102,16 @@ function onBackdrop(e: MouseEvent) {
 </script>
 
 <template>
-  <section v-if="images.length" class="species-gallery" aria-label="Photos">
+  <div v-if="loading" class="grid gap-1.5 sm:grid-cols-[2fr_1fr]" role="status" aria-label="Loading photos">
+    <SkeletonBlock class="aspect-[4/3]" height="auto" rounded="lg" aria-hidden="true" />
+    <div class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
+      <SkeletonBlock v-for="i in 4" :key="i" class="aspect-square" height="auto" aria-hidden="true" />
+    </div>
+  </div>
+  <div v-else-if="!images.length" class="grid aspect-[4/3] place-items-center rounded-lg bg-photo text-sm text-subtle">
+    No openly licensed photos yet
+  </div>
+  <section v-else class="species-gallery" aria-label="Photos">
     <div class="grid gap-1.5 sm:grid-cols-[2fr_1fr]">
       <button
         type="button"
@@ -157,12 +191,12 @@ function onBackdrop(e: MouseEvent) {
             <LicenceBadge :licence="current.licence" :creator="current.creator" :rights-holder="current.rightsHolder" />
             <span v-if="current.publisher" class="text-xs text-muted">via {{ current.publisher }}</span>
             <a
-              :href="`https://www.gbif.org/occurrence/${current.occurrenceKey}`"
+              :href="sourceOf(current).href"
               target="_blank"
               rel="noopener"
               class="text-xs text-accent underline-offset-2 hover:underline"
             >
-              Source record ↗
+              {{ sourceOf(current).label }} ↗
             </a>
           </span>
           <span class="flex items-center gap-3 text-xs text-muted">

@@ -15,6 +15,8 @@ describe('md5', () => {
     expect(
       thumbnailUrl({
         occurrenceKey: 5937962161,
+        datasetKey: 'd',
+        licence: 'CC-BY',
         url: 'https://live.staticflickr.com/65535/55022647247_e96641313b_b.jpg',
       }),
     ).toMatch(/\/v1\/image\/cache\/400x\/occurrence\/5937962161\/media\/b24c9f13340fdc3795334/);
