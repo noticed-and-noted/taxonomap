@@ -13,7 +13,7 @@ UPSTREAM = "https://api.gbif.org"
 # TODO: contact address sent to GBIF in the User-Agent.
 CONTACT_EMAIL = "you@example.org"
 # TODO: your site origins (comma-separated), e.g. the Pages URL and custom domain. "*" allows any site.
-ALLOWED_ORIGINS = "https://gbif-explorer.pages.dev"
+ALLOWED_ORIGINS = "https://app.taxonomap.com"
 
 [observability]
 enabled = true

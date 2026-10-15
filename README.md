@@ -28,18 +28,18 @@ npm run dev             # http://localhost:4321
 
 ## Environment variables
 
-| Variable                                  | Default                           | Used for                                                               |
-| ----------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
-| `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`            | JSON API base (browser and build)                                      |
-| `PUBLIC_GBIF_TILE_BASE`                   | = API base                        | Map tile base                                                          |
-| `PUBLIC_SITE_URL`                         | `https://gbif-explorer.pages.dev` | Canonical URLs, sitemap, Open Graph                                    |
-| `GBIF_CONTACT_EMAIL`                      | none                              | Build-time `User-Agent: Taxonomap/<version> (contact: …)`           |
-| `GBIF_CACHE_TTL_HOURS`                    | `168`                             | Build-time disk-cache freshness                                        |
-| `GBIF_CACHE_REFRESH`                      | `0`                               | `1` ignores the disk cache for this build                              |
-| `SPECIES_PRERENDER_COUNT`                 | `2000`                            | Number of pre-rendered species pages (Phase 3)                         |
-| `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)               | Species in the baked common-name index (`/data/names.json`)            |
-| `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `nominatim`                       | Place search provider (`nominatim` or `photon`); called on submit only |
-| `PUBLIC_BASEMAP_*`                        | see `.env.example`                | Override the Plain (dark/light), Terrain and Satellite basemaps        |
+| Variable                                  | Default                     | Used for                                                               |
+| ----------------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
+| `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`      | JSON API base (browser and build)                                      |
+| `PUBLIC_GBIF_TILE_BASE`                   | = API base                  | Map tile base                                                          |
+| `PUBLIC_SITE_URL`                         | `https://app.taxonomap.com` | Canonical URLs, sitemap, Open Graph                                    |
+| `GBIF_CONTACT_EMAIL`                      | none                        | Build-time `User-Agent: Taxonomap/<version> (contact: …)`              |
+| `GBIF_CACHE_TTL_HOURS`                    | `168`                       | Build-time disk-cache freshness                                        |
+| `GBIF_CACHE_REFRESH`                      | `0`                         | `1` ignores the disk cache for this build                              |
+| `SPECIES_PRERENDER_COUNT`                 | `2000`                      | Number of pre-rendered species pages (Phase 3)                         |
+| `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)         | Species in the baked common-name index (`/data/names.json`)            |
+| `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `nominatim`                 | Place search provider (`nominatim` or `photon`); called on submit only |
+| `PUBLIC_BASEMAP_*`                        | see `.env.example`          | Override the Plain (dark/light), Terrain and Satellite basemaps        |
 
 `PUBLIC_*` values are inlined into the client bundle. Point the two bases at a caching proxy (see "Optional Worker") to change where requests go, with no code changes.
 

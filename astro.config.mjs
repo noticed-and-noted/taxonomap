@@ -12,7 +12,7 @@ for (const [k, v] of Object.entries(loadEnv(process.env.NODE_ENV ?? 'production'
   process.env[k] ??= v;
 }
 
-const site = process.env.PUBLIC_SITE_URL ?? 'https://gbif-explorer.pages.dev';
+const site = process.env.PUBLIC_SITE_URL ?? 'https://app.taxonomap.com';
 
 export default defineConfig({
   site,
