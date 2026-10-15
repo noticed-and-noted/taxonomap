@@ -35,7 +35,7 @@ describe('node transport', () => {
     const b = await t('https://api.test/v1/a');
     expect(b.headers.get('x-cache')).toBe('disk');
     expect(f.seen).toHaveLength(1);
-    expect(f.seen[0]?.ua).toMatch(/^GBIFExplorer\/[\d.]+ \(contact: me@example\.org\)$/);
+    expect(f.seen[0]?.ua).toMatch(/^Taxonomap\/[\d.]+ \(contact: me@example\.org\)$/);
   });
 
   it('caps concurrency at 5', async () => {

@@ -17,7 +17,7 @@ This Worker sits between the site and `api.gbif.org` and caches responses at Clo
 
 - **Serves stale entries for longer** (stale-while-revalidate). A stale entry is returned immediately while one background request refreshes it. Stale entries are also served when GBIF errors.
 - **Merges concurrent misses** for the same URL into one upstream request.
-- **Identifies itself to GBIF** with `User-Agent: GBIFExplorer-edge/<version> (contact: …)`.
+- **Identifies itself to GBIF** with `User-Agent: Taxonomap-edge/<version> (contact: …)`.
 - **Restricts CORS to your site's origins** (`ALLOWED_ORIGINS`). JSON and tile requests from other origins are refused.
 - **Marks every response with `x-gbif-edge`** (`HIT`, `MISS`, `STALE`, `BYPASS` or `REJECT`).
 
@@ -34,7 +34,7 @@ This Worker sits between the site and `api.gbif.org` and caches responses at Clo
 2. Deploy, either:
    - **locally:** run `npx wrangler login`, then `npm run worker:deploy`; or
    - **from CI:** set the repository variables `EDGE_ENABLED=true`, `EDGE_ALLOWED_ORIGINS` and `GBIF_CONTACT_EMAIL`, and the secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template, scoped to the account and zone) and `CLOUDFLARE_ACCOUNT_ID`. `.github/workflows/worker.yml` deploys on pushes to `main` that touch `worker/`.
-3. Check it: `https://gbif-edge.example.org/health` should return `GBIF Explorer edge cache`.
+3. Check it: `https://gbif-edge.example.org/health` should return `Taxonomap edge cache`.
 4. Point the site at it with the repository variables `PUBLIC_GBIF_API_BASE` and `PUBLIC_GBIF_TILE_BASE` set to `https://gbif-edge.example.org`, then rebuild.
 
 ## Local testing

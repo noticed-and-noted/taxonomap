@@ -92,7 +92,7 @@ export async function drawShareCard(
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = accent;
   ctx.font = '600 22px "Inter Variable", Inter, system-ui, sans-serif';
-  ctx.fillText('GBIF EXPLORER · WHAT’S NEAR ME', 56, 92);
+  ctx.fillText('TAXONOMAP · WHAT’S NEAR ME', 56, 92);
 
   ctx.fillStyle = text;
   ctx.font = '600 150px "Source Serif 4 Variable", Georgia, serif';

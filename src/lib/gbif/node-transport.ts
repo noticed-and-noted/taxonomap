@@ -40,7 +40,7 @@ function packageVersion(): string {
 }
 
 export function userAgent(contact = process.env['GBIF_CONTACT_EMAIL']): string {
-  return `GBIFExplorer/${packageVersion()} (contact: ${contact || 'unset'})`;
+  return `Taxonomap/${packageVersion()} (contact: ${contact || 'unset'})`;
 }
 
 export function createNodeTransport(o: NodeTransportOptions = {}): Transport {

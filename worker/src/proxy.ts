@@ -117,7 +117,7 @@ function text(status: number, body: string, extra: Record<string, string> = {}):
 const inflight = new Map<string, Promise<Response>>();
 
 export function userAgent(env: EdgeEnv): string {
-  return `GBIFExplorer-edge/${VERSION} (contact: ${env.CONTACT_EMAIL || 'unset'})`;
+  return `Taxonomap-edge/${VERSION} (contact: ${env.CONTACT_EMAIL || 'unset'})`;
 }
 
 async function fetchUpstream(
@@ -174,7 +174,7 @@ export async function handle(req: Request, env: EdgeEnv, deps: EdgeDeps): Promis
   if (req.method !== 'GET') return text(405, 'Method not allowed', { allow: 'GET, OPTIONS', ...cors });
 
   if (url.pathname === '/' || url.pathname === '/health') {
-    return text(200, 'GBIF Explorer edge cache', { ...cors, [EDGE_HEADER]: 'HEALTH' });
+    return text(200, 'Taxonomap edge cache', { ...cors, [EDGE_HEADER]: 'HEALTH' });
   }
 
   const policy = policyFor(url.pathname);

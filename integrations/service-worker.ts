@@ -23,7 +23,7 @@ const trim = (s: string) => s.replace(/\/+$/, '');
 
 export default function serviceWorker(): AstroIntegration {
   return {
-    name: 'gbif-explorer:service-worker',
+    name: 'taxonomap:service-worker',
     hooks: {
       'astro:build:done': async ({ dir, logger }) => {
         const apiBase = trim(process.env['PUBLIC_GBIF_API_BASE'] || 'https://api.gbif.org');

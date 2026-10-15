@@ -85,7 +85,7 @@ async function redraw() {
 const shareText = computed(() => {
   const g = group.value;
   const n = g ? g.species : props.totalSpecies;
-  return `${n} ${g ? `${label(g)} ` : ''}species recorded within ${props.radiusKm} km${props.month ? ` in ${props.month}` : ''} — explore on GBIF Explorer`;
+  return `${n} ${g ? `${label(g)} ` : ''}species recorded within ${props.radiusKm} km${props.month ? ` in ${props.month}` : ''} — explore on Taxonomap`;
 });
 
 async function share() {

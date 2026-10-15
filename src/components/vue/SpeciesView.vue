@@ -42,7 +42,7 @@ async function load() {
     const idx = await loadNameIndex();
     data.value = await loadSpeciesData(k, (sk) => idx?.get(sk)?.[3] ?? null);
     const d = data.value;
-    document.title = `${d.commonName ? `${d.commonName} (${d.canonicalName})` : d.canonicalName} · GBIF Explorer`;
+    document.title = `${d.commonName ? `${d.commonName} (${d.canonicalName})` : d.canonicalName} · Taxonomap`;
   } catch (e) {
     const kind = classifyError(e);
     if (kind === 'not-found' || kind === 'bad-request') {

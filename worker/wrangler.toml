@@ -1,4 +1,4 @@
-# GBIF Explorer edge cache. Fill in the TODOs, then `npm run worker:deploy`.
+# Taxonomap edge cache. Fill in the TODOs, then `npm run worker:deploy`.
 name = "gbif-explorer-edge"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"

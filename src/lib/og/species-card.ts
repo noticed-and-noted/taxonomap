@@ -127,7 +127,7 @@ function card(input: SpeciesCardInput, photo: string | null): El {
         { display: 'flex', flexDirection: 'column', width: 570, padding: '56px 52px', justifyContent: 'space-between' },
         [
           h('div', { display: 'flex', flexDirection: 'column' }, [
-            h('div', { fontSize: 22, color: '#f0b443', letterSpacing: 1, marginBottom: 28 }, 'GBIF EXPLORER'),
+            h('div', { fontSize: 22, color: '#f0b443', letterSpacing: 1, marginBottom: 28 }, 'TAXONOMAP'),
             h(
               'div',
               { fontFamily: 'Serif', fontWeight: 600, fontSize: title.length > 24 ? 54 : 66, lineHeight: 1.05 },

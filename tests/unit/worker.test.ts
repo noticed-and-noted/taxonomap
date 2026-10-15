@@ -63,7 +63,7 @@ describe('edge worker', () => {
     expect(await b.json()).toEqual({ ok: 1 });
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]?.url).toBe('https://api.gbif.org/v1/occurrence/search?limit=0&taxonKey=1');
-    expect(t.calls[0]?.ua).toMatch(/^GBIFExplorer-edge\/[\d.]+ \(contact: me@x\.org\)$/);
+    expect(t.calls[0]?.ua).toMatch(/^Taxonomap-edge\/[\d.]+ \(contact: me@x\.org\)$/);
   });
 
   it('serves stale while revalidating in the background', async () => {

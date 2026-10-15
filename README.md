@@ -1,4 +1,4 @@
-# GBIF Explorer
+# Taxonomap
 
 A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, built for birders, naturalists, recorders and educators. Pages are pre-rendered at build time, interactive parts hydrate as Vue islands, and the browser calls `api.gbif.org` directly. There is no application server.
 
@@ -33,7 +33,7 @@ npm run dev             # http://localhost:4321
 | `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`            | JSON API base (browser and build)                                      |
 | `PUBLIC_GBIF_TILE_BASE`                   | = API base                        | Map tile base                                                          |
 | `PUBLIC_SITE_URL`                         | `https://gbif-explorer.pages.dev` | Canonical URLs, sitemap, Open Graph                                    |
-| `GBIF_CONTACT_EMAIL`                      | none                              | Build-time `User-Agent: GBIFExplorer/<version> (contact: …)`           |
+| `GBIF_CONTACT_EMAIL`                      | none                              | Build-time `User-Agent: Taxonomap/<version> (contact: …)`           |
 | `GBIF_CACHE_TTL_HOURS`                    | `168`                             | Build-time disk-cache freshness                                        |
 | `GBIF_CACHE_REFRESH`                      | `0`                               | `1` ignores the disk cache for this build                              |
 | `SPECIES_PRERENDER_COUNT`                 | `2000`                            | Number of pre-rendered species pages (Phase 3)                         |
