@@ -35,6 +35,7 @@ import {
 import { circleRing } from '~/lib/gbif/params';
 import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
+import { PIN_CURSOR } from './pinCursors';
 import {
   $basemap,
   $flyTo,
@@ -390,6 +391,8 @@ function fly(req: FlyRequest) {
 }
 
 function onMove(e: MapMouseEvent) {
+  // Pin mode: no cell hover, the cursor says a click drops the pin.
+  if ($mapMode.get() === 'pin') return;
   const f = hexAt(e.point);
   const hover = map?.getSource('hover') as GeoJSONSource | undefined;
   if (!f) {
@@ -583,6 +586,12 @@ onMounted(async () => {
       else if (!$hexGeometry.get()) pendingHexRestore = true;
     }),
     $showRecords.listen(() => void loadRecords()),
+    $mapMode.subscribe((mode) => {
+      if (!map) return;
+      tooltip.value = null;
+      (map.getSource('hover') as GeoJSONSource | undefined)?.setData(EMPTY);
+      map.getCanvas().style.cursor = mode === 'pin' ? PIN_CURSOR : '';
+    }),
     ...[$nearAt, $nearRadius, $mapMode].map((s) =>
       s.listen(() => (map?.getSource('near') as GeoJSONSource | undefined)?.setData(nearGeoJson())),
     ),

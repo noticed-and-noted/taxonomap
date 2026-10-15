@@ -6,7 +6,7 @@
  * sightings, share card.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { full } from '~/lib/format';
 import { classifyError, RADIUS_STEPS_KM, type UiErrorKind } from '~/lib/gbif';
 import {
@@ -30,6 +30,7 @@ import ShareDialog from './ShareDialog.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
 import ThumbImage from './ThumbImage.vue';
+import { useScrollFade } from './useScrollFade';
 
 const at = useStore($nearAt);
 const radius = useStore($nearRadius);
@@ -48,6 +49,13 @@ const total = ref(0);
 const classes = shallowRef<ClassGroup[]>([]);
 const species = shallowRef<SpeciesRow[]>([]);
 const recent = shallowRef<Sighting[] | null>(null);
+/** Recent thumbnails that have loaded (or failed), so their skeletons can go. */
+const thumbDone = ref(new Set<number>());
+const thumbSettled = (key: number) => (thumbDone.value = new Set(thumbDone.value).add(key));
+/** The Recent list fills the rest of the panel and scrolls inside it, fading at either edge. */
+const recentBox = ref<HTMLElement>();
+const { fadeTop: recentFadeTop, fadeBottom: recentFade, update: updateRecentFade } = useScrollFade(recentBox);
+watch([recent, recentBox], () => void nextTick(updateRecentFade));
 const recentLoading = ref(false);
 const recentError = ref(false);
 const shareOpen = ref(false);
@@ -169,14 +177,20 @@ onBeforeUnmount(() => {
     <button
       v-if="!panelOpen"
       type="button"
-      class="pointer-events-auto absolute right-3 top-3 rounded-full border border-border bg-surface px-4 py-2 text-sm shadow-panel"
+      class="pointer-events-auto absolute right-3 top-3 rounded-full md:hidden border border-border bg-surface px-4 py-2 text-sm shadow-panel"
       @click="panelOpen = true"
     >
       Show list
     </button>
 
     <div class="pointer-events-auto">
-      <ResponsivePanel title="What’s near me" :open="panelOpen" @close="panelOpen = false">
+      <ResponsivePanel
+        title="What’s near me"
+        :open="panelOpen"
+        collapsible
+        @close="panelOpen = false"
+        @open="panelOpen = true"
+      >
         <!-- No location yet: explainer -->
         <section v-if="!at" class="space-y-4 text-sm">
           <p>See which species have been recorded around a place, ranked by how often they’ve been seen.</p>
@@ -205,7 +219,9 @@ onBeforeUnmount(() => {
         </section>
 
         <!-- Location set -->
-        <section v-else class="space-y-4">
+        <!-- Exactly the panel's height, so the active list can fill what's left. On a very
+             short screen a list keeps its 12rem minimum and the panel scrolls instead. -->
+        <section v-else class="flex h-full flex-col gap-4">
           <div class="space-y-3 text-sm">
             <label class="block">
               <span class="flex justify-between text-xs text-muted">
@@ -265,7 +281,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Species -->
-          <div v-if="tab === 'species'" role="tabpanel">
+          <div v-if="tab === 'species'" role="tabpanel" class="flex min-h-0 flex-1 flex-col">
             <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
               GBIF is busy right now. <button type="button" class="underline" @click="loadArea">Try again</button>
             </div>
@@ -274,11 +290,11 @@ onBeforeUnmount(() => {
                 thisMonth ? ' or all months' : ''
               }}.
             </p>
-            <SpeciesTable v-else :rows="species" :groups="classes" :loading="loading" :note="tableNote" />
+            <SpeciesTable v-else :rows="species" :groups="classes" :loading="loading" :note="tableNote" fill />
           </div>
 
           <!-- Recent sightings -->
-          <div v-else role="tabpanel">
+          <div v-else role="tabpanel" class="flex min-h-0 flex-1 flex-col">
             <div v-if="recentLoading" class="space-y-2"><SkeletonBlock v-for="i in 4" :key="i" height="5rem" /></div>
             <p v-else-if="recentError" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
               Recent sightings are unavailable right now.
@@ -287,38 +303,58 @@ onBeforeUnmount(() => {
             <p v-else-if="recent && !recent.length" class="rounded-md bg-surface-2 p-3 text-sm text-muted">
               No photographed records from the past year here. Try a larger radius.
             </p>
-            <ul v-else-if="recent" class="space-y-2">
-              <li v-for="r in recent" :key="r.occurrence.key" class="flex gap-3 rounded-md bg-surface-2 p-2">
-                <a
-                  :href="`https://www.gbif.org/occurrence/${r.occurrence.key}`"
-                  target="_blank"
-                  rel="noopener"
-                  class="size-20 shrink-0 overflow-hidden rounded bg-photo"
-                >
-                  <ThumbImage
-                    :image="r.image"
-                    size="200x"
-                    :alt="r.commonName ?? r.occurrence.species ?? ''"
-                    class="size-full object-cover"
-                  />
-                </a>
-                <div class="min-w-0 text-sm">
-                  <p class="truncate font-medium">
-                    {{ r.commonName ?? r.occurrence.species ?? r.occurrence.scientificName }}
-                  </p>
-                  <p v-if="r.commonName" class="sci-name truncate text-xs text-muted">{{ r.occurrence.species }}</p>
-                  <p class="text-xs text-subtle">
-                    {{ r.date }}<span v-if="r.datasetTitle"> · {{ r.datasetTitle }}</span>
-                  </p>
-                  <LicenceBadge
-                    class="mt-1"
-                    :licence="r.image.licence"
-                    :creator="r.image.creator"
-                    :rights-holder="r.image.rightsHolder"
-                  />
-                </div>
-              </li>
-            </ul>
+            <div
+              v-else-if="recent"
+              ref="recentBox"
+              class="fade-list min-h-48 flex-1 overflow-y-auto overscroll-contain"
+              :class="{ 'fade-top': recentFadeTop, 'fade-bottom': recentFade }"
+              tabindex="0"
+              role="region"
+              aria-label="Recent sightings"
+              @scroll.passive="updateRecentFade"
+            >
+              <ul class="space-y-2">
+                <li v-for="r in recent" :key="r.occurrence.key" class="flex gap-3 rounded-md bg-surface-2 p-2">
+                  <a
+                    :href="`https://www.gbif.org/occurrence/${r.occurrence.key}`"
+                    target="_blank"
+                    rel="noopener"
+                    class="relative size-20 shrink-0 overflow-hidden rounded bg-photo"
+                  >
+                    <SkeletonBlock
+                      v-if="!thumbDone.has(r.occurrence.key)"
+                      class="absolute inset-0"
+                      height="100%"
+                      rounded="sm"
+                      aria-hidden="true"
+                    />
+                    <ThumbImage
+                      :image="r.image"
+                      size="200x"
+                      :alt="r.commonName ?? r.occurrence.species ?? ''"
+                      class="relative size-full object-cover"
+                      @loaded="thumbSettled(r.occurrence.key)"
+                      @broken="thumbSettled(r.occurrence.key)"
+                    />
+                  </a>
+                  <div class="min-w-0 text-sm">
+                    <p class="truncate font-medium">
+                      {{ r.commonName ?? r.occurrence.species ?? r.occurrence.scientificName }}
+                    </p>
+                    <p v-if="r.commonName" class="sci-name truncate text-xs text-muted">{{ r.occurrence.species }}</p>
+                    <p class="text-xs text-subtle">
+                      {{ r.date }}<span v-if="r.datasetTitle"> · {{ r.datasetTitle }}</span>
+                    </p>
+                    <LicenceBadge
+                      class="mt-1"
+                      :licence="r.image.licence"
+                      :creator="r.image.creator"
+                      :rights-holder="r.image.rightsHolder"
+                    />
+                  </div>
+                </li>
+              </ul>
+            </div>
           </div>
         </section>
       </ResponsivePanel>

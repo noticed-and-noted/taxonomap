@@ -13,11 +13,16 @@ const props = withDefaults(defineProps<{ image: UsableImage; size?: ThumbSize; a
   size: '400x',
   alt: '',
 });
-const emit = defineEmits<{ broken: [] }>();
+const emit = defineEmits<{ broken: []; loaded: [] }>();
 
 const el = ref<HTMLImageElement>();
 const mounted = ref(false);
 const { src, loaded, broken, onLoad, onError } = useThumbnail(toRef(props, 'image'), props.size);
+
+function handleLoad() {
+  onLoad();
+  emit('loaded');
+}
 
 function handleError() {
   onError();
@@ -27,7 +32,7 @@ function handleError() {
 onMounted(() => {
   const img = el.value;
   if (img?.complete) {
-    if (img.naturalWidth > 0) onLoad();
+    if (img.naturalWidth > 0) handleLoad();
     else handleError();
   }
   mounted.value = true;
@@ -45,7 +50,7 @@ onMounted(() => {
     data-hide-on-error
     class="transition-opacity duration-300"
     :class="mounted && !loaded ? 'opacity-0' : 'opacity-100'"
-    @load="onLoad"
+    @load="handleLoad"
     @error="handleError"
   />
 </template>

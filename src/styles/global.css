@@ -71,6 +71,25 @@
 }
 
 @layer components {
+  /* Soft fades on a scroll box's edges while more is beyond them (see useScrollFade). */
+  .fade-list {
+    --fade-top: 0px;
+    --fade-bottom: 0px;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--fade-top),
+      #000 calc(100% - var(--fade-bottom)),
+      transparent 100%
+    );
+  }
+  .fade-list.fade-top {
+    --fade-top: 1.5rem;
+  }
+  .fade-list.fade-bottom {
+    --fade-bottom: 1.5rem;
+  }
+
   .sci-name {
     font-family: var(--font-serif);
     font-style: italic;

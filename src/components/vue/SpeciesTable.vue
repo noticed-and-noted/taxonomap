@@ -16,6 +16,7 @@ import { photosForKeys, resolveNames, type ClassGroup, type SpeciesRow } from '~
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import { useScrollFade } from './useScrollFade';
 
 const props = defineProps<{
   rows: readonly SpeciesRow[];
@@ -25,6 +26,8 @@ const props = defineProps<{
   selected?: readonly number[];
   /** How the list was cut, e.g. "Top 25 species in each group". */
   note?: string;
+  /** Fill the space left in a flex column instead of a fixed-height scroll box. */
+  fill?: boolean;
 }>();
 
 type SortKey = 'name' | 'group' | 'records';
@@ -100,6 +103,10 @@ const sorted = computed(() => {
 });
 
 const visible = computed(() => sorted.value.slice(0, limit.value));
+
+// Soft fade at the bottom of the results while there's more to scroll to.
+const { fadeBottom: resultsFade, update: updateResultsFade } = useScrollFade(scroller);
+watch([visible, scroller], () => void nextTick(updateResultsFade), { immediate: true });
 
 // Rows currently scrolled into the results box (or just below it). Settles
 // after scrolling pauses, so rows flicked past aren't looked up.
@@ -244,7 +251,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
 </script>
 
 <template>
-  <div class="species-table space-y-2">
+  <div class="species-table" :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
     <div class="relative flex gap-2">
       <label class="min-w-0 flex-1">
         <span class="sr-only">Find in results</span>
@@ -298,7 +305,8 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
           <p class="mb-1 flex justify-between px-1.5 text-xs text-subtle" aria-hidden="true">
             <span>Groups</span><span>Records</span>
           </p>
-          <div class="-mx-1 max-h-56 space-y-0.5 overflow-y-auto px-1">
+          <!-- Every group shows (at most 8 in a cell, 10 in Near me), so no scrolling. -->
+          <div class="space-y-0.5">
             <label
               v-for="g in groupOptions"
               :key="g.key"
@@ -339,10 +347,12 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
       <div
         v-if="filtered.length"
         ref="scroller"
-        class="max-h-[min(22rem,45dvh)] overflow-y-auto overscroll-contain"
+        class="fade-list overflow-y-auto overscroll-contain"
+        :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(22rem,45dvh)]', { 'fade-bottom': resultsFade }]"
         tabindex="0"
         aria-label="Species results"
         role="region"
+        @scroll.passive="updateResultsFade"
       >
         <table class="w-full table-fixed text-sm">
           <thead class="text-xs text-subtle">
