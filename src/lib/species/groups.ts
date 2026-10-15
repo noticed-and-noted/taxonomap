@@ -14,6 +14,7 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import pLimit from 'p-limit';
 import {
   findImages,
+  INATURALIST_DATASET_KEY,
   getSpecies,
   occurrenceFacets,
   searchOccurrences,
@@ -147,7 +148,11 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
  * One photo per species where one exists. A batched search returns records in
  * no useful order, so a few well-photographed species can fill every result
  * (a robin took 54 of 100); each further round asks only for the species still
- * missing, up to `rounds` searches.
+ * missing, up to `rounds` searches per pass.
+ *
+ * Like the species page lead photo (see speciesImages), iNaturalist comes
+ * first and only species without one fall back to all datasets, so a row
+ * shows the same photo as the page it links to.
  */
 export async function photosForKeys(
   keys: readonly number[],
@@ -157,18 +162,22 @@ export async function photosForKeys(
   const images = new Map<number, UsableImage>();
   const names = new Map<number, string>();
   let left = [...keys];
-  for (let i = 0; i < rounds && left.length && !signal?.aborted; i++) {
-    const res = await findImages({ speciesKeys: left }, { limit: 50, ...(signal && { signal }) }).catch(() => null);
-    if (!res) break;
-    for (const [k, n] of res.names) names.set(k, n);
-    for (const img of res.images) {
-      const k = img.speciesKey;
-      if (k !== undefined && left.includes(k) && !images.has(k)) images.set(k, img);
+  for (const datasetKey of [INATURALIST_DATASET_KEY, undefined]) {
+    for (let i = 0; i < rounds && left.length && !signal?.aborted; i++) {
+      const res = await findImages({ speciesKeys: left, datasetKey }, { limit: 50, ...(signal && { signal }) }).catch(
+        () => null,
+      );
+      if (!res) break;
+      for (const [k, n] of res.names) names.set(k, n);
+      for (const img of res.images) {
+        const k = img.speciesKey;
+        if (k !== undefined && left.includes(k) && !images.has(k)) images.set(k, img);
+      }
+      const before = left.length;
+      left = left.filter((k) => !images.has(k));
+      // Nothing new: what's left has no photos we can use from this source.
+      if (left.length === before) break;
     }
-    const before = left.length;
-    left = left.filter((k) => !images.has(k));
-    // Nothing new: what's left has no photos we can use.
-    if (left.length === before) break;
   }
   return { images, names };
 }
