@@ -127,7 +127,7 @@ These are cases where the live API differs from the original brief:
 
 1. **`/v1/species/suggest` matches scientific names only** ("robin" → _Robinsonia_). Common-name search instead uses a baked index plus live vernacular search, behind a swappable `NameSearchProvider`.
 2. **Density tiles ignore `mediaType`, `month` and the other refinements.** Those filters switch the layer to `adhoc` tiles, which are about 8× heavier.
-3. **`media[].license` is often free text** (for example "Copyright by the creator…"). A photo's own licence is used when it is a recognisable Creative Commons licence (CC0, CC-BY and CC-BY-NC are allowed; any other CC licence is rejected). Otherwise the record's licence decides.
+3. **`media[].license` is often free text** (for example "Copyright by the creator…"). A photo's own licence is used when it is a recognisable Creative Commons licence (CC0 and every CC-BY variant are allowed, including ShareAlike and NoDerivatives, even though cards crop photos and link previews composite them). Otherwise the record's licence decides.
 4. `offset + limit` is capped at 100,001.
 5. `@vite-pwa/astro` doesn't support Astro 7, so `integrations/service-worker.ts` calls `workbox-build` directly.
 6. TypeScript is pinned to 6.0.x because `@astrojs/check` and `typescript-eslint` don't support TypeScript 7 yet.
