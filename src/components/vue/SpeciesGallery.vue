@@ -3,27 +3,67 @@
  * Hero gallery (client:visible): a lead photo plus a strip; opens a
  * <dialog> lightbox with keyboard navigation. Every photo shows its licence
  * and creator, and links to the source record. The first photo renders on
- * the server, so the page has an image before hydration.
+ * the server, so the page has an image before hydration. The lightbox
+ * swaps photos immediately, showing a skeleton until the new one loads, and
+ * preloads its neighbours so stepping through is usually instant.
  */
-import { computed, ref } from 'vue';
-import { thumbnailUrl, type UsableImage } from '~/lib/gbif';
+import { computed, reactive, ref } from 'vue';
+import { countRequest, thumbnailUrl, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
+import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 
 const props = defineProps<{ images: readonly UsableImage[]; name: string }>();
 
 const dialog = ref<HTMLDialogElement>();
 const index = ref(0);
+/** The lightbox renders its photo only while open, so none is fetched (or server-rendered) up front. */
+const isOpen = ref(false);
 const current = computed(() => props.images[index.value]);
+const currentSrc = computed(() => (current.value ? thumbnailUrl(current.value, '800x') : undefined));
+
+/** Lightbox URLs that have finished loading (or failed), so their skeletons can go. */
+const settled = reactive(new Set<string>());
+const failed = reactive(new Set<string>());
+const preloading = new Set<string>();
+
+function settle(url: string, ok: boolean) {
+  if (settled.has(url)) return;
+  countRequest('image', url);
+  settled.add(url);
+  if (!ok) failed.add(url);
+}
+
+function preload(i: number) {
+  const img = props.images[i];
+  if (!img) return;
+  const url = thumbnailUrl(img, '800x');
+  if (settled.has(url) || preloading.has(url)) return;
+  preloading.add(url);
+  const el = new Image();
+  el.decoding = 'async';
+  el.onload = () => settle(url, true);
+  el.onerror = () => settle(url, false);
+  el.src = url;
+}
+
+function preloadAround(i: number) {
+  const n = props.images.length;
+  preload((i + 1) % n);
+  preload((i - 1 + n) % n);
+}
 
 function open(i: number) {
   index.value = i;
+  isOpen.value = true;
   dialog.value?.showModal();
+  preloadAround(i);
 }
 
 function step(d: number) {
   const n = props.images.length;
   index.value = (index.value + d + n) % n;
+  preloadAround(index.value);
 }
 
 function onKey(e: KeyboardEvent) {
@@ -41,7 +81,7 @@ function onBackdrop(e: MouseEvent) {
     <div class="grid gap-1.5 sm:grid-cols-[2fr_1fr]">
       <button
         type="button"
-        class="relative block aspect-[4/3] overflow-hidden rounded-lg bg-photo"
+        class="relative block aspect-[4/3] cursor-pointer overflow-hidden rounded-lg bg-photo"
         :aria-label="`Enlarge photo 1 of ${images.length}`"
         @click="open(0)"
       >
@@ -54,12 +94,12 @@ function onBackdrop(e: MouseEvent) {
           />
         </span>
       </button>
-      <div v-if="images.length > 1" class="grid grid-cols-4 gap-1.5 sm:grid-cols-2">
+      <div v-if="images.length > 1" class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
         <button
           v-for="(img, i) in images.slice(1, 5)"
           :key="img.url"
           type="button"
-          class="relative block aspect-square overflow-hidden rounded-md bg-photo"
+          class="relative block aspect-square cursor-pointer overflow-hidden rounded-md bg-photo"
           :aria-label="`Enlarge photo ${i + 2} of ${images.length}`"
           @click="open(i + 1)"
         >
@@ -80,10 +120,35 @@ function onBackdrop(e: MouseEvent) {
       :aria-label="`${name} photos`"
       @keydown="onKey"
       @click="onBackdrop"
+      @close="isOpen = false"
     >
-      <div v-if="current" class="flex max-h-[92dvh] flex-col">
-        <div class="relative min-h-0 flex-1 bg-black">
-          <img :src="thumbnailUrl(current, '800x')" :alt="name" class="mx-auto max-h-[75dvh] w-auto object-contain" />
+      <div v-if="current && isOpen" class="flex max-h-[92dvh] flex-col">
+        <div class="relative h-[min(75dvh,48rem)] shrink-0 bg-surface-2">
+          <SkeletonBlock
+            v-if="currentSrc && !settled.has(currentSrc)"
+            class="absolute inset-0"
+            width="100%"
+            height="100%"
+            rounded="sm"
+            label="Loading photo"
+          />
+          <p
+            v-else-if="currentSrc && failed.has(currentSrc)"
+            class="absolute inset-0 grid place-items-center text-sm text-muted"
+          >
+            Couldn't load this photo
+          </p>
+          <img
+            v-if="currentSrc && !failed.has(currentSrc)"
+            :key="currentSrc"
+            :src="currentSrc"
+            :alt="name"
+            decoding="async"
+            class="relative size-full object-contain transition-opacity duration-200"
+            :class="settled.has(currentSrc) ? 'opacity-100' : 'opacity-0'"
+            @load="settle(currentSrc, true)"
+            @error="settle(currentSrc, false)"
+          />
           <button type="button" class="nav left-2" aria-label="Previous photo" @click="step(-1)">‹</button>
           <button type="button" class="nav right-2" aria-label="Next photo" @click="step(1)">›</button>
         </div>
