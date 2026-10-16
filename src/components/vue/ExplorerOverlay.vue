@@ -30,13 +30,13 @@ const activeFilters = useStore($activeFilterCount);
 const near = useStore($nearMode);
 const { counts, loading, error, live } = useYearHistogram();
 
-/* The year histogram can be collapsed; the choice is remembered per browser. */
+/* The year histogram starts collapsed; opening it is remembered per browser. */
 const TIMELINE_KEY = 'timeline-open';
 function readTimelineOpen() {
   try {
-    return localStorage.getItem(TIMELINE_KEY) !== 'false';
+    return localStorage.getItem(TIMELINE_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 const timelineOpen = ref(readTimelineOpen());

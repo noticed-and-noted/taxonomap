@@ -21,6 +21,8 @@ test('filters and year range live in the URL and survive reload', async ({ page 
   else await page.getByRole('button', { name: 'How recorded, 2 active' }).click();
   await expect(page.getByRole('button', { name: 'Has photo' })).toHaveAttribute('aria-pressed', 'true');
   if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Close panel' }).click();
+  // The year histogram starts collapsed; opening it is remembered across the reload.
+  await page.getByRole('button', { name: 'Show records per year' }).click();
   await expect(page.getByText('2000–2010')).toBeVisible();
   await page.reload();
   await expect(page.getByText('2000–2010')).toBeVisible();
