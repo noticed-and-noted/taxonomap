@@ -41,7 +41,10 @@ test('lists species in a sortable, filterable table', async ({ page }) => {
   await page.getByRole('button', { name: /^Species/ }).click();
   await expect(page.getByRole('columnheader', { name: /Species/ })).toHaveAttribute('aria-sort', 'ascending');
   await page.getByRole('button', { name: 'Filter' }).click();
-  await page.getByRole('dialog', { name: 'Filter species' }).getByRole('checkbox', { name: /Birds/ }).check();
+  // The checkbox is sr-only under its label text, so click the label as a person would.
+  const filters = page.getByRole('dialog', { name: 'Filter species' });
+  await filters.locator('label', { hasText: 'Birds' }).click();
+  await expect(filters.getByRole('checkbox', { name: /Birds/ })).toBeChecked();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: /Filter · 1/ })).toBeVisible();
 });

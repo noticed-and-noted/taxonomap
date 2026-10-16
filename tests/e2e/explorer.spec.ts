@@ -7,7 +7,7 @@ test('omnibox finds a species by common name and filters the map', async ({ page
   await page.goto('/');
   const box = page.getByRole('combobox', { name: 'Search species or places' });
   await box.fill('european robin');
-  const option = page.getByRole('option', { name: /European Robin/i }).first();
+  const option = page.getByRole('option', { name: /^European Robin/i }).first();
   await expect(option).toBeVisible();
   await option.click();
   await expect(page).toHaveURL(/taxon=2492462/);
@@ -50,7 +50,7 @@ test('the header search and the What filter add to one list of taxa', async ({ p
   const box = page.getByRole('combobox', { name: 'Search species or places' });
   await box.fill('european robin');
   await page
-    .getByRole('option', { name: /European Robin/i })
+    .getByRole('option', { name: /^European Robin/i })
     .first()
     .click();
   await expect(page).toHaveURL(/taxon=212%2C2492462/);
