@@ -3,6 +3,8 @@ import { expect, test } from '@playwright/test';
 test('decade animation steps through years without flooding history', async ({ page }) => {
   await page.goto('/');
   const before = await page.evaluate(() => history.length);
+  // The histogram starts collapsed.
+  await page.getByRole('button', { name: 'Show records per year' }).click();
   await page.getByRole('button', { name: 'Play through the decades' }).click();
   await expect(page).toHaveURL(/years=1900-1909/);
   await expect(page).toHaveURL(/years=1910-1919/, { timeout: 5_000 });

@@ -35,7 +35,11 @@ type Option =
 
 /** Species and group results shown at once. */
 const MAX_RESULTS = 8;
-const query = ref('');
+// The omnibox hydrates on idle, and hydrating v-model empties the input, so
+// read anything typed before then from the server-rendered box first.
+const query = ref(
+  import.meta.env.SSR ? '' : ((document.getElementById('omnibox-input') as HTMLInputElement | null)?.value ?? ''),
+);
 const open = ref(false);
 const active = ref(-1);
 const {
@@ -221,14 +225,11 @@ function onBlur(e: FocusEvent) {
   if (!next || !(e.currentTarget as HTMLElement).parentElement?.contains(next)) close();
 }
 
-// The omnibox hydrates on idle: pick up anything typed before that.
+// Search for anything typed before hydration (see query).
 onMounted(() => {
-  const typed = input.value?.value ?? '';
-  if (typed && !query.value) {
-    query.value = typed;
-    if (document.activeElement === input.value) onFocus();
-    onInput();
-  }
+  if (!query.value) return;
+  if (document.activeElement === input.value) onFocus();
+  onInput();
 });
 
 onBeforeUnmount(() => clearTimeout(noticeTimer));
