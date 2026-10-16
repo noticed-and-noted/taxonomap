@@ -10,6 +10,7 @@
 import { useStore } from '@nanostores/vue';
 import { ref, shallowRef, watch } from 'vue';
 import { occurrenceFacets } from '~/lib/gbif';
+import { rememberCount } from '~/lib/map/cellCounts';
 import { namedClasses, speciesInClasses, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import { useLatestLoad } from './useLatestLoad';
@@ -41,6 +42,8 @@ export function useHexSummary() {
       const r = await occurrenceFacets(f, ['classKey', 'month'], { facetLimit: 12, signal });
       if (signal.aborted) return;
       count.value = r.count;
+      // The map's tooltip shows this cell's exact count from now on.
+      rememberCount(filter.value, g.wkt, r.count);
       const m = Array(12).fill(0) as number[];
       for (const c of r.facets['month'] ?? []) m[Number(c.name) - 1] = c.count;
       months.value = m;

@@ -10,7 +10,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { compact } from '~/lib/format';
+import { compact, full } from '~/lib/format';
 import { searchOccurrences } from '~/lib/gbif';
 import {
   buildStyle,
@@ -22,6 +22,7 @@ import {
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
+import { createHoverCounter, knownCount } from '~/lib/map/cellCounts';
 import type { Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
@@ -48,7 +49,7 @@ import {
 
 const container = ref<HTMLDivElement>();
 const failed = ref(false);
-const tooltip = ref<{ x: number; y: number; text: string } | null>(null);
+const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
 let map: MlMap | undefined;
 let occ: OccLayer | undefined;
@@ -255,13 +256,26 @@ function fly(req: FlyRequest) {
   }
 }
 
+const records = (n: number, text: string) => `${text} record${n === 1 ? '' : 's'}`;
+
+/** The hovered cell's exact count, once the pointer has rested on it (lib/map/cellCounts.ts). */
+const hoverCounter = createHoverCounter((wkt, n) => {
+  if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(n, full(n)) };
+});
+
+function clearHover() {
+  hoverCounter.cancel();
+  tooltip.value = null;
+  setData('hover', EMPTY);
+}
+
 function onMove(e: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   if ($mapMode.get() === 'pin') return;
   const f = hexAt(e.point);
-  if (!f) {
-    setData('hover', EMPTY);
-    tooltip.value = null;
+  const geom = f && geometryOf(f);
+  if (!geom) {
+    clearHover();
     map!.getCanvas().style.cursor = '';
     return;
   }
@@ -269,8 +283,13 @@ function onMove(e: MapMouseEvent) {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', properties: {}, geometry: f.geometry }],
   });
-  const total = Number(f.properties['total'] ?? 0);
-  tooltip.value = { x: e.point.x, y: e.point.y, text: `${compact(total)} record${total === 1 ? '' : 's'}` };
+  // The tile's count is an estimate (~) until the exact one is known.
+  const filter = $occurrenceFilter.get();
+  const exact = knownCount(filter, geom.wkt);
+  const text =
+    exact === undefined ? records(geom.tileTotal, `~${compact(geom.tileTotal)}`) : records(exact, full(exact));
+  tooltip.value = { x: e.point.x, y: e.point.y, text, wkt: geom.wkt };
+  hoverCounter.hover(filter, geom.wkt);
   map!.getCanvas().style.cursor = 'pointer';
 }
 
@@ -413,10 +432,7 @@ onMounted(async () => {
     if (!sameView(next, $mapView.get())) $mapView.set(next);
   });
   map.on('mousemove', onMove);
-  map.on('mouseout', () => {
-    tooltip.value = null;
-    setData('hover', EMPTY);
-  });
+  map.on('mouseout', clearHover);
   map.on('click', onClick);
   map.on('style.load', syncOverlays);
   map.getCanvas().addEventListener('keydown', onKey);
@@ -444,8 +460,7 @@ onMounted(async () => {
     $showRecords.listen(() => void loadRecords()),
     $mapMode.subscribe((mode) => {
       if (!map) return;
-      tooltip.value = null;
-      setData('hover', EMPTY);
+      clearHover();
       map.getCanvas().style.cursor = mode === 'pin' ? PIN_CURSOR : '';
     }),
     ...[$nearAt, $nearRadius, $mapMode].map((s) => s.listen(() => setData('near', nearData()))),
@@ -469,6 +484,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  hoverCounter.cancel();
   cleanups.forEach((fn) => fn());
   map?.remove();
   map = undefined;
