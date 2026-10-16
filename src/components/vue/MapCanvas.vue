@@ -8,7 +8,14 @@
  * (overlay, omnibox, panel) drive it without importing it.
  */
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { GeoJSONSource, Map as MlMap, MapGeoJSONFeature, MapMouseEvent, VectorTileSource } from 'maplibre-gl';
+import type {
+  GeoJSONSource,
+  Map as MlMap,
+  MapGeoJSONFeature,
+  MapMouseEvent,
+  Point,
+  VectorTileSource,
+} from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact } from '~/lib/format';
 import {
@@ -31,6 +38,8 @@ import {
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
+import { convexOverlap, hullRing, mercatorPx, outerRings, type Pt } from '~/lib/map/hexPieces';
+import { loadPolarTile, POLAR_SCHEMES, viaPolar } from '~/lib/map/polarTiles';
 import { createTileProgress, type TileLike } from '~/lib/map/tileProgress';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
@@ -71,7 +80,7 @@ const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
 function occTiles(f: TileFilter): string[] {
-  return [occurrenceTileTemplate(f, { hexPerTile: HEX_PER_TILE }, 'mvt')];
+  return [viaPolar(occurrenceTileTemplate(f, { hexPerTile: HEX_PER_TILE }, 'mvt'))];
 }
 
 /** Theme colours from the CSS custom properties (fallbacks match the dark theme). */
@@ -116,11 +125,52 @@ function styleFor() {
   });
 }
 
-/** Pick the most informative hex under a point (edge cells can be split across tiles). */
-function hexAt(point: { x: number; y: number }): MapGeoJSONFeature | undefined {
+type Cell = Pick<MapGeoJSONFeature, 'geometry' | 'properties'>;
+
+/**
+ * The hex under a point, whole. Pick the most informative piece there (edge
+ * cells can be split across tiles), then grow it with every rendered piece
+ * that overlaps it: past the source maxzoom each overzoomed tile holds only
+ * its own slice of the cell.
+ */
+function hexAt(point: { x: number; y: number }): Cell | undefined {
   if (!map) return undefined;
-  const feats = map.queryRenderedFeatures([point.x, point.y], { layers: OCC_LAYERS });
-  return feats.sort((a, b) => Number(b.properties['total'] ?? 0) - Number(a.properties['total'] ?? 0))[0];
+  const m = map;
+  const feats = m.queryRenderedFeatures([point.x, point.y], { layers: OCC_LAYERS });
+  const seed = feats.sort((a, b) => Number(b.properties['total'] ?? 0) - Number(a.properties['total'] ?? 0))[0];
+  if (!seed) return undefined;
+  // Overlap and hull are worked in flat Web Mercator, where cells are convex and
+  // tile slices axis-aligned. On the globe's screen, edges curve and the
+  // antimeridian folds the world, so unrelated pieces can seem to overlap.
+  const zoom = m.getZoom();
+  const toPx = (p: Pt) => mercatorPx(p, zoom);
+  const pieces = outerRings(seed.geometry);
+  const px = pieces.map((r) => r.map(toPx));
+  const seen = new Set(pieces.map((r) => JSON.stringify(r)));
+  for (let grew = true; grew;) {
+    grew = false;
+    const screen = pieces.flat().map((p) => m.project(p));
+    const xs = screen.map((p) => p.x);
+    const ys = screen.map((p) => p.y);
+    const box: [[number, number], [number, number]] = [
+      [Math.min(...xs), Math.min(...ys)],
+      [Math.max(...xs), Math.max(...ys)],
+    ];
+    for (const f of m.queryRenderedFeatures(box, { layers: OCC_LAYERS })) {
+      for (const ring of outerRings(f.geometry)) {
+        const key = JSON.stringify(ring);
+        if (seen.has(key)) continue;
+        const ringPx = ring.map(toPx);
+        if (!px.some((p) => convexOverlap(p, ringPx))) continue;
+        seen.add(key);
+        pieces.push(ring);
+        px.push(ringPx);
+        grew = true;
+      }
+    }
+  }
+  if (pieces.length === 1) return seed;
+  return { properties: seed.properties, geometry: { type: 'Polygon', coordinates: [hullRing(pieces, toPx)] } };
 }
 
 function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
@@ -199,10 +249,21 @@ function fly(req: FlyRequest) {
   }
 }
 
+/**
+ * Whether a screen point misses the globe (space around it at low zoom).
+ * Tiles still answer queries there, as if the point were on the planet. Off
+ * the globe, unproject snaps to the horizon, so the point does not round-trip.
+ */
+function offGlobe(p: Point): boolean {
+  if (!map) return true;
+  const back = map.project(map.unproject(p));
+  return Math.hypot(back.x - p.x, back.y - p.y) > 1;
+}
+
 function onMove(e: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   if ($mapMode.get() === 'pin') return;
-  const f = hexAt(e.point);
+  const f = offGlobe(e.point) ? undefined : hexAt(e.point);
   if (!f) {
     setData('hover', EMPTY);
     tooltip.value = null;
@@ -219,7 +280,7 @@ function onMove(e: MapMouseEvent) {
 }
 
 function onClick(e: MapMouseEvent) {
-  if (!map) return;
+  if (!map || offGlobe(e.point)) return;
   if ($mapMode.get() === 'pin') {
     setNearLocation(e.lngLat.lat, e.lngLat.lng);
     return;
@@ -272,6 +333,7 @@ onMounted(async () => {
     import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
   ]);
   ml.setWorkerUrl(worker.default);
+  for (const scheme of POLAR_SCHEMES) ml.addProtocol(scheme, loadPolarTile);
   if (!container.value) return;
   const v = $mapView.get();
   const style = await styleFor();

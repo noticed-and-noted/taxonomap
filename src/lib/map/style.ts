@@ -7,6 +7,7 @@ import type { ExpressionSpecification, LayerSpecification, MapGeoJSONFeature, St
 import { BASEMAPS, type BasemapId, type Theme } from '~/lib/basemaps';
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
+import { viaPolar } from '~/lib/map/polarTiles';
 import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
 import type { HexGeometry } from '~/stores/explorer';
 
@@ -141,6 +142,18 @@ export function overlay(
   };
 }
 
+/** A basemap's vector sources, routed through the polar trim (see polarTiles). */
+function polarSources(sources: StyleSpecification['sources']): StyleSpecification['sources'] {
+  return Object.fromEntries(
+    Object.entries(sources).map(([id, s]) => [
+      id,
+      s.type !== 'vector'
+        ? s
+        : { ...s, ...(s.url && { url: viaPolar(s.url) }), ...(s.tiles && { tiles: s.tiles.map(viaPolar) }) },
+    ]),
+  );
+}
+
 const styleCache = new Map<string, Promise<StyleSpecification | null>>();
 
 /** Fetch (once) a vector basemap style; null if it cannot be loaded. */
@@ -206,7 +219,7 @@ export async function buildStyle(
     return {
       ...base,
       ...globe,
-      sources: { ...base.sources, ...ours.sources },
+      sources: { ...polarSources(base.sources), ...ours.sources },
       layers: [...layers.slice(0, cut), ...ours.data, ...layers.slice(cut), ...ours.top],
     };
   }

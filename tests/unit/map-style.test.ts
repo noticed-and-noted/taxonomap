@@ -40,6 +40,8 @@ describe('buildStyle', () => {
       'record-points',
     ]);
     expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'hover', 'selected', 'records', 'near']);
+    // The basemap's vector tiles are trimmed off the poles (see polarTiles).
+    expect(s.sources['omt']).toEqual({ type: 'vector', url: 'polar+https://base.test' });
     expect(s.projection).toEqual({ type: 'globe' });
   });
 
