@@ -5,7 +5,7 @@
  * this small integration calls workbox-build directly.
  *
  * Strategies:
- *  - GBIF JSON:  StaleWhileRevalidate, 24 h max age, 300 entries
+ *  - GBIF JSON:  CacheFirst, 24 h max age, 300 entries
  *  - Map tiles:  CacheFirst, 7 days, 2000 entries (empty 204 tiles too)
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
  *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX, OpenTopoMap)
@@ -98,8 +98,9 @@ export default function serviceWorker(): AstroIntegration {
               },
             },
             {
+              // Cache first, not stale-while-revalidate: revalidating sent GBIF a request on every use.
               urlPattern: new RegExp(`^${escape(apiBase)}/v[12]/(?!image/)`),
-              handler: 'StaleWhileRevalidate',
+              handler: 'CacheFirst',
               options: {
                 cacheName: 'gbif-json',
                 expiration: { maxEntries: 300, maxAgeSeconds: 24 * 3600, purgeOnQuotaError: true },
