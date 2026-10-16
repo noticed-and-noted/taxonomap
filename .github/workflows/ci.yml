@@ -133,7 +133,7 @@ jobs:
       deployments: write
     steps:
       # The Pages Functions in functions/ (the login gate) deploy alongside dist.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: functions
       - uses: actions/download-artifact@v4
@@ -144,7 +144,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT }} --branch=main
+          command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT || 'taxonomap' }} --branch=main
 
   contract:
     name: GBIF contract tests (live)
