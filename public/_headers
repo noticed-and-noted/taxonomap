@@ -8,6 +8,11 @@
 /data/*
   Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 
+# Must match the deployed species pages, so always revalidate.
+/data/species-manifest.json
+  ! Cache-Control
+  Cache-Control: no-cache
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

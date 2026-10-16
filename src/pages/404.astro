@@ -4,6 +4,15 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Page not found" noindex>
+  <script is:inline slot="head">
+    // Species pages come and go with the pre-render size (and stale manifests or
+    // old links can point at ones that are gone); every taxon renders at /species/view.
+    {
+      const m = /^\/species\/(\d+)(\/|$)/.exec(location.pathname);
+      if (m) location.replace(`/species/view?key=${m[1]}`);
+    }
+  </script>
+
   <PageShell>
     <section class="mx-auto max-w-xl px-4 py-16 text-center">
       <p class="font-display text-6xl text-accent">404</p>

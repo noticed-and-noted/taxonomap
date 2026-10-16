@@ -69,6 +69,12 @@ export default function serviceWorker(): AstroIntegration {
           sourcemap: false,
           runtimeCaching: [
             {
+              // The species manifest must match the deployed pages; a stale copy links to 404s.
+              urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname === '/data/species-manifest.json',
+              handler: 'NetworkFirst',
+              options: { cacheName: 'baked-data', networkTimeoutSeconds: 4 },
+            },
+            {
               // Baked snapshots: fetched on demand (not precached, to keep installs light).
               urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/data/'),
               handler: 'StaleWhileRevalidate',
