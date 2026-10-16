@@ -85,6 +85,8 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
  */
 function syncOverlays() {
   setData('occ', occ?.collection() ?? EMPTY);
+  // The grid level is set as the map starts, usually before its style has loaded.
+  map?.setPaintProperty('occ-fill', 'fill-color', fillColor($gridLevel.get()));
   setData('selected', selectedGeoJson($hexGeometry.get()));
   setData('records', lastRecords);
   setData('near', nearData());

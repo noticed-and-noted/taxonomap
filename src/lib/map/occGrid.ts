@@ -2,11 +2,10 @@
  * The occurrence hex grid: GBIF density tiles at one grid level we choose,
  * decoded to plain GeoJSON hexes for the map to draw.
  *
- * We pick the tiles rather than MapLibre because on the globe MapLibre picks
- * them from its zoom, which it lowers as you pan towards a pole (keeping the
- * globe the same size on screen). The hexes then changed as you panned. Here
- * the level changes only when you zoom (see gridLevel), so panning keeps the
- * same cells and zooming shows finer or coarser ones.
+ * We pick the tiles rather than MapLibre so the grid follows the view the
+ * way we want (see gridLevel): zooming shows finer or coarser cells; panning
+ * the whole globe keeps the same ones; and zoomed in past the globe filling
+ * the view, cells get coarser towards the poles, where Mercator cells would be tiny.
  */
 import type { PbfReader } from 'pbf';
 import type { VectorTile } from '@mapbox/vector-tile';
@@ -17,8 +16,6 @@ export const HEX_PER_TILE = 28;
 export const MAX_LEVEL = 14;
 /** Hexes are clipped this far from the poles: MapLibre's globe stretches polygon edges on the Mercator edge (85.05°) to the pole. */
 const MAX_LAT = 85;
-/** Below this zoom MapLibre draws a round globe and lowers the zoom towards the poles (its globe projection flattens over 11–12). */
-const GLOBE_UNTIL = 11;
 
 export type LngLat = [number, number];
 export interface TileId {
@@ -33,16 +30,49 @@ export interface HexProps {
 }
 export type Hex = GeoJSON.Feature<GeoJSON.Polygon, HexProps>;
 
+/** MapLibre's own latitude limit for its globe zoom drop. */
+const DROP_LAT_LIMIT = 85.051129;
+/** From this zoom MapLibre's globe is flat (its projection flattens over 11–12) and panning no longer changes the zoom. */
+const FLAT_FROM = 12;
+
+/** How far MapLibre's globe lowers the zoom at this latitude, keeping the globe's size as you pan: log2(1/cos lat). */
+export function zoomDrop(lat: number): number {
+  return Math.log2(1 / Math.cos((Math.min(Math.abs(lat), DROP_LAT_LIMIT) * Math.PI) / 180));
+}
+
+/** The equator-equivalent zoom at which the globe fills a w × h px view: its radius (512 · 2^z / 2π) reaches the half-diagonal. */
+export function fillZoom(w: number, h: number): number {
+  return Math.log2((Math.PI * Math.hypot(w, h)) / 512);
+}
+
 /**
- * The grid level for a view: its zoom as if centred on the equator, where the
- * globe is the same size. MapLibre lowers the zoom by log2(1/cos lat) as the
- * view nears a pole; adding that back gives the same grid for the same globe
- * size anywhere. Once the map is flat the zoom is the scale, so it is used as is.
+ * How many zoom levels past filling the view polar cells switch to coarser
+ * ones (each level doubles the globe's size).
  */
-export function gridLevel(zoom: number, lat: number): number {
-  const z =
-    zoom < GLOBE_UNTIL ? zoom + Math.log2(1 / Math.cos((Math.min(Math.abs(lat), MAX_LAT) * Math.PI) / 180)) : zoom;
-  return Math.min(MAX_LEVEL, Math.max(0, Math.floor(z)));
+const POLAR_COARSEN_FROM = 1;
+
+/**
+ * The grid level for a view (w × h px), from MapLibre's zoom and the
+ * latitude it is centred on.
+ *
+ * The base is the zoom as if centred on the equator (MapLibre's zoom plus its
+ * drop): MapLibre keeps that constant as you pan the globe, so panning keeps
+ * the same grid. Zoomed in POLAR_COARSEN_FROM levels past the globe filling
+ * the view, the grid is coarser by whole levels in polar bands, where Mercator
+ * cells would be tiny: one level from 60°, two from 75.5°, three from 82.8°
+ * (where MapLibre's drop reaches each whole level). Below 60° nothing changes.
+ *
+ * Once the map is flat (zoom 12+) panning leaves MapLibre's zoom alone and
+ * Mercator cells keep their size on screen, so the zoom is used as is.
+ */
+export function gridLevel(zoom: number, lat: number, w: number, h: number): number {
+  // Zoom animations can end a hair short (3.9999999999999996 for 4): don't let that drop a level.
+  const level = (z: number) => Math.min(MAX_LEVEL, Math.max(0, Math.floor(z + 1e-9)));
+  if (zoom >= FLAT_FROM) return level(zoom);
+  const drop = zoomDrop(lat);
+  const equatorZoom = zoom + drop;
+  const close = equatorZoom >= fillZoom(w, h) + POLAR_COARSEN_FROM;
+  return level(equatorZoom - (close ? Math.floor(drop + 1e-9) : 0));
 }
 
 /** The level-`level` tile holding a point. */

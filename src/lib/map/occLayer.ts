@@ -1,7 +1,7 @@
 /**
  * Keeps the map's occurrence hexes filled for the view: one grid level
- * (re-evaluated only when the view zooms), the GBIF tiles covering what is on
- * screen at that level, merged into cells (see occGrid.ts).
+ * (see gridLevel), the GBIF tiles covering what is on screen at that level,
+ * merged into cells (see occGrid.ts).
  *
  * Panning fetches newly visible tiles at the same level, shown as they
  * arrive. A new level or new filters swap the whole set once it is ready,
@@ -77,9 +77,10 @@ function inside([x, y]: LngLat, ring: GeoJSON.Position[]): boolean {
 }
 
 export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
-  let level = gridLevel(map.getZoom(), map.getCenter().lat);
+  const levelNow = () =>
+    gridLevel(map.getZoom(), map.getCenter().lat, map.getCanvas().clientWidth, map.getCanvas().clientHeight);
+  let level = levelNow();
   o.onLevel(level);
-  let zoomed = false;
   let cells = new Map<string, Hex>();
   let shownKey = '';
   let seq = 0;
@@ -178,21 +179,14 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
     }
   }
 
-  // Only zooming may change the level: a globe pan lowers MapLibre's zoom
-  // towards the poles, but gridLevel undoes that, and drag pans fire no zoom events.
-  const onZoom = () => (zoomed = true);
   const onMoveEnd = () => {
-    if (zoomed) {
-      zoomed = false;
-      const next = gridLevel(map.getZoom(), map.getCenter().lat);
-      if (next !== level) {
-        level = next;
-        o.onLevel(level);
-      }
+    const next = levelNow();
+    if (next !== level) {
+      level = next;
+      o.onLevel(level);
     }
     void update();
   };
-  map.on('zoom', onZoom);
   map.on('moveend', onMoveEnd);
   const offFilter = o.listenFilter(() => void update());
   // Edge went down or came back: refetch what failed.
@@ -216,7 +210,6 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
     },
     destroy() {
       abort.abort();
-      map.off('zoom', onZoom);
       map.off('moveend', onMoveEnd);
       offFilter();
       offEdge();
