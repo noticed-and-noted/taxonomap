@@ -182,16 +182,26 @@ describe('clipRingLat', () => {
 describe('decodeHexes', () => {
   it('turns tile hexes into lng/lat cells with the same id from either tile', async () => {
     // A hex across the edge between z1 tiles (0, 1) and (1, 1): GBIF puts it in both.
-    const left = await decodeHexes(mvt([{ ring: hexAt(4096, 1000), total: 5 }]), { x: 0, y: 1 }, 1);
-    const right = await decodeHexes(mvt([{ ring: hexAt(0, 1000), total: 7 }]), { x: 1, y: 1 }, 1);
+    // Its centre (x 0 of the right tile) is in the right tile; the left tile's padded copy over-counts.
+    const left = await decodeHexes(mvt([{ ring: hexAt(4096, 1000), total: 30 }]), { x: 0, y: 1 }, 1);
+    const right = await decodeHexes(mvt([{ ring: hexAt(0, 1000), total: 14 }]), { x: 1, y: 1 }, 1);
     expect(left).toHaveLength(1);
     expect(left[0]!.properties.id).toBe(right[0]!.properties.id);
     expect(left[0]!.geometry.coordinates[0]).toHaveLength(7);
     const lngs = left[0]!.geometry.coordinates[0]!.map((p) => p[0]!);
     expect(Math.min(...lngs)).toBeLessThan(0);
     expect(Math.max(...lngs)).toBeGreaterThan(0);
-    // The fuller copy wins.
+    expect(left[0]!.properties.home).toBe(false);
+    expect(right[0]!.properties.home).toBe(true);
+    // The home copy wins over a higher count, in either order; alone, the padded copy stands in.
     expect([...mergeHexes([left, right]).values()].map((h) => h.properties.total)).toEqual([7]);
+    expect([...mergeHexes([right, left]).values()].map((h) => h.properties.total)).toEqual([7]);
+    expect([...mergeHexes([left]).values()].map((h) => h.properties.total)).toEqual([15]);
+  });
+
+  it('halves GBIF hex totals, which count each record twice', async () => {
+    const [hex] = await decodeHexes(mvt([{ ring: hexAt(2048, 2048), total: 500 }]), { x: 0, y: 0 }, 0);
+    expect(hex!.properties.total).toBe(250);
   });
 
   it('clips cells off the poles', async () => {

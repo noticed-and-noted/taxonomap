@@ -28,6 +28,8 @@ import {
   thumbnailUrl,
 } from '~/lib/gbif';
 import { userAgent } from '~/lib/gbif/node-transport';
+import { decodeHexes, HEX_PER_TILE, mergeHexes, type Hex } from '~/lib/map/occGrid';
+import { geometryOf } from '~/lib/map/style';
 
 const ROBIN = 2492462; // Erithacus rubecula
 const SPARROW = 5231190; // Passer domesticus
@@ -64,6 +66,75 @@ describe('maps', () => {
     const res = await fetch(url);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/png');
+  });
+
+  describe('hex counts agree with an occurrence search over the same cell', () => {
+    // England at z7: dense, and tile 63/41 shares edges with the other two.
+    const Z = 7;
+    const TILES = [
+      { x: 63, y: 41 },
+      { x: 64, y: 41 },
+      { x: 63, y: 42 },
+    ];
+    const mvt = (z: number, x: number, y: number, s: Parameters<typeof occurrenceTileTemplate>[1]) =>
+      fetch(
+        occurrenceTileTemplate({}, s, 'mvt')
+          .replace('{z}', String(z))
+          .replace('{x}', String(x))
+          .replace('{y}', String(y)),
+      ).then((r) => r.arrayBuffer());
+    const sumTotals = async (data: ArrayBuffer) => {
+      const [{ VectorTile }, { PbfReader }] = await Promise.all([import('@mapbox/vector-tile'), import('pbf')]);
+      let sum = 0;
+      for (const layer of Object.values(new VectorTile(new PbfReader(data)).layers))
+        for (let i = 0; i < layer.length; i++) sum += Number(layer.feature(i).properties['total']);
+      return sum;
+    };
+
+    it('GBIF hex bins count each record twice (hexRecords halves them)', async () => {
+      const hexUrl = tile(occurrenceTileTemplate({}, { hexPerTile: HEX_PER_TILE }, 'mvt'));
+      const pointUrl = hexUrl.replace(/&?bin=hex&hexPerTile=\d+/, '');
+      expect(pointUrl).not.toBe(hexUrl);
+      const [hex, points] = await Promise.all(
+        [hexUrl, pointUrl].map((u) =>
+          fetch(u)
+            .then((r) => r.arrayBuffer())
+            .then(sumTotals),
+        ),
+      );
+      expect(hex).toBe(2 * points!);
+    });
+
+    it('merged cells, edge cells included, match the search', async () => {
+      const decoded = await Promise.all(
+        TILES.map(async (t) => decodeHexes(await mvt(Z, t.x, t.y, { hexPerTile: HEX_PER_TILE }), t, Z)),
+      );
+      const homeIds = new Set(decoded[0]!.filter((h) => h.properties.home).map((h) => h.properties.id));
+      const cells = [...mergeHexes(decoded).values()];
+      // The busiest cells of the middle tile that also come in a neighbour's padding, and the busiest inside it.
+      const shared = cells.filter((c) =>
+        decoded.slice(1).some((d) => d.some((h) => h.properties.id === c.properties.id)),
+      );
+      const byTotal = (a: Hex, b: Hex) => b.properties.total - a.properties.total;
+      const picks = [
+        ...shared.sort(byTotal).slice(0, 4),
+        ...cells
+          .filter((c) => homeIds.has(c.properties.id))
+          .sort(byTotal)
+          .slice(0, 2),
+      ];
+      const errors = await Promise.all(
+        picks.map(async (c) => {
+          const geom = geometryOf(c)!;
+          const r = await occurrenceFacets({ geometry: geom.wkt }, [], {});
+          return Math.abs(c.properties.total / r.count - 1);
+        }),
+      );
+      // GBIF snaps records to tile pixels, so a cell can be a few percent off; padded copies were off several-fold.
+      errors.sort((a, b) => a - b);
+      expect(errors[Math.floor(errors.length / 2)]).toBeLessThan(0.02);
+      expect(Math.max(...errors)).toBeLessThan(0.25);
+    });
   });
 
   it('capabilities', async () => {

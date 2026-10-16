@@ -27,6 +27,8 @@ export interface HexProps {
   /** Stable for the cell at its grid level, whichever tile it came from. */
   id: string;
   total: number;
+  /** The cell's centre is in the tile it came from: that tile's count is the one to trust (see mergeHexes). */
+  home: boolean;
 }
 export type Hex = GeoJSON.Feature<GeoJSON.Polygon, HexProps>;
 
@@ -172,6 +174,28 @@ function cellId(ring: LngLat[], level: number): string {
   return `${level}:${wrapped.toFixed(5)},${lat.toFixed(5)}`;
 }
 
+/**
+ * Where a hex's centre falls relative to its tile, in whole tiles: [0, 0] when
+ * the centre is in the tile itself. `ring` is in tile units (0…extent).
+ */
+export function homeOffset(ring: readonly { x: number; y: number }[], extent: number): [number, number] {
+  const pts =
+    ring.length > 1 && ring[0]!.x === ring.at(-1)!.x && ring[0]!.y === ring.at(-1)!.y ? ring.slice(0, -1) : ring;
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  return [Math.floor(cx / extent), Math.floor(cy / extent)];
+}
+
+/**
+ * Records in a GBIF hex bin from its tile `total`. GBIF's hex binning counts
+ * every record twice: a tile's hex totals sum to exactly twice its point or
+ * square totals, and a hex's total is twice an occurrence search over the same
+ * polygon. Square and point tiles are right.
+ */
+export function hexRecords(total: unknown): number {
+  return Math.round((Number(total) || 0) / 2);
+}
+
 /** The hexes in a decoded GBIF density tile, in lng/lat, clipped off the poles. */
 export function hexesOf(tile: VectorTile, t: TileId, level: number): Hex[] {
   const out: Hex[] = [];
@@ -187,9 +211,10 @@ export function hexesOf(tile: VectorTile, t: TileId, level: number): Hex[] {
       const whole = outer.map((p) => [p[0], p[1]] as LngLat);
       const ring = clipRingLat(whole, -MAX_LAT, MAX_LAT);
       if (!ring.length) continue;
+      const [dx, dy] = homeOffset(f.loadGeometry()[0] ?? [], layer.extent);
       out.push({
         type: 'Feature',
-        properties: { id: cellId(whole, level), total: Number(f.properties['total'] ?? 0) },
+        properties: { id: cellId(whole, level), total: hexRecords(f.properties['total']), home: dx === 0 && dy === 0 },
         geometry: { type: 'Polygon', coordinates: [ring] },
       });
     }
@@ -206,14 +231,20 @@ export async function decodeHexes(data: ArrayBuffer, t: TileId, level: number): 
 
 /**
  * One feature per cell from several tiles' hexes. A cell near a tile edge
- * comes in both tiles (GBIF pads tiles); keep the copy with the higher count.
+ * comes in each tile it touches (GBIF pads tiles), but only the tile holding
+ * its centre counts it right: a copy in a neighbour's padding can be off
+ * several-fold. Keep that home copy; until its tile loads, the higher count.
  */
 export function mergeHexes(tiles: Iterable<Hex[]>): Map<string, Hex> {
   const cells = new Map<string, Hex>();
   for (const hexes of tiles) {
     for (const h of hexes) {
       const had = cells.get(h.properties.id);
-      if (!had || h.properties.total > had.properties.total) cells.set(h.properties.id, h);
+      const better =
+        !had ||
+        (h.properties.home && !had.properties.home) ||
+        (h.properties.home === had.properties.home && h.properties.total > had.properties.total);
+      if (better) cells.set(h.properties.id, h);
     }
   }
   return cells;

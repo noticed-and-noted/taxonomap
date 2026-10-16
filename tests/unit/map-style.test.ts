@@ -7,7 +7,11 @@ const COLORS = { accent: '#a', accentContrast: '#c', bg: '#b', text: '#t' };
 const HEXES: GeoJSON.FeatureCollection = {
   type: 'FeatureCollection',
   features: [
-    { type: 'Feature', properties: { id: '3:0,0', total: 4 }, geometry: { type: 'Point', coordinates: [0, 0] } },
+    {
+      type: 'Feature',
+      properties: { id: '3:0,0', total: 4, home: true },
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    },
   ],
 };
 const DATA = { hexes: HEXES, level: 6, selected: EMPTY, records: EMPTY, near: EMPTY };

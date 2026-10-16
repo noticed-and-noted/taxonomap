@@ -9,6 +9,7 @@ import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { gbifBasemapTile, isEdgeUrl, markEdgeDown, occurrenceTileTemplate } from '~/lib/gbif';
+import { hexRecords, homeOffset } from '~/lib/map/occGrid';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
 import { $ramp } from '~/stores/ramp';
 
@@ -26,10 +27,11 @@ const TILE_PX = 512;
 
 const canvas = ref<HTMLCanvasElement>();
 
-/** One tile's hexes: rings in tile units (0…extent) and the record count. */
+/** One tile's hexes: rings in tile units (0…extent), the record count and the tile holding its centre (offset in tiles). */
 interface Hex {
   rings: { x: number; y: number }[][];
   total: number;
+  home: [number, number];
 }
 interface Tile {
   extent: number;
@@ -60,7 +62,8 @@ async function fetchTile(x: number, y: number, retried = false): Promise<Tile | 
   const hexes: Hex[] = [];
   for (let i = 0; i < layer.length; i++) {
     const f = layer.feature(i);
-    hexes.push({ rings: f.loadGeometry(), total: Number(f.properties.total) || 0 });
+    const rings = f.loadGeometry();
+    hexes.push({ rings, total: hexRecords(f.properties.total), home: homeOffset(rings[0] ?? [], layer.extent) });
   }
   return { extent: layer.extent, hexes };
 }
@@ -83,6 +86,10 @@ function paint() {
     const [tx, ty] = tiles[i]!;
     const k = TILE_PX / tile.extent;
     for (const hex of tile.hexes) {
+      // An edge cell comes in each tile it touches; draw the copy from the tile holding its centre (see mergeHexes).
+      const [dx, dy] = hex.home;
+      const homeX = (((tx + dx) % 2 ** Z) + 2 ** Z) % 2 ** Z;
+      if ((dx || dy) && loaded[tiles.findIndex(([x, y]) => x === homeX && y === ty + dy)]) continue;
       ctx.beginPath();
       for (const ring of hex.rings) {
         ring.forEach((p, j) => {
