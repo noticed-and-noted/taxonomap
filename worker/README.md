@@ -10,7 +10,7 @@ This Worker sits between the site and `api.gbif.org` and caches responses at Clo
 
   | Request type                        | Fresh for |
   | ----------------------------------- | --------- |
-  | Tiles                               | 24 h      |
+  | Tiles (including empty 204 tiles)   | 24 h      |
   | Occurrence search                   | 6 h       |
   | Species, datasets and organisations | 7 days    |
   | Thumbnails                          | 30 days   |
@@ -26,16 +26,16 @@ This Worker sits between the site and `api.gbif.org` and caches responses at Clo
 ## Requirements
 
 - A Cloudflare account (the free plan allows 100,000 requests/day).
-- A domain on Cloudflare. The Cache API does nothing on `*.workers.dev`, so the Worker needs a custom domain such as `gbif-edge.example.org`.
+- A domain on Cloudflare. The Cache API does nothing on `*.workers.dev`, so the Worker needs a custom domain such as `gbif.taxonomap.com`.
 
 ## Setup
 
-1. In `worker/wrangler.toml`, set the `routes` hostname, `CONTACT_EMAIL` and `ALLOWED_ORIGINS` (your Pages URL and custom site domain, comma-separated).
+1. In `worker/wrangler.toml`, check the `routes` hostname, `CONTACT_EMAIL` and `ALLOWED_ORIGINS` (your Pages URL and custom site domain, comma-separated).
 2. Deploy, either:
    - **locally:** run `npx wrangler login`, then `npm run worker:deploy`; or
    - **from CI:** set the repository variables `EDGE_ENABLED=true`, `EDGE_ALLOWED_ORIGINS` and `GBIF_CONTACT_EMAIL`, and the secrets `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template, scoped to the account and zone) and `CLOUDFLARE_ACCOUNT_ID`. `.github/workflows/worker.yml` deploys on pushes to `main` that touch `worker/`.
-3. Check it: `https://gbif-edge.example.org/health` should return `Taxonomap edge cache`.
-4. Point the site at it with the repository variables `PUBLIC_GBIF_API_BASE` and `PUBLIC_GBIF_TILE_BASE` set to `https://gbif-edge.example.org`, then rebuild.
+3. Check it: `https://gbif.taxonomap.com/health` should return `Taxonomap edge cache`.
+4. Point the site at it with the repository variables `PUBLIC_GBIF_API_BASE` and `PUBLIC_GBIF_TILE_BASE` set to `https://gbif.taxonomap.com`, then rebuild.
 
 ## Local testing
 

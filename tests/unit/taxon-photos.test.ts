@@ -201,6 +201,22 @@ describe('taxon photos', () => {
     expect(images.size).toBe(35);
     expect(calls.filter((c) => c.includes('api.inaturalist.org'))).toHaveLength(2);
   });
+
+  it('forms taxa batches from the requested IDs, not from what is already loaded', async () => {
+    const calls = network({
+      records: {},
+      taxa: { 5: taxon(5, 10), 40: taxon(40, 10) },
+      voted: {},
+      gbifInat: {},
+      gbifAny: {},
+    });
+    vi.resetModules();
+    const { getTaxa } = await import('~/lib/photos/inat');
+    await getTaxa([5]);
+    // The same list always makes the same request, so caches can share it.
+    await getTaxa([40, 5]);
+    expect(calls.map((c) => new URL(c).pathname)).toEqual(['/v2/taxa/5', '/v2/taxa/5,40']);
+  });
 });
 
 describe('iNaturalist photo URLs', () => {

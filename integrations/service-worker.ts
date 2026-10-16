@@ -6,7 +6,7 @@
  *
  * Strategies:
  *  - GBIF JSON:  StaleWhileRevalidate, 24 h max age, 300 entries
- *  - Map tiles:  CacheFirst, 7 days, 2000 entries
+ *  - Map tiles:  CacheFirst, 7 days, 2000 entries (empty 204 tiles too)
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
  *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX, OpenTopoMap)
  *  - Pages:      NetworkFirst (4 s timeout), 50 entries; offline fallback page
@@ -97,7 +97,7 @@ export default function serviceWorker(): AstroIntegration {
               options: {
                 cacheName: 'gbif-tiles',
                 expiration: { maxEntries: 2000, maxAgeSeconds: 7 * 24 * 3600, purgeOnQuotaError: true },
-                cacheableResponse: { statuses: [200] },
+                cacheableResponse: { statuses: [200, 204] },
               },
             },
             {

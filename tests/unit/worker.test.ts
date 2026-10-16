@@ -9,7 +9,7 @@ class FakeCache {
   async put(key: RequestInfo | URL, res: Response) {
     // Read the body now, like the real cache does.
     const body = await res.arrayBuffer();
-    this.store.set(String(key), new Response(body, res));
+    this.store.set(String(key), new Response(res.status === 204 ? null : body, res));
   }
 }
 
@@ -64,6 +64,16 @@ describe('edge worker', () => {
     expect(t.calls).toHaveLength(1);
     expect(t.calls[0]?.url).toBe('https://api.gbif.org/v1/occurrence/search?limit=0&taxonKey=1');
     expect(t.calls[0]?.ua).toMatch(/^Taxonomap-edge\/[\d.]+ \(contact: me@x\.org\)$/);
+  });
+
+  it('caches empty tiles (204)', async () => {
+    const t = setup(() => new Response(null, { status: 204 }));
+    const a = await t.get('/v2/map/occurrence/density/8/0/0.mvt?taxonKey=1');
+    expect(a.headers.get(EDGE_HEADER)).toBe('MISS');
+    expect(a.headers.get('cache-control')).toBe('public, max-age=3600');
+    await t.settle();
+    const b = await t.get('/v2/map/occurrence/density/8/0/0.mvt?taxonKey=1');
+    expect([b.status, b.headers.get(EDGE_HEADER), t.calls.length]).toEqual([204, 'HIT', 1]);
   });
 
   it('serves stale while revalidating in the background', async () => {

@@ -1,19 +1,18 @@
-# Taxonomap edge cache. Fill in the TODOs, then `npm run worker:deploy`.
-name = "gbif-explorer-edge"
+# Taxonomap edge cache. Deploy with `npm run worker:deploy`.
+name = "taxonomap-edge"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 workers_dev = false
 
-# TODO: your hostname on a domain managed by Cloudflare. The Cache API does
-# nothing on *.workers.dev, so a custom domain is required.
-routes = [{ pattern = "gbif-edge.example.org", custom_domain = true }]
+# The Cache API does nothing on *.workers.dev, so a custom domain is required.
+routes = [{ pattern = "gbif.taxonomap.com", custom_domain = true }]
 
 [vars]
 UPSTREAM = "https://api.gbif.org"
-# TODO: contact address sent to GBIF in the User-Agent.
-CONTACT_EMAIL = "you@example.org"
-# TODO: your site origins (comma-separated), e.g. the Pages URL and custom domain. "*" allows any site.
-ALLOWED_ORIGINS = "https://app.taxonomap.com"
+# Contact address sent to GBIF in the User-Agent.
+CONTACT_EMAIL = "info@taxonomap.com"
+# Site origins allowed to call the edge (comma-separated). "*" allows any site.
+ALLOWED_ORIGINS = "https://app.taxonomap.com,https://taxonomap.pages.dev"
 
 [observability]
 enabled = true

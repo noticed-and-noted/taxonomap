@@ -82,11 +82,16 @@ const TAXON_FIELDS = `id,name,rank_level,ancestor_ids,taxon_photos.photo.${PHOTO
 /** Taxa already fetched, by ID, so overlapping batches don't fetch them twice. */
 const taxa = new Map<number, InatTaxon>();
 
-/** Taxa by ID, with their curated photos; batched TAXA_BATCH per request. */
+/**
+ * Taxa by ID, with their curated photos; batched TAXA_BATCH per request.
+ * Batches come from the requested IDs alone, not from what this visitor has
+ * already loaded, so the same list always makes the same requests (and cache keys).
+ */
 export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Promise<Map<number, InatTaxon>> {
-  const missing = [...new Set(ids)].filter((id) => !taxa.has(id)).sort((a, b) => a - b);
-  for (let i = 0; i < missing.length; i += TAXA_BATCH) {
-    const chunk = missing.slice(i, i + TAXA_BATCH);
+  const wanted = [...new Set(ids)].sort((a, b) => a - b);
+  for (let i = 0; i < wanted.length; i += TAXA_BATCH) {
+    const chunk = wanted.slice(i, i + TAXA_BATCH);
+    if (chunk.every((id) => taxa.has(id))) continue;
     const res = await inat.getJson<{ results: InatTaxon[] }>(
       `/v2/taxa/${chunk.join(',')}`,
       { fields: TAXON_FIELDS },

@@ -61,6 +61,9 @@ const RULES: [RegExp, Policy][] = [
   [/^\/v1\/(dataset|organization)\/[0-9a-f-]{36}$/, { fresh: 7 * DAY, stale: 30 * DAY, browser: HOUR }],
 ];
 
+/** 204 is how GBIF answers an empty map tile, the most common tile of all. */
+const cacheable = (status: number) => status === 200 || status === 204;
+
 export function policyFor(path: string): Policy | null {
   for (const [re, p] of RULES) if (re.test(path)) return p;
   return null;
@@ -133,7 +136,7 @@ async function fetchUpstream(
       const res = await deps.fetch(
         new Request(url, { headers: { 'user-agent': userAgent(env), accept: '*/*' }, redirect: 'follow' }),
       );
-      if (res.status === 200) {
+      if (cacheable(res.status)) {
         // Store a copy with our timestamp; Cloudflare keeps it until the stale limit.
         const stored = new Response(res.clone().body, res);
         stored.headers.set(STORED_AT, String((deps.now ?? Date.now)()));
@@ -159,7 +162,7 @@ function finalise(
   out.headers.delete('set-cookie');
   for (const [k, v] of Object.entries(cors)) out.headers.set(k, v);
   out.headers.set(EDGE_HEADER, state);
-  if (res.status === 200) out.headers.set('cache-control', `public, max-age=${policy.browser}`);
+  if (cacheable(res.status)) out.headers.set('cache-control', `public, max-age=${policy.browser}`);
   else out.headers.set('cache-control', 'no-store');
   return out;
 }
@@ -200,7 +203,7 @@ export async function handle(req: Request, env: EdgeEnv, deps: EdgeDeps): Promis
 
   try {
     const res = await fetchUpstream(upstream, key, policy, env, deps);
-    return finalise(res, res.status === 200 ? 'MISS' : 'BYPASS', policy, cors);
+    return finalise(res, cacheable(res.status) ? 'MISS' : 'BYPASS', policy, cors);
   } catch {
     return text(502, 'GBIF is unreachable', cors);
   }
