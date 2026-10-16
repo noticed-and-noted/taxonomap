@@ -114,7 +114,7 @@ function overlay(): {
 } {
   const accent = css('--accent', '#f0b443');
   const bg = css('--bg', '#0e1813');
-  const text = css('--text', '#e9f0ea');
+  const text = css('--text', '#f2ede2');
   const occ = {
     type: 'vector' as const,
     tiles: occTiles($tileFilter.get()),
@@ -220,7 +220,7 @@ async function buildStyle(basemap: BasemapId): Promise<StyleSpecification> {
     // Insert the data below the first label layer so place names stay legible.
     const firstSymbol = base.layers.findIndex((l) => l.type === 'symbol');
     const cut = firstSymbol === -1 ? base.layers.length : firstSymbol;
-    const text = css('--text', '#e9f0ea');
+    const text = css('--text', '#f2ede2');
     const layers = base.layers.map((l): LayerSpecification => {
       if (l.type === 'background') return { ...l, paint: { ...l.paint, 'background-color': bg } };
       // Roads and rivers show through the semi-transparent hexes; keep them for close zooms.

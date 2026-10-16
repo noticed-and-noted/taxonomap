@@ -15,19 +15,27 @@ const nav = [
 ---
 
 <header class="app-header">
-  <a href="/" class="brand pill flex items-center gap-2 px-3.5 font-display text-lg font-semibold tracking-tight">
-    <svg
-      viewBox="0 0 24 24"
-      class="size-6 text-accent"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.6"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9"></circle>
-      <path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"></path>
-    </svg>
-    <span class="brand-label">Taxonomap</span>
+  <a href="/" class="brand pill flex items-center px-3.5" aria-label="Taxonomap home">
+    <span class="wordmark" aria-hidden="true">
+      <span class="brand-label">tax</span>
+      {/* The fern stands in for the first "o"; its stem and leaflets hang below the baseline. */}
+      <svg viewBox="16 7 32 53" class="fern">
+        <path d="M40 58C40 48 40 37 32 37" fill="none" stroke="var(--accent)" stroke-width="4.5" stroke-linecap="round"></path>
+        <g transform="translate(17 8.5) scale(0.75)">
+          <path
+            d="M20 38A18 18 0 0 1 20 2A14 14 0 0 1 20 30A8 8 0 0 1 20 14"
+            fill="none"
+            stroke="var(--accent)"
+            stroke-width="6"
+            stroke-linecap="round"
+          ></path>
+          <circle cx="20.5" cy="14" r="3.6" fill="var(--accent)"></circle>
+        </g>
+        <path d="M40 51C35 50 31 47 30 43C35 43 38 46 40 51Z" fill="var(--text-muted)"></path>
+        <path d="M40 46C44 44 48 44 51 41C50 46 45 48 40 46Z" fill="var(--text-muted)"></path>
+      </svg>
+      <span class="brand-label">nomap</span>
+    </span>
   </a>
 
   <div class="search-slot min-w-0 flex-1">
@@ -91,6 +99,26 @@ const nav = [
     border-radius: var(--radius);
     background: var(--surface);
     box-shadow: var(--shadow);
+  }
+
+  /* Sizes are tied to Patrick Hand's x-height (0.467em) so the fern's coil matches the lowercase letters. */
+  .wordmark {
+    display: flex;
+    align-items: baseline;
+    font-family: var(--font-hand);
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--text);
+    transform: translateY(-0.12em);
+  }
+
+  .fern {
+    flex: none;
+    width: 0.474em;
+    height: 0.786em;
+    margin: 0 0.02em;
+    overflow: visible;
+    transform: translateY(0.308em);
   }
 
   .theme-pill {

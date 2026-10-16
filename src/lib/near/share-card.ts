@@ -79,8 +79,8 @@ export async function drawShareCard(
   if (!ctx) return;
   const dark = input.theme === 'dark';
   const bg = dark ? '#0e1813' : '#f5efe3';
-  const text = dark ? '#e9f0ea' : '#1d2720';
-  const muted = dark ? '#a9bbb0' : '#4f5d54';
+  const text = dark ? '#f2ede2' : '#0e1813';
+  const muted = dark ? '#a8b8ae' : '#3f5c4c';
   const accent = dark ? '#f0b443' : '#9c5200';
 
   ctx.fillStyle = bg;

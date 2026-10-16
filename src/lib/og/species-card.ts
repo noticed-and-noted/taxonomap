@@ -99,7 +99,7 @@ function card(input: SpeciesCardInput, photo: string | null): El {
     : '';
   return h(
     'div',
-    { width: W, height: H, display: 'flex', background: '#0e1813', color: '#e9f0ea', fontFamily: 'Inter' },
+    { width: W, height: H, display: 'flex', background: '#0e1813', color: '#f2ede2', fontFamily: 'Inter' },
     [
       photo
         ? h('img', { width: 630, height: 630, objectFit: 'cover' }, undefined, { src: photo, width: 630, height: 630 })
@@ -136,7 +136,7 @@ function card(input: SpeciesCardInput, photo: string | null): El {
             input.commonName
               ? h(
                   'div',
-                  { fontFamily: 'Serif', fontStyle: 'italic', fontSize: 34, color: '#a9bbb0', marginTop: 14 },
+                  { fontFamily: 'Serif', fontStyle: 'italic', fontSize: 34, color: '#a8b8ae', marginTop: 14 },
                   input.scientificName,
                 )
               : h('div', {}, ''),
@@ -144,7 +144,7 @@ function card(input: SpeciesCardInput, photo: string | null): El {
           h('div', { display: 'flex', flexDirection: 'column' }, [
             h('div', { display: 'flex', alignItems: 'baseline' }, [
               h('div', { fontSize: 64, fontWeight: 600 }, compact(input.count)),
-              h('div', { fontSize: 26, color: '#a9bbb0', marginLeft: 14 }, 'records on GBIF'),
+              h('div', { fontSize: 26, color: '#a8b8ae', marginLeft: 14 }, 'records on GBIF'),
             ]),
             h('div', { fontSize: 17, color: '#84998c', marginTop: 18 }, credit),
           ]),

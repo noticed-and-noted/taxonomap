@@ -13,8 +13,8 @@
   --surface-3: #243a2f;
   --border: #2c4437;
   --border-strong: #3f5c4c;
-  --text: #e9f0ea; /* 15.6:1 on bg */
-  --text-muted: #a9bbb0; /* 8.9:1 on bg */
+  --text: #f2ede2; /* "bone", 15.5:1 on bg */
+  --text-muted: #a8b8ae; /* "lichen", 8.7:1 on bg */
   --text-subtle: #84998c; /* 5.6:1 on bg */
   --accent: #f0b443; /* amber: selection */
   --accent-contrast: #1d1404;
@@ -34,8 +34,8 @@
   --surface-3: #e5dbc6;
   --border: #d8ccb5;
   --border-strong: #b9a989;
-  --text: #1d2720; /* 14.2:1 on bg */
-  --text-muted: #4f5d54; /* 6.6:1 on bg */
+  --text: #0e1813; /* "forest", 15.8:1 on bg */
+  --text-muted: #3f5c4c; /* "fern", 6.4:1 on bg */
   --text-subtle: #66726a; /* 4.7:1 on bg */
   --accent: #9c5200; /* 5.6:1 on bg */
   --accent-contrast: #fffaf0;
