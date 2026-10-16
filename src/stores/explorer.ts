@@ -170,6 +170,9 @@ export const $mapMode = atom<'explore' | 'pin'>('explore');
 /** Current map bounds [west, south, east, north], published by MapCanvas. */
 export const $mapBounds = atom<readonly [number, number, number, number] | null>(null);
 
+/** Tile loading for the current burst, published by MapCanvas (`total` 0: nothing counted yet). */
+export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>({ loading: true, done: 0, total: 0 });
+
 /** One-shot camera requests (place search, taxon extent). */
 export const $flyTo = atom<FlyRequest | null>(null);
 

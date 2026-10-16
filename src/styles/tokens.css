@@ -48,15 +48,19 @@
 }
 
 :root {
-  /* Perceptually uniform, colour-blind-safe sequential ramp (viridis). */
-  --ramp-0: #440154;
-  --ramp-1: #46327e;
-  --ramp-2: #365c8d;
-  --ramp-3: #277f8e;
-  --ramp-4: #1fa187;
-  --ramp-5: #4ac16d;
-  --ramp-6: #a0da39;
-  --ramp-7: #fde725;
+  /*
+   * Density ramp: "lichen to fern" (pale straw to deep teal). Viewers can
+   * pick another in map settings (RAMPS in lib/ramp.ts), which overrides
+   * these on <html>.
+   */
+  --ramp-0: #e8e2b0;
+  --ramp-1: #c6d491;
+  --ramp-2: #9cc27b;
+  --ramp-3: #6fab6f;
+  --ramp-4: #45916a;
+  --ramp-5: #237563;
+  --ramp-6: #105958;
+  --ramp-7: #0b3c48;
 
   --radius-sm: 6px;
   --radius: 10px;

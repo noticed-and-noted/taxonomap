@@ -24,19 +24,23 @@ import {
 import {
   buildStyle,
   EMPTY,
+  fillColor,
   geometryOf,
   nearGeoJson,
   OCC_LAYERS,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
+import { createTileProgress, type TileLike } from '~/lib/map/tileProgress';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
+import { $ramp } from '~/stores/ramp';
 import { PIN_CURSOR } from './pinCursors';
 import {
   $basemap,
   $flyTo,
   $hexGeometry,
   $mapBounds,
+  $mapLoad,
   $mapMode,
   $mapView,
   $occurrenceFilter,
@@ -52,7 +56,7 @@ import {
 const HEX_PER_TILE = 28;
 
 const container = ref<HTMLDivElement>();
-const loading = ref(true);
+const tiles = createTileProgress();
 const failed = ref(false);
 const tooltip = ref<{ x: number; y: number; text: string } | null>(null);
 
@@ -91,6 +95,17 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
 /** Point the occurrence source at new tile URLs (filters changed, or the edge cache went down). */
 const setOccTiles = () =>
   (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles($occurrenceFilter.get()));
+
+/**
+ * Push the current overlay data into a freshly loaded style. A style is built
+ * from the stores, then loads asynchronously; a store change in between (near
+ * me switching to pin mode on a reload, say) finds no source and would be lost.
+ */
+function syncOverlays() {
+  setData('selected', selectedGeoJson($hexGeometry.get()));
+  setData('records', lastRecords);
+  setData('near', nearData());
+}
 
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
@@ -333,9 +348,33 @@ onMounted(async () => {
     setData('hover', EMPTY);
   });
   map.on('click', onClick);
-  map.on('dataloading', () => (loading.value = true));
+  // Tile progress for the loading ring (MapProgress): count each tile in the burst as it starts and settles.
+  // Loading means tiles are still pending, not "until idle" (idle also waits for fades and repaints).
+  // Only tile events start a burst: GeoJSON setData (hover, selection) also fires `dataloading`.
+  const publishLoad = () => {
+    const p = tiles.get();
+    // Before the first tile (style still loading) keep the initial state.
+    $mapLoad.set({ loading: p.total ? p.done < p.total : $mapLoad.get().loading, ...p });
+  };
+  const onTile = (start: boolean) => (e: object) => {
+    const { tile } = e as { tile?: TileLike };
+    if (start) {
+      if (!tile) return;
+      // A new burst: the last one's counts were kept for the ring's fade-out.
+      if (!$mapLoad.get().loading) tiles.reset();
+      tiles.start(tile);
+    } else tiles.settle(tile);
+    publishLoad();
+  };
+  map.on('dataloading', onTile(true));
+  map.on('data', onTile(false));
+  map.on('dataabort', onTile(false));
+  map.on('error', onTile(false));
+  map.on('style.load', syncOverlays);
   map.on('idle', () => {
-    loading.value = false;
+    // Anything still pending settled silently (a 404); the burst is over either way.
+    tiles.settle();
+    $mapLoad.set({ ...tiles.get(), loading: false });
     if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
   });
   map.on('error', (e) => {
@@ -359,6 +398,10 @@ onMounted(async () => {
     // Edge went down or came back: re-point the tile source.
     onEdgeChange(setOccTiles),
     $basemap.listen(() => void rebuildStyle()),
+    // A new density ramp only repaints the hexes.
+    $ramp.listen(() => {
+      if (map?.getLayer('occ-fill')) map.setPaintProperty('occ-fill', 'fill-color', fillColor());
+    }),
     $mapView.listen((v) => {
       if (!map) return;
       const c = map.getCenter();
@@ -411,7 +454,6 @@ onBeforeUnmount(() => {
   <div class="map-canvas relative size-full" data-testid="map">
     <div ref="container" class="size-full" role="region" aria-label="Occurrence map"></div>
     <div class="crosshair" aria-hidden="true"></div>
-    <div v-if="loading" class="map-progress" role="status" aria-label="Loading map data"></div>
     <div
       v-if="tooltip"
       class="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[130%] rounded-sm bg-surface px-2 py-1 text-xs text-text shadow-panel"
@@ -429,34 +471,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.map-progress {
-  position: absolute;
-  inset: var(--header-offset) 0 auto 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  background-size: 40% 100%;
-  background-repeat: no-repeat;
-  animation: sweep 1.2s var(--ease) infinite;
-  z-index: 5;
-}
-
-@keyframes sweep {
-  from {
-    background-position: -40% 0;
-  }
-  to {
-    background-position: 140% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .map-progress {
-    animation: none;
-    background: var(--accent);
-    opacity: 0.5;
-  }
-}
-
 /* Crosshair appears only while the map has keyboard focus. */
 .crosshair {
   position: absolute;

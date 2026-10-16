@@ -5,7 +5,7 @@
  */
 import { computed, ref, watch } from 'vue';
 
-const props = defineProps<{ title: string; open: boolean }>();
+const props = defineProps<{ title: string; open: boolean; closeLabel?: string | undefined }>();
 const emit = defineEmits<{ close: [] }>();
 
 const SNAPS = [0.22, 0.55, 0.92] as const;
@@ -103,7 +103,7 @@ function onKey(e: KeyboardEvent) {
         <button
           type="button"
           class="grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2"
-          aria-label="Close panel"
+          :aria-label="closeLabel ?? 'Close panel'"
           @click="emit('close')"
         >
           <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

@@ -23,8 +23,18 @@ import {
 } from '~/lib/near/data';
 import { loadSpeciesManifest } from '~/lib/species/links';
 import { $flyTo, $mapMode } from '~/stores/explorer';
-import { $nearAt, $nearRadius, $nearTab, $nearThisMonth, setNearLocation, zoomForRadius } from '~/stores/near';
+import {
+  $nearAt,
+  $nearRadius,
+  $nearTab,
+  $nearThisMonth,
+  exitNearMode,
+  setNearLocation,
+  zoomForRadius,
+} from '~/stores/near';
+import BasemapSwitcher from './BasemapSwitcher.vue';
 import LicenceBadge from './LicenceBadge.vue';
+import MapProgress from './MapProgress.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import ShareDialog from './ShareDialog.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -163,19 +173,30 @@ onBeforeUnmount(() => {
     <button
       v-if="!panelOpen"
       type="button"
-      class="pointer-events-auto absolute right-3 top-3 rounded-full md:hidden border border-border bg-surface px-4 py-2 text-sm shadow-panel"
+      class="pointer-events-auto absolute left-3 top-3 rounded-full md:hidden border border-border bg-surface px-4 py-2 text-sm shadow-panel"
       @click="panelOpen = true"
     >
       Show list
     </button>
+
+    <!-- Basemap and loading stay in near me; they slide with the panel when it's tucked away. -->
+    <div
+      class="near-bar pointer-events-none absolute right-3 top-3 *:pointer-events-auto"
+      :class="{ tucked: !panelOpen }"
+    >
+      <div class="hidden sm:block"><BasemapSwitcher /></div>
+      <MapProgress class="absolute right-0 top-0 sm:top-10" />
+    </div>
 
     <div class="pointer-events-auto">
       <ResponsivePanel
         title="What’s near me"
         :open="panelOpen"
         collapsible
+        dismissible="Leave near me"
         @close="panelOpen = false"
         @open="panelOpen = true"
+        @dismiss="exitNearMode"
       >
         <!-- No location yet: explainer -->
         <section v-if="!at" class="space-y-4 text-sm">
@@ -364,6 +385,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Desktop: beside the panel, which is always on screen (open, or tucked to a strip). */
+@media (min-width: 768px) {
+  .near-bar {
+    right: calc(var(--panel-width) + 1.5rem);
+    transition: transform var(--dur-slow) var(--ease);
+  }
+  /* The same distance SidePanel's .collapsed moves the panel, so they slide together. */
+  .near-bar.tucked {
+    transform: translateX(calc(var(--panel-width) + 0.75rem - 4rem));
+  }
+}
+
 .chip {
   border: 1px solid var(--border);
   border-radius: 999px;

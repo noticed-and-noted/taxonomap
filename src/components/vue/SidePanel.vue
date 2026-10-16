@@ -2,9 +2,17 @@
 /**
  * Right-hand panel. `collapsible` swaps the close button for a tab on the
  * panel's left edge that slides the whole panel, unchanged, towards the
- * screen edge until only a strip of it shows, and back again.
+ * screen edge until only a strip of it shows, and back again; `closable`
+ * keeps the close button alongside it.
  */
-defineProps<{ title: string; open: boolean; collapsible?: boolean; collapsed?: boolean }>();
+defineProps<{
+  title: string;
+  open: boolean;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  closable?: boolean;
+  closeLabel?: string | undefined;
+}>();
 const emit = defineEmits<{ close: []; collapse: []; expand: [] }>();
 </script>
 
@@ -35,10 +43,10 @@ const emit = defineEmits<{ close: []; collapse: []; expand: [] }>();
         <header class="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <h2 class="truncate font-display text-lg">{{ title }}</h2>
           <button
-            v-if="!collapsible"
+            v-if="!collapsible || closable"
             type="button"
             class="grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
-            aria-label="Close panel"
+            :aria-label="closeLabel ?? 'Close panel'"
             @click="emit('close')"
           >
             <svg

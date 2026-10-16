@@ -3,6 +3,7 @@ import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { binLabels, rampColors } from '~/lib/ramp';
 import { $mapView } from '~/stores/explorer';
+import { $ramp } from '~/stores/ramp';
 
 const view = useStore($mapView);
 const colors = ref<string[]>(rampColors());
@@ -10,11 +11,16 @@ const colors = ref<string[]>(rampColors());
 const labels = computed(() => binLabels(view.value.zoom));
 
 let observer: MutationObserver | undefined;
+let unlisten: (() => void) | undefined;
 onMounted(() => {
   observer = new MutationObserver(() => (colors.value = rampColors()));
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  unlisten = $ramp.listen(() => (colors.value = rampColors()));
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  unlisten?.();
+});
 </script>
 
 <template>

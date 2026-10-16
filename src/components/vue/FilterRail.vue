@@ -4,20 +4,33 @@
  * icon opens its group in a flyout beside the rail, which stays open while
  * you use the map (and alongside the cell panel on the right). Escape, the
  * close button or the same icon hides it. Phones use the Filters sheet.
+ * Settings (map colours) sits at the foot of the rail, apart from the filters.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref } from 'vue';
 import { clearFilters } from '~/stores/explorer';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, type FilterGroupId } from './filterGroups';
 import FilterGroup from './FilterGroup.vue';
+import MapSettings from './MapSettings.vue';
+
+type PanelId = FilterGroupId | 'settings';
+
+const SETTINGS = {
+  id: 'settings',
+  label: 'Settings',
+  title: 'Settings',
+  icon: 'M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2M14 4v4M8 10v4M16 16v4',
+} as const;
 
 const counts = useStore($groupCounts);
 const total = useStore($activeFilterCount);
-const open = ref<FilterGroupId | null>(null);
-const current = computed(() => FILTER_GROUPS.find((g) => g.id === open.value) ?? null);
+const open = ref<PanelId | null>(null);
+const current = computed(() =>
+  open.value === 'settings' ? SETTINGS : (FILTER_GROUPS.find((g) => g.id === open.value) ?? null),
+);
 const buttons = ref<Record<string, HTMLButtonElement>>({});
 
-function toggle(id: FilterGroupId) {
+function toggle(id: PanelId) {
   open.value = open.value === id ? null : id;
 }
 
@@ -68,6 +81,19 @@ function label(name: string, n: number) {
         <span class="rail-label">Clear</span>
         <span class="sr-only"> all filters</span>
       </button>
+      <button
+        :ref="(el) => el && (buttons.settings = el as HTMLButtonElement)"
+        type="button"
+        class="rail-btn rail-settings"
+        :aria-expanded="open === 'settings'"
+        aria-controls="filter-flyout"
+        @click="toggle('settings')"
+      >
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+          <path :d="SETTINGS.icon" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="rail-label">{{ SETTINGS.label }}</span>
+      </button>
     </nav>
 
     <Transition name="flyout">
@@ -77,7 +103,7 @@ function label(name: string, n: number) {
           <button
             type="button"
             class="grid size-7 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
-            :aria-label="`Hide ${current.title} filters`"
+            :aria-label="current.id === 'settings' ? 'Hide settings' : `Hide ${current.title} filters`"
             @click="close"
           >
             <svg
@@ -92,7 +118,11 @@ function label(name: string, n: number) {
             </svg>
           </button>
         </header>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+        <!-- Settings scrolls its own option list, so its body doesn't scroll. -->
+        <div v-if="current.id === 'settings'" class="flex min-h-0 flex-1 flex-col px-4 pt-3">
+          <MapSettings />
+        </div>
+        <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <FilterGroup :group="current.id" />
         </div>
       </section>
@@ -101,11 +131,21 @@ function label(name: string, n: number) {
 </template>
 
 <style scoped>
+/*
+ * Full height of the rail region, so the flyout's max-height resolves and a
+ * long panel (settings) scrolls inside it. The empty space lets clicks
+ * through to the map.
+ */
 .filter-rail-wrap {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  max-height: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.rail,
+.flyout {
+  pointer-events: auto;
 }
 
 .rail {
@@ -165,6 +205,13 @@ function label(name: string, n: number) {
   font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1;
+}
+
+.rail-settings {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding-top: 0.5rem;
 }
 
 .rail-clear {

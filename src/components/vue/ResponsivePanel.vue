@@ -3,13 +3,17 @@
  * Desktop (≥768px): 400px right SidePanel. Mobile: BottomSheet.
  * `collapsible`: on desktop, closing slides the panel aside to a strip
  * instead of removing it; `open` asks for it back.
+ * `dismissible` (with collapsible): a close button that emits `dismiss`,
+ * for leaving the whole mode rather than tucking the panel away.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import BottomSheet from './BottomSheet.vue';
 import SidePanel from './SidePanel.vue';
 
-defineProps<{ title: string; open: boolean; collapsible?: boolean }>();
-const emit = defineEmits<{ close: []; open: [] }>();
+const props = defineProps<{ title: string; open: boolean; collapsible?: boolean; dismissible?: string }>();
+const emit = defineEmits<{ close: []; open: []; dismiss: [] }>();
+/** The sheet has one close button: with `dismissible` it dismisses. */
+const closeSheet = () => (props.dismissible ? emit('dismiss') : emit('close'));
 
 const desktop = ref(true);
 let mq: MediaQueryList | undefined;
@@ -30,11 +34,14 @@ onBeforeUnmount(() => mq?.removeEventListener('change', update));
     open
     collapsible
     :collapsed="!open"
+    :closable="!!dismissible"
+    :close-label="dismissible"
+    @close="emit('dismiss')"
     @collapse="emit('close')"
     @expand="emit('open')"
   >
     <slot />
   </SidePanel>
   <SidePanel v-else-if="desktop" :title="title" :open="open" @close="emit('close')"><slot /></SidePanel>
-  <BottomSheet v-else :title="title" :open="open" @close="emit('close')"><slot /></BottomSheet>
+  <BottomSheet v-else :title="title" :open="open" :close-label="dismissible" @close="closeSheet"><slot /></BottomSheet>
 </template>

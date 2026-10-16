@@ -15,6 +15,8 @@ import { $activeFilterCount, FILTER_GROUPS } from './filterGroups';
 import FilterRail from './FilterRail.vue';
 import HexPanel from './HexPanel.vue';
 import MapLegend from './MapLegend.vue';
+import MapProgress from './MapProgress.vue';
+import MapSettings from './MapSettings.vue';
 import NearExplorer from './NearExplorer.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import TaxonChip from './TaxonChip.vue';
@@ -77,20 +79,6 @@ function closePanel() {
 <template>
   <div v-if="near" class="pointer-events-none absolute inset-0 z-10">
     <NearExplorer />
-    <button
-      type="button"
-      class="near-btn near-exit pointer-events-auto absolute left-3 top-3 z-20"
-      aria-label="Leave near me"
-      @click="toggleNear"
-    >
-      <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path :d="pinIcon" />
-      </svg>
-      Near me
-      <svg viewBox="0 0 12 12" class="size-3" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-        <path d="M3 3l6 6M9 3l-6 6" />
-      </svg>
-    </button>
   </div>
 
   <div v-else class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen }">
@@ -133,6 +121,8 @@ function closePanel() {
         </svg>
         Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
       </button>
+      <!-- Under the right-hand pills (2rem tall) on every screen size. -->
+      <MapProgress class="absolute right-0 top-10" />
     </div>
 
     <div
@@ -179,6 +169,7 @@ function closePanel() {
             <p class="mb-2 text-sm font-medium">Basemap</p>
             <BasemapSwitcher />
           </div>
+          <MapSettings />
         </div>
         <HexPanel v-else />
       </ResponsivePanel>
@@ -216,10 +207,6 @@ function closePanel() {
 }
 .near-btn:hover {
   color: var(--text);
-}
-.near-exit {
-  color: var(--text);
-  border-color: var(--accent);
 }
 .near-phone {
   width: 2rem;
