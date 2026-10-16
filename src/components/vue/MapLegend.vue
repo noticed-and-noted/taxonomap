@@ -2,13 +2,13 @@
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { binLabels, rampColors } from '~/lib/ramp';
-import { $mapView } from '~/stores/explorer';
+import { $gridLevel } from '~/stores/explorer';
 import { $ramp } from '~/stores/ramp';
 
-const view = useStore($mapView);
+const level = useStore($gridLevel);
 const colors = ref<string[]>(rampColors());
-// Bins scale with zoom (cells cover more ground when zoomed out).
-const labels = computed(() => binLabels(view.value.zoom));
+// Bins follow the hex grid level (cells cover more ground when zoomed out).
+const labels = computed(() => binLabels(level.value));
 
 let observer: MutationObserver | undefined;
 let unlisten: (() => void) | undefined;

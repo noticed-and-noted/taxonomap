@@ -2,15 +2,15 @@
  * Density colour ramp shared by the map layer and the legend.
  *
  * GBIF hex cells cover a fixed share of each tile, so a cell's area (and
- * typical count) grows ~4× per zoom level out. Fixed bins saturate at world
- * view, so the log-scale thresholds are scaled by 4^(REF_ZOOM − zoom) and
- * rounded to 1-2-5 steps; the legend shows the values for the current zoom.
+ * typical count) grows ~4× per grid level out. Fixed bins saturate at world
+ * view, so the log-scale thresholds are scaled by 4^(REF_ZOOM − level) and
+ * rounded to 1-2-5 steps; the legend shows the values for the current grid
+ * level (lib/map/occGrid.ts).
  * Colours come from the --ramp-* tokens: the default ramp in tokens.css, or
  * the viewer's choice from RAMPS (applied by stores/ramp.ts).
  */
 export const BASE_THRESHOLDS = [10, 100, 1_000, 10_000, 100_000, 1_000_000] as const;
 export const REF_ZOOM = 6;
-export const MAX_ZOOM_STOP = 14;
 
 export interface Ramp {
   id: string;

@@ -1,9 +1,16 @@
 /** The map's style: our layers spliced into each kind of basemap, and the GeoJSON helpers. */
 import type { MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
-import { buildStyle, EMPTY, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
+import { buildStyle, EMPTY, fillColor, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
+import { thresholdsAt } from '~/lib/ramp';
 
 const COLORS = { accent: '#a', accentContrast: '#c', bg: '#b', text: '#t' };
-const DATA = { tiles: ['https://tiles.test/{z}/{x}/{y}.mvt'], selected: EMPTY, records: EMPTY, near: EMPTY };
+const HEXES: GeoJSON.FeatureCollection = {
+  type: 'FeatureCollection',
+  features: [
+    { type: 'Feature', properties: { id: '3:0,0', total: 4 }, geometry: { type: 'Point', coordinates: [0, 0] } },
+  ],
+};
+const DATA = { hexes: HEXES, level: 6, selected: EMPTY, records: EMPTY, near: EMPTY };
 
 const vectorBase: StyleSpecification = {
   version: 8,
@@ -40,8 +47,6 @@ describe('buildStyle', () => {
       'record-points',
     ]);
     expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'hover', 'selected', 'records', 'near']);
-    // The basemap's vector tiles are trimmed off the poles (see polarTiles).
-    expect(s.sources['omt']).toEqual({ type: 'vector', url: 'polar+https://base.test' });
     expect(s.projection).toEqual({ type: 'globe' });
   });
 
@@ -88,8 +93,17 @@ describe('buildStyle', () => {
       tileTotal: 1,
     });
     const s = await buildStyle('plain', 'dark', COLORS, { ...DATA, selected }, async () => null);
-    expect(s.sources['occ']).toMatchObject({ type: 'vector', tiles: DATA.tiles });
+    expect(s.sources['occ']).toMatchObject({ type: 'geojson', data: HEXES });
     expect(s.sources['selected']).toEqual({ type: 'geojson', data: selected });
+  });
+});
+
+describe('fillColor', () => {
+  it('bins cell counts by the grid level’s thresholds, as the legend does', () => {
+    const steps = (level: number) => (fillColor(level) as unknown[]).filter((v) => typeof v === 'number');
+    expect(steps(6)).toEqual(thresholdsAt(6));
+    expect(steps(2)).toEqual(thresholdsAt(2));
+    expect(fillColor(6).slice(0, 2)).toEqual(['step', ['get', 'total']]);
   });
 });
 

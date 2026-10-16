@@ -1,52 +1,35 @@
 <script setup lang="ts">
 /**
  * The persisted map island (client:only). MapLibre with a globe at low zoom,
- * a basemap, and GBIF hex-density vector tiles styled client-side so the
+ * a basemap, and GBIF hex-density cells (occLayer) styled client-side so the
  * legend matches exactly and cells can be queried on click.
  *
  * All state flows through Nano Stores (URL-synced), so other islands
  * (overlay, omnibox, panel) drive it without importing it.
  */
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type {
-  GeoJSONSource,
-  Map as MlMap,
-  MapGeoJSONFeature,
-  MapMouseEvent,
-  Point,
-  VectorTileSource,
-} from 'maplibre-gl';
+import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact } from '~/lib/format';
-import {
-  $gbifStale,
-  countRequest,
-  isEdgeUrl,
-  markEdgeDown,
-  occurrenceTileTemplate,
-  onEdgeChange,
-  searchOccurrences,
-  type TileFilter,
-} from '~/lib/gbif';
+import { searchOccurrences } from '~/lib/gbif';
 import {
   buildStyle,
   EMPTY,
   fillColor,
   geometryOf,
   nearGeoJson,
-  OCC_LAYERS,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
-import { convexOverlap, hullRing, mercatorPx, outerRings, type Pt } from '~/lib/map/hexPieces';
-import { loadPolarTile, POLAR_SCHEMES, viaPolar } from '~/lib/map/polarTiles';
-import { createTileProgress, type TileLike } from '~/lib/map/tileProgress';
+import type { Hex } from '~/lib/map/occGrid';
+import { createOccLayer, type OccLayer } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { PIN_CURSOR } from './pinCursors';
 import {
   $basemap,
   $flyTo,
+  $gridLevel,
   $hexGeometry,
   $mapBounds,
   $mapLoad,
@@ -62,14 +45,12 @@ import {
   type FlyRequest,
 } from '~/stores/explorer';
 
-const HEX_PER_TILE = 28;
-
 const container = ref<HTMLDivElement>();
-const tiles = createTileProgress();
 const failed = ref(false);
 const tooltip = ref<{ x: number; y: number; text: string } | null>(null);
 
 let map: MlMap | undefined;
+let occ: OccLayer | undefined;
 const cleanups: (() => void)[] = [];
 let lastRecords: GeoJSON.FeatureCollection = EMPTY;
 let pendingHexRestore = false;
@@ -78,10 +59,6 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-
-function occTiles(f: TileFilter): string[] {
-  return [viaPolar(occurrenceTileTemplate(f, { hexPerTile: HEX_PER_TILE }, 'mvt'))];
-}
 
 /** Theme colours from the CSS custom properties (fallbacks match the dark theme). */
 function colors(): MapColors {
@@ -101,16 +78,13 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
   (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
-/** Point the occurrence source at new tile URLs (filters changed, or the edge cache went down). */
-const setOccTiles = () =>
-  (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles($occurrenceFilter.get()));
-
 /**
  * Push the current overlay data into a freshly loaded style. A style is built
  * from the stores, then loads asynchronously; a store change in between (near
  * me switching to pin mode on a reload, say) finds no source and would be lost.
  */
 function syncOverlays() {
+  setData('occ', occ?.collection() ?? EMPTY);
   setData('selected', selectedGeoJson($hexGeometry.get()));
   setData('records', lastRecords);
   setData('near', nearData());
@@ -118,59 +92,29 @@ function syncOverlays() {
 
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
-    tiles: occTiles($occurrenceFilter.get()),
+    hexes: occ?.collection() ?? EMPTY,
+    level: $gridLevel.get(),
     selected: selectedGeoJson($hexGeometry.get()),
     records: lastRecords,
     near: nearData(),
   });
 }
 
-type Cell = Pick<MapGeoJSONFeature, 'geometry' | 'properties'>;
-
 /**
- * The hex under a point, whole. Pick the most informative piece there (edge
- * cells can be split across tiles), then grow it with every rendered piece
- * that overlaps it: past the source maxzoom each overzoomed tile holds only
- * its own slice of the cell.
+ * Whether a screen point misses the globe (space around it at low zoom).
+ * There, unproject snaps to the horizon, so the point does not round-trip.
  */
-function hexAt(point: { x: number; y: number }): Cell | undefined {
-  if (!map) return undefined;
-  const m = map;
-  const feats = m.queryRenderedFeatures([point.x, point.y], { layers: OCC_LAYERS });
-  const seed = feats.sort((a, b) => Number(b.properties['total'] ?? 0) - Number(a.properties['total'] ?? 0))[0];
-  if (!seed) return undefined;
-  // Overlap and hull are worked in flat Web Mercator, where cells are convex and
-  // tile slices axis-aligned. On the globe's screen, edges curve and the
-  // antimeridian folds the world, so unrelated pieces can seem to overlap.
-  const zoom = m.getZoom();
-  const toPx = (p: Pt) => mercatorPx(p, zoom);
-  const pieces = outerRings(seed.geometry);
-  const px = pieces.map((r) => r.map(toPx));
-  const seen = new Set(pieces.map((r) => JSON.stringify(r)));
-  for (let grew = true; grew;) {
-    grew = false;
-    const screen = pieces.flat().map((p) => m.project(p));
-    const xs = screen.map((p) => p.x);
-    const ys = screen.map((p) => p.y);
-    const box: [[number, number], [number, number]] = [
-      [Math.min(...xs), Math.min(...ys)],
-      [Math.max(...xs), Math.max(...ys)],
-    ];
-    for (const f of m.queryRenderedFeatures(box, { layers: OCC_LAYERS })) {
-      for (const ring of outerRings(f.geometry)) {
-        const key = JSON.stringify(ring);
-        if (seen.has(key)) continue;
-        const ringPx = ring.map(toPx);
-        if (!px.some((p) => convexOverlap(p, ringPx))) continue;
-        seen.add(key);
-        pieces.push(ring);
-        px.push(ringPx);
-        grew = true;
-      }
-    }
-  }
-  if (pieces.length === 1) return seed;
-  return { properties: seed.properties, geometry: { type: 'Polygon', coordinates: [hullRing(pieces, toPx)] } };
+function offGlobe(p: { x: number; y: number }): boolean {
+  if (!map) return true;
+  const back = map.project(map.unproject([p.x, p.y]));
+  return Math.hypot(back.x - p.x, back.y - p.y) > 1;
+}
+
+/** The hex cell under a screen point, if any. */
+function hexAt(point: { x: number; y: number }): Hex | undefined {
+  if (!map || !occ || offGlobe(point)) return undefined;
+  const ll = map.unproject([point.x, point.y]);
+  return occ.cellAt([ll.lng, ll.lat]);
 }
 
 function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
@@ -187,15 +131,14 @@ function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: n
   $panel.set('hex');
 }
 
-/** Re-resolve a hex selected via the URL once tiles are rendered. */
+/** Re-resolve a hex selected via the URL once its cell is loaded. */
 function restoreHex() {
   const p = $selectedHex.get();
-  if (!map || !p || $hexGeometry.get()) {
+  if (!occ || !p || $hexGeometry.get()) {
     pendingHexRestore = false;
     return;
   }
-  const pt = map.project(p as [number, number]);
-  const f = hexAt(pt);
+  const f = occ.cellAt([p[0], p[1]]);
   const geom = f && geometryOf(f);
   if (geom) {
     $hexGeometry.set(geom);
@@ -249,21 +192,10 @@ function fly(req: FlyRequest) {
   }
 }
 
-/**
- * Whether a screen point misses the globe (space around it at low zoom).
- * Tiles still answer queries there, as if the point were on the planet. Off
- * the globe, unproject snaps to the horizon, so the point does not round-trip.
- */
-function offGlobe(p: Point): boolean {
-  if (!map) return true;
-  const back = map.project(map.unproject(p));
-  return Math.hypot(back.x - p.x, back.y - p.y) > 1;
-}
-
 function onMove(e: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   if ($mapMode.get() === 'pin') return;
-  const f = offGlobe(e.point) ? undefined : hexAt(e.point);
+  const f = hexAt(e.point);
   if (!f) {
     setData('hover', EMPTY);
     tooltip.value = null;
@@ -333,7 +265,6 @@ onMounted(async () => {
     import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
   ]);
   ml.setWorkerUrl(worker.default);
-  for (const scheme of POLAR_SCHEMES) ml.addProtocol(scheme, loadPolarTile);
   if (!container.value) return;
   const v = $mapView.get();
   const style = await styleFor();
@@ -348,12 +279,22 @@ onMounted(async () => {
     dragRotate: false,
     renderWorldCopies: false,
     fadeDuration: reducedMotion() ? 0 : 200,
-    // Called on the main thread for every request, including worker-loaded tiles.
-    transformRequest: (url, type) => {
-      if (type === 'Tile' && url.includes('/v2/map/occurrence/')) countRequest('tile', url);
-      return { url };
-    },
   });
+  occ = createOccLayer(map, {
+    filter: () => $occurrenceFilter.get(),
+    listenFilter: (fn) => $occurrenceFilter.listen(fn),
+    onCells: (fc) => {
+      setData('occ', fc);
+      if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
+    },
+    onLevel: (level) => {
+      $gridLevel.set(level);
+      if (map?.getLayer('occ-fill')) map.setPaintProperty('occ-fill', 'fill-color', fillColor(level));
+    },
+    onProgress: (done, total) => $mapLoad.set({ loading: done < total, done, total }),
+    onFailed: () => (failed.value = true),
+  });
+  cleanups.push(() => occ?.destroy());
   map.addControl(new ml.NavigationControl({ showCompass: false }), 'bottom-right');
   if (import.meta.env.DEV) (window as unknown as { __map?: MlMap }).__map = map;
   // Track container size (window resize alone misses layout changes).
@@ -410,59 +351,16 @@ onMounted(async () => {
     setData('hover', EMPTY);
   });
   map.on('click', onClick);
-  // Tile progress for the loading ring (MapProgress): count each tile in the burst as it starts and settles.
-  // Loading means tiles are still pending, not "until idle" (idle also waits for fades and repaints).
-  // Only tile events start a burst: GeoJSON setData (hover, selection) also fires `dataloading`.
-  const publishLoad = () => {
-    const p = tiles.get();
-    // Before the first tile (style still loading) keep the initial state.
-    $mapLoad.set({ loading: p.total ? p.done < p.total : $mapLoad.get().loading, ...p });
-  };
-  const onTile = (start: boolean) => (e: object) => {
-    const { tile } = e as { tile?: TileLike };
-    if (start) {
-      if (!tile) return;
-      // A new burst: the last one's counts were kept for the ring's fade-out.
-      if (!$mapLoad.get().loading) tiles.reset();
-      tiles.start(tile);
-    } else tiles.settle(tile);
-    publishLoad();
-  };
-  map.on('dataloading', onTile(true));
-  map.on('data', onTile(false));
-  map.on('dataabort', onTile(false));
-  map.on('error', onTile(false));
   map.on('style.load', syncOverlays);
-  map.on('idle', () => {
-    // Anything still pending settled silently (a 404); the burst is over either way.
-    tiles.settle();
-    $mapLoad.set({ ...tiles.get(), loading: false });
-    if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
-  });
-  map.on('error', (e) => {
-    // Tile failures: keep the map usable and show the quiet stale note.
-    const err = e.error as { status?: number; url?: string } | undefined;
-    const status = err?.status;
-    // Edge cache failing (quota, outage, CORS-less error page): go straight to GBIF.
-    if (err?.url && isEdgeUrl(err.url) && (!status || status === 429 || status >= 500)) {
-      markEdgeDown();
-      return;
-    }
-    if (status === 429 || (status !== undefined && status >= 500)) $gbifStale.set(true);
-    if ((e as { sourceId?: string }).sourceId === 'occ' && status === undefined) failed.value = true;
-  });
   map.getCanvas().addEventListener('keydown', onKey);
   cleanups.push(() => map?.getCanvas().removeEventListener('keydown', onKey));
 
   // Store → map
   cleanups.push(
-    $occurrenceFilter.listen(setOccTiles),
-    // Edge went down or came back: re-point the tile source.
-    onEdgeChange(setOccTiles),
     $basemap.listen(() => void rebuildStyle()),
     // A new density ramp only repaints the hexes.
     $ramp.listen(() => {
-      if (map?.getLayer('occ-fill')) map.setPaintProperty('occ-fill', 'fill-color', fillColor());
+      if (map?.getLayer('occ-fill')) map.setPaintProperty('occ-fill', 'fill-color', fillColor($gridLevel.get()));
     }),
     $mapView.listen((v) => {
       if (!map) return;

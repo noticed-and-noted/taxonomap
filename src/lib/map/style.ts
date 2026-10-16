@@ -1,14 +1,13 @@
 /**
  * The map's MapLibre style: a basemap with our data drawn over it. Pure
- * functions of their inputs (theme colours, tile URLs, GeoJSON), so the
+ * functions of their inputs (theme colours, hex cells, GeoJSON), so the
  * MapCanvas island only gathers inputs and wires events.
  */
 import type { ExpressionSpecification, LayerSpecification, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
 import { BASEMAPS, type BasemapId, type Theme } from '~/lib/basemaps';
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
-import { viaPolar } from '~/lib/map/polarTiles';
-import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
+import { rampColors, thresholdsAt } from '~/lib/ramp';
 import type { HexGeometry } from '~/stores/explorer';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -29,23 +28,21 @@ export interface MapColors {
 
 /** What our sources start with when the style is (re)built. */
 export interface OverlayData {
-  /** Occurrence tile URL templates. */
-  tiles: string[];
+  /** Occurrence hex cells (lib/map/occLayer.ts). */
+  hexes: GeoJSON.FeatureCollection;
+  /** Their grid level, which the colour bins follow. */
+  level: number;
   selected: GeoJSON.FeatureCollection;
   records: GeoJSON.FeatureCollection;
   near: GeoJSON.FeatureCollection;
 }
 
-/** Zoom-interpolated log bins (see lib/ramp.ts); matches the legend. */
-export function fillColor(): ExpressionSpecification {
+/** Log bins for cells at this grid level (see lib/ramp.ts); matches the legend. */
+export function fillColor(level: number): ExpressionSpecification {
   const c = rampColors();
-  const stops: unknown[] = [];
-  for (let z = 0; z <= MAX_ZOOM_STOP; z++) {
-    const step: unknown[] = ['step', ['get', 'total'], c[0]];
-    thresholdsAt(z).forEach((t, i) => step.push(t, c[i + 1]));
-    stops.push(z, step);
-  }
-  return ['interpolate', ['linear'], ['zoom'], ...stops] as ExpressionSpecification;
+  const step: unknown[] = ['step', ['get', 'total'], c[0]];
+  thresholdsAt(level).forEach((t, i) => step.push(t, c[i + 1]));
+  return step as ExpressionSpecification;
 }
 
 /** Our data sources and layers, shared by every basemap. */
@@ -61,9 +58,8 @@ export function overlay(
   return {
     sources: {
       occ: {
-        type: 'vector',
-        tiles: data.tiles,
-        maxzoom: 14,
+        type: 'geojson',
+        data: data.hexes,
         attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
       },
       hover: { type: 'geojson', data: EMPTY },
@@ -77,9 +73,8 @@ export function overlay(
         id: 'occ-fill',
         type: 'fill',
         source: 'occ',
-        'source-layer': 'occurrence',
         paint: {
-          'fill-color': fillColor(),
+          'fill-color': fillColor(data.level),
           'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.78, 8, 0.66],
           'fill-antialias': true,
         },
@@ -140,18 +135,6 @@ export function overlay(
       },
     ],
   };
-}
-
-/** A basemap's vector sources, routed through the polar trim (see polarTiles). */
-function polarSources(sources: StyleSpecification['sources']): StyleSpecification['sources'] {
-  return Object.fromEntries(
-    Object.entries(sources).map(([id, s]) => [
-      id,
-      s.type !== 'vector'
-        ? s
-        : { ...s, ...(s.url && { url: viaPolar(s.url) }), ...(s.tiles && { tiles: s.tiles.map(viaPolar) }) },
-    ]),
-  );
 }
 
 const styleCache = new Map<string, Promise<StyleSpecification | null>>();
@@ -219,7 +202,7 @@ export async function buildStyle(
     return {
       ...base,
       ...globe,
-      sources: { ...polarSources(base.sources), ...ours.sources },
+      sources: { ...base.sources, ...ours.sources },
       layers: [...layers.slice(0, cut), ...ours.data, ...layers.slice(cut), ...ours.top],
     };
   }
