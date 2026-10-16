@@ -52,8 +52,11 @@ jobs:
       PUBLIC_GBIF_TILE_BASE: ${{ vars.PUBLIC_GBIF_TILE_BASE || 'https://api.gbif.org' }}
       PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://app.taxonomap.com' }}
       GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
-      SPECIES_PRERENDER_COUNT: ${{ vars.SPECIES_PRERENDER_COUNT || '2000' }}
-      NAME_INDEX_SIZE: ${{ vars.NAME_INDEX_SIZE || '6000' }}
+      # Species pre-rendering is off for now to keep deploys quick (species
+      # pages render client-side at /species/view). Set these repo variables
+      # to restore it, e.g. 2000 pages and a 6000-name index.
+      SPECIES_PRERENDER_COUNT: ${{ vars.SPECIES_PRERENDER_COUNT || '0' }}
+      NAME_INDEX_SIZE: ${{ vars.NAME_INDEX_SIZE || '300' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
