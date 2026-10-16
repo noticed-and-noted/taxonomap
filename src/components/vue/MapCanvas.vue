@@ -18,6 +18,7 @@ import {
   fillColor,
   geometryOf,
   nearGeoJson,
+  occOpacity,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
@@ -78,15 +79,75 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
   (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
+/** Colour both hex layers with the bins for this grid level. */
+function paintHexes(level = $gridLevel.get()) {
+  for (const id of ['occ-fill', 'occ-fresh-fill']) {
+    if (map?.getLayer(id)) map.setPaintProperty(id, 'fill-color', fillColor(level));
+  }
+}
+
+/** How long arriving cells take to fade in. */
+const FADE_MS = 180;
+/** Cells fading in on `occ-fresh`, and the fade they belong to. */
+let fresh: Hex[] = [];
+let fade = 0;
+let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Move cells that have faded in onto `occ`. */
+function settleFresh() {
+  clearTimeout(fadeTimer);
+  if (!fresh.length) return;
+  const mine = fade;
+  const src = map?.getSource('occ') as GeoJSONSource | undefined;
+  void src?.updateData({ add: fresh }).then(() => {
+    // A newer fade may have started meanwhile; its cells stay.
+    if (mine === fade) setData('occ-fresh', EMPTY);
+  });
+  fresh = [];
+}
+
+/** Cells arriving as you pan: removed ones go at once, new ones fade in. */
+function changeHexes(add: Hex[], remove: string[]) {
+  settleFresh();
+  const src = map?.getSource('occ') as GeoJSONSource | undefined;
+  if (!map || !src) return;
+  if (remove.length) void src.updateData({ remove });
+  if (!add.length) return;
+  if (reducedMotion()) {
+    void src.updateData({ add });
+    return;
+  }
+  const m = map;
+  fresh = add;
+  fade++;
+  setData('occ-fresh', { type: 'FeatureCollection', features: add });
+  m.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: 0, delay: 0 });
+  m.setPaintProperty('occ-fresh-fill', 'fill-opacity', 0);
+  requestAnimationFrame(() => {
+    m.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: FADE_MS, delay: 0 });
+    m.setPaintProperty('occ-fresh-fill', 'fill-opacity', occOpacity(m.getZoom()));
+  });
+  fadeTimer = setTimeout(settleFresh, FADE_MS + 20);
+}
+
+/** A whole new set of cells (new level or filters): no fade, nothing left mid-fade. */
+function replaceHexes(fc: GeoJSON.FeatureCollection) {
+  clearTimeout(fadeTimer);
+  fresh = [];
+  fade++;
+  setData('occ-fresh', EMPTY);
+  setData('occ', fc);
+}
+
 /**
  * Push the current overlay data into a freshly loaded style. A style is built
  * from the stores, then loads asynchronously; a store change in between (near
  * me switching to pin mode on a reload, say) finds no source and would be lost.
  */
 function syncOverlays() {
-  setData('occ', occ?.collection() ?? EMPTY);
+  replaceHexes(occ?.collection() ?? EMPTY);
   // The grid level is set as the map starts, usually before its style has loaded.
-  map?.setPaintProperty('occ-fill', 'fill-color', fillColor($gridLevel.get()));
+  paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get()));
   setData('records', lastRecords);
   setData('near', nearData());
@@ -286,12 +347,16 @@ onMounted(async () => {
     filter: () => $occurrenceFilter.get(),
     listenFilter: (fn) => $occurrenceFilter.listen(fn),
     onCells: (fc) => {
-      setData('occ', fc);
+      replaceHexes(fc);
+      if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
+    },
+    onChanges: (add, remove) => {
+      changeHexes(add, remove);
       if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
     },
     onLevel: (level) => {
       $gridLevel.set(level);
-      if (map?.getLayer('occ-fill')) map.setPaintProperty('occ-fill', 'fill-color', fillColor(level));
+      paintHexes(level);
     },
     onProgress: (done, total) => $mapLoad.set({ loading: done < total, done, total }),
     onFailed: () => (failed.value = true),
@@ -361,9 +426,7 @@ onMounted(async () => {
   cleanups.push(
     $basemap.listen(() => void rebuildStyle()),
     // A new density ramp only repaints the hexes.
-    $ramp.listen(() => {
-      if (map?.getLayer('occ-fill')) map.setPaintProperty('occ-fill', 'fill-color', fillColor($gridLevel.get()));
-    }),
+    $ramp.listen(() => paintHexes()),
     $mapView.listen((v) => {
       if (!map) return;
       const c = map.getCenter();

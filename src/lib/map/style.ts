@@ -18,6 +18,11 @@ const FONT = ['Noto Sans Bold'];
 /** The occurrence hex layer, which clicks and hovers query. */
 export const OCC_LAYERS = ['occ-fill'];
 
+/** The hexes' opacity at a zoom: a touch more see-through closer in, where the basemap matters more. */
+export function occOpacity(zoom: number): number {
+  return 0.78 - 0.12 * Math.min(1, Math.max(0, zoom / 8));
+}
+
 /** Theme colours from the CSS custom properties. */
 export interface MapColors {
   accent: string;
@@ -60,8 +65,12 @@ export function overlay(
       occ: {
         type: 'geojson',
         data: data.hexes,
+        // Cell ids, so arriving tiles update the source instead of replacing it.
+        promoteId: 'id',
         attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
       },
+      // Cells fading in, before they join `occ`.
+      'occ-fresh': { type: 'geojson', data: EMPTY },
       hover: { type: 'geojson', data: EMPTY },
       selected: { type: 'geojson', data: data.selected },
       records: { type: 'geojson', data: data.records, cluster: true, clusterRadius: 40, clusterMaxZoom: 14 },
@@ -75,7 +84,19 @@ export function overlay(
         source: 'occ',
         paint: {
           'fill-color': fillColor(data.level),
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.78, 8, 0.66],
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, occOpacity(0), 8, occOpacity(8)],
+          'fill-antialias': true,
+        },
+      },
+      {
+        id: 'occ-fresh-fill',
+        type: 'fill',
+        source: 'occ-fresh',
+        paint: {
+          'fill-color': fillColor(data.level),
+          // Animated from 0 to occOpacity as cells arrive.
+          'fill-opacity': 0,
+          'fill-opacity-transition': { duration: 0, delay: 0 },
           'fill-antialias': true,
         },
       },

@@ -35,6 +35,7 @@ describe('buildStyle', () => {
       'road_major',
       'water',
       'occ-fill',
+      'occ-fresh-fill',
       'place_city',
       'place_country',
       'hover-line',
@@ -46,7 +47,9 @@ describe('buildStyle', () => {
       'record-count',
       'record-points',
     ]);
-    expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'hover', 'selected', 'records', 'near']);
+    expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'records', 'near']);
+    // Cell ids let arriving tiles update the hexes in place.
+    expect(s.sources['occ']).toMatchObject({ promoteId: 'id' });
     expect(s.projection).toEqual({ type: 'globe' });
   });
 

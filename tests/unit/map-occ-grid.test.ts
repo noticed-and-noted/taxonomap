@@ -7,6 +7,8 @@ import {
   fillZoom,
   gridLevel,
   mergeHexes,
+  ringAround,
+  shiftTiles,
   tileAt,
   tilesFor,
   zoomDrop,
@@ -120,6 +122,38 @@ describe('tilesFor', () => {
       { x: 0, y: 1 },
       { x: 3, y: 2 },
     ]);
+  });
+});
+
+describe('ringAround and shiftTiles', () => {
+  it('rings a view’s tiles with their neighbours, wrapping at the antimeridian and stopping at the poles', () => {
+    // Level 2: 4 × 4 tiles. A view of two tiles on the top row at the antimeridian.
+    const ring = ringAround(
+      [
+        { x: 3, y: 0 },
+        { x: 0, y: 0 },
+      ],
+      2,
+    );
+    expect(ring).toHaveLength(6);
+    expect(ring).toContainEqual({ x: 2, y: 0 });
+    expect(ring).toContainEqual({ x: 1, y: 1 });
+    expect(ring.every((t) => t.y >= 0)).toBe(true);
+    expect(ring).not.toContainEqual({ x: 3, y: 0 });
+  });
+
+  it('moves a view’s tiles by a pan, wrapping x and dropping rows off the map', () => {
+    expect(
+      shiftTiles(
+        [
+          { x: 3, y: 1 },
+          { x: 3, y: 2 },
+        ],
+        1,
+        -2,
+        2,
+      ),
+    ).toEqual([{ x: 0, y: 0 }]);
   });
 });
 

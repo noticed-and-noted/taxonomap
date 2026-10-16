@@ -104,6 +104,41 @@ export function tilesFor(points: LngLat[], level: number): TileId[] {
   return [...seen.values()].sort((a, b) => dist(a) - dist(b));
 }
 
+/**
+ * The tiles bordering a set (sides and corners), not in it: prefetched so a
+ * short pan lands on loaded cells. x wraps at the antimeridian; rows stop at the poles.
+ */
+export function ringAround(tiles: TileId[], level: number): TileId[] {
+  const n = 2 ** level;
+  const has = new Set(tiles.map((t) => `${t.x}/${t.y}`));
+  const ring = new Map<string, TileId>();
+  for (const t of tiles) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const y = t.y + dy;
+      if (y < 0 || y >= n) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = (((t.x + dx) % n) + n) % n;
+        const k = `${x}/${y}`;
+        if (!has.has(k)) ring.set(k, { x, y });
+      }
+    }
+  }
+  return [...ring.values()];
+}
+
+/** The same tiles moved by whole tiles (x wrapping, rows kept on the map): where a view's tiles will be after a pan. */
+export function shiftTiles(tiles: TileId[], dx: number, dy: number, level: number): TileId[] {
+  const n = 2 ** level;
+  const out = new Map<string, TileId>();
+  for (const t of tiles) {
+    const y = t.y + dy;
+    if (y < 0 || y >= n) continue;
+    const x = (((t.x + dx) % n) + n) % n;
+    out.set(`${x}/${y}`, { x, y });
+  }
+  return [...out.values()];
+}
+
 /** Clip a lng/lat ring to minLat <= lat <= maxLat (Sutherland–Hodgman); [] if nothing is left. */
 export function clipRingLat(ring: LngLat[], minLat: number, maxLat: number): LngLat[] {
   const open =
