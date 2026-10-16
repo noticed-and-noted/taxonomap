@@ -4,7 +4,7 @@
  */
 import { atom, onMount } from 'nanostores';
 import { nameIndexWithin } from '~/lib/data/name-index';
-import { getSpecies, type Rank } from '~/lib/gbif';
+import { getSpecies, type NameHit, type Rank } from '~/lib/gbif';
 import { $taxonKeys, clearHexSelection, MAX_TAXA } from './explorer';
 
 export interface TaxonInfo {
@@ -14,13 +14,11 @@ export interface TaxonInfo {
   rank: Rank;
 }
 
-const RANKS = { K: 'KINGDOM', P: 'PHYLUM', C: 'CLASS', O: 'ORDER', F: 'FAMILY', G: 'GENUS', S: 'SPECIES' } as const;
-
 /** Names for a taxon key: the baked name index first, then one cached GBIF call. */
 export async function lookupTaxon(key: number): Promise<TaxonInfo | null> {
   const idx = await nameIndexWithin();
-  const row = idx?.get(key);
-  if (row) return { key, scientificName: row[2], rank: RANKS[row[1]], ...(row[3] && { commonName: row[3] }) };
+  const hit = idx?.get(key);
+  if (hit) return taxonFromHit(hit);
   try {
     const u = await getSpecies(key);
     return {
@@ -56,6 +54,16 @@ async function resolve(keys: readonly number[]): Promise<void> {
 
 onMount($taxa, () => $taxonKeys.subscribe((keys) => void resolve(keys)));
 
+/** A search result (or index entry) as display info. */
+export function taxonFromHit(h: Pick<NameHit, 'key' | 'scientificName' | 'rank' | 'commonName'>): TaxonInfo {
+  return {
+    key: h.key,
+    scientificName: h.scientificName,
+    rank: h.rank,
+    ...(h.commonName && { commonName: h.commonName }),
+  };
+}
+
 /** Seed the cache when the caller already knows the names (search picks). */
 export function primeTaxonInfo(t: TaxonInfo): void {
   names.set(t.key, t);
@@ -72,13 +80,6 @@ export function addTaxon(t: TaxonInfo): AddTaxonResult {
   clearHexSelection();
   $taxonKeys.set([...keys, t.key].sort((a, b) => a - b));
   return 'added';
-}
-
-/** Make `t` the only selected taxon (search from pages that follow a single taxon). */
-export function setOnlyTaxon(t: TaxonInfo): void {
-  primeTaxonInfo(t);
-  clearHexSelection();
-  $taxonKeys.set([t.key]);
 }
 
 export function removeTaxon(key: number): void {

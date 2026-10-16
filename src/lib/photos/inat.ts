@@ -6,6 +6,7 @@
  * allowed and then requests are spaced out.
  */
 import { createHttp, type Transport } from '~/lib/gbif/http';
+import { HOUR } from '~/lib/util/time';
 import { parseLicence, type InatImage } from '~/lib/gbif/licence';
 
 export const INAT_API_BASE = 'https://api.inaturalist.org';
@@ -47,7 +48,7 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
 const inat = createHttp({
   base: INAT_API_BASE,
   transport: throttle((url, init) => globalThis.fetch(url, init)),
-  defaultTtlMs: 6 * 3_600_000,
+  defaultTtlMs: 6 * HOUR,
 });
 
 /** Every Creative Commons photo licence (see parseLicence for the rule). */

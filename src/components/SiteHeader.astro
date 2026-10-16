@@ -1,7 +1,14 @@
 ---
 /** Site header: brand, omnibox (client:idle), main navigation, theme toggle. */
-import Omnibox from './vue/Omnibox.vue';
+import Omnibox, { type SearchMode } from './vue/Omnibox.vue';
 import ThemeToggle from './ThemeToggle.astro';
+
+interface Props {
+  /** What picking a search result does on this page. */
+  search: SearchMode;
+}
+
+const { search } = Astro.props;
 
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 const nav = [
@@ -20,7 +27,13 @@ const nav = [
       <span class="brand-label">tax</span>
       {/* The fern stands in for the first "o"; its stem and leaflets hang below the baseline. */}
       <svg viewBox="16 7 32 53" class="fern">
-        <path d="M40 58C40 48 40 37 32 37" fill="none" stroke="var(--accent)" stroke-width="4.5" stroke-linecap="round"></path>
+        <path
+          d="M40 58C40 48 40 37 32 37"
+          fill="none"
+          stroke="var(--accent)"
+          stroke-width="4.5"
+          stroke-linecap="round"
+        ></path>
         <g transform="translate(17 8.5) scale(0.75)">
           <path
             d="M20 38A18 18 0 0 1 20 2A14 14 0 0 1 20 30A8 8 0 0 1 20 14"
@@ -39,7 +52,7 @@ const nav = [
   </a>
 
   <div class="search-slot min-w-0 flex-1">
-    <Omnibox client:idle />
+    <Omnibox client:idle mode={search} />
   </div>
 
   <nav aria-label="Main" class="pill p-1">
@@ -68,7 +81,9 @@ const nav = [
       ))}
     </ul>
   </nav>
-  <div class="pill theme-pill"><ThemeToggle /></div>
+  <div class="pill theme-pill">
+    <ThemeToggle />
+  </div>
 </header>
 
 <style>

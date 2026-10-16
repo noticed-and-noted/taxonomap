@@ -81,14 +81,13 @@ export async function speciesInClasses(
   const limit = pLimit(CONCURRENCY);
   const pages = await Promise.all(
     classes.slice(0, maxClasses).map((c) =>
-      limit(() => {
+      limit(async () => {
         signal?.throwIfAborted();
-        return occurrenceFacets({ ...filter, classKey: c.key }, ['speciesKey'], {
+        const r = await occurrenceFacets({ ...filter, classKey: c.key }, ['speciesKey'], {
           facetLimit: perClass,
           ...(signal && { signal }),
-        }).then((r) =>
-          (r.facets['speciesKey'] ?? []).map((f) => ({ key: Number(f.name), records: f.count, classKey: c.key })),
-        );
+        });
+        return (r.facets['speciesKey'] ?? []).map((f) => ({ key: Number(f.name), records: f.count, classKey: c.key }));
       }),
     ),
   );
@@ -101,9 +100,9 @@ export async function speciesInClasses(
   const sci = new Map<number, string>();
   const common = new Map<number, string>();
   for (const r of rows) {
-    const row = idx?.get(r.key);
-    if (row) sci.set(r.key, row[2]);
-    if (row?.[3]) common.set(r.key, row[3]);
+    const n = idx?.get(r.key);
+    if (n) sci.set(r.key, n.scientificName);
+    if (n?.commonName) common.set(r.key, n.commonName);
   }
   // Records carry their species name: one search covers most misses.
   const misses = rows.filter((r) => !sci.has(r.key)).map((r) => r.key);
@@ -131,13 +130,15 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
   const names = new Map<number, string>();
   await Promise.all(
     keys.map((k) =>
-      limit(() => {
-        // Skip the rest once superseded. No signal on the request itself: identical
-        // in-flight requests are shared, and another caller may be awaiting it.
-        if (signal?.aborted) return undefined;
-        return getSpecies(k)
-          .then((u) => names.set(k, u.canonicalName ?? u.scientificName))
-          .catch(() => undefined);
+      limit(async () => {
+        // Skip the rest once superseded.
+        if (signal?.aborted) return;
+        try {
+          const u = await getSpecies(k, signal);
+          names.set(k, u.canonicalName ?? u.scientificName);
+        } catch {
+          /* unnamed */
+        }
       }),
     ),
   );

@@ -1,4 +1,5 @@
 import { atom } from 'nanostores';
+import { MINUTE } from '~/lib/util/time';
 import { apiBase, isEdgeUrl, markEdgeDown, servedByEdge } from './edge';
 import { GbifNotFoundError, GbifRequestError, GbifUnavailableError } from './errors';
 import { LruCache } from './lru';
@@ -48,7 +49,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     maxRetries: 3,
     baseDelayMs: 500,
     maxDelayMs: 30_000,
-    defaultTtlMs: 10 * 60_000,
+    defaultTtlMs: 10 * MINUTE,
     cacheSize: 300,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     random: Math.random,
@@ -56,7 +57,12 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     ...overrides,
   };
   const cache = new LruCache<unknown>(opts.cacheSize);
-  const inFlight = new Map<string, Promise<unknown>>();
+  /**
+   * One request per URL, shared by every caller. The request has its own
+   * controller: a caller's signal only stops that caller waiting, and the
+   * request itself is cancelled once no caller is left waiting.
+   */
+  const inFlight = new Map<string, { promise: Promise<unknown>; ctrl: AbortController; waiting: number }>();
   /**
    * Shared cool-down after a 429: GBIF rate-limits per client, so once one
    * request is throttled every other request waits too, instead of each
@@ -129,38 +135,73 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
   /** Cache key and path+query, independent of which base serves it. */
   const relative = (path: string, params?: Params) => buildUrl('', path, params);
 
+  function start(url: string, ttlMs: number) {
+    const ctrl = new AbortController();
+    const entry = {
+      ctrl,
+      waiting: 0,
+      promise: fetchWithRetry(url, ctrl.signal)
+        .then((data) => {
+          cache.set(url, data, ttlMs);
+          return data;
+        })
+        .catch((err: unknown) => {
+          if (err instanceof GbifUnavailableError) {
+            const stale = cache.peek(url);
+            if (stale !== undefined) {
+              $gbifStale.set(true);
+              return stale;
+            }
+          }
+          throw err;
+        })
+        .finally(() => {
+          if (inFlight.get(url) === entry) inFlight.delete(url);
+        }),
+    };
+    // Callers that stop waiting are rejected on their own; this only silences the shared copy.
+    entry.promise.catch(() => {});
+    inFlight.set(url, entry);
+    return entry;
+  }
+
   /**
-   * GET JSON from GBIF. Identical concurrent requests share one promise; fresh
-   * results come from the LRU; on persistent failure a stale copy is returned
-   * and $gbifStale is raised.
+   * GET JSON from GBIF. Identical concurrent requests share one request;
+   * fresh results come from the LRU; on persistent failure a stale copy is
+   * returned and $gbifStale is raised. Aborting `ro.signal` rejects only this
+   * caller (see inFlight).
    */
   async function getJson<T>(path: string, params?: Params, ro: RequestOptions = {}): Promise<T> {
     const url = relative(path, params);
     const fresh = cache.get(url);
     if (fresh !== undefined) return fresh as T;
 
-    const pending = inFlight.get(url);
-    if (pending) return pending as Promise<T>;
+    const { signal } = ro;
+    signal?.throwIfAborted();
+    const entry = inFlight.get(url) ?? start(url, ro.ttlMs ?? opts.defaultTtlMs);
+    entry.waiting++;
+    if (!signal) return entry.promise as Promise<T>;
 
-    const p = fetchWithRetry(url, ro.signal)
-      .then((data) => {
-        cache.set(url, data, ro.ttlMs ?? opts.defaultTtlMs);
-        return data;
-      })
-      .catch((err: unknown) => {
-        if (err instanceof GbifUnavailableError) {
-          const stale = cache.peek(url);
-          if (stale !== undefined) {
-            $gbifStale.set(true);
-            return stale;
-          }
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        reject(signal.reason);
+        if (--entry.waiting === 0) {
+          entry.ctrl.abort(signal.reason);
+          if (inFlight.get(url) === entry) inFlight.delete(url);
         }
-        throw err;
-      })
-      .finally(() => inFlight.delete(url));
-
-    inFlight.set(url, p);
-    return p as Promise<T>;
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      entry.promise.then(
+        (v) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(v as T);
+        },
+        (e: unknown) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(e);
+        },
+      );
+    });
   }
 
   return {

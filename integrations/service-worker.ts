@@ -36,7 +36,7 @@ export default function serviceWorker(): AstroIntegration {
         const { count, size, warnings } = await generateSW({
           swDest: `${outDir}/sw.js`,
           globDirectory: outDir,
-          // Routes and baked data appear in later phases; only glob what exists.
+          // Only glob what the build produced.
           globPatterns: [
             ...[
               'index.html',

@@ -11,11 +11,11 @@ import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { compact } from '~/lib/format';
 import { normalise } from '~/lib/data/name-index';
 import { debounce } from '~/lib/util/debounce';
-import type { UsableImage } from '~/lib/gbif';
-import { photosForKeys, resolveNames, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
+import type { ClassGroup, SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import { useRowDetails } from './useRowDetails';
 import { useScrollFade } from './useScrollFade';
 
 const props = defineProps<{
@@ -52,18 +52,16 @@ const groupLabel = (key: number) => {
   const g = groupBy.value.get(key);
   return g ? (g.common ?? g.name) : '';
 };
-/** Names looked up after load, for rows the index and batch search missed. */
-const lateNames = ref(new Map<number, string>());
-const sciName = (r: SpeciesRow) => (r.unnamed ? lateNames.value.get(r.key) : undefined) ?? r.scientificName;
-/** Lookups that came back empty: show the "Species N" fallback, not a skeleton. */
-const noName = ref(new Set<number>());
-const pendingName = (r: SpeciesRow) => !!r.unnamed && !lateNames.value.has(r.key) && !noName.value.has(r.key);
+// Rows currently scrolled into the results box (or just below it); see observeRows.
+const inView = ref(new Set<number>());
+// Photos, and names the index lacked, looked up as rows come into view.
+const { sciName, pendingName, photoOf, pendingPhoto } = useRowDetails({
+  rows: () => props.rows,
+  dataset: () => props.groups,
+  inView,
+  needAllNames: () => sortKey.value === 'name' || !!query.value.trim(),
+});
 const displayName = (r: SpeciesRow) => r.commonName ?? sciName(r);
-/** Photos found after load; `photoDone` marks keys searched (found or not). */
-const latePhotos = ref(new Map<number, UsableImage>());
-const photoDone = ref(new Set<number>());
-const photoOf = (r: SpeciesRow) => r.image ?? latePhotos.value.get(r.key);
-const pendingPhoto = (r: SpeciesRow) => !photoOf(r) && !photoDone.value.has(r.key);
 const initials = (r: SpeciesRow) =>
   displayName(r)
     .split(/\s+/)
@@ -108,9 +106,7 @@ const visible = computed(() => sorted.value.slice(0, limit.value));
 const { fadeBottom: resultsFade, update: updateResultsFade } = useScrollFade(scroller);
 watch([visible, scroller], () => void nextTick(updateResultsFade), { immediate: true });
 
-// Rows currently scrolled into the results box (or just below it). Settles
-// after scrolling pauses, so rows flicked past aren't looked up.
-const inView = ref(new Set<number>());
+// Settles after scrolling pauses, so rows flicked past aren't looked up.
 let io: IntersectionObserver | undefined;
 let intersecting = new Set<number>();
 const settle = debounce((keys: Set<number>) => (inView.value = keys), 150);
@@ -134,59 +130,6 @@ function observeRows() {
 }
 watch([visible, scroller], () => void nextTick(observeRows), { immediate: true });
 
-// Lazy lookups. Photos: rows in view. Names: rows in view, unless sorting by
-// name or searching needs them all. Photos go first because their records
-// carry names too. Each key is asked for once per data set.
-let photoAsked = new Set<number>();
-let nameAsked = new Set<number>();
-let lazyCtrl: AbortController | undefined;
-let lazyFor: readonly ClassGroup[] | undefined;
-const inViewRows = computed(() => props.rows.filter((r) => inView.value.has(r.key)));
-const needPhotos = computed(() => inViewRows.value.filter((r) => !r.image).map((r) => r.key));
-const needNames = computed(() =>
-  (sortKey.value === 'name' || query.value.trim() ? props.rows : inViewRows.value)
-    .filter((r) => r.unnamed)
-    .map((r) => r.key),
-);
-watch(
-  [needPhotos, needNames],
-  async ([photoKeys, nameKeys]) => {
-    if (lazyFor !== props.groups) {
-      // New cell or area: forget the last one's lookups and stop them.
-      lazyCtrl?.abort();
-      lazyCtrl = new AbortController();
-      lazyFor = props.groups;
-      photoAsked = new Set();
-      nameAsked = new Set();
-      lateNames.value = new Map();
-      noName.value = new Set();
-      latePhotos.value = new Map();
-      photoDone.value = new Set();
-    }
-    const ctrl = lazyCtrl;
-    const photos = photoKeys.filter((k) => !photoAsked.has(k));
-    let names = nameKeys.filter((k) => !nameAsked.has(k));
-    for (const k of photos) photoAsked.add(k);
-    for (const k of names) nameAsked.add(k);
-
-    if (photos.length) {
-      const found = await photosForKeys(photos, ctrl?.signal);
-      if (ctrl !== lazyCtrl) return;
-      if (found.images.size) latePhotos.value = new Map([...latePhotos.value, ...found.images]);
-      photoDone.value = new Set([...photoDone.value, ...photos]);
-      if (found.names.size) lateNames.value = new Map([...lateNames.value, ...found.names]);
-      names = names.filter((k) => !found.names.has(k));
-    }
-    if (names.length) {
-      const found = await resolveNames(names, ctrl?.signal);
-      if (ctrl !== lazyCtrl) return;
-      if (found.size) lateNames.value = new Map([...lateNames.value, ...found]);
-      const missed = names.filter((k) => !found.has(k));
-      if (missed.length) noName.value = new Set([...noName.value, ...missed]);
-    }
-  },
-  { immediate: true },
-);
 const maxRecords = computed(() => Math.max(1, ...props.rows.map((r) => r.records)));
 
 function sortBy(key: SortKey) {
@@ -229,7 +172,6 @@ watch(filterOpen, (open) => {
 });
 onBeforeUnmount(() => {
   filterOpen.value = false;
-  lazyCtrl?.abort();
   io?.disconnect();
   settle.cancel();
 });

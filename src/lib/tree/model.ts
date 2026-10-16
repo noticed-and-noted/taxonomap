@@ -6,8 +6,9 @@
  */
 import { loadSnapshot } from '~/lib/data/load';
 import { nameIndexWithin } from '~/lib/data/name-index';
+import { CODE_BY_RANK } from '~/lib/data/ranks';
 import type { TreeRank, TreeNodeRow } from '~/lib/data/types';
-import { getChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField, type Rank } from '~/lib/gbif';
+import { getChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField } from '~/lib/gbif';
 
 export interface TreeNode {
   key: number;
@@ -35,20 +36,6 @@ export const NEXT_RANK: Partial<Record<TreeNode['rank'], TreeRank>> = {
   F: 'G',
   G: 'S',
 };
-
-export const RANK_NAME: Record<TreeRank, Rank> = {
-  K: 'KINGDOM',
-  P: 'PHYLUM',
-  C: 'CLASS',
-  O: 'ORDER',
-  F: 'FAMILY',
-  G: 'GENUS',
-  S: 'SPECIES',
-};
-
-const RANK_CODE: Record<string, TreeRank> = Object.fromEntries(
-  Object.entries(RANK_NAME).map(([code, name]) => [name, code as TreeRank]),
-);
 
 const FACET_FOR: Record<TreeRank, FacetField> = {
   K: 'kingdomKey',
@@ -139,12 +126,12 @@ export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortS
   const records = new Map((occ.facets[FACET_FOR[childRank]] ?? []).map((c) => [Number(c.name), c.count]));
   const children: TreeNode[] = [];
   for (const k of kids.results) {
-    if (RANK_CODE[k.rank] !== childRank) continue;
+    if (CODE_BY_RANK[k.rank] !== childRank) continue;
     if (k.taxonomicStatus && k.taxonomicStatus !== 'ACCEPTED') continue;
     const r = records.get(k.key) ?? 0;
     const s = childRank === 'S' ? 1 : (species?.get(k.key) ?? 0);
     if (r === 0 && s === 0) continue;
-    const raw = idx?.get(k.key)?.[3] ?? k.vernacularName;
+    const raw = idx?.get(k.key)?.commonName ?? k.vernacularName;
     const common = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : undefined;
     children.push({
       key: k.key,

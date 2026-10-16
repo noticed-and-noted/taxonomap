@@ -1,0 +1,96 @@
+/**
+ * Lazy details for species-table rows: each row's lead photo, and its name
+ * when the baked index lacked it. Photos are fetched for rows in view; names
+ * for rows in view, or for every row when `needAllNames` (sorting by name,
+ * searching). Photos go first because their records carry names too. Each
+ * key is asked for once per data set; a new data set (`dataset` changes)
+ * forgets the last one's lookups and aborts them.
+ */
+import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
+import type { UsableImage } from '~/lib/gbif';
+import { photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
+
+export interface RowDetailsOptions {
+  rows: () => readonly SpeciesRow[];
+  /** Identity of the data set (a new value means new rows). */
+  dataset: () => unknown;
+  /** Keys of rows currently scrolled into view. */
+  inView: Ref<Set<number>>;
+  needAllNames: () => boolean;
+}
+
+export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetailsOptions) {
+  /** Names looked up after load, for rows the index and batch search missed. */
+  const lateNames = ref(new Map<number, string>());
+  /** Lookups that came back empty: show the "Species N" fallback, not a skeleton. */
+  const noName = ref(new Set<number>());
+  /** Photos found after load; `photoDone` marks keys searched (found or not). */
+  const latePhotos = ref(new Map<number, UsableImage>());
+  const photoDone = ref(new Set<number>());
+
+  let photoAsked = new Set<number>();
+  let nameAsked = new Set<number>();
+  let ctrl: AbortController | undefined;
+  let current: unknown;
+
+  function forget() {
+    ctrl?.abort();
+    ctrl = new AbortController();
+    photoAsked = new Set();
+    nameAsked = new Set();
+    lateNames.value = new Map();
+    noName.value = new Set();
+    latePhotos.value = new Map();
+    photoDone.value = new Set();
+  }
+
+  const inViewRows = computed(() => rows().filter((r) => inView.value.has(r.key)));
+  const needPhotos = computed(() => inViewRows.value.filter((r) => !r.image).map((r) => r.key));
+  const needNames = computed(() =>
+    (needAllNames() ? rows() : inViewRows.value).filter((r) => r.unnamed).map((r) => r.key),
+  );
+
+  watch(
+    [needPhotos, needNames],
+    async ([photoKeys, nameKeys]) => {
+      if (current !== dataset()) {
+        current = dataset();
+        forget();
+      }
+      const mine = ctrl;
+      const photos = photoKeys.filter((k) => !photoAsked.has(k));
+      let names = nameKeys.filter((k) => !nameAsked.has(k));
+      for (const k of photos) photoAsked.add(k);
+      for (const k of names) nameAsked.add(k);
+
+      if (photos.length) {
+        const found = await photosForKeys(photos, mine?.signal);
+        if (mine !== ctrl) return;
+        if (found.images.size) latePhotos.value = new Map([...latePhotos.value, ...found.images]);
+        photoDone.value = new Set([...photoDone.value, ...photos]);
+        if (found.names.size) lateNames.value = new Map([...lateNames.value, ...found.names]);
+        names = names.filter((k) => !found.names.has(k));
+      }
+      if (names.length) {
+        const found = await resolveNames(names, mine?.signal);
+        if (mine !== ctrl) return;
+        if (found.size) lateNames.value = new Map([...lateNames.value, ...found]);
+        const missed = names.filter((k) => !found.has(k));
+        if (missed.length) noName.value = new Set([...noName.value, ...missed]);
+      }
+    },
+    { immediate: true },
+  );
+
+  onScopeDispose(() => ctrl?.abort());
+
+  return {
+    /** The scientific name, once known. */
+    sciName: (r: SpeciesRow) => (r.unnamed ? lateNames.value.get(r.key) : undefined) ?? r.scientificName,
+    /** Still looking the name up (show a skeleton). */
+    pendingName: (r: SpeciesRow) => !!r.unnamed && !lateNames.value.has(r.key) && !noName.value.has(r.key),
+    photoOf: (r: SpeciesRow) => r.image ?? latePhotos.value.get(r.key),
+    /** Still looking the photo up. */
+    pendingPhoto: (r: SpeciesRow) => !r.image && !latePhotos.value.has(r.key) && !photoDone.value.has(r.key),
+  };
+}

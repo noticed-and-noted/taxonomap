@@ -24,7 +24,7 @@ export interface NamesSnapshot extends BakedMeta {
 }
 
 /** Tree node rank codes (baked levels are K–O; lazy levels add F, G, S). */
-export type TreeRank = 'K' | 'P' | 'C' | 'O' | 'F' | 'G' | 'S';
+export type TreeRank = RankCode;
 
 /** Compact tree node. */
 export interface TreeNodeRow {

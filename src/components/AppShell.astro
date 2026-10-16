@@ -12,17 +12,20 @@ import MapCanvas from './vue/MapCanvas.vue';
 import RequestMeter from './vue/RequestMeter.vue';
 import StaleNotice from './vue/StaleNotice.vue';
 import SiteHeader from './SiteHeader.astro';
+import type { SearchMode } from './vue/Omnibox.vue';
 
 interface Props {
   /** full: map is the page; hidden: map stays alive offscreen (e.g. /tree). */
   map?: 'full' | 'hidden';
+  /** What picking a search result does (the map adds it; the tree moves to it). */
+  search: SearchMode;
 }
 
-const { map = 'full' } = Astro.props;
+const { map = 'full', search } = Astro.props;
 ---
 
 <div class="app-shell" data-map={map}>
-  <SiteHeader />
+  <SiteHeader search={search} />
 
   <div class="app-body">
     <div class="map-region" aria-hidden={map === 'hidden' ? 'true' : undefined}>

@@ -4,7 +4,7 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 **Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
 
-> Status: all six phases are built. Lighthouse scores have not been measured yet (see Phase 6).
+> Status: Lighthouse scores have not been measured yet (see Polish).
 
 ## Local setup
 
@@ -36,7 +36,7 @@ npm run dev             # http://localhost:4321
 | `GBIF_CONTACT_EMAIL`                      | none                        | Build-time `User-Agent: Taxonomap/<version> (contact: …)`              |
 | `GBIF_CACHE_TTL_HOURS`                    | `168`                       | Build-time disk-cache freshness                                        |
 | `GBIF_CACHE_REFRESH`                      | `0`                         | `1` ignores the disk cache for this build                              |
-| `SPECIES_PRERENDER_COUNT`                 | `2000`                      | Number of pre-rendered species pages (Phase 3)                         |
+| `SPECIES_PRERENDER_COUNT`                 | `2000`                      | Number of pre-rendered species pages                                   |
 | `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)         | Species in the baked common-name index (`/data/names.json`)            |
 | `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `nominatim`                 | Place search provider (`nominatim` or `photon`); called on submit only |
 | `PUBLIC_BASEMAP_*`                        | see `.env.example`          | Override the Plain (dark/light), Terrain and Satellite basemaps        |
@@ -53,7 +53,7 @@ npm run dev             # http://localhost:4321
 - **The map survives navigation.** The map island lives in a `transition:persist="map"` slot inside `AppShell.astro`.
 - **Islands talk only through stores.** `MapCanvas` (persisted, `client:only`), `ExplorerOverlay` (`client:only`) and `Omnibox` (`client:idle`) are separate Vue apps; camera requests use the ephemeral `$flyTo` store and the selected cell's geometry is published on `$hexGeometry`.
 
-## Map explorer (Phase 2)
+## Map explorer
 
 - **Density layer.** GBIF hex-binned **vector** tiles (`.mvt`), styled on the client so the legend matches exactly and cells can be queried on click. Because a cell covers more ground when zoomed out, the log-scale bins scale by 4^(6 − zoom) and the legend shows the bins for the current zoom (`src/lib/ramp.ts`). Viridis ramp, colour-blind safe.
 - **Filter rail.** A vertical rail on the map's left edge groups the filters: What (up to 10 species or groups of any rank, records of any shown; IUCN Red List category), When (years, months), Where (continent, maximum coordinate uncertainty), How recorded (record type, has photo, has sound) and Source (licence). Each icon opens its group in a flyout that stays open beside the cell panel; badges count the active filters per group. On the map, the omnibox adds to the What list rather than replacing it; on the tree and species pages, which follow one taxon, it replaces it. More than one taxon needs `adhoc` tiles (density rejects a repeated `taxonKey`).
@@ -86,7 +86,7 @@ npm run dev             # http://localhost:4321
 | Build disk cache              | `.cache/gbif/`      | Keyed by URL hash. Concurrency 5. CI persists it with `actions/cache`, so nightly builds are incremental                                                                                                                              |
 | Cloudflare Pages              | `_astro/*`          | Immutable; see `public/_headers`                                                                                                                                                                                                      |
 
-## Species pages (Phase 3)
+## Species pages
 
 - **Pre-rendered pages.** `/species/{key}/{slug}` is built for `SPECIES_PRERENDER_COUNT` species (default 2000; 12 in dev). They are chosen by record count, with a quota for each major class (birds, insects, flowering plants, mammals, fungi and so on), so the set isn't nearly all birds (`src/lib/bake/index.ts`).
 - **Fallback page.** Every other species uses `/species/view?key=`. It is client-rendered with the same components and marked `noindex`; if the species does have a static page, it redirects there.
@@ -99,7 +99,7 @@ npm run dev             # http://localhost:4321
 - **Open Graph images.** Rendered at build per pre-rendered species with satori and resvg (`src/lib/og/species-card.ts`), without a photo: photos are only fetched in the browser, so a build-time one could differ from the page's lead photo. Rendered PNGs are cached in `.cache/`, so unchanged cards aren't re-rendered.
 - **Sitemap.** `@astrojs/sitemap` covers the main routes and pre-rendered species. `/sitemap.xml` redirects to `/sitemap-index.xml` via `public/_redirects`.
 
-## Tree of life (Phase 4)
+## Tree of life
 
 - **Baked levels.** Kingdom → order (about 3,700 nodes, 68 KB gzipped) come from `/data/tree.json`. Records come from one occurrence facet request. Species counts come from one species-search facet on `higherTaxonKey` per kingdom, which counts accepted species under every taxon without a request per node. Orders with very few species can fall outside the facet limit; they get a floor of 1.
 - **Live levels.** Below order, each expansion makes three requests (children for names, an occurrence facet for records, a species facet for counts), whatever the number of children.
@@ -108,7 +108,7 @@ npm run dev             # http://localhost:4321
 - **"Only the map view."** Replaces record counts with counts inside the persisted map's current bounds (one facet request). Lazily loaded levels reload with the same geometry filter. Species counts stay global.
 - **Accessibility.** The child list beside the chart is both the keyboard navigation and the data-table fallback.
 
-## What's near me (Phase 5)
+## What's near me
 
 - **A mode of the map page** (`/?near=1`), toggled by the Near me button in the map's top bar; it replaces the filters, timeline and hex panel. Leaving it drops its params from the URL. The old `/near` route redirects, keeping its query.
 - **Choosing a place.** The map switches to pin mode: click to drop a pin, or use your location after an explainer. The location is rounded to 3 dp (~100 m) before it's stored, put in the URL (`at=`) or sent anywhere. The radius snaps to 1/2/5/10/25/50 km and is drawn on the map.
@@ -117,7 +117,7 @@ npm run dev             # http://localhost:4321
 - **Recent sightings.** Photographed records from the past year, newest first, each showing its dataset and photo licence. GBIF ignores sort parameters, so the feed filters by date range and sorts on the client.
 - **Share card.** Drawn on a `<canvas>` using only CORS-enabled GBIF imagery (basemap and density tiles), so it can be exported. It's shared as an image with the Web Share API where supported, otherwise downloaded, or the link copied. It doesn't print coordinates. The per-group species tallies are fetched when the dialog opens.
 
-## Polish (Phase 6)
+## Polish
 
 - **Decade animation.** The play button on the time slider steps through 1900s → 2020s. While it plays, URL writes use `replaceState` (`withHistoryMode`), so Back isn't flooded.
 - **Offline.**
@@ -139,7 +139,7 @@ These are cases where the live API differs from the original brief:
 5. `@vite-pwa/astro` doesn't support Astro 7, so `integrations/service-worker.ts` calls `workbox-build` directly.
 6. TypeScript is pinned to 6.0.x because `@astrojs/check` and `typescript-eslint` don't support TypeScript 7 yet.
 7. Species detail (`/v1/species/{key}`) has no `vernacularName` at species rank (higher ranks do), and occurrence records carry only `publishingOrgKey`. Publisher names come from `/v1/organization/{key}`.
-8. MapLibre 6 derives its worker URL from `import.meta.url`, which breaks once bundled. The worker is shipped as an asset (`?url`) and passed to `setWorkerUrl`. MapLibre is about 285 KB gzipped plus a 144 KB worker, which is the largest risk to the 3 s first-map target; it is tracked for Phase 6.
+8. MapLibre 6 derives its worker URL from `import.meta.url`, which breaks once bundled. The worker is shipped as an asset (`?url`) and passed to `setWorkerUrl`. MapLibre is about 285 KB gzipped plus a 144 KB worker, which is the largest risk to the 3 s first-map target; it has not been measured yet.
 
 ## Deployment
 

@@ -2,6 +2,7 @@
  * The subset of GBIF response fields this app depends on. Contract tests in
  * tests/contract assert these against the live API.
  */
+import type { ALLOWED_LICENCE_ENUMS } from './licence';
 
 export type Rank =
   | 'KINGDOM'
@@ -32,8 +33,8 @@ export type Continent = 'AFRICA' | 'ANTARCTICA' | 'ASIA' | 'EUROPE' | 'NORTH_AME
 /** IUCN Red List categories as GBIF's `iucnRedListCategory` filter spells them. */
 export type IucnCategory = 'EX' | 'EW' | 'CR' | 'EN' | 'VU' | 'NT' | 'LC' | 'DD';
 
-/** GBIF `license` enum values for the three licences GBIF accepts for data. */
-export type LicenceEnum = 'CC0_1_0' | 'CC_BY_4_0' | 'CC_BY_NC_4_0';
+/** GBIF `license` enum values for the three licences GBIF accepts for data (listed in licence.ts). */
+export type LicenceEnum = (typeof ALLOWED_LICENCE_ENUMS)[number];
 
 export interface Paged<T> {
   offset: number;

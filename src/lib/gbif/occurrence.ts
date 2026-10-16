@@ -12,7 +12,7 @@ import type {
   OccurrenceSearch,
 } from './types';
 
-const HOUR = 3_600_000;
+import { DAY, HOUR } from '~/lib/util/time';
 
 /**
  * Filters that both the search API and the adhoc map tiles accept, but the
@@ -181,5 +181,5 @@ export function searchOccurrences(
 }
 
 export function getOccurrence(key: number): Promise<Occurrence> {
-  return http().getJson(`/v1/occurrence/${key}`, undefined, { ttlMs: 24 * HOUR });
+  return http().getJson(`/v1/occurrence/${key}`, undefined, { ttlMs: DAY });
 }

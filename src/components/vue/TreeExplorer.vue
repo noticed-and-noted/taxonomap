@@ -10,6 +10,7 @@ import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import { classifyError, type UiErrorKind, type UsableImage } from '~/lib/gbif';
+import { RANK_BY_CODE } from '~/lib/data/ranks';
 import { leadPhoto } from '~/lib/photos/taxon-photos';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import {
@@ -18,7 +19,6 @@ import {
   loadBakedTree,
   loadChildren,
   pathTo,
-  RANK_NAME,
   resolve,
   ROOT_KEY,
   type TreeNode,
@@ -139,7 +139,7 @@ watch(selected, async (n) => {
   photo.value = null;
   if (!n || n.rank === 'ROOT') return;
   try {
-    const img = await leadPhoto({ key: n.key, rank: RANK_NAME[n.rank] });
+    const img = await leadPhoto({ key: n.key, rank: RANK_BY_CODE[n.rank] });
     if (selected.value === n) photo.value = img ?? null;
   } catch {
     /* optional */

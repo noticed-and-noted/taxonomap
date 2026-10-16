@@ -7,6 +7,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { $requestCounts, edgeAvailable, edgeConfigured, resetRequestCounts } from '~/lib/gbif';
+import { MINUTE } from '~/lib/util/time';
 
 const counts = useStore($requestCounts);
 const enabled = ref(false);
@@ -44,7 +45,7 @@ onBeforeUnmount(() => {
 });
 
 const total = computed(() => counts.value.tile + counts.value.json + counts.value.image);
-const minutes = computed(() => Math.max(0, Math.round((now.value - counts.value.startedAt) / 60_000)));
+const minutes = computed(() => Math.max(0, Math.round((now.value - counts.value.startedAt) / MINUTE)));
 const edgeState = computed(() => (!edgeConfigured() ? 'off' : edgeAvailable(now.value) ? 'on' : 'bypassed'));
 </script>
 

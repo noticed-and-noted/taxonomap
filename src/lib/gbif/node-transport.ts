@@ -10,7 +10,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pLimit from 'p-limit';
-import type { Transport } from './http';
+import { HOUR, MINUTE } from '~/lib/util/time';
+import { parseRetryAfter, type Transport } from './http';
 
 export interface NodeTransportOptions {
   cacheDir?: string;
@@ -45,7 +46,7 @@ export function userAgent(contact = process.env['GBIF_CONTACT_EMAIL']): string {
 
 export function createNodeTransport(o: NodeTransportOptions = {}): Transport {
   const cacheDir = o.cacheDir ?? join(process.cwd(), '.cache', 'gbif');
-  const ttlMs = o.ttlMs ?? Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? 168) * 3_600_000;
+  const ttlMs = o.ttlMs ?? Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? 168) * HOUR;
   const refresh = o.refresh ?? process.env['GBIF_CACHE_REFRESH'] === '1';
   const limit = pLimit(o.concurrency ?? 5);
   const doFetch = o.fetchImpl ?? fetch;
@@ -89,12 +90,8 @@ export function createNodeTransport(o: NodeTransportOptions = {}): Transport {
         headers: { 'User-Agent': ua, Accept: 'application/json' },
         ...(init?.signal ? { signal: init.signal } : {}),
       });
-      const ra = res.headers.get('retry-after');
-      if (ra) {
-        const secs = Number(ra);
-        const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(ra) - Date.now();
-        if (ms > 0) pausedUntil = Math.max(pausedUntil, Date.now() + Math.min(ms, 120_000));
-      }
+      const ms = parseRetryAfter(res.headers.get('retry-after'));
+      if (ms) pausedUntil = Math.max(pausedUntil, Date.now() + Math.min(ms, 2 * MINUTE));
       // Cache successes and definitive 404s; never cache throttling or errors.
       if (res.status === 200 || res.status === 404) {
         const body = await res.text();

@@ -40,7 +40,7 @@ async function load() {
   }
   try {
     const idx = await loadNameIndex();
-    data.value = await loadSpeciesData(k, (sk) => idx?.get(sk)?.[3] ?? null);
+    data.value = await loadSpeciesData(k, (sk) => idx?.get(sk)?.commonName ?? null);
     const d = data.value;
     document.title = `${d.commonName ? `${d.commonName} (${d.canonicalName})` : d.canonicalName} · Taxonomap`;
   } catch (e) {

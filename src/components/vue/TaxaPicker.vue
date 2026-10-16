@@ -8,12 +8,12 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, useId, watch } from 'vue';
-import { bakedIndexProvider, loadNameIndex, nameIndexWithin } from '~/lib/data/name-index';
+import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
-import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
-import { debounce } from '~/lib/util/debounce';
+import type { NameHit } from '~/lib/gbif';
 import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
-import { $taxa, addTaxon, removeTaxon } from '~/stores/taxon';
+import { $taxa, addTaxon, removeTaxon, taxonFromHit } from '~/stores/taxon';
+import { useNameSearch } from './useNameSearch';
 
 const MAX_OPTIONS = 8;
 /** Past this many selected taxa, the list scrolls instead of growing. */
@@ -35,80 +35,22 @@ watch(keys, async (next, prev) => {
 });
 
 const query = ref('');
-const indexHits = ref<NameHit[]>([]);
-const liveHits = ref<NameHit[]>([]);
-const loading = ref(false);
 const active = ref(-1);
-let abort: AbortController | undefined;
+const { hits: options, loading, search } = useNameSearch({ max: MAX_OPTIONS, exclude: () => keys.value });
 
 const full = computed(() => keys.value.length >= MAX_TAXA);
-
-const options = computed(() => {
-  const seen = new Set(keys.value);
-  const out: NameHit[] = [];
-  // Live scientific matches are mostly noise once the index has answers.
-  const live = indexHits.value.length ? liveHits.value.slice(0, 3) : liveHits.value;
-  for (const h of [...indexHits.value, ...live]) {
-    if (seen.has(h.key)) continue;
-    seen.add(h.key);
-    out.push(h);
-    if (out.length >= MAX_OPTIONS) break;
-  }
-  return out;
-});
 
 const open = computed(() => query.value.trim().length >= 2 && !full.value);
 const activeId = computed(() => (active.value >= 0 ? `${uid}-opt-${active.value}` : undefined));
 const rankLabel = (rank: string) => RANK_LABELS[rank] ?? (rank === 'UNRANKED' ? '' : rank.toLowerCase());
 
-async function runIndex(q: string) {
-  const hits = await bakedIndexProvider.search(q);
-  if (q === query.value) indexHits.value = hits;
-}
-
-const runLive = debounce(async (q: string) => {
-  abort?.abort();
-  const ctrl = new AbortController();
-  abort = ctrl;
-  loading.value = true;
-  await nameIndexWithin(1500);
-  await runIndex(q);
-  if (ctrl.signal.aborted) return;
-  if (q.trim().length >= 3) {
-    const results = await Promise.allSettled([
-      gbifSuggestProvider.search(q, ctrl.signal),
-      // Vernacular search ranks poorly, so only use it when the index is thin.
-      indexHits.value.length < 3 ? gbifVernacularProvider.search(q, ctrl.signal) : Promise.resolve([]),
-    ]);
-    if (ctrl.signal.aborted) return;
-    liveHits.value = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-  } else {
-    liveHits.value = [];
-  }
-  loading.value = false;
-}, 250);
-
 function onInput() {
   active.value = -1;
-  liveHits.value = [];
-  const q = query.value;
-  if (q.trim().length < 2) {
-    abort?.abort();
-    indexHits.value = [];
-    loading.value = false;
-    return;
-  }
-  void runIndex(q);
-  runLive(q);
+  search(query.value);
 }
 
 function pick(h: NameHit) {
-  addTaxon({
-    key: h.key,
-    scientificName: h.scientificName,
-    rank: h.rank,
-    ...(h.commonName && { commonName: h.commonName }),
-  });
+  addTaxon(taxonFromHit(h));
   query.value = '';
   onInput();
 }

@@ -5,7 +5,7 @@ import type { Rank } from './types';
  * Name search is behind an interface because GBIF's taxonomy is migrating to
  * ChecklistBank. Verified: /v1/species/suggest matches scientific names only,
  * and vernacular search ranks poorly, so the omnibox combines a baked
- * common-name index (Phase 2) with these live providers.
+ * common-name index with these live providers.
  */
 export interface NameHit {
   key: number;

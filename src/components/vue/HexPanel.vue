@@ -14,17 +14,14 @@ import RecordDetail from './RecordDetail.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
 import { HEX_CLASSES, HEX_PER_CLASS, useHexSummary } from './useHexSummary';
+import { perGroupNote } from './useLatestLoad';
 
 const { loading, error, count, months, classes, species, reload } = useHexSummary();
 const showRecords = useStore($showRecords);
 const record = useStore($selectedRecord);
 const taxa = useStore($taxa);
 const selectedKeys = computed(() => taxa.value.map((t) => t.key));
-const tableNote = computed(() =>
-  classes.value.length > HEX_CLASSES
-    ? `top ${HEX_PER_CLASS} in each of the ${HEX_CLASSES} most-recorded groups`
-    : `top ${HEX_PER_CLASS} in each group`,
-);
+const tableNote = computed(() => perGroupNote(classes.value.length, HEX_CLASSES, HEX_PER_CLASS));
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
 

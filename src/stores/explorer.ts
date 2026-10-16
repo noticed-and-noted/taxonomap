@@ -2,9 +2,10 @@
  * Shared explorer state. Every field lives in the URL (see url-sync.ts), so
  * any view is reproducible from its link and the back button works.
  */
-import { atom, computed } from 'nanostores';
+import { atom, computed, type ReadableAtom, type WritableAtom } from 'nanostores';
 import { BASEMAP_IDS } from '~/lib/basemaps';
-import type { BasisOfRecord, Continent, IucnCategory, LicenceEnum, OccurrenceFilter, TileFilter } from '~/lib/gbif';
+import { ALLOWED_LICENCE_ENUMS } from '~/lib/gbif/licence';
+import type { BasisOfRecord, Continent, IucnCategory, LicenceEnum, OccurrenceFilter } from '~/lib/gbif';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
@@ -31,12 +32,12 @@ export const CONTINENTS: readonly Continent[] = [
 /** Most to least threatened. */
 export const IUCN_CATEGORIES: readonly IucnCategory[] = ['EX', 'EW', 'CR', 'EN', 'VU', 'NT', 'LC', 'DD'];
 
-export const LICENCES: readonly LicenceEnum[] = ['CC0_1_0', 'CC_BY_4_0', 'CC_BY_NC_4_0'];
+export const LICENCES: readonly LicenceEnum[] = ALLOWED_LICENCE_ENUMS;
 
-/** Allowed "max coordinate uncertainty" steps, in metres. */
 /** Most taxa the What filter accepts (keeps URLs and requests short). */
 export const MAX_TAXA = 10;
 
+/** Allowed "max coordinate uncertainty" steps, in metres. */
 export const UNCERTAINTY_STEPS_M = [10, 100, 1000, 10000] as const;
 
 export const PANELS = ['none', 'hex', 'filters'] as const;
@@ -49,6 +50,15 @@ export interface MapView {
 }
 
 export const DEFAULT_VIEW: MapView = { lng: 10, lat: 25, zoom: 1.6 };
+
+/** Whether two views are the same once rounded for the URL (2/2/1 dp). */
+export function sameView(a: MapView, b: MapView): boolean {
+  return (
+    a.lng.toFixed(2) === b.lng.toFixed(2) &&
+    a.lat.toFixed(2) === b.lat.toFixed(2) &&
+    a.zoom.toFixed(1) === b.zoom.toFixed(1)
+  );
+}
 
 /** "lng,lat,zoom" with 2/2/1 dp. */
 const viewCodec: UrlCodec<MapView> = {
@@ -67,10 +77,7 @@ const viewCodec: UrlCodec<MapView> = {
     };
   },
   serialize: (v) => `${v.lng.toFixed(2)},${v.lat.toFixed(2)},${v.zoom.toFixed(1)}`,
-  equals: (a, b) =>
-    a.lng.toFixed(2) === b.lng.toFixed(2) &&
-    a.lat.toFixed(2) === b.lat.toFixed(2) &&
-    a.zoom.toFixed(1) === b.zoom.toFixed(1),
+  equals: sameView,
 };
 
 export type YearRange = readonly [number, number] | null;
@@ -99,6 +106,8 @@ export const $taxonKeys = urlAtom(codecs.intSet('taxon', { min: 0, limit: MAX_TA
 /** The taxon when exactly one is selected (the tree and species pages follow it), else null. */
 export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? (keys[0] ?? null) : null));
 export const $mapView = urlAtom(viewCodec);
+/** A map view as its `view` URL parameter. */
+export const viewParam = (v: MapView): string => viewCodec.serialize(v);
 export const $yearRange = urlAtom(yearsCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
 export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
@@ -173,48 +182,91 @@ export function clearHexSelection(): void {
   if ($panel.get() === 'hex') $panel.set('none');
 }
 
-const nonEmpty = <T>(v: readonly T[]) => (v.length ? v : undefined);
+/* ---- Filters ---- */
 
-export const $occurrenceFilter = computed(
-  [
-    $taxonKeys,
-    $yearRange,
-    $basisOfRecord,
-    $hasPhoto,
-    $hasSound,
-    $months,
-    $continents,
-    $maxUncertainty,
-    $licences,
-    $iucn,
-  ],
-  (taxa, year, basis, photo, sound, months, continents, uncert, licences, iucn): OccurrenceFilter => ({
-    taxonKeys: nonEmpty(taxa),
-    year,
-    basisOfRecord: nonEmpty(basis),
-    hasImage: photo || undefined,
-    hasSound: sound || undefined,
-    months: nonEmpty(months),
-    continents: nonEmpty(continents),
-    maxUncertaintyM: uncert ?? undefined,
-    licences: nonEmpty(licences),
-    iucn: nonEmpty(iucn),
-  }),
+/** The filter rail's groups (see components/vue/filterGroups.ts for labels and icons). */
+export type FilterGroupId = 'what' | 'when' | 'where' | 'how' | 'source';
+
+/**
+ * One URL-synced filter: the rail group it sits in, when it counts as set,
+ * the OccurrenceFilter fields it contributes, and its cleared value.
+ */
+interface FilterDef<T> {
+  store: WritableAtom<T>;
+  group: FilterGroupId;
+  cleared: T;
+  isSet: (value: T) => boolean;
+  apply: (value: T) => OccurrenceFilter;
+}
+
+/** A FilterDef with its value type erased, so filters of every type share one list. */
+export interface Filter {
+  store: ReadableAtom<unknown>;
+  group: FilterGroupId;
+  isSet: (value: unknown) => boolean;
+  apply: (value: unknown) => OccurrenceFilter;
+  clear: () => void;
+}
+
+function filter<T>(d: FilterDef<T>): Filter {
+  return {
+    store: d.store,
+    group: d.group,
+    isSet: (v) => d.isSet(v as T),
+    apply: (v) => d.apply(v as T),
+    clear: () => d.store.set(d.cleared),
+  };
+}
+
+const list = <T>(store: WritableAtom<T[]>, group: FilterGroupId, apply: (v: T[]) => OccurrenceFilter) =>
+  filter({ store, group, cleared: [], isSet: (v) => v.length > 0, apply });
+const flag = (store: WritableAtom<boolean>, group: FilterGroupId, fields: OccurrenceFilter) =>
+  filter({ store, group, cleared: false, isSet: (v) => v, apply: () => fields });
+const nullable = <T>(store: WritableAtom<T | null>, group: FilterGroupId, apply: (v: T) => OccurrenceFilter) =>
+  filter({ store, group, cleared: null, isSet: (v) => v !== null, apply: (v) => apply(v as T) });
+
+/**
+ * Every filter, in one place: adding one here feeds the occurrence filter,
+ * "clear all" and the rail's badge counts.
+ */
+export const FILTERS: readonly Filter[] = [
+  list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
+  list($iucn, 'what', (iucn) => ({ iucn })),
+  nullable($yearRange, 'when', (year) => ({ year })),
+  list($months, 'when', (months) => ({ months })),
+  list($continents, 'where', (continents) => ({ continents })),
+  nullable($maxUncertainty, 'where', (maxUncertaintyM) => ({ maxUncertaintyM })),
+  list($basisOfRecord, 'how', (basisOfRecord) => ({ basisOfRecord })),
+  flag($hasPhoto, 'how', { hasImage: true }),
+  flag($hasSound, 'how', { hasSound: true }),
+  list($licences, 'source', (licences) => ({ licences })),
+];
+
+const filterValues = computed(
+  FILTERS.map((f) => f.store),
+  (...values: unknown[]) => values,
 );
+
+/** The URL filters as one OccurrenceFilter (only the ones that are set). */
+export const $occurrenceFilter = computed(filterValues, (values): OccurrenceFilter => {
+  const out: OccurrenceFilter = {};
+  FILTERS.forEach((f, i) => {
+    if (f.isSet(values[i])) Object.assign(out, f.apply(values[i]));
+  });
+  return out;
+});
+
+/** Filters set per rail group (each control that is set counts once). */
+export const $groupCounts = computed(filterValues, (values) => {
+  const counts: Record<FilterGroupId, number> = { what: 0, when: 0, where: 0, how: 0, source: 0 };
+  FILTERS.forEach((f, i) => {
+    if (f.isSet(values[i])) counts[f.group]++;
+  });
+  return counts;
+});
 
 /** Reset every filter, taxa included (one history step). */
 export function clearFilters(): void {
   clearHexSelection();
-  $taxonKeys.set([]);
-  $yearRange.set(null);
-  $basisOfRecord.set([]);
-  $hasPhoto.set(false);
-  $hasSound.set(false);
-  $months.set([]);
-  $continents.set([]);
-  $maxUncertainty.set(null);
-  $licences.set([]);
-  $iucn.set([]);
+  for (const f of FILTERS) f.clear();
 }
-
-export const $tileFilter = computed($occurrenceFilter, (f): TileFilter => ({ ...f }));

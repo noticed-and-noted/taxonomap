@@ -5,7 +5,7 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Taxonomap">
-  <AppShell map="full">
+  <AppShell map="full" search="map">
     <h1 class="sr-only">Global map of species occurrence records</h1>
     <ExplorerOverlay client:only="vue" />
   </AppShell>

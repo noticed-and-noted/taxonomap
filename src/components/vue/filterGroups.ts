@@ -3,20 +3,9 @@
  * sheet (phones). Counts are per group, so the rail can badge each icon.
  */
 import { computed } from 'nanostores';
-import {
-  $basisOfRecord,
-  $continents,
-  $hasPhoto,
-  $hasSound,
-  $iucn,
-  $licences,
-  $maxUncertainty,
-  $months,
-  $taxonKeys,
-  $yearRange,
-} from '~/stores/explorer';
+import { $groupCounts, type FilterGroupId } from '~/stores/explorer';
 
-export type FilterGroupId = 'what' | 'when' | 'where' | 'how' | 'source';
+export { $groupCounts, type FilterGroupId };
 
 export interface FilterGroupMeta {
   id: FilterGroupId;
@@ -60,28 +49,5 @@ export const FILTER_GROUPS: readonly FilterGroupMeta[] = [
     icon: 'M4 6a8 3 0 1 0 16 0a8 3 0 1 0-16 0M4 6v6a8 3 0 0 0 16 0V6M4 12v6a8 3 0 0 0 16 0v-6',
   },
 ];
-
-/** Active filters per group (each control that is set counts once). */
-export const $groupCounts = computed(
-  [
-    $taxonKeys,
-    $iucn,
-    $yearRange,
-    $months,
-    $continents,
-    $maxUncertainty,
-    $basisOfRecord,
-    $hasPhoto,
-    $hasSound,
-    $licences,
-  ],
-  (taxa, iucn, years, months, continents, uncert, basis, photo, sound, licences): Record<FilterGroupId, number> => ({
-    what: +(taxa.length > 0) + +(iucn.length > 0),
-    when: +(years !== null) + +(months.length > 0),
-    where: +(continents.length > 0) + +(uncert !== null),
-    how: +(basis.length > 0) + +photo + +sound,
-    source: +(licences.length > 0),
-  }),
-);
 
 export const $activeFilterCount = computed($groupCounts, (c) => Object.values(c).reduce((a, b) => a + b, 0));

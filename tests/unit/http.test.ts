@@ -114,6 +114,69 @@ describe('http client', () => {
     expect(calls).toHaveLength(1);
   });
 
+  describe('aborting a shared request', () => {
+    /** A transport that answers only when told to, and records each request's signal. */
+    function gated() {
+      const signals: AbortSignal[] = [];
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const client = createHttp({
+        base: 'https://api.test',
+        transport: async (_url, init) => {
+          if (init?.signal) signals.push(init.signal);
+          await gate;
+          init?.signal?.throwIfAborted();
+          return json({ n: 1 });
+        },
+      });
+      return { client, signals, release };
+    }
+
+    it('rejects only the caller that aborted', async () => {
+      const { client, signals, release } = gated();
+      const ctrl = new AbortController();
+      const first = client.getJson('/v1/x', undefined, { signal: ctrl.signal });
+      const second = client.getJson('/v1/x');
+      ctrl.abort();
+      release();
+      await expect(first).rejects.toThrow();
+      await expect(second).resolves.toEqual({ n: 1 });
+      expect(signals[0]?.aborted).toBe(false);
+    });
+
+    it('cancels the request once every caller has aborted', async () => {
+      const { client, signals, release } = gated();
+      const a = new AbortController();
+      const b = new AbortController();
+      const pa = client.getJson('/v1/x', undefined, { signal: a.signal });
+      const pb = client.getJson('/v1/x', undefined, { signal: b.signal });
+      a.abort();
+      expect(signals[0]?.aborted).toBe(false);
+      b.abort();
+      expect(signals[0]?.aborted).toBe(true);
+      release();
+      await expect(pa).rejects.toThrow();
+      await expect(pb).rejects.toThrow();
+    });
+
+    it('starts afresh after a cancelled request', async () => {
+      const { client, release } = gated();
+      const ctrl = new AbortController();
+      const first = client.getJson('/v1/x', undefined, { signal: ctrl.signal });
+      ctrl.abort();
+      await expect(first).rejects.toThrow();
+      const again = client.getJson('/v1/x');
+      release();
+      await expect(again).resolves.toEqual({ n: 1 });
+    });
+
+    it('rejects at once when the signal is already aborted', async () => {
+      const { client, signals } = gated();
+      await expect(client.getJson('/v1/x', undefined, { signal: AbortSignal.abort() })).rejects.toThrow();
+      expect(signals).toHaveLength(0);
+    });
+  });
+
   it('parses Retry-After seconds and HTTP dates', () => {
     expect(parseRetryAfter('3')).toBe(3000);
     expect(parseRetryAfter(new Date(10_000).toUTCString(), 4000)).toBe(6000);

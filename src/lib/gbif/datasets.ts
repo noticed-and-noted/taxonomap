@@ -1,7 +1,7 @@
 import { http } from './http';
 import type { Dataset, Organization } from './types';
 
-const WEEK = 7 * 24 * 3_600_000;
+import { WEEK } from '~/lib/util/time';
 
 export function getDataset(key: string): Promise<Dataset> {
   return http().getJson(`/v1/dataset/${key}`, undefined, { ttlMs: WEEK });

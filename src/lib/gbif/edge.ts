@@ -9,10 +9,11 @@
  * never completed. GBIF errors relayed by the Worker carry the header and
  * are handled by normal retry/back-off instead.
  */
+import { MINUTE } from '~/lib/util/time';
 import { GBIF_API_BASE, GBIF_FALLBACK_BASE, GBIF_TILE_BASE } from './config';
 
 export const EDGE_HEADER = 'x-gbif-edge';
-const COOL_DOWN_MS = 5 * 60_000;
+const COOL_DOWN_MS = 5 * MINUTE;
 
 let downUntil = 0;
 const listeners = new Set<() => void>();

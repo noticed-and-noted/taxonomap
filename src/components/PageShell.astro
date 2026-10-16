@@ -1,6 +1,6 @@
 ---
 /**
- * Frame for content pages (species): the site header and a scrolling main
+ * Frame for content pages (species, 404): the site header and a scrolling main
  * area. No map, so these pages stay within the JS budget.
  */
 import SiteHeader from './SiteHeader.astro';
@@ -9,7 +9,7 @@ import StaleNotice from './vue/StaleNotice.vue';
 ---
 
 <div class="page-shell">
-  <SiteHeader />
+  <SiteHeader search="about" />
   <main id="main" tabindex="-1">
     <slot />
   </main>

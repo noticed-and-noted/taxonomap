@@ -18,6 +18,7 @@
  * taxon's rank is used. Taxa with no match fall back to source C.
  */
 import pLimit from 'p-limit';
+import { HOUR } from '~/lib/util/time';
 import {
   findImages,
   http,
@@ -61,7 +62,7 @@ async function inatRecord(key: number, opts: Opts): Promise<{ taxonId?: number; 
     http().getJson<OccurrenceSearch>(
       '/v1/occurrence/search',
       { taxonKey: key, datasetKey: INATURALIST_DATASET_KEY, limit: 1 },
-      { ttlMs: 6 * 3_600_000, ...(opts.signal && { signal: opts.signal }) },
+      { ttlMs: 6 * HOUR, ...(opts.signal && { signal: opts.signal }) },
     ),
   );
   const r = res.results[0];

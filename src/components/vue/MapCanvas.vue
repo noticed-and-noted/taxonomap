@@ -8,18 +8,8 @@
  * (overlay, omnibox, panel) drive it without importing it.
  */
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type {
-  ExpressionSpecification,
-  GeoJSONSource,
-  LayerSpecification,
-  Map as MlMap,
-  MapGeoJSONFeature,
-  MapMouseEvent,
-  StyleSpecification,
-  VectorTileSource,
-} from 'maplibre-gl';
+import type { GeoJSONSource, Map as MlMap, MapGeoJSONFeature, MapMouseEvent, VectorTileSource } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { BASEMAPS, type BasemapId } from '~/lib/basemaps';
 import { compact } from '~/lib/format';
 import {
   $gbifStale,
@@ -28,12 +18,18 @@ import {
   markEdgeDown,
   occurrenceTileTemplate,
   onEdgeChange,
-  polygonToWkt,
   searchOccurrences,
   type TileFilter,
 } from '~/lib/gbif';
-import { circleRing } from '~/lib/gbif/params';
-import { MAX_ZOOM_STOP, rampColors, thresholdsAt } from '~/lib/ramp';
+import {
+  buildStyle,
+  EMPTY,
+  geometryOf,
+  nearGeoJson,
+  OCC_LAYERS,
+  selectedGeoJson,
+  type MapColors,
+} from '~/lib/map/style';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { PIN_CURSOR } from './pinCursors';
 import {
@@ -47,19 +43,13 @@ import {
   $selectedHex,
   $selectedRecord,
   $showRecords,
-  $tileFilter,
   $panel,
   clearHexSelection,
+  sameView,
   type FlyRequest,
-  type HexGeometry,
 } from '~/stores/explorer';
 
 const HEX_PER_TILE = 28;
-const OCC_LAYERS = ['occ-fill'];
-const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
-/** Glyphs for our own labels (cluster counts), also used on raster basemaps. */
-const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
-const FONT = ['Noto Sans Bold'];
 
 const container = ref<HTMLDivElement>();
 const loading = ref(true);
@@ -80,223 +70,35 @@ function occTiles(f: TileFilter): string[] {
   return [occurrenceTileTemplate(f, { hexPerTile: HEX_PER_TILE }, 'mvt')];
 }
 
-/** Zoom-interpolated log bins (see lib/ramp.ts); matches the legend. */
-function fillColor(): ExpressionSpecification {
-  const c = rampColors();
-  const stops: unknown[] = [];
-  for (let z = 0; z <= MAX_ZOOM_STOP; z++) {
-    const step: unknown[] = ['step', ['get', 'total'], c[0]];
-    thresholdsAt(z).forEach((t, i) => step.push(t, c[i + 1]));
-    stops.push(z, step);
-  }
-  return ['interpolate', ['linear'], ['zoom'], ...stops] as ExpressionSpecification;
-}
-
-const styleCache = new Map<string, Promise<StyleSpecification | null>>();
-
-/** Fetch (once) a vector basemap style; null if it cannot be loaded. */
-function fetchStyle(url: string): Promise<StyleSpecification | null> {
-  let p = styleCache.get(url);
-  if (!p) {
-    p = fetch(url)
-      .then((r) => (r.ok ? (r.json() as Promise<StyleSpecification>) : null))
-      .catch(() => null);
-    styleCache.set(url, p);
-  }
-  return p;
-}
-
-/** Our data sources and layers, shared by every basemap. */
-function overlay(): {
-  sources: StyleSpecification['sources'];
-  data: LayerSpecification[];
-  top: LayerSpecification[];
-} {
-  const accent = css('--accent', '#f0b443');
-  const bg = css('--bg', '#0e1813');
-  const text = css('--text', '#f2ede2');
-  const occ = {
-    type: 'vector' as const,
-    tiles: occTiles($tileFilter.get()),
-    maxzoom: 14,
-    attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
-  };
+/** Theme colours from the CSS custom properties (fallbacks match the dark theme). */
+function colors(): MapColors {
   return {
-    sources: {
-      occ,
-      hover: { type: 'geojson', data: EMPTY },
-      selected: { type: 'geojson', data: selectedGeoJson($hexGeometry.get()) },
-      records: { type: 'geojson', data: lastRecords, cluster: true, clusterRadius: 40, clusterMaxZoom: 14 },
-      near: { type: 'geojson', data: nearGeoJson() },
-    },
-    // Drawn below basemap labels.
-    data: [
-      {
-        id: 'occ-fill',
-        type: 'fill',
-        source: 'occ',
-        'source-layer': 'occurrence',
-        paint: {
-          'fill-color': fillColor(),
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.78, 8, 0.66],
-          'fill-antialias': true,
-        },
-      },
-    ],
-    // Drawn above everything.
-    top: [
-      { id: 'hover-line', type: 'line', source: 'hover', paint: { 'line-color': text, 'line-width': 1.5 } },
-      { id: 'selected-line', type: 'line', source: 'selected', paint: { 'line-color': accent, 'line-width': 3 } },
-      {
-        id: 'near-area',
-        type: 'fill',
-        source: 'near',
-        filter: ['==', ['geometry-type'], 'Polygon'],
-        paint: { 'fill-color': accent, 'fill-opacity': 0.08 },
-      },
-      {
-        id: 'near-edge',
-        type: 'line',
-        source: 'near',
-        filter: ['==', ['geometry-type'], 'Polygon'],
-        paint: { 'line-color': accent, 'line-width': 2, 'line-dasharray': [2, 1.5] },
-      },
-      {
-        id: 'near-pin',
-        type: 'circle',
-        source: 'near',
-        filter: ['==', ['geometry-type'], 'Point'],
-        paint: { 'circle-color': accent, 'circle-radius': 7, 'circle-stroke-color': bg, 'circle-stroke-width': 3 },
-      },
-      {
-        id: 'record-clusters',
-        type: 'circle',
-        source: 'records',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': accent,
-          'circle-opacity': 0.9,
-          'circle-stroke-color': bg,
-          'circle-stroke-width': 2,
-          'circle-radius': ['step', ['get', 'point_count'], 12, 10, 16, 50, 22],
-        },
-      },
-      {
-        id: 'record-count',
-        type: 'symbol',
-        source: 'records',
-        filter: ['has', 'point_count'],
-        layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': FONT, 'text-size': 12 },
-        paint: { 'text-color': css('--accent-contrast', '#1d1404') },
-      },
-      {
-        id: 'record-points',
-        type: 'circle',
-        source: 'records',
-        filter: ['!', ['has', 'point_count']],
-        paint: { 'circle-color': accent, 'circle-radius': 6, 'circle-stroke-color': bg, 'circle-stroke-width': 2 },
-      },
-    ],
+    accent: css('--accent', '#f0b443'),
+    accentContrast: css('--accent-contrast', '#1d1404'),
+    bg: css('--bg', '#0e1813'),
+    text: css('--text', '#f2ede2'),
   };
 }
 
-async function buildStyle(basemap: BasemapId): Promise<StyleSpecification> {
-  const t = theme();
-  const bg = css('--bg', '#0e1813');
-  const src = BASEMAPS[basemap].source(t);
-  const ours = overlay();
-  const globe: Pick<StyleSpecification, 'projection' | 'sky'> = {
-    projection: { type: 'globe' },
-    sky: {
-      'sky-color': bg,
-      'horizon-color': bg,
-      'fog-color': bg,
-      'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 0.6, 5, 0.2, 7, 0],
-    },
-  };
+/** The "near me" pin and circle, shown only while the map is in pin mode. */
+const nearData = () => nearGeoJson($mapMode.get() === 'pin' ? $nearAt.get() : null, $nearRadius.get());
 
-  const base = src.kind === 'vector' ? await fetchStyle(src.styleUrl) : null;
-  if (base) {
-    // Insert the data below the first label layer so place names stay legible.
-    const firstSymbol = base.layers.findIndex((l) => l.type === 'symbol');
-    const cut = firstSymbol === -1 ? base.layers.length : firstSymbol;
-    const text = css('--text', '#f2ede2');
-    const layers = base.layers.map((l): LayerSpecification => {
-      if (l.type === 'background') return { ...l, paint: { ...l.paint, 'background-color': bg } };
-      // Roads and rivers show through the semi-transparent hexes; keep them for close zooms.
-      if (l.type === 'line' && /waterway|highway|road|railway|aeroway/.test(l.id)) {
-        return { ...l, minzoom: Math.max(l.minzoom ?? 0, 8) };
-      }
-      // Labels sit on top of the data, so give them theme colours and a halo.
-      if (l.type === 'symbol') {
-        // Keep the data readable: only country/continent names below z5.
-        const major = /country|continent/.test(l.id);
-        return {
-          ...l,
-          ...(!major && { minzoom: Math.max(l.minzoom ?? 0, 5) }),
-          paint: { ...l.paint, 'text-color': text, 'text-halo-color': bg, 'text-halo-width': 1.4, 'text-opacity': 0.9 },
-        };
-      }
-      return l;
-    });
-    return {
-      ...base,
-      ...globe,
-      sources: { ...base.sources, ...ours.sources },
-      layers: [...layers.slice(0, cut), ...ours.data, ...layers.slice(cut), ...ours.top],
-    };
-  }
-
-  // Raster basemap (or vector style unavailable: plain background).
-  const raster = src.kind === 'raster' ? src : null;
-  return {
-    version: 8,
-    glyphs: GLYPHS,
-    ...globe,
-    sources: {
-      ...(raster && {
-        base: {
-          type: 'raster',
-          tiles: raster.tiles,
-          tileSize: raster.tileSize,
-          maxzoom: raster.maxzoom,
-          attribution: raster.attribution,
-        },
-      }),
-      ...ours.sources,
-    },
-    layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': bg } },
-      ...(raster ? [{ id: 'base', type: 'raster' as const, source: 'base', paint: { 'raster-opacity': 0.9 } }] : []),
-      ...ours.data,
-      ...ours.top,
-    ],
-  };
+/** Replace a GeoJSON source's data, if the style has that source yet. */
+function setData(source: string, data: GeoJSON.GeoJSON) {
+  (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
-/** Pin + radius circle for "near me" (only while the map is in pin mode). */
-function nearGeoJson(): GeoJSON.FeatureCollection {
-  const at = $nearAt.get();
-  if ($mapMode.get() !== 'pin' || !at) return EMPTY;
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'Polygon', coordinates: [circleRing(at.lat, at.lng, $nearRadius.get())] },
-      },
-      { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [at.lng, at.lat] } },
-    ],
-  };
-}
+/** Point the occurrence source at new tile URLs (filters changed, or the edge cache went down). */
+const setOccTiles = () =>
+  (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles($occurrenceFilter.get()));
 
-function selectedGeoJson(g: HexGeometry | null): GeoJSON.FeatureCollection {
-  if (!g) return EMPTY;
-  return {
-    type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [g.ring] } }],
-  };
+function styleFor() {
+  return buildStyle($basemap.get(), theme(), colors(), {
+    tiles: occTiles($occurrenceFilter.get()),
+    selected: selectedGeoJson($hexGeometry.get()),
+    records: lastRecords,
+    near: nearData(),
+  });
 }
 
 /** Pick the most informative hex under a point (edge cells can be split across tiles). */
@@ -304,14 +106,6 @@ function hexAt(point: { x: number; y: number }): MapGeoJSONFeature | undefined {
   if (!map) return undefined;
   const feats = map.queryRenderedFeatures([point.x, point.y], { layers: OCC_LAYERS });
   return feats.sort((a, b) => Number(b.properties['total'] ?? 0) - Number(a.properties['total'] ?? 0))[0];
-}
-
-function geometryOf(f: MapGeoJSONFeature): HexGeometry | null {
-  const g = f.geometry;
-  const ring = g.type === 'Polygon' ? g.coordinates[0] : g.type === 'MultiPolygon' ? g.coordinates[0]?.[0] : undefined;
-  if (!ring || ring.length < 4) return null;
-  const r = ring.map((p) => [p[0] as number, p[1] as number] as [number, number]);
-  return { ring: r, wkt: polygonToWkt(r), tileTotal: Number(f.properties['total'] ?? 0) };
 }
 
 function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
@@ -349,7 +143,7 @@ async function loadRecords() {
   const geom = $hexGeometry.get();
   if (!map || !$showRecords.get() || !geom) {
     lastRecords = EMPTY;
-    (map?.getSource('records') as GeoJSONSource | undefined)?.setData(EMPTY);
+    setData('records', EMPTY);
     return;
   }
   try {
@@ -370,7 +164,7 @@ async function loadRecords() {
   } catch {
     lastRecords = EMPTY;
   }
-  (map.getSource('records') as GeoJSONSource | undefined)?.setData(lastRecords);
+  setData('records', lastRecords);
 }
 
 function fly(req: FlyRequest) {
@@ -394,14 +188,16 @@ function onMove(e: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   if ($mapMode.get() === 'pin') return;
   const f = hexAt(e.point);
-  const hover = map?.getSource('hover') as GeoJSONSource | undefined;
   if (!f) {
-    hover?.setData(EMPTY);
+    setData('hover', EMPTY);
     tooltip.value = null;
     map!.getCanvas().style.cursor = '';
     return;
   }
-  hover?.setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: f.geometry }] });
+  setData('hover', {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: {}, geometry: f.geometry }],
+  });
   const total = Number(f.properties['total'] ?? 0);
   tooltip.value = { x: e.point.x, y: e.point.y, text: `${compact(total)} record${total === 1 ? '' : 's'}` };
   map!.getCanvas().style.cursor = 'pointer';
@@ -445,19 +241,11 @@ function onKey(e: KeyboardEvent) {
   }
 }
 
-function sameView(a: { lng: number; lat: number; zoom: number }, b: { lng: number; lat: number; zoom: number }) {
-  return (
-    a.lng.toFixed(2) === b.lng.toFixed(2) &&
-    a.lat.toFixed(2) === b.lat.toFixed(2) &&
-    a.zoom.toFixed(1) === b.zoom.toFixed(1)
-  );
-}
-
 let styleSeq = 0;
 async function rebuildStyle() {
   if (!map) return;
   const mine = ++styleSeq;
-  const style = await buildStyle($basemap.get());
+  const style = await styleFor();
   if (map && mine === styleSeq) map.setStyle(style, { diff: false });
 }
 
@@ -471,7 +259,7 @@ onMounted(async () => {
   ml.setWorkerUrl(worker.default);
   if (!container.value) return;
   const v = $mapView.get();
-  const style = await buildStyle($basemap.get());
+  const style = await styleFor();
   if (!container.value) return;
   map = new ml.Map({
     container: container.value,
@@ -542,7 +330,7 @@ onMounted(async () => {
   map.on('mousemove', onMove);
   map.on('mouseout', () => {
     tooltip.value = null;
-    (map?.getSource('hover') as GeoJSONSource | undefined)?.setData(EMPTY);
+    setData('hover', EMPTY);
   });
   map.on('click', onClick);
   map.on('dataloading', () => (loading.value = true));
@@ -567,9 +355,9 @@ onMounted(async () => {
 
   // Store → map
   cleanups.push(
-    $tileFilter.listen((f) => (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles(f))),
+    $occurrenceFilter.listen(setOccTiles),
     // Edge went down or came back: re-point the tile source.
-    onEdgeChange(() => (map?.getSource('occ') as VectorTileSource | undefined)?.setTiles(occTiles($tileFilter.get()))),
+    onEdgeChange(setOccTiles),
     $basemap.listen(() => void rebuildStyle()),
     $mapView.listen((v) => {
       if (!map) return;
@@ -578,7 +366,7 @@ onMounted(async () => {
         map.jumpTo({ center: [v.lng, v.lat], zoom: v.zoom });
     }),
     $hexGeometry.subscribe((g) => {
-      (map?.getSource('selected') as GeoJSONSource | undefined)?.setData(selectedGeoJson(g));
+      setData('selected', selectedGeoJson(g));
       void loadRecords();
     }),
     $selectedHex.listen((p) => {
@@ -589,12 +377,10 @@ onMounted(async () => {
     $mapMode.subscribe((mode) => {
       if (!map) return;
       tooltip.value = null;
-      (map.getSource('hover') as GeoJSONSource | undefined)?.setData(EMPTY);
+      setData('hover', EMPTY);
       map.getCanvas().style.cursor = mode === 'pin' ? PIN_CURSOR : '';
     }),
-    ...[$nearAt, $nearRadius, $mapMode].map((s) =>
-      s.listen(() => (map?.getSource('near') as GeoJSONSource | undefined)?.setData(nearGeoJson())),
-    ),
+    ...[$nearAt, $nearRadius, $mapMode].map((s) => s.listen(() => setData('near', nearData()))),
     $occurrenceFilter.listen(() => void loadRecords()),
     $flyTo.subscribe((req) => {
       if (!req) return;

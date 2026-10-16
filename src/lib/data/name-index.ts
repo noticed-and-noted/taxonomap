@@ -1,8 +1,8 @@
 import type { NameHit, NameSearchProvider } from '~/lib/gbif/names';
+import type { Rank } from '~/lib/gbif/types';
 import { loadSnapshot } from './load';
+import { RANK_BY_CODE } from './ranks';
 import type { NameRow } from './types';
-
-const RANKS = { K: 'KINGDOM', P: 'PHYLUM', C: 'CLASS', O: 'ORDER', F: 'FAMILY', G: 'GENUS', S: 'SPECIES' } as const;
 
 /** Lower-case, strip accents and punctuation. */
 export function normalise(s: string): string {
@@ -15,8 +15,23 @@ export function normalise(s: string): string {
     .trim();
 }
 
+/** One taxon in the index. */
+export interface IndexedName {
+  key: number;
+  rank: Rank;
+  scientificName: string;
+  commonName?: string;
+  /** Occurrence records. */
+  count: number;
+}
+
+/** The baked row format, [key, rank code, scientific name, common name | null, count], decoded. */
+function decode([key, code, scientificName, commonName, count]: NameRow): IndexedName {
+  return { key, rank: RANK_BY_CODE[code], scientificName, ...(commonName && { commonName }), count };
+}
+
 interface Entry {
-  row: NameRow;
+  name: IndexedName;
   common: string;
   sci: string;
 }
@@ -38,9 +53,15 @@ function score(text: string, q: string, qWords: string[]): number {
 
 export class NameIndex {
   readonly #entries: Entry[];
+  readonly #byKey: Map<number, IndexedName>;
 
   constructor(rows: readonly NameRow[]) {
-    this.#entries = rows.map((row) => ({ row, common: normalise(row[3] ?? ''), sci: normalise(row[2]) }));
+    this.#entries = rows.map(decode).map((name) => ({
+      name,
+      common: normalise(name.commonName ?? ''),
+      sci: normalise(name.scientificName),
+    }));
+    this.#byKey = new Map(this.#entries.map((e) => [e.name.key, e.name]));
   }
 
   search(query: string, limit = 8): NameHit[] {
@@ -54,18 +75,11 @@ export class NameIndex {
     }
     // Rows are pre-sorted by count; sort is stable, so ties keep count order.
     hits.sort((a, b) => b.s - a.s);
-    return hits.slice(0, limit).map(({ e: { row } }) => ({
-      key: row[0],
-      rank: RANKS[row[1]],
-      scientificName: row[2],
-      ...(row[3] && { commonName: row[3] }),
-      count: row[4],
-      source: 'index' as const,
-    }));
+    return hits.slice(0, limit).map(({ e }) => ({ ...e.name, source: 'index' as const }));
   }
 
-  get(key: number): NameRow | undefined {
-    return this.#entries.find((e) => e.row[0] === key)?.row;
+  get(key: number): IndexedName | undefined {
+    return this.#byKey.get(key);
   }
 }
 

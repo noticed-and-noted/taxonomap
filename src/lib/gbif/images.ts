@@ -1,3 +1,4 @@
+import { HOUR } from '~/lib/util/time';
 import { apiBase } from './edge';
 import { http } from './http';
 import { md5 } from './md5';
@@ -21,7 +22,7 @@ export async function findImages(
       limit: opts.limit ?? 24,
       offset: opts.offset,
     },
-    { ttlMs: 6 * 3_600_000, ...(opts.signal && { signal: opts.signal }) },
+    { ttlMs: 6 * HOUR, ...(opts.signal && { signal: opts.signal }) },
   );
   // Species names come free with the records (useful when batching species).
   const names = new Map<number, string>();

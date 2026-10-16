@@ -3,6 +3,7 @@
  * the Node transport (User-Agent, concurrency cap, disk cache). Use it from
  * Astro frontmatter, getStaticPaths, endpoints and scripts — never islands.
  */
+import { DAY } from '~/lib/util/time';
 import { GBIF_FALLBACK_BASE } from './config';
 import { configureHttp } from './http';
 import { createNodeTransport } from './node-transport';
@@ -12,7 +13,7 @@ import { createNodeTransport } from './node-transport';
 configureHttp({
   base: GBIF_FALLBACK_BASE,
   transport: createNodeTransport(),
-  defaultTtlMs: 24 * 3_600_000,
+  defaultTtlMs: DAY,
   cacheSize: 5000,
 });
 

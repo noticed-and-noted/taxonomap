@@ -2,8 +2,7 @@ import { BACKBONE_DATASET_KEY } from './config';
 import { http } from './http';
 import type { MatchV1, MatchV2, NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
 
-const DAY = 24 * 3_600_000;
-const HOUR = 3_600_000;
+import { DAY, HOUR } from '~/lib/util/time';
 
 export function getSpecies(key: number, signal?: AbortSignal): Promise<NameUsage> {
   return http().getJson(`/v1/species/${key}`, undefined, { ttlMs: DAY, ...(signal && { signal }) });

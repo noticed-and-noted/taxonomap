@@ -8,7 +8,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { full } from '~/lib/format';
-import { classifyError, RADIUS_STEPS_KM, type UiErrorKind } from '~/lib/gbif';
+import { RADIUS_STEPS_KM } from '~/lib/gbif';
 import {
   classesNear,
   NEAR_CLASSES,
@@ -30,6 +30,7 @@ import ShareDialog from './ShareDialog.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
 import ThumbImage from './ThumbImage.vue';
+import { perGroupNote, useLatestLoad } from './useLatestLoad';
 import { useScrollFade } from './useScrollFade';
 
 const at = useStore($nearAt);
@@ -42,8 +43,7 @@ const monthName = new Date().toLocaleString('en', { month: 'long' });
 
 const panelOpen = ref(true);
 const geoState = ref<'idle' | 'asking' | 'denied' | 'unavailable'>('idle');
-const loading = ref(false);
-const error = ref<UiErrorKind | null>(null);
+const { loading, error, run: runArea, cancel: cancelArea } = useLatestLoad();
 const total = ref(0);
 
 const classes = shallowRef<ClassGroup[]>([]);
@@ -60,9 +60,6 @@ const recentLoading = ref(false);
 const recentError = ref(false);
 const shareOpen = ref(false);
 const tallies = shallowRef<Awaited<ReturnType<typeof speciesTallies>> | null>(null);
-let seq = 0;
-/** Aborts the previous area's remaining requests when the pin or radius changes. */
-let ctrl: AbortController | undefined;
 
 const area = computed<Area | null>(() =>
   at.value
@@ -70,11 +67,7 @@ const area = computed<Area | null>(() =>
     : null,
 );
 const radiusIndex = computed(() => (RADIUS_STEPS_KM as readonly number[]).indexOf(radius.value));
-const tableNote = computed(() =>
-  classes.value.length > NEAR_CLASSES
-    ? `top ${NEAR_PER_CLASS} in each of the ${NEAR_CLASSES} most-recorded groups`
-    : `top ${NEAR_PER_CLASS} in each group`,
-);
+const tableNote = computed(() => perGroupNote(classes.value.length, NEAR_CLASSES, NEAR_PER_CLASS));
 
 function onRadius(e: Event) {
   const i = Number((e.target as HTMLInputElement).value);
@@ -100,35 +93,29 @@ function locate() {
   );
 }
 
+/** Load the area's groups and species; a new pin or radius aborts the last area's requests. */
 async function loadArea() {
   const a = area.value;
-  const mine = ++seq;
-  ctrl?.abort();
-  ctrl = new AbortController();
-  const { signal } = ctrl;
   classes.value = [];
   species.value = [];
   recent.value = null;
   tallies.value = null;
-  error.value = null;
-  if (!a) return;
+  if (!a) {
+    cancelArea();
+    error.value = null;
+    return;
+  }
   $flyTo.set({ kind: 'point', lng: a.lng, lat: a.lat, zoom: zoomForRadius(a.radiusKm) });
-  loading.value = true;
-  try {
+  await runArea(async (signal) => {
     const r = await classesNear(a, signal);
-    if (mine !== seq) return;
+    if (signal.aborted) return;
     total.value = r.records;
     if (tab.value === 'recent') void loadRecent();
     const rows = await speciesNear(a, r.classes, signal);
-    if (mine !== seq) return;
+    if (signal.aborted) return;
     classes.value = r.classes;
     species.value = rows;
-    loading.value = false;
-  } catch (e) {
-    if (mine === seq) error.value = classifyError(e);
-  } finally {
-    if (mine === seq) loading.value = false;
-  }
+  });
 }
 
 async function loadRecent() {
@@ -168,7 +155,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   $mapMode.set('explore');
-  ctrl?.abort();
 });
 </script>
 

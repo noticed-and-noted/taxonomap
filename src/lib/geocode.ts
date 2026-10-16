@@ -3,6 +3,7 @@
  * policy forbids autocomplete. The provider is configurable
  * (PUBLIC_GEOCODER = nominatim | photon, PUBLIC_GEOCODER_URL).
  */
+import { env } from '~/lib/env';
 
 export interface Place {
   name: string;
@@ -13,8 +14,6 @@ export interface Place {
   bbox?: [number, number, number, number];
 }
 
-type Env = Record<string, string | undefined>;
-const env = ((import.meta as unknown as { env?: Env }).env ?? {}) as Env;
 const PROVIDER = (env['PUBLIC_GEOCODER'] || 'nominatim') as 'nominatim' | 'photon';
 const BASE =
   env['PUBLIC_GEOCODER_URL'] ||

@@ -85,7 +85,7 @@ export async function recentSightings(a: Area, limit = 24, signal?: AbortSignal)
   );
   return rows.map(({ o, img }) => {
     const sk = o.speciesKey ?? o.taxonKey;
-    const common = sk !== undefined ? idx?.get(sk)?.[3] : undefined;
+    const common = sk !== undefined ? idx?.get(sk)?.commonName : undefined;
     const title = titles.get(o.datasetKey);
     return {
       occurrence: o,
@@ -113,7 +113,7 @@ export async function speciesTallies(
     const topNames = rows
       .slice(0, 6)
       .map((c) => idx?.get(Number(c.name)))
-      .map((row) => row?.[3] ?? row?.[2])
+      .map((n) => n?.commonName ?? n?.scientificName)
       .filter((n): n is string => !!n)
       .slice(0, 3);
     return { species: rows.length, topNames };

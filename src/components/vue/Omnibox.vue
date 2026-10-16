@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * Header search (client:idle). On the map, a species or group pick adds it
- * to the What filter's taxa (records of any are shown); on the tree it moves
- * the tree there (the filter is left alone); on About pages it opens that
- * result's About page; elsewhere a pick replaces the taxon. Species: the
- * baked common-name index answers instantly; live GBIF providers (scientific suggest + vernacular search)
- * are debounced 250 ms. Places: geocoder on submit only (Nominatim policy).
+ * Header search (client:idle). What a species or group pick does depends on
+ * the page (`mode`): on the map it adds it to the What filter's taxa (records
+ * of any are shown); on the tree it moves the tree there (the filter is left
+ * alone); on other pages it opens that result's About page. Species: see
+ * useNameSearch. Places: geocoder on submit only (Nominatim policy).
  * The highlighted species result (or the first, before you arrow) is
  * previewed beside the list, with a link to its About page; Cmd/Ctrl-Enter
  * opens that page. ARIA 1.2 combobox with a listbox popup.
@@ -13,35 +12,45 @@
 import { navigate } from 'astro:transitions/client';
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { bakedIndexProvider, loadNameIndex, nameIndexWithin } from '~/lib/data/name-index';
+import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { searchPlaces, type Place } from '~/lib/geocode';
-import { gbifSuggestProvider, gbifVernacularProvider, mapCapabilities, type NameHit } from '~/lib/gbif';
-import { debounce } from '~/lib/util/debounce';
+import { mapCapabilities, type NameHit } from '~/lib/gbif';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
-import { $flyTo, MAX_TAXA as MAX_SELECTED } from '~/stores/explorer';
-import { addTaxon, setOnlyTaxon, type TaxonInfo } from '~/stores/taxon';
+import { $flyTo, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
+import { hrefWith } from '~/stores/url-sync';
 import TaxonPreview from './TaxonPreview.vue';
+import { useNameSearch } from './useNameSearch';
+
+/** What picking a species or group does: add it to the map, move the tree there, or open its About page. */
+export type SearchMode = 'map' | 'tree' | 'about';
+const props = defineProps<{ mode: SearchMode }>();
 
 type Option =
   | { kind: 'taxon'; id: string; hit: NameHit }
   | { kind: 'place-search'; id: string }
   | { kind: 'place'; id: string; place: Place };
 
-const MAX_TAXA = 8;
+/** Species and group results shown at once. */
+const MAX_RESULTS = 8;
 const query = ref('');
 const open = ref(false);
 const active = ref(-1);
-const indexHits = ref<NameHit[]>([]);
-const liveHits = ref<NameHit[]>([]);
+const {
+  hits: taxa,
+  loading: liveLoading,
+  failed: liveFailed,
+  search,
+  reset: resetSearch,
+} = useNameSearch({
+  max: MAX_RESULTS,
+});
 const places = ref<Place[] | null>(null);
-const liveLoading = ref(false);
-const liveFailed = ref(false);
 const placeLoading = ref(false);
 const placeFailed = ref(false);
 const input = ref<HTMLInputElement>();
-let liveAbort: AbortController | undefined;
 
 /* Short note shown under the box when a pick could not be applied (the What list is full). */
 const notice = ref('');
@@ -51,20 +60,6 @@ function announce(text: string) {
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => (notice.value = ''), 5000);
 }
-
-const taxa = computed(() => {
-  const seen = new Set<number>();
-  const out: NameHit[] = [];
-  // Live scientific matches are mostly noise once the index has answers.
-  const live = indexHits.value.length ? liveHits.value.slice(0, 3) : liveHits.value;
-  for (const h of [...indexHits.value, ...live]) {
-    if (seen.has(h.key)) continue;
-    seen.add(h.key);
-    out.push(h);
-    if (out.length >= MAX_TAXA) break;
-  }
-  return out;
-});
 
 const options = computed<Option[]>(() => {
   if (places.value) return places.value.map((place, i) => ({ kind: 'place', id: `omni-place-${i}`, place }));
@@ -99,55 +94,27 @@ const enterLabel = computed(() => {
   return 'Search places';
 });
 
-function openAbout(hit: NameHit) {
-  const href = aboutHref(hit);
+/** Empty the box and put the list away once a result is picked. */
+function finishPick() {
   query.value = '';
-  indexHits.value = [];
-  liveHits.value = [];
+  places.value = null;
+  resetSearch();
   close();
   input.value?.blur();
+}
+
+function openAbout(hit: NameHit) {
+  const href = aboutHref(hit);
+  finishPick();
   void navigate(href);
 }
-
-async function runIndex(q: string) {
-  indexHits.value = await bakedIndexProvider.search(q);
-}
-
-const runLive = debounce(async (q: string) => {
-  liveAbort?.abort();
-  if (q.trim().length < 3) {
-    liveHits.value = [];
-    liveLoading.value = false;
-    return;
-  }
-  const ctrl = new AbortController();
-  liveAbort = ctrl;
-  liveLoading.value = true;
-  liveFailed.value = false;
-  // Let the local index answer first, so live results never reorder the list
-  // under the pointer, and decide on the vernacular search with it loaded.
-  await nameIndexWithin(1500);
-  await runIndex(q);
-  if (ctrl.signal.aborted) return;
-  const results = await Promise.allSettled([
-    gbifSuggestProvider.search(q, ctrl.signal),
-    // Vernacular search ranks poorly, so only use it when the index is thin.
-    indexHits.value.length < 3 ? gbifVernacularProvider.search(q, ctrl.signal) : Promise.resolve([]),
-  ]);
-  if (ctrl.signal.aborted) return;
-  liveHits.value = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-  liveFailed.value = results.every((r) => r.status === 'rejected');
-  liveLoading.value = false;
-}, 250);
 
 function onInput() {
   places.value = null;
   placeFailed.value = false;
   open.value = true;
   active.value = -1;
-  const q = query.value;
-  void runIndex(q);
-  runLive(q);
+  search(query.value);
 }
 
 function onFocus() {
@@ -178,49 +145,27 @@ async function runPlaceSearch() {
   }
 }
 
-function onMapPage() {
-  return window.location.pathname === '/' || window.location.pathname === '';
-}
-const onTreePage = () => /^\/tree\/?$/.test(window.location.pathname);
-const onAboutPage = () => window.location.pathname.startsWith('/species/');
-
-/** Label for picking a result in place; undefined on About pages, where a pick opens its About page. */
+/** Label for picking a result in place; undefined where a pick opens its About page. */
 function selectLabel(): string | undefined {
-  if (onMapPage()) return 'Add to map';
-  if (onTreePage()) return 'Show in tree';
-  if (onAboutPage()) return undefined;
-  return 'Select';
+  if (props.mode === 'map') return 'Add to map';
+  if (props.mode === 'tree') return 'Show in tree';
+  return undefined;
 }
 
 async function pickTaxon(hit: NameHit) {
-  if (onAboutPage()) {
+  if (props.mode === 'about') {
     openAbout(hit);
     return;
   }
-  const info: TaxonInfo = {
-    key: hit.key,
-    scientificName: hit.scientificName,
-    rank: hit.rank,
-    ...(hit.commonName && { commonName: hit.commonName }),
-  };
-  query.value = '';
-  indexHits.value = [];
-  liveHits.value = [];
-  close();
-  input.value?.blur();
+  finishPick();
   // The tree browses on its own; only "View on map" there touches the filter.
-  if (onTreePage()) {
+  if (props.mode === 'tree') {
     $treeFocus.set(hit.key);
     return;
   }
-  // Other pages follow a single taxon, so a pick there replaces it.
-  if (!onMapPage()) {
-    setOnlyTaxon(info);
-    return;
-  }
-  const result = addTaxon(info);
+  const result = addTaxon(taxonFromHit(hit));
   if (result === 'full') {
-    announce(`You can show up to ${MAX_SELECTED} species or groups. Remove one in the What filter first.`);
+    announce(`You can show up to ${MAX_TAXA} species or groups. Remove one in the What filter first.`);
     return;
   }
   try {
@@ -234,14 +179,9 @@ async function pickTaxon(hit: NameHit) {
 }
 
 function pickPlace(p: Place) {
-  close();
-  query.value = '';
-  places.value = null;
-  input.value?.blur();
-  const zoom = p.bbox ? undefined : 10;
-  if (!onMapPage()) {
-    const z = zoom ?? 8;
-    void navigate(`/?view=${p.lng.toFixed(2)},${p.lat.toFixed(2)},${z.toFixed(1)}`);
+  finishPick();
+  if (props.mode !== 'map') {
+    void navigate(hrefWith('/', { view: viewParam({ lng: p.lng, lat: p.lat, zoom: p.bbox ? 8 : 10 }) }));
     return;
   }
   $flyTo.set(
@@ -291,11 +231,7 @@ onMounted(() => {
   }
 });
 
-onBeforeUnmount(() => {
-  runLive.cancel();
-  liveAbort?.abort();
-  clearTimeout(noticeTimer);
-});
+onBeforeUnmount(() => clearTimeout(noticeTimer));
 </script>
 
 <template>

@@ -8,7 +8,7 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
   title="Tree of life"
   description="Browse the tree of life, from kingdoms to species, sized by how often each group has been recorded."
 >
-  <AppShell map="hidden">
+  <AppShell map="hidden" search="tree">
     <TreeExplorer client:only="vue" />
   </AppShell>
 </BaseLayout>

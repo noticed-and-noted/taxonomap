@@ -7,47 +7,33 @@
 import { useStore } from '@nanostores/vue';
 import { ref, watch } from 'vue';
 import { loadSnapshot } from '~/lib/data/load';
-import { classifyError, occurrenceFacets, type UiErrorKind } from '~/lib/gbif';
+import { occurrenceFacets } from '~/lib/gbif';
 import { $occurrenceFilter } from '~/stores/explorer';
+import { useLatestLoad } from './useLatestLoad';
 
 export type YearCounts = Map<number, number>;
 
 export function useYearHistogram() {
   const filter = useStore($occurrenceFilter);
   const counts = ref<YearCounts>(new Map());
-  const loading = ref(true);
-  const error = ref<UiErrorKind | null>(null);
   const live = ref(false);
-  let seq = 0;
+  const { loading, error, run } = useLatestLoad();
 
-  async function load() {
-    const mine = ++seq;
+  function load() {
     const { year: _year, ...rest } = filter.value;
     const filtered = Object.values(rest).some((v) => v !== undefined);
-    loading.value = true;
-    error.value = null;
-    try {
-      let rows: [number, number][];
-      if (!filtered) {
-        const snap = await loadSnapshot('years');
-        if (snap) rows = snap.years;
-        else rows = await fetchLive(rest);
-      } else {
-        rows = await fetchLive(rest);
-      }
-      if (mine !== seq) return;
+    return run(async (signal) => {
+      const snap = filtered ? null : await loadSnapshot('years');
+      const rows = snap ? snap.years : await fetchLive(rest, signal);
+      if (signal.aborted) return;
       counts.value = new Map(rows);
       live.value = filtered;
-    } catch (e) {
-      if (mine === seq) error.value = classifyError(e);
-    } finally {
-      if (mine === seq) loading.value = false;
-    }
+    });
   }
 
-  async function fetchLive(f: Parameters<typeof occurrenceFacets>[0]): Promise<[number, number][]> {
-    const r = await occurrenceFacets(f, ['year'], { facetLimit: 1000 });
-    return (r.facets['year'] ?? []).map((c) => [Number(c.name), c.count]);
+  async function fetchLive(f: Parameters<typeof occurrenceFacets>[0], signal: AbortSignal) {
+    const r = await occurrenceFacets(f, ['year'], { facetLimit: 1000, signal });
+    return (r.facets['year'] ?? []).map((c): [number, number] => [Number(c.name), c.count]);
   }
 
   // Only re-fetch when a non-year filter changes.

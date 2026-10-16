@@ -44,7 +44,7 @@ async function load(key: number) {
     const [d, idx] = await Promise.all([getDataset(o.datasetKey).catch(() => null), nameIndexWithin()]);
     dataset.value = d;
     const sk = o.speciesKey ?? o.taxonKey;
-    commonName.value = (sk !== undefined && idx?.get(sk)?.[3]) || null;
+    commonName.value = (sk !== undefined && idx?.get(sk)?.commonName) || null;
     const orgKey = o.publishingOrgKey ?? d?.publishingOrganizationKey;
     if (orgKey) org.value = await getOrganization(orgKey).catch(() => null);
   } catch (e) {

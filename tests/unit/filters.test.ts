@@ -65,7 +65,20 @@ describe('explorer filter stores', () => {
     });
     expect(e.$taxonKey.get()).toBeNull();
     e.clearFilters();
-    expect(JSON.parse(JSON.stringify(e.$occurrenceFilter.get()))).toEqual({ year: null });
+    expect(e.$occurrenceFilter.get()).toEqual({});
+  });
+
+  it('count set filters per rail group', async () => {
+    const e = await import('~/stores/explorer');
+    e.clearFilters();
+    e.$taxonKeys.set([212]);
+    e.$iucn.set(['VU']);
+    e.$yearRange.set([1990, 2000]);
+    e.$hasPhoto.set(true);
+    e.$hasSound.set(true);
+    expect(e.$groupCounts.get()).toEqual({ what: 2, when: 1, where: 0, how: 2, source: 0 });
+    e.clearFilters();
+    expect(Object.values(e.$groupCounts.get()).every((n) => n === 0)).toBe(true);
   });
 
   it('read a pre-multi-select taxon link as a one-item list', async () => {

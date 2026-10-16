@@ -5,11 +5,11 @@
  */
 import { useStore } from '@nanostores/vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { $dataStale } from '~/stores/status';
+import { $gbifStale } from '~/lib/gbif';
 
-const stale = useStore($dataStale);
+const stale = useStore($gbifStale);
 const offline = ref(false);
-const dismiss = () => $dataStale.set(false);
+const dismiss = () => $gbifStale.set(false);
 const update = () => (offline.value = !navigator.onLine);
 
 onMounted(() => {

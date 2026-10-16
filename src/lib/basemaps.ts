@@ -6,6 +6,7 @@
  * "plain" is an OpenFreeMap vector style that follows the site theme; its
  * label layers are drawn above the occurrence hexes.
  */
+import { env } from '~/lib/env';
 
 export type BasemapId = 'plain' | 'terrain' | 'satellite';
 export type Theme = 'dark' | 'light';
@@ -28,9 +29,6 @@ export interface BasemapDef {
   label: string;
   source: (theme: Theme) => RasterDef | VectorDef;
 }
-
-type Env = Record<string, string | undefined>;
-const env = ((import.meta as unknown as { env?: Env }).env ?? {}) as Env;
 
 export const BASEMAPS: Record<BasemapId, BasemapDef> = {
   plain: {

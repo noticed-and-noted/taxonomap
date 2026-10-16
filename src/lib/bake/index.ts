@@ -13,14 +13,9 @@ import {
   type NameUsage,
   type VernacularName,
 } from '~/lib/gbif/server';
-import type {
-  NameRow,
-  NamesSnapshot,
-  RankCode,
-  TreeNodeRow,
-  TreeSnapshot,
-  YearsSnapshot,
-} from '~/lib/data/types';
+import type { NameRow, NamesSnapshot, TreeNodeRow, TreeSnapshot, YearsSnapshot } from '~/lib/data/types';
+import { CODE_BY_RANK } from '~/lib/data/ranks';
+import { isDev } from '~/lib/env';
 import { englishName } from '~/lib/species/names';
 import { speciesSlug } from '~/lib/species/data';
 
@@ -64,23 +59,9 @@ const SPECIES_GROUPS: { key: number; label: string; share: number }[] = [
   { key: 1354, label: 'Oaks, birches & allies', share: 0.01 },
 ];
 
-const RANK_CODE: Record<string, RankCode> = {
-  KINGDOM: 'K',
-  PHYLUM: 'P',
-  CLASS: 'C',
-  ORDER: 'O',
-  FAMILY: 'F',
-  GENUS: 'G',
-  SPECIES: 'S',
-};
-
-export function isDev(): boolean {
-  return !!(import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV;
-}
-
 /**
  * Index size. Each species costs two small, disk-cached GBIF requests
- * (detail + vernacular names), shared with the species pages in Phase 3.
+ * (detail + vernacular names), shared with the species pages.
  */
 function indexSize(): number {
   const fromEnv = Number(process.env['NAME_INDEX_SIZE']);
@@ -147,7 +128,7 @@ async function higherRanks(): Promise<NameRow[]> {
   const rows: NameRow[] = [];
   for (const [key, count] of counts) {
     const u = usages.get(key);
-    const rank = u && RANK_CODE[u.rank];
+    const rank = u && CODE_BY_RANK[u.rank];
     if (!u || !rank || count < 1000) continue;
     const common =
       (u.vernacularNames && englishName(u.vernacularNames)) ??
@@ -313,10 +294,9 @@ export function bakeTree(): Promise<TreeSnapshot> {
       for (const [key, n] of counts) species.set(key, n);
     }
 
-    const code = { KINGDOM: 'K', PHYLUM: 'P', CLASS: 'C', ORDER: 'O' } as const;
     const nodes: TreeNodeRow[] = [];
     for (const u of usages) {
-      const r = code[u.rank as keyof typeof code];
+      const r = (TREE_RANKS as readonly string[]).includes(u.rank) ? CODE_BY_RANK[u.rank] : undefined;
       const o = records.get(u.key) ?? 0;
       const s = species.get(u.key) ?? (o > 0 ? 1 : 0);
       if (!r || (o === 0 && s === 0)) continue;

@@ -14,6 +14,17 @@ describe('NameIndex', () => {
   // The baked index is sorted by count, descending.
   const idx = new NameIndex([...rows].sort((a, b) => b[4] - a[4]));
 
+  it('looks up a taxon by key, decoded', () => {
+    expect(idx.get(212)).toEqual({
+      key: 212,
+      rank: 'CLASS',
+      scientificName: 'Aves',
+      commonName: 'Birds',
+      count: 900_000_000,
+    });
+    expect(idx.get(1)).toBeUndefined();
+  });
+
   it('finds common names by word prefix, most-recorded first', () => {
     expect(idx.search('robin').map((h) => h.key)).toEqual([9510564, 2492462, 7]);
   });
