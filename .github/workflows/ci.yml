@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # Other branches get CI through pull requests; only main deploys.
   push:
+    branches: [main]
   pull_request:
   schedule:
     # Nightly rebuild refreshes baked data and pre-rendered species pages.
