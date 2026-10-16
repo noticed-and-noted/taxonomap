@@ -12,7 +12,8 @@ UPSTREAM = "https://api.gbif.org"
 # Contact address sent to GBIF in the User-Agent.
 CONTACT_EMAIL = "info@taxonomap.com"
 # Site origins allowed to call the edge (comma-separated). "*" allows any site.
-ALLOWED_ORIGINS = "https://app.taxonomap.com,https://taxonomap.pages.dev"
+# localhost:4321 is where astro dev/preview and the e2e tests run.
+ALLOWED_ORIGINS = "https://app.taxonomap.com,https://taxonomap.pages.dev,http://localhost:4321"
 
 [observability]
 enabled = true
