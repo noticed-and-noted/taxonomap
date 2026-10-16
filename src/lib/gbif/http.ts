@@ -1,6 +1,6 @@
 import { atom } from 'nanostores';
 import { MINUTE } from '~/lib/util/time';
-import { apiBase, isEdgeUrl, markEdgeDown, servedByEdge } from './edge';
+import { GBIF_API_BASE } from './config';
 import { GbifNotFoundError, GbifRequestError, GbifUnavailableError } from './errors';
 import { LruCache } from './lru';
 import { countRequest } from './metrics';
@@ -10,8 +10,7 @@ import { buildUrl, type Params } from './params';
 export type Transport = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
 
 export interface HttpOptions {
-  /** Base URL, or a function so the edge fallback can switch it per attempt. */
-  base: string | (() => string);
+  base: string;
   transport: Transport;
   maxRetries: number;
   baseDelayMs: number;
@@ -44,7 +43,7 @@ export function parseRetryAfter(header: string | null, now = Date.now()): number
 
 export function createHttp(overrides: Partial<HttpOptions> = {}) {
   const opts: HttpOptions = {
-    base: apiBase,
+    base: GBIF_API_BASE,
     transport: (url, init) => globalThis.fetch(url, init),
     maxRetries: 3,
     baseDelayMs: 500,
@@ -76,40 +75,26 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     return step / 2 + opts.random() * (step / 2);
   }
 
-  const baseUrl = () => (typeof opts.base === 'function' ? opts.base() : opts.base);
-
   async function fetchWithRetry(rel: string, signal?: AbortSignal): Promise<unknown> {
     let lastStatus: number | undefined;
-    let url = `${baseUrl()}${rel}`;
+    const url = `${opts.base}${rel}`;
     let waited = false;
     for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
       // A request that just slept its own back-off has already waited.
       const cool = coolUntil - opts.now();
       if (cool > 0 && !waited) await opts.sleep(cool);
       waited = false;
-      url = `${baseUrl()}${rel}`;
       let res: Response;
-      countRequest('json', url);
+      countRequest('json');
       try {
         res = await opts.transport(url, signal ? { signal } : undefined);
       } catch (err) {
         if (signal?.aborted) throw err;
         lastStatus = undefined;
-        // Edge unreachable (or a CORS-less platform error): go direct, no wait.
-        if (isEdgeUrl(url)) {
-          markEdgeDown();
-          continue;
-        }
         if (attempt < opts.maxRetries) {
           await opts.sleep(backoff(attempt));
           waited = true;
         }
-        continue;
-      }
-      if (!res.ok && isEdgeUrl(url) && !servedByEdge(res)) {
-        // Cloudflare platform error (e.g. quota exceeded), not GBIF: go direct.
-        markEdgeDown();
-        lastStatus = res.status;
         continue;
       }
       if (res.ok) return res.json();
@@ -206,7 +191,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
 
   return {
     getJson,
-    url: (path: string, params?: Params) => buildUrl(baseUrl(), path, params),
+    url: (path: string, params?: Params) => buildUrl(opts.base, path, params),
     clear: () => cache.clear(),
     get options(): Readonly<HttpOptions> {
       return opts;

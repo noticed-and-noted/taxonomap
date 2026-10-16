@@ -4,7 +4,6 @@
  * `~/lib/gbif/server`, which re-exports this with the Node transport.
  */
 export * from './config';
-export * from './edge';
 export * from './metrics';
 export * from './errors';
 export { $gbifStale, http, configureHttp, createHttp, type Http, type Transport } from './http';

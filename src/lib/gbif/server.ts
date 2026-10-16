@@ -4,14 +4,10 @@
  * Astro frontmatter, getStaticPaths, endpoints and scripts — never islands.
  */
 import { DAY } from '~/lib/util/time';
-import { GBIF_FALLBACK_BASE } from './config';
 import { configureHttp } from './http';
 import { createNodeTransport } from './node-transport';
 
-// Build time talks to GBIF directly, never through the edge cache: it has its
-// own disk cache and User-Agent, and must not spend the Worker's quota.
 configureHttp({
-  base: GBIF_FALLBACK_BASE,
   transport: createNodeTransport(),
   defaultTtlMs: DAY,
   cacheSize: 5000,

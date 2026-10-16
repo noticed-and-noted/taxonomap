@@ -1,5 +1,5 @@
 import { HOUR } from '~/lib/util/time';
-import { apiBase } from './edge';
+import { GBIF_API_BASE } from './config';
 import { http } from './http';
 import { md5 } from './md5';
 import { ALLOWED_LICENCE_ENUMS, usableImages, type GbifImage, type UsableImage } from './licence';
@@ -45,11 +45,11 @@ const INAT_SIZES = [
  * the MD5 of the media identifier. iNaturalist photos use iNaturalist's own
  * sizes: the smallest at least as wide as the requested width.
  */
-export function thumbnailUrl(img: UsableImage, size: ThumbSize = '400x', base: string = apiBase()): string {
+export function thumbnailUrl(img: UsableImage, size: ThumbSize = '400x'): string {
   if (img.source === 'inat') {
     const want = parseInt(size, 10);
     const name = INAT_SIZES.find(([, px]) => px >= want)?.[0] ?? 'large';
     return img.url.replace(/\/(square|thumb|small|medium|large|original)\.(\w+)(\?.*)?$/, `/${name}.$2`);
   }
-  return `${base}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
+  return `${GBIF_API_BASE}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
 }

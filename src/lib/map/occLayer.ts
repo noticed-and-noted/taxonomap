@@ -15,15 +15,7 @@
  * so the old hexes stay up until then.
  */
 import type { EaseToOptions, FlyToOptions, LngLatLike, Map as MlMap, PointLike } from 'maplibre-gl';
-import {
-  $gbifStale,
-  countRequest,
-  isEdgeUrl,
-  markEdgeDown,
-  occurrenceTileTemplate,
-  onEdgeChange,
-  type TileFilter,
-} from '~/lib/gbif';
+import { $gbifStale, countRequest, occurrenceTileTemplate, type TileFilter } from '~/lib/gbif';
 import {
   decodeHexes,
   gridLevel,
@@ -152,21 +144,18 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
       .replace('{z}', String(l))
       .replace('{x}', String(t.x))
       .replace('{y}', String(t.y));
-    countRequest('tile', url);
+    countRequest('tile');
     let res: Response;
     try {
       res = await fetch(url, { signal });
     } catch {
       if (signal.aborted) return undefined;
-      // Edge cache failing (outage, CORS-less error page): go straight to GBIF, which refetches.
-      if (isEdgeUrl(url)) markEdgeDown();
-      else o.onFailed();
+      o.onFailed();
       return undefined;
     }
     if (res.status === 404) return [];
     if (!res.ok) {
-      if (isEdgeUrl(url) && (res.status === 429 || res.status >= 500)) markEdgeDown();
-      else if (res.status === 429 || res.status >= 500) $gbifStale.set(true);
+      if (res.status === 429 || res.status >= 500) $gbifStale.set(true);
       return undefined;
     }
     return decodeHexes(await res.arrayBuffer(), t, l);
@@ -329,8 +318,6 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
   map.on('move', onMove);
   map.on('moveend', onMoveEnd);
   const offFilter = o.listenFilter(planView);
-  // Edge went down or came back: refetch what failed.
-  const offEdge = onEdgeChange(planView);
   if (map.loaded()) planView();
   else map.once('load', planView);
 
@@ -355,7 +342,6 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
       map.off('move', onMove);
       map.off('moveend', onMoveEnd);
       offFilter();
-      offEdge();
     },
   };
 }

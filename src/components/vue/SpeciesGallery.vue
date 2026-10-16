@@ -54,7 +54,7 @@ const preloading = new Set<string>();
 
 function settle(url: string, ok: boolean) {
   if (settled.has(url)) return;
-  countRequest('image', url);
+  countRequest('image');
   settled.add(url);
   if (!ok) failed.add(url);
 }

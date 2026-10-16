@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
  * Request meter (dev, or any build with ?debug=requests). Counts what this
- * page asked GBIF / the edge for in this session, to size Worker quotas.
+ * page asked GBIF for in this session.
  * Ctrl+D shows / hides it; the choice is remembered per browser.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { $requestCounts, edgeAvailable, edgeConfigured, resetRequestCounts } from '~/lib/gbif';
+import { $requestCounts, resetRequestCounts } from '~/lib/gbif';
 import { MINUTE } from '~/lib/util/time';
 
 const counts = useStore($requestCounts);
@@ -46,7 +46,6 @@ onBeforeUnmount(() => {
 
 const total = computed(() => counts.value.tile + counts.value.json + counts.value.image);
 const minutes = computed(() => Math.max(0, Math.round((now.value - counts.value.startedAt) / MINUTE)));
-const edgeState = computed(() => (!edgeConfigured() ? 'off' : edgeAvailable(now.value) ? 'on' : 'bypassed'));
 </script>
 
 <template>
@@ -66,8 +65,6 @@ const edgeState = computed(() => (!edgeConfigured() ? 'off' : edgeAvailable(now.
       <dd class="text-right">{{ counts.image }}</dd>
       <dt class="font-medium text-text">Total</dt>
       <dd class="text-right font-medium text-text">{{ total }}</dd>
-      <dt>Via edge ({{ edgeState }})</dt>
-      <dd class="text-right">{{ counts.edge }}</dd>
     </dl>
     <button type="button" class="mt-1 underline-offset-2 hover:text-text hover:underline" @click="resetRequestCounts">
       Reset

@@ -8,7 +8,7 @@
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { gbifBasemapTile, isEdgeUrl, markEdgeDown, occurrenceTileTemplate } from '~/lib/gbif';
+import { gbifBasemapTile, occurrenceTileTemplate } from '~/lib/gbif';
 import { hexRecords, homeOffset } from '~/lib/map/occGrid';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
 import { $ramp } from '~/stores/ramp';
@@ -38,7 +38,7 @@ interface Tile {
   hexes: Hex[];
 }
 
-async function fetchTile(x: number, y: number, retried = false): Promise<Tile | null> {
+async function fetchTile(x: number, y: number): Promise<Tile | null> {
   const url = occurrenceTileTemplate({ taxonKey: props.taxonKey }, { hexPerTile: 45 }, 'mvt')
     .replace('{z}', String(Z))
     .replace('{x}', String(x))
@@ -48,11 +48,6 @@ async function fetchTile(x: number, y: number, retried = false): Promise<Tile | 
     res = await fetch(url);
     if (!res.ok && res.status !== 204) throw new Error(String(res.status));
   } catch {
-    // Edge failures retry direct.
-    if (!retried && isEdgeUrl(url)) {
-      markEdgeDown();
-      return fetchTile(x, y, true);
-    }
     return null;
   }
   const buf = await res.arrayBuffer();

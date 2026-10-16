@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * GBIF thumbnail <img> with fade-in, edge fallback and request counting.
+ * GBIF thumbnail <img> with fade-in and request counting.
  * Server-rendered images are visible without JavaScript: the fade only
  * applies once mounted, and images that finished loading before hydration
  * are detected on mount.

@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import satori from 'satori';
 import { compact } from '~/lib/format';
-import { GBIF_FALLBACK_BASE, thumbnailUrl, type UsableImage } from '~/lib/gbif';
+import { thumbnailUrl, type UsableImage } from '~/lib/gbif';
 import { userAgent } from '~/lib/gbif/node-transport';
 
 const W = 1200;
@@ -71,7 +71,7 @@ const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
 
 /** Download (once) a photo as a data URI; null if unavailable. */
 async function photoDataUri(img: UsableImage): Promise<string | null> {
-  const url = thumbnailUrl(img, '800x', GBIF_FALLBACK_BASE);
+  const url = thumbnailUrl(img, '800x');
   const file = join(CACHE, 'og-photos', `${sha1(url)}.bin`);
   try {
     const buf = await readFile(file);

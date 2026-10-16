@@ -10,8 +10,6 @@ function stripSlash(url: string): string {
 
 export const GBIF_API_BASE = stripSlash(env['PUBLIC_GBIF_API_BASE'] || 'https://api.gbif.org');
 export const GBIF_TILE_BASE = stripSlash(env['PUBLIC_GBIF_TILE_BASE'] || GBIF_API_BASE);
-/** Where requests go when the edge cache (if configured) is unavailable. */
-export const GBIF_FALLBACK_BASE = stripSlash(env['PUBLIC_GBIF_FALLBACK_BASE'] || 'https://api.gbif.org');
 
 /** iNaturalist Research-grade Observations: well-framed photos with per-photo CC licences. */
 export const INATURALIST_DATASET_KEY = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
