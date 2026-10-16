@@ -91,7 +91,7 @@ export async function drawShareCard(
   ctx.setLineDash([]);
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = accent;
-  ctx.font = '600 22px "Inter Variable", Inter, system-ui, sans-serif';
+  ctx.font = '600 22px "Lexend Variable", Lexend, system-ui, sans-serif';
   ctx.fillText('TAXONOMAP · WHAT’S NEAR ME', 56, 92);
 
   ctx.fillStyle = text;
@@ -103,14 +103,14 @@ export async function drawShareCard(
   wrap(ctx, headline, 540).forEach((line, i) => ctx.fillText(line, 56, 318 + i * 54));
 
   ctx.fillStyle = muted;
-  ctx.font = '400 26px "Inter Variable", Inter, system-ui, sans-serif';
+  ctx.font = '400 26px "Lexend Variable", Lexend, system-ui, sans-serif';
   const top = input.topNames.slice(0, 3).join(' · ');
   if (top)
     wrap(ctx, `Including ${top}`, 540)
       .slice(0, 2)
       .forEach((line, i) => ctx.fillText(line, 56, 470 + i * 34));
 
-  ctx.font = '400 18px "Inter Variable", Inter, system-ui, sans-serif';
+  ctx.font = '400 18px "Lexend Variable", Lexend, system-ui, sans-serif';
   ctx.fillText(`Occurrence data: GBIF.org · area ~${round(input.radiusKm, 0)} km radius`, 56, 580);
 
   // Map panel (right): basemap + density tile around the area, circle on top.

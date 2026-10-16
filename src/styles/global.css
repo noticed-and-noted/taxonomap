@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/inter';
+@import '@fontsource-variable/lexend';
 @import '@fontsource-variable/source-serif-4';
 /* Wordmark only, so the Latin subset is enough. */
 @import '@fontsource/patrick-hand/latin-400.css';
@@ -24,7 +24,7 @@
   --color-danger: var(--danger);
   --color-photo: var(--photo-placeholder);
 
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Lexend Variable', ui-sans-serif, system-ui, sans-serif;
   --font-serif: 'Source Serif 4 Variable', ui-serif, Georgia, serif;
   --font-hand: 'Patrick Hand', ui-rounded, cursive;
 

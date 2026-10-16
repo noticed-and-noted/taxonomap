@@ -39,14 +39,14 @@ let fonts: Promise<{ name: string; data: Buffer; weight: 400 | 600; style: 'norm
 function loadFonts() {
   const f = (pkg: string, file: string) => readFile(join(process.cwd(), 'node_modules', pkg, 'files', file));
   fonts ??= Promise.all([
-    f('@fontsource/inter', 'inter-latin-400-normal.woff').then((data) => ({
-      name: 'Inter',
+    f('@fontsource/lexend', 'lexend-latin-400-normal.woff').then((data) => ({
+      name: 'Lexend',
       data,
       weight: 400 as const,
       style: 'normal' as const,
     })),
-    f('@fontsource/inter', 'inter-latin-600-normal.woff').then((data) => ({
-      name: 'Inter',
+    f('@fontsource/lexend', 'lexend-latin-600-normal.woff').then((data) => ({
+      name: 'Lexend',
       data,
       weight: 600 as const,
       style: 'normal' as const,
@@ -99,7 +99,7 @@ function card(input: SpeciesCardInput, photo: string | null): El {
     : '';
   return h(
     'div',
-    { width: W, height: H, display: 'flex', background: '#0e1813', color: '#f2ede2', fontFamily: 'Inter' },
+    { width: W, height: H, display: 'flex', background: '#0e1813', color: '#f2ede2', fontFamily: 'Lexend' },
     [
       photo
         ? h('img', { width: 630, height: 630, objectFit: 'cover' }, undefined, { src: photo, width: 630, height: 630 })
