@@ -50,7 +50,7 @@ jobs:
     env:
       PUBLIC_GBIF_API_BASE: ${{ vars.PUBLIC_GBIF_API_BASE || 'https://api.gbif.org' }}
       PUBLIC_GBIF_TILE_BASE: ${{ vars.PUBLIC_GBIF_TILE_BASE || 'https://api.gbif.org' }}
-      PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+      PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL || 'https://app.taxonomap.com' }}
       GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
       SPECIES_PRERENDER_COUNT: ${{ vars.SPECIES_PRERENDER_COUNT || '2000' }}
       NAME_INDEX_SIZE: ${{ vars.NAME_INDEX_SIZE || '6000' }}
