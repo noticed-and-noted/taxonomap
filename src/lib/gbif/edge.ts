@@ -1,12 +1,12 @@
 /**
- * Optional edge cache (the Cloudflare Worker in /worker) with automatic
+ * Optional edge cache (a caching proxy in front of GBIF) with automatic
  * fallback. When PUBLIC_GBIF_API_BASE / PUBLIC_GBIF_TILE_BASE point at the
- * Worker and it fails (quota exceeded, outage, network error), requests go
+ * proxy and it fails (quota exceeded, outage, network error), requests go
  * straight to GBIF for a cool-down period, so users never notice.
  *
  * A failure is "the edge's fault" when the response lacks the Worker's
- * x-gbif-edge header (a Cloudflare platform error page) or the request
- * never completed. GBIF errors relayed by the Worker carry the header and
+ * proxy's x-gbif-edge header (a platform error page) or the request
+ * never completed. GBIF errors relayed by the proxy carry the header and
  * are handled by normal retry/back-off instead.
  */
 import { MINUTE } from '~/lib/util/time';

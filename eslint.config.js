@@ -8,16 +8,7 @@ import tseslint from 'typescript-eslint';
 
 export default defineConfig(
   {
-    ignores: [
-      'dist/',
-      '.astro/',
-      '.cache/',
-      'node_modules/',
-      'playwright-report/',
-      'test-results/',
-      'worker/dist/',
-      'coverage/',
-    ],
+    ignores: ['dist/', '.astro/', '.cache/', 'node_modules/', 'playwright-report/', 'test-results/', 'coverage/'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

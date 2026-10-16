@@ -12,38 +12,6 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "4322"],
       "port": 4322
-    },
-    {
-      "name": "edge",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "wrangler",
-        "dev",
-        "--config",
-        "worker/wrangler.toml",
-        "--port",
-        "8787",
-        "--var",
-        "ALLOWED_ORIGINS:http://localhost:4323",
-        "--var",
-        "CONTACT_EMAIL:dev@localhost"
-      ],
-      "port": 8787
-    },
-    {
-      "name": "dev-edge",
-      "runtimeExecutable": "env",
-      "runtimeArgs": [
-        "PUBLIC_GBIF_API_BASE=http://localhost:8787",
-        "PUBLIC_GBIF_TILE_BASE=http://localhost:8787",
-        "npm",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "4323"
-      ],
-      "port": 4323
     }
   ]
 }

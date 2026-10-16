@@ -10,7 +10,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // Vue and Astro files are covered by the Playwright journeys, not measured here.
-      include: ['src/**/*.ts', 'worker/src/**/*.ts', 'functions/**/*.ts', 'integrations/**/*.ts'],
+      include: ['src/**/*.ts', 'functions/**/*.ts', 'integrations/**/*.ts'],
       exclude: ['src/**/*.d.ts', 'src/lib/data/types.ts', 'src/lib/gbif/types.ts'],
       reporter: ['text-summary', 'html'],
       // Floors a little under the current figures, so coverage cannot quietly slip.
