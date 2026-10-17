@@ -39,7 +39,21 @@ const CORS_PHOTO_HOST = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\//
  * browsers count as several MB of storage each.
  */
 export function photoCrossOrigin(url: string | undefined): 'anonymous' | undefined {
-  return url && CORS_PHOTO_HOST.test(url) ? 'anonymous' : undefined;
+  return url && CORS_PHOTO_HOST.test(url) && !corsFailed.has(url) ? 'anonymous' : undefined;
+}
+
+/**
+ * Photo URLs whose CORS load failed: a copy fetched without CORS earlier (by
+ * an older build, or the browser cache, as S3 doesn't vary on Origin) answers
+ * for them and the browser rejects it. They load without `crossorigin` instead.
+ */
+const corsFailed = new Set<string>();
+
+/** After a photo fails to load: true if it was a CORS load, now to be retried without. */
+export function retryWithoutCors(url: string): boolean {
+  if (!photoCrossOrigin(url)) return false;
+  corsFailed.add(url);
+  return true;
 }
 
 export type ThumbSize = '200x' | '400x' | '800x' | `${number}x${number}`;

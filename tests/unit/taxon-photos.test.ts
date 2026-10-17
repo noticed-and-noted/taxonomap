@@ -239,4 +239,14 @@ describe('iNaturalist photo URLs', () => {
     expect(photoCrossOrigin('https://api.gbif.org/v1/image/cache/400x/occurrence/1/media/abc')).toBeUndefined();
     expect(photoCrossOrigin('https://static.inaturalist.org/photos/1/small.jpg')).toBeUndefined();
   });
+
+  it('retries a failed CORS photo once without crossorigin, then gives up', async () => {
+    const { photoCrossOrigin, retryWithoutCors } = await import('~/lib/gbif/images');
+    const url = 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/small.jpeg';
+    expect(retryWithoutCors(url)).toBe(true);
+    expect(photoCrossOrigin(url)).toBeUndefined();
+    expect(retryWithoutCors(url)).toBe(false);
+    // GBIF photos never load with CORS, so there is nothing to retry.
+    expect(retryWithoutCors('https://api.gbif.org/v1/image/cache/400x/occurrence/1/media/abc')).toBe(false);
+  });
 });

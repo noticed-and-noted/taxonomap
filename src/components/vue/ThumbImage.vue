@@ -6,7 +6,7 @@
  * are detected on mount.
  */
 import { onMounted, ref, toRef } from 'vue';
-import { photoCrossOrigin, type ThumbSize, type UsableImage } from '~/lib/gbif';
+import { photoCrossOrigin, retryWithoutCors, type ThumbSize, type UsableImage } from '~/lib/gbif';
 import { useThumbnail } from './useThumbnail';
 
 const props = withDefaults(defineProps<{ image: UsableImage; size?: ThumbSize; alt?: string }>(), {
@@ -17,6 +17,8 @@ const emit = defineEmits<{ broken: []; loaded: [] }>();
 
 const el = ref<HTMLImageElement>();
 const mounted = ref(false);
+/** Bumped to remount the <img> for a retry without crossorigin. */
+const attempt = ref(0);
 const { src, loaded, broken, onLoad, onError } = useThumbnail(toRef(props, 'image'), props.size);
 
 function handleLoad() {
@@ -25,6 +27,10 @@ function handleLoad() {
 }
 
 function handleError() {
+  if (src.value && retryWithoutCors(src.value)) {
+    attempt.value++;
+    return;
+  }
   onError();
   if (broken.value) emit('broken');
 }
@@ -42,6 +48,7 @@ onMounted(() => {
 <template>
   <img
     v-if="src && !broken"
+    :key="attempt"
     ref="el"
     :src="src"
     :crossorigin="photoCrossOrigin(src)"

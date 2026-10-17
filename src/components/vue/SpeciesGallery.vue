@@ -8,7 +8,14 @@
  * loads, and preloads its neighbours so stepping through is usually instant.
  */
 import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
-import { countRequest, photoCrossOrigin, thumbnailUrl, type Rank, type UsableImage } from '~/lib/gbif';
+import {
+  countRequest,
+  photoCrossOrigin,
+  retryWithoutCors,
+  thumbnailUrl,
+  type Rank,
+  type UsableImage,
+} from '~/lib/gbif';
 import { taxonPhotos } from '~/lib/photos/taxon-photos';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -51,6 +58,13 @@ const currentSrc = computed(() => (current.value ? thumbnailUrl(current.value, '
 const settled = reactive(new Set<string>());
 const failed = reactive(new Set<string>());
 const preloading = new Set<string>();
+/** Bumped to remount the lightbox <img> for a retry without crossorigin. */
+const attempt = ref(0);
+
+function onLightboxError(url: string) {
+  if (retryWithoutCors(url)) attempt.value++;
+  else settle(url, false);
+}
 
 function settle(url: string, ok: boolean) {
   if (settled.has(url)) return;
@@ -71,7 +85,11 @@ function preload(i: number) {
   const cors = photoCrossOrigin(url);
   if (cors) el.crossOrigin = cors;
   el.onload = () => settle(url, true);
-  el.onerror = () => settle(url, false);
+  el.onerror = () => {
+    if (!retryWithoutCors(url)) return settle(url, false);
+    preloading.delete(url);
+    preload(i);
+  };
   el.src = url;
 }
 
@@ -177,7 +195,7 @@ function onBackdrop(e: MouseEvent) {
           </p>
           <img
             v-if="currentSrc && !failed.has(currentSrc)"
-            :key="currentSrc"
+            :key="`${currentSrc}#${attempt}`"
             :src="currentSrc"
             :crossorigin="photoCrossOrigin(currentSrc)"
             :alt="name"
@@ -185,7 +203,7 @@ function onBackdrop(e: MouseEvent) {
             class="relative size-full object-contain transition-opacity duration-200"
             :class="settled.has(currentSrc) ? 'opacity-100' : 'opacity-0'"
             @load="settle(currentSrc, true)"
-            @error="settle(currentSrc, false)"
+            @error="onLightboxError(currentSrc)"
           />
           <button type="button" class="nav left-2" aria-label="Previous photo" @click="step(-1)">‹</button>
           <button type="button" class="nav right-2" aria-label="Next photo" @click="step(1)">›</button>
