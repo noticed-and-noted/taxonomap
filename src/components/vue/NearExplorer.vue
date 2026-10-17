@@ -35,6 +35,7 @@ import {
 import BasemapSwitcher from './BasemapSwitcher.vue';
 import LicenceBadge from './LicenceBadge.vue';
 import MapProgress from './MapProgress.vue';
+import NearPlaceSearch from './NearPlaceSearch.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import ShareDialog from './ShareDialog.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -201,6 +202,7 @@ onBeforeUnmount(() => {
         <!-- No location yet: explainer -->
         <section v-if="!at" class="space-y-4 text-sm">
           <p>See which species have been recorded around a place, ranked by how often they’ve been seen.</p>
+          <NearPlaceSearch />
           <div class="rounded-md border border-border bg-surface-2 p-3 text-xs text-muted">
             <p class="font-medium text-text">About your location</p>
             <p class="mt-1">
@@ -230,6 +232,7 @@ onBeforeUnmount(() => {
              short screen a list keeps its 12rem minimum and the panel scrolls instead. -->
         <section v-else class="flex h-full flex-col gap-4">
           <div class="space-y-3 text-sm">
+            <NearPlaceSearch />
             <label class="block">
               <span class="flex justify-between text-xs text-muted">
                 <span>Within</span><span class="font-medium text-text">{{ radius }} km</span>
@@ -261,7 +264,7 @@ onBeforeUnmount(() => {
               <button type="button" class="chip" @click="locate">Use my location</button>
               <button type="button" class="chip ml-auto" :disabled="!classes.length" @click="openShare">Share</button>
             </div>
-            <p class="text-xs text-subtle">Click the map to move the pin.</p>
+            <p class="text-xs text-subtle">Search a place or click the map to move the pin.</p>
           </div>
 
           <p v-if="!loading && !error" class="text-sm text-muted" aria-live="polite">
