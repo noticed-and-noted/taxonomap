@@ -7,7 +7,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
-import { $panel, $selectedHex, $selectedRecord, clearFilters, clearHexSelection } from '~/stores/explorer';
+import { $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
 import BasemapSwitcher from './BasemapSwitcher.vue';
 import FilterGroup from './FilterGroup.vue';
@@ -25,7 +25,6 @@ import { useYearHistogram } from './useYearHistogram';
 
 const panel = useStore($panel);
 const hex = useStore($selectedHex);
-const record = useStore($selectedRecord);
 const activeFilters = useStore($activeFilterCount);
 const near = useStore($nearMode);
 const { counts, loading, error, live } = useYearHistogram();
@@ -64,7 +63,7 @@ const pinIcon = 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 
 const hexOpen = computed(() => panel.value === 'hex' && hex.value !== null);
 const filtersOpen = computed(() => panel.value === 'filters');
 const panelOpen = computed(() => hexOpen.value || filtersOpen.value);
-const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : record.value !== null ? 'Record' : 'Selected cell'));
+const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : 'Selected cell'));
 
 function openFilters() {
   $panel.set(filtersOpen.value ? (hex.value ? 'hex' : 'none') : 'filters');

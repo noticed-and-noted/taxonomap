@@ -137,10 +137,6 @@ const hexCodec: UrlCodec<HexPoint> = {
 export const $selectedHex = urlAtom(hexCodec);
 export const $panel = urlAtom(codecs.enumOf('panel', PANELS, 'none'));
 export const $basemap = urlAtom(codecs.enumOf('base', BASEMAP_IDS, 'plain', { history: 'replace' }));
-/** Show individual (clustered) records for the selected hex. */
-export const $showRecords = urlAtom(codecs.bool('pts'));
-/** Selected occurrence record (shown in the panel). */
-export const $selectedRecord = urlAtom(codecs.int('rec', null));
 
 /* ---- Ephemeral (not in the URL): derived from URL state or one-shot requests ---- */
 
@@ -178,8 +174,6 @@ export const $flyTo = atom<FlyRequest | null>(null);
 /** Clear the hex selection and anything that depends on it. */
 export function clearHexSelection(): void {
   $selectedHex.set(null);
-  $showRecords.set(false);
-  $selectedRecord.set(null);
   $hexGeometry.set(null);
   if ($panel.get() === 'hex') $panel.set('none');
 }

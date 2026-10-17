@@ -1,38 +1,30 @@
 <script setup lang="ts">
 /**
  * Selected cell summary: record count, a sortable and filterable species
- * table, radial seasonality, and a switch to individual (clustered) records.
+ * table and radial seasonality.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onMounted } from 'vue';
 import { full } from '~/lib/format';
 import { loadSpeciesManifest } from '~/lib/species/links';
-import { $hexGeometry, $selectedRecord, $showRecords } from '~/stores/explorer';
+import { $hexGeometry } from '~/stores/explorer';
 import { $taxa } from '~/stores/taxon';
 import RadialSeasonality from './RadialSeasonality.vue';
-import RecordDetail from './RecordDetail.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
 import { HEX_CLASSES, HEX_PER_CLASS, useHexSummary } from './useHexSummary';
 import { perGroupNote } from './useLatestLoad';
 
 const { loading, error, count, months, classes, species, reload } = useHexSummary();
-const showRecords = useStore($showRecords);
-const record = useStore($selectedRecord);
 const taxa = useStore($taxa);
 const selectedKeys = computed(() => taxa.value.map((t) => t.key));
 const tableNote = computed(() => perGroupNote(classes.value.length, HEX_CLASSES, HEX_PER_CLASS));
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
-
-const toggleRecords = () => $showRecords.set(!showRecords.value);
-const closeRecord = () => $selectedRecord.set(null);
 </script>
 
 <template>
-  <RecordDetail v-if="record !== null" :occurrence-key="record" @back="closeRecord" />
-
-  <div v-else-if="!geometry" class="space-y-3" role="status" aria-label="Finding the selected cell">
+  <div v-if="!geometry" class="space-y-3" role="status" aria-label="Finding the selected cell">
     <SkeletonBlock height="2rem" width="50%" />
     <p class="text-xs text-subtle">Finding the selected cell on the map…</p>
   </div>
@@ -71,20 +63,6 @@ const closeRecord = () => $selectedRecord.set(null);
       </section>
 
       <RadialSeasonality v-if="count" :counts="months" title="Records by month" />
-
-      <section v-if="count">
-        <button
-          type="button"
-          class="w-full rounded-md border border-border px-3 py-2 text-sm transition-colors duration-200 hover:border-accent"
-          :aria-pressed="showRecords"
-          @click="toggleRecords"
-        >
-          {{ showRecords ? 'Hide individual records' : 'Show individual records' }}
-        </button>
-        <p v-if="showRecords" class="mt-1.5 text-xs text-subtle">
-          Showing up to 300 records as clustered points. Select a point to see the record and its source.
-        </p>
-      </section>
     </template>
   </div>
 </template>

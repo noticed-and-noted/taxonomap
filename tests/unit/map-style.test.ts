@@ -14,7 +14,7 @@ const HEXES: GeoJSON.FeatureCollection = {
     },
   ],
 };
-const DATA = { hexes: HEXES, level: 6, selected: EMPTY, records: EMPTY, near: EMPTY };
+const DATA = { hexes: HEXES, level: 6, selected: EMPTY, near: EMPTY };
 
 const vectorBase: StyleSpecification = {
   version: 8,
@@ -47,11 +47,8 @@ describe('buildStyle', () => {
       'near-area',
       'near-edge',
       'near-pin',
-      'record-clusters',
-      'record-count',
-      'record-points',
     ]);
-    expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'records', 'near']);
+    expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'near']);
     // Cell ids let arriving tiles update the hexes in place.
     expect(s.sources['occ']).toMatchObject({ promoteId: 'id' });
     expect(s.projection).toEqual({ type: 'globe' });

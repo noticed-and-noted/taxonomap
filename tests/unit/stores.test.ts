@@ -39,16 +39,11 @@ describe('explorer URL state', () => {
     expect(new URLSearchParams(location.search).get('hex')).toBe('1.2346,-2.0000');
   });
 
-  it('clears the cell, its records and its panel together', async () => {
-    const s = await stores('?hex=1,2&pts=1&rec=5&panel=hex');
+  it('clears the cell and its panel together', async () => {
+    const s = await stores('?hex=1,2&panel=hex');
     s.$hexGeometry.set({ ring: [], wkt: '', tileTotal: 1 });
     s.clearHexSelection();
-    expect([s.$selectedHex.get(), s.$showRecords.get(), s.$selectedRecord.get(), s.$hexGeometry.get()]).toEqual([
-      null,
-      false,
-      null,
-      null,
-    ]);
+    expect([s.$selectedHex.get(), s.$hexGeometry.get()]).toEqual([null, null]);
     expect(s.$panel.get()).toBe('none');
   });
 

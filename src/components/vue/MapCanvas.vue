@@ -11,7 +11,6 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact, full } from '~/lib/format';
-import { searchOccurrences } from '~/lib/gbif';
 import {
   buildStyle,
   EMPTY,
@@ -39,8 +38,6 @@ import {
   $mapView,
   $occurrenceFilter,
   $selectedHex,
-  $selectedRecord,
-  $showRecords,
   $panel,
   clearHexSelection,
   sameView,
@@ -54,7 +51,6 @@ const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(
 let map: MlMap | undefined;
 let occ: OccLayer | undefined;
 const cleanups: (() => void)[] = [];
-let lastRecords: GeoJSON.FeatureCollection = EMPTY;
 let pendingHexRestore = false;
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -150,7 +146,6 @@ function syncOverlays() {
   // The grid level is set as the map starts, usually before its style has loaded.
   paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get()));
-  setData('records', lastRecords);
   setData('near', nearData());
 }
 
@@ -159,7 +154,6 @@ function styleFor() {
     hexes: occ?.collection() ?? EMPTY,
     level: $gridLevel.get(),
     selected: selectedGeoJson($hexGeometry.get()),
-    records: lastRecords,
     near: nearData(),
   });
 }
@@ -188,8 +182,6 @@ function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: n
     clearHexSelection();
     return;
   }
-  $selectedRecord.set(null);
-  $showRecords.set(false);
   $hexGeometry.set(geom);
   $selectedHex.set([Number(lngLat.lng.toFixed(4)), Number(lngLat.lat.toFixed(4))]);
   $panel.set('hex');
@@ -209,34 +201,6 @@ function restoreHex() {
     if ($panel.get() === 'none') $panel.set('hex');
   }
   pendingHexRestore = false;
-}
-
-async function loadRecords() {
-  const geom = $hexGeometry.get();
-  if (!map || !$showRecords.get() || !geom) {
-    lastRecords = EMPTY;
-    setData('records', EMPTY);
-    return;
-  }
-  try {
-    const res = await searchOccurrences(
-      { ...$occurrenceFilter.get(), geometry: geom.wkt, georeferenced: true },
-      { limit: 300 },
-    );
-    lastRecords = {
-      type: 'FeatureCollection',
-      features: res.results
-        .filter((r) => r.decimalLatitude !== undefined && r.decimalLongitude !== undefined)
-        .map((r) => ({
-          type: 'Feature',
-          properties: { key: r.key },
-          geometry: { type: 'Point', coordinates: [r.decimalLongitude as number, r.decimalLatitude as number] },
-        })),
-    };
-  } catch {
-    lastRecords = EMPTY;
-  }
-  setData('records', lastRecords);
 }
 
 /** How much of the map the floating header, bottom sheet and side panel cover, in px per edge. */
@@ -324,21 +288,6 @@ function onClick(e: MapMouseEvent) {
   if (!map || offGlobe(e.point)) return;
   if ($mapMode.get() === 'pin') {
     setNearLocation(e.lngLat.lat, e.lngLat.lng);
-    return;
-  }
-  const cluster = map.queryRenderedFeatures(e.point, { layers: ['record-clusters'] })[0];
-  if (cluster) {
-    const src = map.getSource('records') as GeoJSONSource;
-    void src.getClusterExpansionZoom(Number(cluster.properties['cluster_id'])).then((zoom) => {
-      const [lng, lat] = (cluster.geometry as GeoJSON.Point).coordinates as [number, number];
-      map?.easeTo({ center: [lng, lat], zoom, duration: reducedMotion() ? 0 : 400 });
-    });
-    return;
-  }
-  const point = map.queryRenderedFeatures(e.point, { layers: ['record-points'] })[0];
-  if (point) {
-    $selectedRecord.set(Number(point.properties['key']));
-    $panel.set('hex');
     return;
   }
   selectAt(e.point, e.lngLat);
@@ -476,22 +425,17 @@ onMounted(async () => {
       if (!sameView(v, { lng: c.lng, lat: c.lat, zoom: map.getZoom() }))
         map.jumpTo({ center: [v.lng, v.lat], zoom: v.zoom });
     }),
-    $hexGeometry.subscribe((g) => {
-      setData('selected', selectedGeoJson(g));
-      void loadRecords();
-    }),
+    $hexGeometry.subscribe((g) => setData('selected', selectedGeoJson(g))),
     $selectedHex.listen((p) => {
       if (!p) $hexGeometry.set(null);
       else if (!$hexGeometry.get()) pendingHexRestore = true;
     }),
-    $showRecords.listen(() => void loadRecords()),
     $mapMode.subscribe((mode) => {
       if (!map) return;
       clearHover();
       map.getCanvas().style.cursor = mode === 'pin' ? PIN_CURSOR : '';
     }),
     ...[$nearAt, $nearRadius, $mapMode].map((s) => s.listen(() => setData('near', nearData()))),
-    $occurrenceFilter.listen(() => void loadRecords()),
     $flyTo.subscribe((req) => {
       if (!req) return;
       fly(req);

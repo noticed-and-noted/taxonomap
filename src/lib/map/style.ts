@@ -11,9 +11,8 @@ import { rampColors, thresholdsAt } from '~/lib/ramp';
 import type { HexGeometry } from '~/stores/explorer';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
-/** Glyphs for our own labels (cluster counts), also used on raster basemaps. */
+/** Glyphs for raster basemaps, which bring none of their own. */
 const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
-const FONT = ['Noto Sans Bold'];
 
 /** The occurrence hex layer, which clicks and hovers query. */
 export const OCC_LAYERS = ['occ-fill'];
@@ -38,7 +37,6 @@ export interface OverlayData {
   /** Their grid level, which the colour bins follow. */
   level: number;
   selected: GeoJSON.FeatureCollection;
-  records: GeoJSON.FeatureCollection;
   near: GeoJSON.FeatureCollection;
 }
 
@@ -73,7 +71,6 @@ export function overlay(
       'occ-fresh': { type: 'geojson', data: EMPTY },
       hover: { type: 'geojson', data: EMPTY },
       selected: { type: 'geojson', data: data.selected },
-      records: { type: 'geojson', data: data.records, cluster: true, clusterRadius: 40, clusterMaxZoom: 14 },
       near: { type: 'geojson', data: data.near },
     },
     // Drawn below basemap labels.
@@ -125,34 +122,6 @@ export function overlay(
         source: 'near',
         filter: ['==', ['geometry-type'], 'Point'],
         paint: { 'circle-color': accent, 'circle-radius': 7, 'circle-stroke-color': bg, 'circle-stroke-width': 3 },
-      },
-      {
-        id: 'record-clusters',
-        type: 'circle',
-        source: 'records',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': accent,
-          'circle-opacity': 0.9,
-          'circle-stroke-color': bg,
-          'circle-stroke-width': 2,
-          'circle-radius': ['step', ['get', 'point_count'], 12, 10, 16, 50, 22],
-        },
-      },
-      {
-        id: 'record-count',
-        type: 'symbol',
-        source: 'records',
-        filter: ['has', 'point_count'],
-        layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': FONT, 'text-size': 12 },
-        paint: { 'text-color': colors.accentContrast },
-      },
-      {
-        id: 'record-points',
-        type: 'circle',
-        source: 'records',
-        filter: ['!', ['has', 'point_count']],
-        paint: { 'circle-color': accent, 'circle-radius': 6, 'circle-stroke-color': bg, 'circle-stroke-width': 2 },
       },
     ],
   };
