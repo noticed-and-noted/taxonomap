@@ -2,6 +2,7 @@
 import type Point from '@mapbox/point-geometry';
 import { fromVectorTileJs } from '@maplibre/vt-pbf';
 import {
+  adhocLevel,
   clipRingLat,
   decodeHexes,
   fillZoom,
@@ -41,6 +42,12 @@ const hexAt = (cx: number, cy: number, r = 100): Px[] =>
     Math.round(cx + r * Math.cos((a * Math.PI) / 180)),
     Math.round(cy + r * Math.sin((a * Math.PI) / 180)),
   ]);
+
+describe('adhocLevel', () => {
+  it('drops levels where adhoc geohash cells are wider than hexes, keeps the rest', () => {
+    expect([5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(adhocLevel)).toEqual([5, 5, 7, 8, 8, 10, 10, 12, 12, 12]);
+  });
+});
 
 describe('gridLevel', () => {
   // A 1024 × 768 view: the globe fills it from an equator-equivalent zoom of about 3.

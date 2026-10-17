@@ -15,8 +15,9 @@
  * so the old hexes stay up until then.
  */
 import type { EaseToOptions, FlyToOptions, LngLatLike, Map as MlMap, PointLike } from 'maplibre-gl';
-import { $gbifStale, countRequest, occurrenceTileTemplate, type TileFilter } from '~/lib/gbif';
+import { $gbifStale, countRequest, needsAdhoc, occurrenceTileTemplate, type TileFilter } from '~/lib/gbif';
 import {
+  adhocLevel,
   decodeHexes,
   gridLevel,
   HEX_PER_TILE,
@@ -96,7 +97,10 @@ interface Job {
 
 export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
   const size = () => [map.getCanvas().clientWidth, map.getCanvas().clientHeight] as const;
-  const levelAt = (zoom: number, lat: number) => gridLevel(zoom, lat, ...size());
+  const levelAt = (zoom: number, lat: number) => {
+    const l = gridLevel(zoom, lat, ...size());
+    return needsAdhoc(o.filter()) ? adhocLevel(l) : l;
+  };
   let level = levelAt(map.getZoom(), map.getCenter().lat);
   o.onLevel(level);
 
@@ -317,7 +321,8 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
 
   map.on('move', onMove);
   map.on('moveend', onMoveEnd);
-  const offFilter = o.listenFilter(planView);
+  // A filter can switch between density and adhoc tiles, which can change the level.
+  const offFilter = o.listenFilter(onMoveEnd);
   if (map.loaded()) planView();
   else map.once('load', planView);
 

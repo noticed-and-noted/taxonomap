@@ -77,6 +77,15 @@ export function gridLevel(zoom: number, lat: number, w: number, h: number): numb
   return level(equatorZoom - (close ? Math.floor(drop + 1e-9) : 0));
 }
 
+/**
+ * GBIF's adhoc tiles (any refinement filter) snap records to geohash cells,
+ * finer only every 2–3 zooms (measured: steps at 4, 7, 10, 12, 14). At the
+ * levels between, a cell is wider than our hexes, so alternate hex columns
+ * come back near-empty in stripes. Those levels use the coarser level below.
+ */
+const ADHOC_LEVEL: Record<number, number> = { 6: 5, 9: 8, 11: 10, 13: 12, 14: 12 };
+export const adhocLevel = (level: number): number => ADHOC_LEVEL[level] ?? level;
+
 /** The level-`level` tile holding a point. */
 export function tileAt([lng, lat]: LngLat, level: number): TileId {
   const n = 2 ** level;
