@@ -5,9 +5,10 @@
  * of any are shown); on the tree it moves the tree there (the filter is left
  * alone); on other pages it opens that result's About page. Species: see
  * useNameSearch. Places: geocoder on submit only (Nominatim policy).
- * The highlighted species result (or the first, before you arrow) is
- * previewed beside the list, with a link to its About page; Cmd/Ctrl-Enter
- * opens that page. ARIA 1.2 combobox with a listbox popup.
+ * The first result is highlighted until you arrow, so Enter picks it. The
+ * highlighted species result is previewed beside the list, with a link to its
+ * About page; Cmd/Ctrl-Enter opens that page, and Cmd/Ctrl-Shift-Enter
+ * searches places. ARIA 1.2 combobox with a listbox popup.
  */
 import { navigate } from 'astro:transitions/client';
 import { useStore } from '@nanostores/vue';
@@ -21,6 +22,7 @@ import { $flyTo, MAX_TAXA, viewParam } from '~/stores/explorer';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
 import { hrefWith } from '~/stores/url-sync';
+import SkeletonBlock from './SkeletonBlock.vue';
 import TaxonPreview from './TaxonPreview.vue';
 import { useNameSearch } from './useNameSearch';
 
@@ -41,7 +43,8 @@ const query = ref(
   import.meta.env.SSR ? '' : ((document.getElementById('omnibox-input') as HTMLInputElement | null)?.value ?? ''),
 );
 const open = ref(false);
-const active = ref(-1);
+/** Highlighted row; the first result by default, so Enter picks it. */
+const active = ref(0);
 const {
   hits: taxa,
   loading: liveLoading,
@@ -65,19 +68,28 @@ function announce(text: string) {
   noticeTimer = setTimeout(() => (notice.value = ''), 5000);
 }
 
+/** What is loading, if anything: shown in the place row's spot. */
+const searching = computed(() =>
+  placeLoading.value ? 'places' : liveLoading.value && !places.value ? 'species' : null,
+);
+
+/** Placeholder rows to show while species load: enough to make three rows with what's in. */
+const placeholderRows = computed(() => (searching.value === 'species' ? Math.max(0, 3 - taxa.value.length) : 0));
+
 const options = computed<Option[]>(() => {
   if (places.value) return places.value.map((place, i) => ({ kind: 'place', id: `omni-place-${i}`, place }));
   const opts: Option[] = taxa.value.map((hit) => ({ kind: 'taxon', id: `omni-taxon-${hit.key}`, hit }));
-  if (query.value.trim().length >= 2) opts.push({ kind: 'place-search', id: 'omni-place-search' });
+  // Not while results are loading: they would push it down as they arrive.
+  if (query.value.trim().length >= 2 && !searching.value) opts.push({ kind: 'place-search', id: 'omni-place-search' });
   return opts;
 });
 
 const activeId = computed(() => options.value[active.value]?.id);
 
-/** The result to preview: the highlighted species/group, or the first one before you arrow. */
+/** The result to preview: the highlighted species/group (the first, if the highlight's row has gone). */
 const previewHit = computed<NameHit | null>(() => {
   if (places.value) return null;
-  const o = active.value >= 0 ? options.value[active.value] : options.value[0];
+  const o = options.value[active.value] ?? options.value[0];
   return o?.kind === 'taxon' ? o.hit : null;
 });
 
@@ -117,7 +129,7 @@ function onInput() {
   places.value = null;
   placeFailed.value = false;
   open.value = true;
-  active.value = -1;
+  active.value = 0;
   search(query.value);
 }
 
@@ -129,7 +141,7 @@ function onFocus() {
 
 function close() {
   open.value = false;
-  active.value = -1;
+  active.value = 0;
 }
 
 async function runPlaceSearch() {
@@ -140,7 +152,7 @@ async function runPlaceSearch() {
   try {
     places.value = await searchPlaces(q);
     open.value = true;
-    active.value = places.value.length ? 0 : -1;
+    active.value = 0;
   } catch {
     placeFailed.value = true;
     places.value = [];
@@ -205,14 +217,16 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === 'ArrowDown') {
     e.preventDefault();
     open.value = true;
-    active.value = n ? (active.value + 1) % n : -1;
+    active.value = n ? (active.value + 1) % n : 0;
   } else if (e.key === 'ArrowUp') {
     e.preventDefault();
-    active.value = n ? (active.value - 1 + n) % n : -1;
+    active.value = n ? (active.value - 1 + n) % n : 0;
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if ((e.metaKey || e.ctrlKey) && previewHit.value) openAbout(previewHit.value);
-    else if (active.value >= 0) choose(options.value[active.value]);
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey) void runPlaceSearch();
+    else if ((e.metaKey || e.ctrlKey) && previewHit.value) openAbout(previewHit.value);
+    else if (options.value[active.value]) choose(options.value[active.value]);
+    // Nothing to pick yet (still loading, or no matches): look for a place.
     else void runPlaceSearch();
   } else if (e.key === 'Escape') {
     if (open.value) close();
@@ -294,7 +308,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-show="open && (options.length > 0 || placeFailed || (places && !places.length))"
+      v-show="open && (options.length > 0 || searching || placeFailed || (places && !places.length))"
       ref="dropdown"
       class="dropdown absolute left-0 right-0 top-full z-40 mt-1 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-panel"
       :class="{ 'with-preview': previewHit }"
@@ -314,6 +328,7 @@ onBeforeUnmount(() => {
             :key="o.id"
             role="option"
             :aria-selected="i === active"
+            :class="{ 'place-row': o.kind === 'place-search' }"
             class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
             @mousedown.prevent
             @click="choose(o)"
@@ -352,6 +367,26 @@ onBeforeUnmount(() => {
               </span>
             </template>
           </li>
+          <!-- Placeholder rows where results will land, so nothing jumps when they arrive. -->
+          <template v-if="searching">
+            <li
+              v-for="n in placeholderRows"
+              :key="`skel-${n}`"
+              role="none"
+              class="flex items-center gap-3 px-3 py-2"
+              aria-hidden="true"
+            >
+              <span class="min-w-0 flex-1 space-y-1.5">
+                <SkeletonBlock :width="`${[55, 70, 45][n % 3]}%`" height="0.8rem" />
+                <SkeletonBlock :width="`${[32, 40, 36][n % 3]}%`" height="0.6rem" />
+              </span>
+              <SkeletonBlock width="2.25rem" height="0.7rem" />
+            </li>
+            <li role="none" class="place-row flex items-center gap-3 px-3 py-2.5">
+              <span class="sr-only">Searching {{ searching }}…</span>
+              <SkeletonBlock width="60%" height="0.8rem" aria-hidden="true" />
+            </li>
+          </template>
         </ul>
         <TaxonPreview
           v-if="previewHit"
@@ -372,6 +407,9 @@ onBeforeUnmount(() => {
         <span><kbd>↵</kbd> {{ enterLabel }}</span>
         <span v-if="previewHit && selectLabel()"
           ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
+        >
+        <span v-if="!places && enterLabel !== 'Search places'"
+          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> Places</span
         >
         <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
       </p>
@@ -414,6 +452,18 @@ onBeforeUnmount(() => {
   .results.with-preview {
     grid-template-columns: minmax(0, 1fr) 14rem;
   }
+}
+
+/* "Search places" stays in view at the foot of the list while species scroll under it. */
+.place-row {
+  position: sticky;
+  bottom: -0.25rem; /* the list's bottom padding */
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.place-row[aria-selected='true'] {
+  /* accent-soft is translucent: lay it over the surface so rows don't show through. */
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
 }
 
 /* Keyboard hints: only where there is likely a keyboard. */

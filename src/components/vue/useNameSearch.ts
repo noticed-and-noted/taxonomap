@@ -23,7 +23,7 @@ export interface NameSearchOptions {
 export function useNameSearch({ max, exclude }: NameSearchOptions) {
   const indexHits = ref<NameHit[]>([]);
   const liveHits = ref<NameHit[]>([]);
-  /** Live providers are being asked. */
+  /** Live providers are being asked (or will be, once the debounce settles). */
   const loading = ref(false);
   /** Every live provider failed for the last query. */
   const failed = ref(false);
@@ -94,6 +94,7 @@ export function useNameSearch({ max, exclude }: NameSearchOptions) {
     current = q;
     // Live hits belong to the previous query.
     liveHits.value = [];
+    loading.value = q.trim().length >= MIN_LIVE_QUERY;
     void runIndex(q);
     runLive(q);
   }
