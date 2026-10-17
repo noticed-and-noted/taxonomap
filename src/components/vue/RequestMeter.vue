@@ -2,7 +2,8 @@
 /**
  * Request meter (dev, or any build with ?debug=requests). Counts what this
  * page asked GBIF for in this session.
- * Ctrl+D shows / hides it; the choice is remembered per browser.
+ * Ctrl+D shows / hides it; the choice is remembered per browser. Hidden on
+ * phones, which have no Ctrl+D and no room for it.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
@@ -51,7 +52,7 @@ const minutes = computed(() => Math.max(0, Math.round((now.value - counts.value.
 <template>
   <aside
     v-if="enabled && visible"
-    class="fixed left-16 top-1/2 z-40 -translate-y-1/2 rounded-md border border-border bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-panel backdrop-blur"
+    class="fixed left-16 top-1/2 z-40 hidden -translate-y-1/2 rounded-md border border-border bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-panel backdrop-blur md:block"
     aria-label="GBIF request meter"
   >
     <p class="mb-1 font-medium text-text">GBIF requests · {{ minutes }} min</p>
