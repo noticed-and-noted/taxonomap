@@ -239,9 +239,25 @@ async function loadRecords() {
   setData('records', lastRecords);
 }
 
+/** How much of the map the floating header, bottom sheet and side panel cover, in px per edge. */
+function coveredEdges() {
+  const box = map!.getContainer().getBoundingClientRect();
+  const header = document.querySelector('.app-header')?.getBoundingClientRect();
+  // offsetHeight, not the rect: the sheet may still be sliding in.
+  const sheet = document.querySelector<HTMLElement>('.bottom-sheet')?.offsetHeight ?? 0;
+  const panel = document.querySelector('.side-panel:not(.collapsed)')?.getBoundingClientRect();
+  return {
+    top: header ? Math.max(0, header.bottom - box.top) : 0,
+    bottom: Math.min(sheet, box.height / 2),
+    left: 0,
+    right: panel ? Math.max(0, box.right - panel.left) : 0,
+  };
+}
+
 function fly(req: FlyRequest) {
   if (!map) return;
   const animate = !reducedMotion();
+  const c = coveredEdges();
   if (req.kind === 'bounds') {
     const [w, s, e, n] = req.bbox;
     map.fitBounds(
@@ -249,10 +265,21 @@ function fly(req: FlyRequest) {
         [w, s],
         [e, n],
       ],
-      { padding: 60, maxZoom: req.maxZoom ?? 9, duration: animate ? 1200 : 0 },
+      {
+        padding: { top: c.top + 60, bottom: c.bottom + 60, left: c.left + 60, right: c.right + 60 },
+        maxZoom: req.maxZoom ?? 9,
+        duration: animate ? 1200 : 0,
+      },
     );
   } else {
-    map.flyTo({ center: [req.lng, req.lat], zoom: req.zoom, duration: animate ? 1400 : 0, essential: false });
+    // An offset, not camera padding: MapLibre keeps padding after the move.
+    map.flyTo({
+      center: [req.lng, req.lat],
+      zoom: req.zoom,
+      offset: [(c.left - c.right) / 2, (c.top - c.bottom) / 2],
+      duration: animate ? 1400 : 0,
+      essential: false,
+    });
   }
 }
 
