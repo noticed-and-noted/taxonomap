@@ -168,14 +168,18 @@ function sunLabel(s: Shape) {
   };
 }
 
-/* icicle: columns by depth, focus in the first column */
-const colW = computed(() => width.value / (LEVELS + 1));
+/* icicle: columns by depth, focus in the first column (a header row when narrow) */
+const narrow = computed(() => width.value < 520);
+const HEAD = 44;
+const top = computed(() => (narrow.value ? HEAD : 0));
+const colW = computed(() => width.value / (narrow.value ? LEVELS : LEVELS + 1));
 function rect(s: Shape) {
+  const h = height.value - top.value;
   return {
-    x: s.rel * colW.value,
-    y: s.x0 * height.value,
+    x: (narrow.value ? s.rel - 1 : s.rel) * colW.value,
+    y: top.value + s.x0 * h,
     w: Math.max(0, colW.value - 2),
-    h: Math.max(0, (s.x1 - s.x0) * height.value - 1),
+    h: Math.max(0, (s.x1 - s.x0) * h - 1),
   };
 }
 
@@ -201,6 +205,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
       v-if="layout === 'sunburst'"
       :width="width"
       :height="height"
+      class="absolute inset-0"
       role="img"
       :aria-label="`Sunburst of ${centreLabel}, sized by ${metric}. Use the list beside the chart to navigate.`"
     >
@@ -253,10 +258,20 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
       v-else
       :width="width"
       :height="height"
+      class="absolute inset-0"
       role="img"
       :aria-label="`Icicle chart of ${centreLabel}, sized by ${metric}. Use the list beside the chart to navigate.`"
     >
-      <g class="cursor-pointer" @click="emit('up')">
+      <g v-if="narrow" class="cursor-pointer" @click="emit('up')">
+        <rect :width="width - 2" :height="HEAD - 4" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
+        <text :x="10" :y="25" class="fill-[var(--text)] font-display text-sm">
+          {{ focus.parent ? '← ' : '' }}{{ centreLabel.length > 22 ? `${centreLabel.slice(0, 21)}…` : centreLabel }}
+        </text>
+        <text :x="width - 10" :y="25" text-anchor="end" class="fill-[var(--text-subtle)] text-[11px]">
+          {{ compact(focusTotal) }} {{ metric }}
+        </text>
+      </g>
+      <g v-else class="cursor-pointer" @click="emit('up')">
         <rect :width="colW - 2" :height="height - 1" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
         <text :x="10" :y="20" class="fill-[var(--text)] font-display text-sm">{{ centreLabel }}</text>
         <text :x="10" :y="38" class="fill-[var(--text-subtle)] text-[11px]">

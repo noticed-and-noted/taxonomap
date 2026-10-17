@@ -263,8 +263,8 @@ const share = (n: TreeNode) => {
       <SkeletonBlock height="20rem" />
     </div>
 
-    <div v-else class="grid gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
-      <div class="relative min-h-[22rem]">
+    <div v-else class="grid grid-cols-[minmax(0,1fr)] gap-4 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
+      <div class="relative h-[55dvh] min-h-[20rem] md:h-auto md:min-h-[22rem]">
         <TreeChart
           :root="root"
           :focus="focus"
@@ -283,6 +283,26 @@ const share = (n: TreeNode) => {
         >
           Some levels could not be loaded. Try again in a moment.
         </p>
+      </div>
+
+      <!-- Phones: the details panel is below the fold, so echo the selection here. -->
+      <div
+        v-if="detail && detail.rank !== 'ROOT'"
+        class="-mt-2 flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 md:hidden"
+        aria-live="polite"
+      >
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-medium">
+            {{ detail.common ?? detail.name }}
+            <span class="text-xs font-normal text-subtle">{{ RANK_LABELS[detail.rank] }}</span>
+          </p>
+          <p class="text-xs text-muted">{{ compact(detail.records) }} records · {{ compact(detail.species) }} species</p>
+        </div>
+        <a
+          :href="`/?taxon=${detail.key}`"
+          class="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-contrast"
+          >View on map</a
+        >
       </div>
 
       <aside
@@ -327,11 +347,13 @@ const share = (n: TreeNode) => {
           <h3 class="mb-1.5 text-sm font-medium">
             {{ children.length }} {{ children.length === 1 ? 'group' : 'groups' }} in {{ focus.common ?? focus.name }}
           </h3>
-          <ol class="max-h-[60vh] space-y-0.5 overflow-y-auto pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1">
+          <ol
+            class="max-h-[50dvh] space-y-0.5 overflow-y-auto overscroll-contain pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1"
+          >
             <li v-for="c in children" :key="c.key">
               <button
                 type="button"
-                class="grid w-full grid-cols-[1fr_auto] items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-2"
+                class="grid min-h-11 w-full grid-cols-[1fr_auto] items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-2 md:min-h-0"
                 :aria-current="selected?.key === c.key ? 'true' : undefined"
                 :class="{ 'bg-accent-soft': selected?.key === c.key }"
                 @click="pick(c)"
