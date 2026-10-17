@@ -42,12 +42,6 @@ export const FILTER_GROUPS: readonly FilterGroupMeta[] = [
     title: 'How recorded',
     icon: 'M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M21 12c-2.4 4-5.4 6-9 6s-6.6-2-9-6c2.4-4 5.4-6 9-6s6.6 2 9 6',
   },
-  {
-    id: 'source',
-    label: 'Source',
-    title: 'Source',
-    icon: 'M4 6a8 3 0 1 0 16 0a8 3 0 1 0-16 0M4 6v6a8 3 0 0 0 16 0V6M4 12v6a8 3 0 0 0 16 0v-6',
-  },
 ];
 
 export const $activeFilterCount = computed($groupCounts, (c) => Object.values(c).reduce((a, b) => a + b, 0));

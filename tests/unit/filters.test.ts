@@ -9,13 +9,12 @@ describe('refinements', () => {
         months: [5, 4],
         continents: ['EUROPE'],
         maxUncertaintyM: 1000,
-        licences: ['CC0_1_0', 'CC_BY_4_0'],
         iucn: ['VU'],
       }),
     );
     expect(qs).toBe(
       'continent=EUROPE&coordinateUncertaintyInMeters=0%2C1000&iucnRedListCategory=VU' +
-        '&license=CC0_1_0&license=CC_BY_4_0&mediaType=Sound&mediaType=StillImage&month=4&month=5',
+        '&mediaType=Sound&mediaType=StillImage&month=4&month=5',
     );
   });
 
@@ -51,7 +50,6 @@ describe('explorer filter stores', () => {
     e.$months.set([4]);
     e.$continents.set(['EUROPE']);
     e.$maxUncertainty.set(100);
-    e.$licences.set(['CC0_1_0']);
     e.$iucn.set(['VU']);
     e.$hasSound.set(true);
     expect(e.$occurrenceFilter.get()).toMatchObject({
@@ -59,7 +57,6 @@ describe('explorer filter stores', () => {
       months: [4],
       continents: ['EUROPE'],
       maxUncertaintyM: 100,
-      licences: ['CC0_1_0'],
       iucn: ['VU'],
       hasSound: true,
     });
@@ -76,7 +73,7 @@ describe('explorer filter stores', () => {
     e.$yearRange.set([1990, 2000]);
     e.$hasPhoto.set(true);
     e.$hasSound.set(true);
-    expect(e.$groupCounts.get()).toEqual({ what: 2, when: 1, where: 0, how: 2, source: 0 });
+    expect(e.$groupCounts.get()).toEqual({ what: 2, when: 1, where: 0, how: 2 });
     e.clearFilters();
     expect(Object.values(e.$groupCounts.get()).every((n) => n === 0)).toBe(true);
   });

@@ -62,12 +62,6 @@ export const IUCN_LABELS: Record<string, string> = {
   DD: 'Data deficient',
 };
 
-export const LICENCE_LABELS: Record<string, string> = {
-  CC0_1_0: 'CC0 (public domain)',
-  CC_BY_4_0: 'CC BY 4.0',
-  CC_BY_NC_4_0: 'CC BY-NC 4.0',
-};
-
 /** "10 m", "1 km". */
 export function distance(m: number): string {
   return m >= 1000 ? `${m / 1000} km` : `${m} m`;

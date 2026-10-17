@@ -7,7 +7,6 @@ import type {
   Facet,
   FacetCount,
   IucnCategory,
-  LicenceEnum,
   Occurrence,
   OccurrenceSearch,
 } from './types';
@@ -26,7 +25,6 @@ export interface Refinements {
   continents?: readonly Continent[] | undefined;
   /** Keep records whose stated coordinate uncertainty is at most this; drops records without one. */
   maxUncertaintyM?: number | undefined;
-  licences?: readonly LicenceEnum[] | undefined;
   iucn?: readonly IucnCategory[] | undefined;
 }
 
@@ -37,7 +35,6 @@ export function refinementParams(r: Refinements): Params {
     month: r.months,
     continent: r.continents,
     coordinateUncertaintyInMeters: r.maxUncertaintyM ? `0,${r.maxUncertaintyM}` : undefined,
-    license: r.licences,
     iucnRedListCategory: r.iucn,
   };
 }

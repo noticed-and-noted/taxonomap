@@ -12,7 +12,6 @@ import {
   CONTINENT_LABELS,
   distance,
   IUCN_LABELS,
-  LICENCE_LABELS,
   MONTH_NAMES,
   MONTHS,
 } from '~/lib/format';
@@ -22,14 +21,12 @@ import {
   $hasPhoto,
   $hasSound,
   $iucn,
-  $licences,
   $maxUncertainty,
   $months,
   $yearRange,
   BASIS_OF_RECORD,
   CONTINENTS,
   IUCN_CATEGORIES,
-  LICENCES,
   UNCERTAINTY_STEPS_M,
 } from '~/stores/explorer';
 import type { FilterGroupId } from './filterGroups';
@@ -48,7 +45,6 @@ const uncert = useStore($maxUncertainty);
 const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
 const sound = useStore($hasSound);
-const licences = useStore($licences);
 
 function toggleIn<T>(store: WritableAtom<T[]>, value: T, sort?: (a: T, b: T) => number) {
   const cur = store.get();
@@ -61,7 +57,6 @@ const toggleIucn = (v: (typeof IUCN_CATEGORIES)[number]) => toggleIn($iucn, v);
 const toggleMonth = (m: number) => toggleIn($months, m, (a, b) => a - b);
 const toggleContinent = (v: (typeof CONTINENTS)[number]) => toggleIn($continents, v);
 const toggleBasis = (v: (typeof BASIS_OF_RECORD)[number]) => toggleIn($basisOfRecord, v);
-const toggleLicence = (v: (typeof LICENCES)[number]) => toggleIn($licences, v);
 const setUncert = (m: number | null) => $maxUncertainty.set(m);
 const togglePhoto = () => $hasPhoto.set(!photo.value);
 const toggleSound = () => $hasSound.set(!sound.value);
@@ -227,17 +222,6 @@ const clearYears = () => $yearRange.set(null);
           <button type="button" class="toggle" :aria-pressed="sound" @click="toggleSound">Has sound</button>
         </div>
         <p class="hint">With both on, records with either are kept.</p>
-      </fieldset>
-    </template>
-
-    <template v-else-if="group === 'source'">
-      <fieldset>
-        <legend class="group-label">Licence</legend>
-        <label v-for="l in LICENCES" :key="l" class="check-row">
-          <input type="checkbox" :checked="licences.includes(l)" @change="toggleLicence(l)" />
-          {{ LICENCE_LABELS[l] }}
-        </label>
-        <p class="hint">Records under any ticked licence.</p>
       </fieldset>
     </template>
   </div>

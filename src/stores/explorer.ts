@@ -4,8 +4,7 @@
  */
 import { atom, computed, type ReadableAtom, type WritableAtom } from 'nanostores';
 import { BASEMAP_IDS } from '~/lib/basemaps';
-import { ALLOWED_LICENCE_ENUMS } from '~/lib/gbif/licence';
-import type { BasisOfRecord, Continent, IucnCategory, LicenceEnum, OccurrenceFilter } from '~/lib/gbif';
+import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
@@ -31,8 +30,6 @@ export const CONTINENTS: readonly Continent[] = [
 
 /** Most to least threatened. */
 export const IUCN_CATEGORIES: readonly IucnCategory[] = ['EX', 'EW', 'CR', 'EN', 'VU', 'NT', 'LC', 'DD'];
-
-export const LICENCES: readonly LicenceEnum[] = ALLOWED_LICENCE_ENUMS;
 
 /** Most taxa the What filter accepts (keeps URLs and requests short). */
 export const MAX_TAXA = 10;
@@ -118,7 +115,6 @@ export const $maxUncertainty = urlAtom({
   ...codecs.int('uncert', null, { scope: 'global' }),
   parse: (raw) => (UNCERTAINTY_STEPS_M as readonly number[]).find((m) => String(m) === raw),
 });
-export const $licences = urlAtom(codecs.setOf('licence', LICENCES, { scope: 'global' }));
 export const $iucn = urlAtom(codecs.setOf('iucn', IUCN_CATEGORIES, { scope: 'global' }));
 export type HexPoint = readonly [lng: number, lat: number] | null;
 
@@ -191,7 +187,7 @@ export function clearHexSelection(): void {
 /* ---- Filters ---- */
 
 /** The filter rail's groups (see components/vue/filterGroups.ts for labels and icons). */
-export type FilterGroupId = 'what' | 'when' | 'where' | 'how' | 'source';
+export type FilterGroupId = 'what' | 'when' | 'where' | 'how';
 
 /**
  * One URL-synced filter: the rail group it sits in, when it counts as set,
@@ -245,7 +241,6 @@ export const FILTERS: readonly Filter[] = [
   list($basisOfRecord, 'how', (basisOfRecord) => ({ basisOfRecord })),
   flag($hasPhoto, 'how', { hasImage: true }),
   flag($hasSound, 'how', { hasSound: true }),
-  list($licences, 'source', (licences) => ({ licences })),
 ];
 
 const filterValues = computed(
@@ -264,7 +259,7 @@ export const $occurrenceFilter = computed(filterValues, (values): OccurrenceFilt
 
 /** Filters set per rail group (each control that is set counts once). */
 export const $groupCounts = computed(filterValues, (values) => {
-  const counts: Record<FilterGroupId, number> = { what: 0, when: 0, where: 0, how: 0, source: 0 };
+  const counts: Record<FilterGroupId, number> = { what: 0, when: 0, where: 0, how: 0 };
   FILTERS.forEach((f, i) => {
     if (f.isSet(values[i])) counts[f.group]++;
   });
