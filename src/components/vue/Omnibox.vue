@@ -11,7 +11,7 @@
  */
 import { navigate } from 'astro:transitions/client';
 import { useStore } from '@nanostores/vue';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { searchPlaces, type Place } from '~/lib/geocode';
@@ -225,14 +225,34 @@ function onBlur(e: FocusEvent) {
   if (!next || !(e.currentTarget as HTMLElement).parentElement?.contains(next)) close();
 }
 
+/* Keep the dropdown inside the visible area: on-screen keyboards shrink the
+   visual viewport (not the layout one) on iOS and Android, hiding its foot. */
+const dropdown = ref<HTMLDivElement>();
+const fitHeight = ref<number | null>(null);
+function fit() {
+  if (!open.value || !dropdown.value) return;
+  const vv = window.visualViewport;
+  const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  fitHeight.value = Math.max(160, Math.floor(bottom - dropdown.value.getBoundingClientRect().top - 8));
+}
+watch(open, (o) => (o ? void nextTick(fit) : undefined));
+
 // Search for anything typed before hydration (see query).
 onMounted(() => {
+  window.visualViewport?.addEventListener('resize', fit);
+  window.visualViewport?.addEventListener('scroll', fit);
+  window.addEventListener('resize', fit);
   if (!query.value) return;
   if (document.activeElement === input.value) onFocus();
   onInput();
 });
 
-onBeforeUnmount(() => clearTimeout(noticeTimer));
+onBeforeUnmount(() => {
+  clearTimeout(noticeTimer);
+  window.visualViewport?.removeEventListener('resize', fit);
+  window.visualViewport?.removeEventListener('scroll', fit);
+  window.removeEventListener('resize', fit);
+});
 </script>
 
 <template>
@@ -275,15 +295,18 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
 
     <div
       v-show="open && (options.length > 0 || placeFailed || (places && !places.length))"
-      class="dropdown absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-border bg-surface shadow-panel"
+      ref="dropdown"
+      class="dropdown absolute left-0 right-0 top-full z-40 mt-1 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-panel"
       :class="{ 'with-preview': previewHit }"
+      :style="fitHeight ? { maxHeight: `${fitHeight}px` } : undefined"
     >
-      <div :class="{ 'with-preview': previewHit }" class="results">
+      <!-- Only the list shrinks when space is short, so the preview stays in view. -->
+      <div :class="{ 'with-preview': previewHit }" class="results flex min-h-0 flex-col">
         <ul
           id="omnibox-listbox"
           role="listbox"
           :aria-label="places ? 'Places' : 'Species and places'"
-          class="max-h-[60vh] min-w-0 overflow-auto py-1"
+          class="max-h-[60vh] min-h-0 min-w-0 overflow-auto overscroll-contain py-1"
         >
           <li
             v-for="(o, i) in options"
