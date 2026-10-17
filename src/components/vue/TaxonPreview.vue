@@ -10,6 +10,7 @@ import { compact, RANK_LABELS } from '~/lib/format';
 import { occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
 import { leadPhoto } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
+import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 
 const props = defineProps<{ hit: NameHit; href: string; aboutLabel: string; selectLabel?: string | undefined }>();
@@ -18,6 +19,8 @@ const emit = defineEmits<{ select: []; about: [] }>();
 const image = ref<UsableImage>();
 const liveCount = ref<number | null>(null);
 const imageLoading = ref(false);
+/** The photo file itself has loaded; until then the thumb shimmers. */
+const imageShown = ref(false);
 let seq = 0;
 
 const count = computed(() => props.hit.count ?? liveCount.value);
@@ -42,6 +45,7 @@ watch(
   () => {
     seq++;
     image.value = undefined;
+    imageShown.value = false;
     liveCount.value = null;
     imageLoading.value = true;
     load(props.hit);
@@ -55,7 +59,23 @@ onBeforeUnmount(() => load.cancel());
 <template>
   <section class="taxon-preview" :aria-label="`Preview: ${name}`">
     <div class="thumb">
-      <ThumbImage v-if="image" :key="image.url" :image="image" size="200x" alt="" class="size-full object-cover" />
+      <SkeletonBlock
+        v-if="imageLoading || (image && !imageShown)"
+        class="absolute inset-0"
+        height="100%"
+        rounded="sm"
+        aria-hidden="true"
+      />
+      <ThumbImage
+        v-if="image"
+        :key="image.url"
+        :image="image"
+        size="200x"
+        alt=""
+        class="relative size-full object-cover"
+        @loaded="imageShown = true"
+        @broken="image = undefined"
+      />
       <span v-else-if="!imageLoading" class="text-xs text-subtle">No photo</span>
     </div>
     <div class="body">
@@ -85,6 +105,7 @@ onBeforeUnmount(() => load.cancel());
   font-size: 0.875rem;
 }
 .thumb {
+  position: relative;
   display: grid;
   place-items: center;
   flex-shrink: 0;
