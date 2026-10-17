@@ -1,7 +1,7 @@
 /**
  * Data for "What's near me":
  *   classes in the area      → 1 facet request
- *   species in the area      → 1 facet request per leading class (see species/groups.ts)
+ *   species in the area      → 1 facet request per leading class, then 1 batched name search (see species/groups.ts)
  *   recent sightings         → 1 search + titles of the few datasets involved
  */
 import { nameIndexWithin } from '~/lib/data/name-index';

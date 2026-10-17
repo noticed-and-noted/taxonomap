@@ -21,6 +21,7 @@ import {
   type Sighting,
   type SpeciesRow,
 } from '~/lib/near/data';
+import { nameFromRecords } from '~/lib/species/groups';
 import { loadSpeciesManifest } from '~/lib/species/links';
 import { $flyTo, $mapMode } from '~/stores/explorer';
 import {
@@ -126,6 +127,8 @@ async function loadArea() {
     if (signal.aborted) return;
     classes.value = r.classes;
     species.value = rows;
+    const named = await nameFromRecords(rows, signal);
+    if (!signal.aborted) species.value = named;
   });
 }
 

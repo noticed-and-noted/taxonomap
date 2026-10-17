@@ -69,7 +69,9 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
         if (found.images.size) latePhotos.value = new Map([...latePhotos.value, ...found.images]);
         photoDone.value = new Set([...photoDone.value, ...photos]);
         if (found.names.size) lateNames.value = new Map([...lateNames.value, ...found.names]);
-        names = names.filter((k) => !found.names.has(k));
+        // The batched record search may have named rows while photos loaded.
+        const unnamed = new Set(rows().flatMap((r) => (r.unnamed ? [r.key] : [])));
+        names = names.filter((k) => !found.names.has(k) && unnamed.has(k));
       }
       if (names.length) {
         const found = await resolveNames(names, mine?.signal);

@@ -3,9 +3,10 @@
  * The baked data has no species → class mapping, so each class is queried:
  *   classes            → 1 facet request (callers fold it into one they make anyway)
  *   species per class  → 1 facet request per class, 2 at a time (classKey AND the filter)
- *   names              → baked index, then one batched record search for misses;
- *                         the table calls `resolveNames` for any it still needs to show
- *                         (cached detail lookups, 2 at a time)
+ *                         (skipped for a class whose facet the caller already has)
+ *   names              → baked index; then `nameFromRecords`, one batched record search
+ *                         for misses, run after the rows are shown; the table calls
+ *                         `resolveNames` for any it still needs (cached detail lookups, 2 at a time)
  *   photos             → the table calls `photosForKeys` for rows in view: each species'
  *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
@@ -71,25 +72,32 @@ export async function namedClasses(counts: readonly FacetCount[]): Promise<Class
   );
 }
 
-/** Top species of each of the leading classes, most-recorded first, named where cheap. */
+/**
+ * Top species of each of the leading classes, most-recorded first, named from
+ * the baked index (see nameFromRecords for the rest). `known` holds speciesKey
+ * facets the caller already fetched, by classKey; those classes are not queried.
+ */
 export async function speciesInClasses(
   filter: OccurrenceFilter,
   classes: readonly ClassGroup[],
-  opts: { maxClasses?: number; perClass?: number; signal?: AbortSignal } = {},
+  opts: { maxClasses?: number; perClass?: number; signal?: AbortSignal; known?: Map<number, FacetCount[]> } = {},
 ): Promise<SpeciesRow[]> {
-  const { maxClasses = 8, perClass = 30, signal } = opts;
+  const { maxClasses = 8, perClass = 30, signal, known } = opts;
   const limit = pLimit(CONCURRENCY);
   const pages = await Promise.all(
-    classes.slice(0, maxClasses).map((c) =>
-      limit(async () => {
-        signal?.throwIfAborted();
-        const r = await occurrenceFacets({ ...filter, classKey: c.key }, ['speciesKey'], {
-          facetLimit: perClass,
-          ...(signal && { signal }),
-        });
-        return (r.facets['speciesKey'] ?? []).map((f) => ({ key: Number(f.name), records: f.count, classKey: c.key }));
-      }),
-    ),
+    classes.slice(0, maxClasses).map(async (c) => {
+      const counts =
+        known?.get(c.key) ??
+        (await limit(async () => {
+          signal?.throwIfAborted();
+          const r = await occurrenceFacets({ ...filter, classKey: c.key }, ['speciesKey'], {
+            facetLimit: perClass,
+            ...(signal && { signal }),
+          });
+          return r.facets['speciesKey'] ?? [];
+        }));
+      return counts.map((f) => ({ key: Number(f.name), records: f.count, classKey: c.key }));
+    }),
   );
   const rows = pages.flat().sort((a, b) => b.records - a.records);
   if (!rows.length) return [];
@@ -104,14 +112,6 @@ export async function speciesInClasses(
     if (n) sci.set(r.key, n.scientificName);
     if (n?.commonName) common.set(r.key, n.commonName);
   }
-  // Records carry their species name: one search covers most misses.
-  const misses = rows.filter((r) => !sci.has(r.key)).map((r) => r.key);
-  if (misses.length) {
-    const res = await searchOccurrences({ speciesKeys: misses.slice(0, 150) }, { limit: 300 }, signal).catch(
-      () => null,
-    );
-    for (const o of res?.results ?? []) if (o.speciesKey !== undefined && o.species) sci.set(o.speciesKey, o.species);
-  }
   return rows.map((r) => {
     const commonName = common.get(r.key);
     const name = sci.get(r.key);
@@ -121,6 +121,25 @@ export async function speciesInClasses(
       ...(commonName && { commonName }),
       ...(!name && { unnamed: true as const }),
     };
+  });
+}
+
+/**
+ * Names for rows the index missed, from one batched record search (records
+ * carry their species name). Returns `rows` itself when it names none.
+ */
+export async function nameFromRecords(rows: SpeciesRow[], signal?: AbortSignal): Promise<SpeciesRow[]> {
+  const misses = rows.filter((r) => r.unnamed).map((r) => r.key);
+  if (!misses.length) return rows;
+  const res = await searchOccurrences({ speciesKeys: misses.slice(0, 150) }, { limit: 300 }, signal).catch(() => null);
+  const sci = new Map<number, string>();
+  for (const o of res?.results ?? []) if (o.speciesKey !== undefined && o.species) sci.set(o.speciesKey, o.species);
+  if (!sci.size) return rows;
+  return rows.map((r) => {
+    const name = r.unnamed && sci.get(r.key);
+    if (!name) return r;
+    const { unnamed: _, ...named } = r;
+    return { ...named, scientificName: name };
   });
 }
 

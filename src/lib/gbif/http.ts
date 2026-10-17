@@ -83,6 +83,8 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
       // A request that just slept its own back-off has already waited.
       const cool = coolUntil - opts.now();
       if (cool > 0 && !waited) await opts.sleep(cool);
+      // Cancelled during a cool-down or back-off: don't send (or count) it.
+      signal?.throwIfAborted();
       waited = false;
       let res: Response;
       countRequest('json');

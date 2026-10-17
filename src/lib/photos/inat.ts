@@ -28,11 +28,17 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
     tokens = Math.min(burst, tokens + ((t - last) / 1000) * perSecond);
     last = t;
   };
-  const acquire = () => {
+  // A request cancelled while queued (its panel closed) gives up its turn without spending a token.
+  const acquire = (signal?: AbortSignal) => {
     const turn = queue.then(async () => {
+      if (signal?.aborted) return;
       refill();
       if (tokens < 1) {
-        await new Promise((r) => setTimeout(r, ((1 - tokens) / perSecond) * 1000));
+        await new Promise<void>((r) => {
+          const t = setTimeout(r, ((1 - tokens) / perSecond) * 1000);
+          signal?.addEventListener('abort', () => (clearTimeout(t), r()), { once: true });
+        });
+        if (signal?.aborted) return;
         refill();
       }
       tokens -= 1;
@@ -41,7 +47,8 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
     return turn;
   };
   return async (url, init) => {
-    await acquire();
+    await acquire(init?.signal);
+    init?.signal?.throwIfAborted();
     return transport(url, init);
   };
 }
