@@ -45,7 +45,7 @@ const hexAt = (cx: number, cy: number, r = 100): Px[] =>
 
 describe('adhocLevel', () => {
   it('drops levels where adhoc geohash cells are wider than hexes, keeps the rest', () => {
-    expect([5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(adhocLevel)).toEqual([5, 5, 7, 8, 8, 10, 10, 12, 12, 12]);
+    expect([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(adhocLevel)).toEqual([2, 2, 4, 5, 5, 7, 7, 7, 10, 10, 12, 12, 12]);
   });
 });
 

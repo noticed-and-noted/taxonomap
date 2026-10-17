@@ -79,11 +79,12 @@ export function gridLevel(zoom: number, lat: number, w: number, h: number): numb
 
 /**
  * GBIF's adhoc tiles (any refinement filter) snap records to geohash cells,
- * finer only every 2–3 zooms (measured: steps at 4, 7, 10, 12, 14). At the
- * levels between, a cell is wider than our hexes, so alternate hex columns
- * come back near-empty in stripes. Those levels use the coarser level below.
+ * finer only every 2–3 zooms (measured: steps at 4, 7, 10, 12, 14). Unless a
+ * hex is clearly wider than a cell (≥ ~1.4×), the two grids beat and hex
+ * columns come back near-empty in stripes. Those levels use the nearest
+ * coarser level that is clear.
  */
-const ADHOC_LEVEL: Record<number, number> = { 6: 5, 9: 8, 11: 10, 13: 12, 14: 12 };
+const ADHOC_LEVEL: Record<number, number> = { 3: 2, 6: 5, 8: 7, 9: 7, 11: 10, 13: 12, 14: 12 };
 export const adhocLevel = (level: number): number => ADHOC_LEVEL[level] ?? level;
 
 /** The level-`level` tile holding a point. */
