@@ -55,13 +55,13 @@ const groupLabel = (key: number) => {
 // Rows currently scrolled into the results box (or just below it); see observeRows.
 const inView = ref(new Set<number>());
 // Photos, and names the index lacked, looked up as rows come into view.
-const { sciName, pendingName, photoOf, pendingPhoto } = useRowDetails({
+const { commonName, sciName, pendingName, photoOf, pendingPhoto } = useRowDetails({
   rows: () => props.rows,
   dataset: () => props.groups,
   inView,
   needAllNames: () => sortKey.value === 'name' || !!query.value.trim(),
 });
-const displayName = (r: SpeciesRow) => r.commonName ?? sciName(r);
+const displayName = (r: SpeciesRow) => commonName(r) ?? sciName(r);
 const initials = (r: SpeciesRow) =>
   displayName(r)
     .split(/\s+/)
@@ -84,7 +84,7 @@ const filtered = computed(() => {
   const q = normalise(query.value);
   const on = new Set(groupsOn.value);
   return props.rows.filter(
-    (r) => (!on.size || on.has(r.classKey)) && (!q || normalise(`${r.commonName ?? ''} ${sciName(r)}`).includes(q)),
+    (r) => (!on.size || on.has(r.classKey)) && (!q || normalise(`${commonName(r) ?? ''} ${sciName(r)}`).includes(q)),
   );
 });
 
@@ -347,8 +347,8 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
                   <span v-if="pendingName(r)" class="sr-only">Loading name</span>
                   <span v-else class="min-w-0">
                     <span class="block truncate group-hover:underline">{{ displayName(r) }}</span>
-                    <span v-if="r.commonName" class="sci-name block truncate text-xs text-muted">{{
-                      r.scientificName
+                    <span v-if="commonName(r)" class="sci-name block truncate text-xs text-muted">{{
+                      sciName(r)
                     }}</span>
                   </span>
                 </a>

@@ -41,8 +41,12 @@ export function listByRank(rank: Rank, offset = 0, limit = 1000) {
   );
 }
 
-export function getVernacularNames(key: number, limit = 300) {
-  return http().getJson<Paged<VernacularName>>(`/v1/species/${key}/vernacularNames`, { limit }, { ttlMs: DAY });
+export function getVernacularNames(key: number, limit = 300, signal?: AbortSignal) {
+  return http().getJson<Paged<VernacularName>>(
+    `/v1/species/${key}/vernacularNames`,
+    { limit },
+    { ttlMs: DAY, ...(signal && { signal }) },
+  );
 }
 
 export function getSynonyms(key: number, limit = 100) {

@@ -7,6 +7,7 @@
  *   names              → baked index; then `nameFromRecords`, one batched record search
  *                         for misses, run after the rows are shown; the table calls
  *                         `resolveNames` for any it still needs (cached detail lookups, 2 at a time)
+ *                         and `commonNames` for rows in view without a common name
  *   photos             → the table calls `photosForKeys` for rows in view: each species'
  *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
@@ -16,6 +17,7 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import pLimit from 'p-limit';
 import {
   getSpecies,
+  getVernacularNames,
   occurrenceFacets,
   searchOccurrences,
   type FacetCount,
@@ -23,6 +25,7 @@ import {
   type UsableImage,
 } from '~/lib/gbif';
 import { leadPhotos } from '~/lib/photos/taxon-photos';
+import { englishName } from './names';
 
 export interface ClassGroup {
   key: number;
@@ -158,6 +161,26 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
         } catch {
           /* unnamed */
         }
+      }),
+    ),
+  );
+  return names;
+}
+
+/**
+ * English common names, picked as the species page picks them (same cached
+ * request), a few at a time. Keys with no English name are left out.
+ */
+export async function commonNames(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
+  const limit = pLimit(CONCURRENCY);
+  const names = new Map<number, string>();
+  await Promise.all(
+    keys.map((k) =>
+      limit(async () => {
+        if (signal?.aborted) return;
+        const v = await getVernacularNames(k, 300, signal).catch(() => null);
+        const name = v && englishName(v.results);
+        if (name) names.set(k, name);
       }),
     ),
   );

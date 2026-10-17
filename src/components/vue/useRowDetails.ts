@@ -1,14 +1,15 @@
 /**
- * Lazy details for species-table rows: each row's lead photo, and its name
- * when the baked index lacked it. Photos are fetched for rows in view; names
- * for rows in view, or for every row when `needAllNames` (sorting by name,
- * searching). Photos go first because their records carry names too. Each
+ * Lazy details for species-table rows: each row's lead photo, its name when
+ * the baked index lacked it, and its common name when the index had none.
+ * Photos and common names are fetched for rows in view; names for rows in
+ * view, or for every row when `needAllNames` (sorting by name, searching).
+ * Photos go first because their records carry names too. Each
  * key is asked for once per data set; a new data set (`dataset` changes)
  * forgets the last one's lookups and aborts them.
  */
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import type { UsableImage } from '~/lib/gbif';
-import { photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
+import { commonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 
 export interface RowDetailsOptions {
   rows: () => readonly SpeciesRow[];
@@ -27,9 +28,12 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
   /** Photos found after load; `photoDone` marks keys searched (found or not). */
   const latePhotos = ref(new Map<number, UsableImage>());
   const photoDone = ref(new Set<number>());
+  /** Common names looked up after load, for rows in view the index had none for. */
+  const lateCommon = ref(new Map<number, string>());
 
   let photoAsked = new Set<number>();
   let nameAsked = new Set<number>();
+  let commonAsked = new Set<number>();
   let ctrl: AbortController | undefined;
   let current: unknown;
 
@@ -42,6 +46,17 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
     noName.value = new Set();
     latePhotos.value = new Map();
     photoDone.value = new Set();
+    commonAsked = new Set();
+    lateCommon.value = new Map();
+  }
+
+  /** Start over when the data set changes; returns this data set's controller. */
+  function sync() {
+    if (current !== dataset()) {
+      current = dataset();
+      forget();
+    }
+    return ctrl;
   }
 
   const inViewRows = computed(() => rows().filter((r) => inView.value.has(r.key)));
@@ -49,15 +64,26 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
   const needNames = computed(() =>
     (needAllNames() ? rows() : inViewRows.value).filter((r) => r.unnamed).map((r) => r.key),
   );
+  const needCommon = computed(() => inViewRows.value.filter((r) => !r.commonName).map((r) => r.key));
+
+  // Common names run alongside photos: neither needs the other.
+  watch(
+    needCommon,
+    async (keys) => {
+      const mine = sync();
+      const ask = keys.filter((k) => !commonAsked.has(k));
+      if (!ask.length) return;
+      for (const k of ask) commonAsked.add(k);
+      const found = await commonNames(ask, mine?.signal);
+      if (mine === ctrl && found.size) lateCommon.value = new Map([...lateCommon.value, ...found]);
+    },
+    { immediate: true },
+  );
 
   watch(
     [needPhotos, needNames],
     async ([photoKeys, nameKeys]) => {
-      if (current !== dataset()) {
-        current = dataset();
-        forget();
-      }
-      const mine = ctrl;
+      const mine = sync();
       const photos = photoKeys.filter((k) => !photoAsked.has(k));
       let names = nameKeys.filter((k) => !nameAsked.has(k));
       for (const k of photos) photoAsked.add(k);
@@ -87,6 +113,8 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
   onScopeDispose(() => ctrl?.abort());
 
   return {
+    /** The common name, from the index or looked up once in view. */
+    commonName: (r: SpeciesRow) => r.commonName ?? lateCommon.value.get(r.key),
     /** The scientific name, once known. */
     sciName: (r: SpeciesRow) => (r.unnamed ? lateNames.value.get(r.key) : undefined) ?? r.scientificName,
     /** Still looking the name up (show a skeleton). */

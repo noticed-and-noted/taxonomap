@@ -6,6 +6,7 @@ import type { SpeciesRow } from '~/lib/species/groups';
 const lookups = vi.hoisted(() => ({
   photos: [] as number[][],
   names: [] as number[][],
+  common: [] as number[][],
 }));
 
 vi.mock('~/lib/species/groups', () => ({
@@ -20,6 +21,10 @@ vi.mock('~/lib/species/groups', () => ({
   resolveNames: async (keys: number[]) => {
     lookups.names.push(keys);
     return new Map(keys.filter((k) => k === 2).map((k) => [k, 'Named by lookup']));
+  },
+  commonNames: async (keys: number[]) => {
+    lookups.common.push(keys);
+    return new Map(keys.filter((k) => k === 3).map((k) => [k, 'Common three']));
   },
 }));
 
@@ -47,6 +52,7 @@ async function setup(rows: SpeciesRow[]) {
 beforeEach(() => {
   lookups.photos = [];
   lookups.names = [];
+  lookups.common = [];
 });
 
 describe('useRowDetails', () => {
@@ -65,6 +71,18 @@ describe('useRowDetails', () => {
     expect(rows.map((r) => d.sciName(r))).toEqual(['Named by photo', 'Named by lookup', 'Species 3', 'Species 4']);
     expect(d.photoOf(rows[0]!)).toMatchObject({ url: 'p1' });
     expect([d.pendingPhoto(rows[1]!), d.pendingPhoto(rows[3]!)]).toEqual([false, true]);
+    stop();
+  });
+
+  it('looks up common names for rows in view that have none', async () => {
+    const { unnamed: _, ...five } = row(5, { commonName: 'Indexed five' });
+    const rows = [row(3), five];
+    const { d, inView, stop } = await setup(rows);
+    expect(d.commonName(rows[0]!)).toBeUndefined();
+    inView.value = new Set([3, 5]);
+    await vi.waitFor(() => expect(d.commonName(rows[0]!)).toBe('Common three'));
+    expect(lookups.common).toEqual([[3]]);
+    expect(d.commonName(rows[1]!)).toBe('Indexed five');
     stop();
   });
 
