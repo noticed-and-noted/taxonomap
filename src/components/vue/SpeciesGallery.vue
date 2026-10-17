@@ -8,7 +8,7 @@
  * loads, and preloads its neighbours so stepping through is usually instant.
  */
 import { computed, onMounted, reactive, ref, shallowRef } from 'vue';
-import { countRequest, thumbnailUrl, type Rank, type UsableImage } from '~/lib/gbif';
+import { countRequest, photoCrossOrigin, thumbnailUrl, type Rank, type UsableImage } from '~/lib/gbif';
 import { taxonPhotos } from '~/lib/photos/taxon-photos';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -67,6 +67,9 @@ function preload(i: number) {
   preloading.add(url);
   const el = new Image();
   el.decoding = 'async';
+  // Same mode as the <img> below, so the preloaded copy is the one it uses.
+  const cors = photoCrossOrigin(url);
+  if (cors) el.crossOrigin = cors;
   el.onload = () => settle(url, true);
   el.onerror = () => settle(url, false);
   el.src = url;
@@ -176,6 +179,7 @@ function onBackdrop(e: MouseEvent) {
             v-if="currentSrc && !failed.has(currentSrc)"
             :key="currentSrc"
             :src="currentSrc"
+            :crossorigin="photoCrossOrigin(currentSrc)"
             :alt="name"
             decoding="async"
             class="relative size-full object-contain transition-opacity duration-200"

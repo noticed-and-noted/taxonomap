@@ -121,12 +121,14 @@ onBeforeUnmount(() => unlisten?.());
         <span v-for="([x, y], i) in tiles" :key="i" class="relative block">
           <img
             :src="gbifBasemapTile(Z, x, y, 'dark')"
+            crossorigin="anonymous"
             alt=""
             loading="lazy"
             class="base-dark absolute inset-0 size-full"
           />
           <img
             :src="gbifBasemapTile(Z, x, y, 'light')"
+            crossorigin="anonymous"
             alt=""
             loading="lazy"
             class="base-light absolute inset-0 size-full"

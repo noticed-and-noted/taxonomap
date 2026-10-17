@@ -5,6 +5,7 @@
  *   recent sightings         → 1 search + titles of the few datasets involved
  */
 import { nameIndexWithin } from '~/lib/data/name-index';
+import { DAY } from '~/lib/util/time';
 import {
   circleToWkt,
   getDataset,
@@ -59,22 +60,28 @@ export interface Sighting {
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Latest dated records with photos from the past year, newest first. */
+/** Newest windows first: GBIF ignores sort, so a short window is what keeps the feed recent. */
+const SIGHTING_WINDOWS_DAYS = [30, 365];
+
+/** Latest dated records with photos, newest first: the past 30 days, widened to a year if that has too few. */
 export async function recentSightings(a: Area, limit = 24, signal?: AbortSignal): Promise<Sighting[]> {
   const now = new Date();
-  const yearAgo = new Date(now);
-  yearAgo.setFullYear(now.getFullYear() - 1);
-  const res = await searchOccurrences(
-    { ...filterFor(a), hasImage: true, eventDate: `${isoDay(yearAgo)},${isoDay(now)}` },
-    { limit: 60 },
-    signal,
-  );
+  let rows: { o: Occurrence; img: GbifImage }[] = [];
+  for (const days of SIGHTING_WINDOWS_DAYS) {
+    const from = new Date(now.getTime() - days * DAY);
+    const res = await searchOccurrences(
+      { ...filterFor(a), hasImage: true, eventDate: `${isoDay(from)},${isoDay(now)}` },
+      { limit: 60 },
+      signal,
+    );
+    rows = res.results
+      .map((o) => ({ o, img: usableImages(o)[0] }))
+      .filter((x): x is { o: Occurrence; img: GbifImage } => !!x.img && !!x.o.eventDate)
+      .sort((x, y) => (y.o.eventDate ?? '').localeCompare(x.o.eventDate ?? ''))
+      .slice(0, limit);
+    if (rows.length >= limit) break;
+  }
   const idx = await nameIndexWithin(800);
-  const rows = res.results
-    .map((o) => ({ o, img: usableImages(o)[0] }))
-    .filter((x): x is { o: Occurrence; img: GbifImage } => !!x.img && !!x.o.eventDate)
-    .sort((x, y) => (y.o.eventDate ?? '').localeCompare(x.o.eventDate ?? ''))
-    .slice(0, limit);
   // Titles for the handful of datasets involved (attribution on every card).
   const titles = new Map<string, string>();
   await Promise.all(

@@ -1,6 +1,6 @@
 import { BACKBONE_DATASET_KEY } from './config';
 import { http } from './http';
-import type { MatchV1, MatchV2, NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
+import type { NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
 
 import { DAY, HOUR } from '~/lib/util/time';
 
@@ -41,14 +41,6 @@ export function listByRank(rank: Rank, offset = 0, limit = 1000) {
   );
 }
 
-export function matchName(name: string): Promise<MatchV1> {
-  return http().getJson('/v1/species/match', { name }, { ttlMs: DAY });
-}
-
-export function matchNameV2(scientificName: string): Promise<MatchV2> {
-  return http().getJson('/v2/species/match', { scientificName }, { ttlMs: DAY });
-}
-
 export function getVernacularNames(key: number, limit = 300) {
   return http().getJson<Paged<VernacularName>>(`/v1/species/${key}/vernacularNames`, { limit }, { ttlMs: DAY });
 }
@@ -67,12 +59,6 @@ export function getChildren(key: number, opts: { limit?: number; offset?: number
 
 export function getParents(key: number): Promise<NameUsage[]> {
   return http().getJson(`/v1/species/${key}/parents`, undefined, { ttlMs: DAY });
-}
-
-/** Prefer an English vernacular name, falling back to any. */
-export function pickCommonName(names: readonly VernacularName[], langs = ['eng', 'en']): string | undefined {
-  const inLang = names.filter((n) => n.language && langs.includes(n.language));
-  return (inLang.find((n) => n.preferred) ?? inLang[0])?.vernacularName;
 }
 
 /**

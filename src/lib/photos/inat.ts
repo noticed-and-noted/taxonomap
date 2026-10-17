@@ -6,6 +6,7 @@
  * allowed and then requests are spaced out.
  */
 import { createHttp, type Transport } from '~/lib/gbif/http';
+import { LruCache } from '~/lib/gbif/lru';
 import { HOUR } from '~/lib/util/time';
 import { parseLicence, type InatImage } from '~/lib/gbif/licence';
 
@@ -79,8 +80,8 @@ interface InatObservation {
 
 const TAXON_FIELDS = `id,name,rank_level,ancestor_ids,taxon_photos.photo.${PHOTO_FIELDS.replaceAll(',', ',taxon_photos.photo.')}`;
 
-/** Taxa already fetched, by ID, so overlapping batches don't fetch them twice. */
-const taxa = new Map<number, InatTaxon>();
+/** Taxa already fetched, by ID, so overlapping batches don't fetch them twice; capped so long sessions don't grow without end. */
+const taxa = new LruCache<InatTaxon>(2000);
 
 /**
  * Taxa by ID, with their curated photos; batched TAXA_BATCH per request.
@@ -91,15 +92,20 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
   const wanted = [...new Set(ids)].sort((a, b) => a - b);
   for (let i = 0; i < wanted.length; i += TAXA_BATCH) {
     const chunk = wanted.slice(i, i + TAXA_BATCH);
-    if (chunk.every((id) => taxa.has(id))) continue;
+    if (chunk.every((id) => taxa.get(String(id)) !== undefined)) continue;
     const res = await inat.getJson<{ results: InatTaxon[] }>(
       `/v2/taxa/${chunk.join(',')}`,
       { fields: TAXON_FIELDS },
       { ...(signal && { signal }) },
     );
-    for (const t of res.results) taxa.set(t.id, t);
+    for (const t of res.results) taxa.set(String(t.id), t, Infinity);
   }
-  return new Map(ids.flatMap((id) => (taxa.has(id) ? [[id, taxa.get(id) as InatTaxon]] : [])));
+  return new Map(
+    ids.flatMap((id): [number, InatTaxon][] => {
+      const t = taxa.get(String(id));
+      return t ? [[id, t]] : [];
+    }),
+  );
 }
 
 /** Research-grade observations of a taxon with an openly licensed photo, most-voted first. */

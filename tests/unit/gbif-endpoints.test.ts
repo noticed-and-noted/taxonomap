@@ -44,15 +44,6 @@ describe('occurrence endpoints', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('searches species in a circle', async () => {
-    const calls = stubNetwork(() => facets(1, 'SPECIES_KEY', []));
-    const g = await gbif();
-    await g.speciesInRadius(51.5, -0.1, 5, { month: 4 }, 50);
-    const q = calls[0]!.searchParams;
-    expect(q.get('geometry')).toMatch(/^POLYGON/);
-    expect([q.get('month'), q.get('facetLimit')]).toEqual(['4', '50']);
-  });
-
   it('fetches one record by key', async () => {
     const calls = stubNetwork(() => ({ key: 9, datasetKey: 'd' }));
     const g = await gbif();
@@ -68,8 +59,6 @@ describe('species endpoints', () => {
     await g.suggestSpecies('  Turdus ', { rank: 'SPECIES' });
     await g.searchVernacular('robin');
     await g.listByRank('CLASS', 1000);
-    await g.matchName('Aves');
-    await g.matchNameV2('Aves');
     await g.getVernacularNames(212);
     await g.getSynonyms(212);
     await g.getChildren(212, { offset: 100 });
@@ -78,8 +67,6 @@ describe('species endpoints', () => {
       '/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=Turdus&rank=SPECIES',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=10&q=robin&qField=VERNACULAR&status=ACCEPTED',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=1000&offset=1000&rank=CLASS&status=ACCEPTED',
-      '/v1/species/match?name=Aves',
-      '/v2/species/match?scientificName=Aves',
       '/v1/species/212/vernacularNames?limit=300',
       '/v1/species/212/synonyms?limit=100',
       '/v1/species/212/children?limit=100&offset=100',
@@ -91,17 +78,6 @@ describe('species endpoints', () => {
     stubNetwork(() => facets(0, 'HIGHER_TAXON_KEY', [[212, 11000]]));
     const g = await gbif();
     expect([...(await g.speciesCountsUnder(1))]).toEqual([[212, 11000]]);
-  });
-
-  it('prefers a preferred English common name', async () => {
-    const g = await gbif();
-    const names = [
-      { vernacularName: 'Rotkehlchen', language: 'deu', preferred: true },
-      { vernacularName: 'Robin', language: 'eng' },
-      { vernacularName: 'European robin', language: 'eng', preferred: true },
-    ];
-    expect(g.pickCommonName(names)).toBe('European robin');
-    expect(g.pickCommonName(names.slice(0, 1))).toBeUndefined();
   });
 });
 

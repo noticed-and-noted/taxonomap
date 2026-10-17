@@ -2,7 +2,7 @@
  * Build-time baking. The Node transport (disk cache, User-Agent) is swapped
  * for the plain client so these tests never touch .cache/.
  */
-import { facets, stubNetwork } from './helpers/network';
+import { facets, json, stubNetwork } from './helpers/network';
 
 vi.mock('~/lib/gbif/server', () => import('~/lib/gbif'));
 
@@ -15,8 +15,10 @@ const usage = (key: number, rank: string, name: string, extra: object = {}) => (
 });
 
 /** A tiny GBIF: two kingdoms' worth of taxa and a few species. */
-function gbif() {
+function gbif(override: (url: URL) => unknown = () => undefined) {
   return stubNetwork((url) => {
+    const early = override(url);
+    if (early !== undefined) return early;
     const p = url.pathname;
     const q = url.searchParams;
     if (p === '/v1/species/search' && q.get('facet') === 'higherTaxonKey')
@@ -132,6 +134,14 @@ describe('bake', () => {
     // Birds get ceil(3 × 0.3) = 1 slot (key 10); the next class adds 12, a genus, which is dropped.
     expect(await b.bakeSpeciesList()).toEqual([{ key: 10, slug: 'species-number10', count: 9000 }]);
     expect(await b.bakeSpeciesManifest()).toEqual({ 10: 'species-number10' });
+  });
+
+  it('fails the build when GBIF errors, rather than dropping the species', async () => {
+    gbif((url) => (url.pathname === '/v1/species/10' ? json({}, 400) : undefined));
+    const b = await bake({ SPECIES_PRERENDER_COUNT: '3' });
+    // The mocked server module keeps its client (and its cache) across tests.
+    (await import('~/lib/gbif/server')).http().clear();
+    await expect(b.bakeSpeciesList()).rejects.toThrow();
   });
 
   it('pre-renders nothing when the count is 0', async () => {

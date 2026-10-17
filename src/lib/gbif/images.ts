@@ -30,6 +30,18 @@ export async function findImages(
   return { images: res.results.flatMap(usableImages), count: res.count, endOfRecords: res.endOfRecords, names };
 }
 
+/** Photo hosts that send CORS headers. GBIF's image cache does not, so its photos must load without `crossorigin`. */
+const CORS_PHOTO_HOST = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\//;
+
+/**
+ * `crossorigin` for a photo URL: 'anonymous' where the host allows it, so the
+ * service worker stores a readable copy rather than an opaque one, which
+ * browsers count as several MB of storage each.
+ */
+export function photoCrossOrigin(url: string | undefined): 'anonymous' | undefined {
+  return url && CORS_PHOTO_HOST.test(url) ? 'anonymous' : undefined;
+}
+
 export type ThumbSize = '200x' | '400x' | '800x' | `${number}x${number}`;
 
 /** iNaturalist's fixed photo sizes, by longest edge. */

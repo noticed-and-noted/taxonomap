@@ -94,26 +94,6 @@ export interface VernacularName {
   preferred?: boolean;
 }
 
-/** v1 /species/match */
-export interface MatchV1 extends HigherKeys {
-  usageKey?: number;
-  acceptedUsageKey?: number;
-  scientificName?: string;
-  canonicalName?: string;
-  rank?: Rank;
-  status?: string;
-  confidence: number;
-  matchType: 'EXACT' | 'FUZZY' | 'HIGHERRANK' | 'NONE' | (string & {});
-}
-
-/** v2 /species/match */
-export interface MatchV2 {
-  usage?: { key: string; name: string; canonicalName?: string; rank: Rank; status?: string };
-  acceptedUsage?: { key: string; name: string; rank: Rank };
-  classification?: { key: string; name: string; rank: Rank }[];
-  diagnostics: { matchType: string; confidence?: number };
-}
-
 export interface FacetCount {
   name: string;
   count: number;

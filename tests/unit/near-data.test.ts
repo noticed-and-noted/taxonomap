@@ -65,9 +65,30 @@ describe('near data', () => {
       [11, '2026-06-01', undefined, undefined],
       [10, '2026-03-01', 'European robin', 'Garden survey'],
     ]);
-    const q = calls[0]!.searchParams;
+    // Too few in the past 30 days, so it widens to a year.
+    const searches = calls.filter((u) => u.pathname === '/v1/occurrence/search');
+    expect(searches).toHaveLength(2);
+    const q = searches[1]!.searchParams;
     expect(q.get('mediaType')).toBe('StillImage');
     expect(q.get('eventDate')).toMatch(/^\d{4}-\d\d-\d\d,\d{4}-\d\d-\d\d$/);
+  });
+
+  it('stays within the past 30 days when that fills the feed', async () => {
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v1/occurrence/search')
+        return { count: 30, results: Array.from({ length: 30 }, (_, i) => photoRecord(100 + i, '2026-10-01', 1)) };
+      if (url.pathname.startsWith('/v1/dataset/')) return { key: 'ds1', title: 'Garden survey' };
+      return snapshots({ names: NAMES })(url);
+    });
+    const { recentSightings } = await load();
+    expect(await recentSightings(AREA)).toHaveLength(24);
+    const searches = calls.filter((u) => u.pathname === '/v1/occurrence/search');
+    expect(searches).toHaveLength(1);
+    const [from, to] = searches[0]!.searchParams
+      .get('eventDate')!
+      .split(',')
+      .map((d) => Date.parse(d));
+    expect((to! - from!) / 86_400_000).toBe(30);
   });
 
   it('tallies distinct species overall and for the six leading classes', async () => {

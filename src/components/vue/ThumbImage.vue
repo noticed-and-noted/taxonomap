@@ -6,7 +6,7 @@
  * are detected on mount.
  */
 import { onMounted, ref, toRef } from 'vue';
-import type { ThumbSize, UsableImage } from '~/lib/gbif';
+import { photoCrossOrigin, type ThumbSize, type UsableImage } from '~/lib/gbif';
 import { useThumbnail } from './useThumbnail';
 
 const props = withDefaults(defineProps<{ image: UsableImage; size?: ThumbSize; alt?: string }>(), {
@@ -44,6 +44,7 @@ onMounted(() => {
     v-if="src && !broken"
     ref="el"
     :src="src"
+    :crossorigin="photoCrossOrigin(src)"
     :alt="alt"
     loading="lazy"
     decoding="async"

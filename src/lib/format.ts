@@ -12,10 +12,6 @@ export function full(n: number): string {
 }
 
 /** "1 record" / "12,345 records" */
-export function plural(n: number, one: string, many = `${one}s`): string {
-  return `${full(n)} ${n === 1 ? one : many}`;
-}
-
 let regionNames: Intl.DisplayNames | undefined;
 
 /** ISO 3166-1 alpha-2 → English country name (falls back to the code). */

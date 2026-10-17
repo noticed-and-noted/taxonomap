@@ -5,6 +5,7 @@
  */
 import {
   BACKBONE_DATASET_KEY,
+  circleToWkt,
   configureHttp,
   findImages,
   getChildren,
@@ -17,13 +18,10 @@ import {
   getVernacularNames,
   listByRank,
   mapCapabilities,
-  matchName,
-  matchNameV2,
   occurrenceFacets,
   occurrenceTileTemplate,
   searchOccurrences,
   searchVernacular,
-  speciesInRadius,
   suggestSpecies,
   thumbnailUrl,
 } from '~/lib/gbif';
@@ -164,17 +162,6 @@ describe('species', () => {
     expect(r.results.every((x) => x.datasetKey === BACKBONE_DATASET_KEY)).toBe(true);
   });
 
-  it('match v1', async () => {
-    const m = await matchName('Erithacus rubecula');
-    expect(m).toMatchObject({ usageKey: ROBIN, matchType: 'EXACT', classKey: AVES });
-  });
-
-  it('match v2', async () => {
-    const m = await matchNameV2('Erithacus rubecula');
-    expect(m.usage).toMatchObject({ key: String(ROBIN), rank: 'SPECIES' });
-    expect(m.classification?.find((c) => c.rank === 'CLASS')?.key).toBe(String(AVES));
-  });
-
   it('detail', async () => {
     const s = await getSpecies(SPARROW);
     expect(s).toMatchObject({ key: SPARROW, rank: 'SPECIES', canonicalName: 'Passer domesticus', classKey: AVES });
@@ -215,7 +202,7 @@ describe('occurrences', () => {
   });
 
   it('species in an area (WKT polygon + speciesKey facet)', async () => {
-    const r = await speciesInRadius(51.507, -0.128, 2, {}, 10);
+    const r = await occurrenceFacets({ geometry: circleToWkt(51.507, -0.128, 2) }, ['speciesKey'], { facetLimit: 10 });
     expect(r.facets['speciesKey']?.length).toBeGreaterThan(0);
   });
 

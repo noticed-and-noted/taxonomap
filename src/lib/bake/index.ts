@@ -7,6 +7,7 @@ import pLimit from 'p-limit';
 import {
   getSpecies,
   getVernacularNames,
+  GbifNotFoundError,
   listByRank,
   occurrenceFacets,
   speciesCountsUnder,
@@ -27,6 +28,12 @@ function once<T>(key: string, fn: () => Promise<T>): Promise<T> {
     memo.set(key, p);
   }
   return p;
+}
+
+/** Skip taxa GBIF doesn't know; any other failure fails the build, so a GBIF outage can't deploy a smaller site. */
+function rethrowUnlessMissing(e: unknown): null {
+  if (e instanceof GbifNotFoundError) return null;
+  throw e;
 }
 
 const meta = () => ({ v: 1 as const, generated: new Date().toISOString() });
@@ -118,8 +125,8 @@ async function higherRanks(): Promise<NameRow[]> {
       limit(async () => {
         try {
           usages.set(k, await getSpecies(k));
-        } catch {
-          /* skip unknown keys */
+        } catch (e) {
+          rethrowUnlessMissing(e);
         }
       }),
     ),
@@ -146,8 +153,8 @@ async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
         try {
           const [u, v] = await Promise.all([getSpecies(key), getVernacularNames(key, 100)]);
           return [key, 'S', u.canonicalName ?? u.scientificName, englishName(v.results), count];
-        } catch {
-          return null;
+        } catch (e) {
+          return rethrowUnlessMissing(e);
         }
       }),
     ),
@@ -235,8 +242,8 @@ export function bakeSpeciesList(): Promise<PrerenderSpecies[]> {
             // Only accepted species get a canonical page.
             if (u.rank !== 'SPECIES') return null;
             return { key, slug: speciesSlug(u), count };
-          } catch {
-            return null;
+          } catch (e) {
+            return rethrowUnlessMissing(e);
           }
         }),
       ),

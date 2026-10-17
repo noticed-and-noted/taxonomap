@@ -1,6 +1,6 @@
 import { LIMITS } from './config';
 import { http } from './http';
-import { circleToWkt, yearRangeParam, type Params } from './params';
+import { yearRangeParam, type Params } from './params';
 import type {
   BasisOfRecord,
   Continent,
@@ -147,17 +147,6 @@ export async function occurrenceCount(filter: OccurrenceFilter, signal?: AbortSi
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
   return res.count;
-}
-
-/** Species in an area, ranked by record count. */
-export function speciesInRadius(
-  lat: number,
-  lng: number,
-  radiusKm: number,
-  filter: Omit<OccurrenceFilter, 'geometry'> = {},
-  facetLimit = 200,
-) {
-  return occurrenceFacets({ ...filter, geometry: circleToWkt(lat, lng, radiusKm) }, ['speciesKey'], { facetLimit });
 }
 
 export function searchOccurrences(

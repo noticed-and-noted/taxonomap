@@ -232,4 +232,11 @@ describe('iNaturalist photo URLs', () => {
     expect(thumbnailUrl(img, '400x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpeg');
     expect(thumbnailUrl(img, '800x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg');
   });
+
+  it('asks for CORS only from hosts that send it (GBIF’s image cache does not)', async () => {
+    const { photoCrossOrigin } = await import('~/lib/gbif/images');
+    expect(photoCrossOrigin('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg')).toBe('anonymous');
+    expect(photoCrossOrigin('https://api.gbif.org/v1/image/cache/400x/occurrence/1/media/abc')).toBeUndefined();
+    expect(photoCrossOrigin('https://static.inaturalist.org/photos/1/small.jpg')).toBeUndefined();
+  });
 });
