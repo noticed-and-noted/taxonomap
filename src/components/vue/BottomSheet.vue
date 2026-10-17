@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Mobile bottom sheet with three snap points (peek / half / full). Drag the
- * handle (pointer events) or use the handle button / arrow keys to snap.
+ * handle or header (pointer events) or use the handle button / arrow keys to snap.
  */
 import { computed, ref, watch } from 'vue';
 
@@ -98,12 +98,19 @@ function onKey(e: KeyboardEvent) {
       >
         <span class="block h-1 w-10 rounded-full bg-border-strong"></span>
       </button>
-      <header class="flex items-center justify-between gap-2 px-4 pb-2">
+      <header
+        class="flex touch-none items-center justify-between gap-2 px-4 pb-2"
+        @pointerdown="onDown"
+        @pointermove="onMoveDrag"
+        @pointerup="onUp"
+        @pointercancel="onUp"
+      >
         <h2 class="truncate font-display text-lg">{{ title }}</h2>
         <button
           type="button"
           class="grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2"
           :aria-label="closeLabel ?? 'Close panel'"
+          @pointerdown.stop
           @click="emit('close')"
         >
           <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
