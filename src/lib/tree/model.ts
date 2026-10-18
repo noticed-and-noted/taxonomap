@@ -90,14 +90,14 @@ export function buildTree(rows: readonly TreeNodeRow[]): TreeNode {
     n.children?.forEach((c) => assignKingdom(c, k));
   };
   root.children?.forEach((k) => assignKingdom(k, k.name));
-  root.records = sum(root.children, 'records');
-  root.species = sum(root.children, 'species');
+  root.records = sum(root.children!, 'records');
+  root.species = sum(root.children!, 'species');
   sortChildren(root);
   return root;
 }
 
-function sum(nodes: TreeNode[] | undefined, f: 'records' | 'species'): number {
-  return (nodes ?? []).reduce((s, n) => s + n[f], 0);
+function sum(nodes: TreeNode[], f: 'records' | 'species'): number {
+  return nodes.reduce((s, n) => s + n[f], 0);
 }
 
 function sortChildren(n: TreeNode) {

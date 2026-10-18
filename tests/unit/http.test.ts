@@ -1,4 +1,4 @@
-import { GbifNotFoundError, GbifUnavailableError } from '~/lib/gbif/errors';
+import { GbifNotFoundError, GbifRequestError, GbifUnavailableError } from '~/lib/gbif/errors';
 import { $gbifStale, createHttp, parseRetryAfter, type Transport } from '~/lib/gbif/http';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -101,6 +101,26 @@ describe('http client', () => {
     expect($gbifStale.get()).toBe(false);
   });
 
+  it('gives up after network errors on every attempt', async () => {
+    const { client, sleeps } = setup([new Error('a'), new Error('b'), new Error('c'), new Error('d')]);
+    await expect(client.getJson('/v1/x')).rejects.toMatchObject({ name: 'GbifUnavailableError', status: undefined });
+    expect(sleeps).toHaveLength(3);
+  });
+
+  it('uses the global fetch by default', async () => {
+    const fetch = vi.fn(async () => json({ ok: 1 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      await expect(createHttp({ base: 'https://api.test' }).getJson('/v1/x')).resolves.toEqual({ ok: 1 });
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.test/v1/x',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('falls back to a stale cached copy and raises the stale flag', async () => {
     const { client } = setup([json({ v: 'old' }), json({}, 502), json({}, 502), json({}, 502), json({}, 502)]);
     await client.getJson('/v1/x', undefined, { ttlMs: -1 }); // immediately stale
@@ -181,5 +201,53 @@ describe('http client', () => {
     expect(parseRetryAfter('3')).toBe(3000);
     expect(parseRetryAfter(new Date(10_000).toUTCString(), 4000)).toBe(6000);
     expect(parseRetryAfter(null)).toBeUndefined();
+    expect(parseRetryAfter('soon')).toBeUndefined();
+  });
+
+  it('throws GbifRequestError for other 4xx, even when the body cannot be read', async () => {
+    const res = new Response('bad', { status: 400 });
+    vi.spyOn(res, 'text').mockRejectedValue(new Error('stream'));
+    const { client } = setup([res]);
+    const err = await client.getJson('/v1/x').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GbifRequestError);
+    expect(err).not.toBeInstanceOf(GbifNotFoundError);
+    expect(err).toMatchObject({ status: 400 });
+  });
+
+  it('builds URLs, exposes its options and can drop its cache', async () => {
+    const { client, calls } = setup([json({ n: 1 }), json({ n: 2 })]);
+    expect(client.url('/v1/x', { a: 1 })).toBe('https://api.test/v1/x?a=1');
+    expect(client.options.base).toBe('https://api.test');
+    await client.getJson('/v1/x');
+    client.clear();
+    await expect(client.getJson('/v1/x')).resolves.toEqual({ n: 2 });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('sleeps on a real timer by default', async () => {
+    vi.useFakeTimers();
+    try {
+      const responses = [json({}, 503), json({ ok: true })];
+      const client = createHttp({
+        base: 'https://api.test',
+        transport: async () => responses.shift()!,
+        random: () => 0,
+      });
+      const p = client.getJson('/v1/x');
+      await vi.advanceTimersByTimeAsync(250);
+      await expect(p).resolves.toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('configureHttp swaps the shared client', async () => {
+    const shared = await import('~/lib/gbif/http');
+    const before = shared.http();
+    const next = shared.configureHttp({ base: 'https://other.test' });
+    expect(shared.http()).toBe(next);
+    expect(next).not.toBe(before);
+    expect(next.options.base).toBe('https://other.test');
+    shared.configureHttp({});
   });
 });

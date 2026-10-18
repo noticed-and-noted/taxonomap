@@ -1,4 +1,5 @@
 import { NameIndex, normalise } from '~/lib/data/name-index';
+import { snapshots, stubNetwork } from './helpers/network';
 import type { NameRow } from '~/lib/data/types';
 
 const rows: NameRow[] = [
@@ -8,6 +9,7 @@ const rows: NameRow[] = [
   [9510564, 'S', 'Turdus migratorius', 'American robin', 20_000_000],
   [2490384, 'S', 'Cyanistes caeruleus', 'Eurasian blue tit', 15_000_000],
   [7, 'S', 'Robinia pseudoacacia', 'Black locust', 1_000_000],
+  [8, 'S', 'Ursus arctos', null, 500],
 ];
 
 describe('NameIndex', () => {
@@ -47,5 +49,42 @@ describe('NameIndex', () => {
 
   it('ignores one-letter queries', () => {
     expect(idx.search('r')).toEqual([]);
+  });
+});
+
+describe('NameIndex scoring', () => {
+  const idx = new NameIndex(rows);
+
+  it('puts an exact name first, and finds taxa with no common name', () => {
+    expect(idx.search('birds')[0]?.key).toBe(212);
+    expect(idx.search('ursus arctos').map((h) => h.key)).toEqual([8]);
+  });
+});
+
+describe('loading the index', () => {
+  async function fresh() {
+    vi.resetModules();
+    return import('~/lib/data/name-index');
+  }
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('answers from the baked snapshot, or with nothing when it is missing or the network fails', async () => {
+    stubNetwork(snapshots({ names: rows }));
+    expect((await (await fresh()).bakedIndexProvider.search('robin')).length).toBe(3);
+    stubNetwork(snapshots({}));
+    await expect((await fresh()).bakedIndexProvider.search('robin')).resolves.toEqual([]);
+    vi.stubGlobal('fetch', () => Promise.reject(new TypeError('offline')));
+    await expect((await fresh()).loadNameIndex()).resolves.toBeNull();
+  });
+
+  it('gives up waiting after the time limit', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', () => new Promise(() => {}));
+    const p = (await fresh()).nameIndexWithin(100);
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(p).resolves.toBeNull();
   });
 });

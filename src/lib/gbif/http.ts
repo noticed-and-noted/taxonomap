@@ -75,7 +75,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
     return step / 2 + opts.random() * (step / 2);
   }
 
-  async function fetchWithRetry(rel: string, signal?: AbortSignal): Promise<unknown> {
+  async function fetchWithRetry(rel: string, signal: AbortSignal): Promise<unknown> {
     let lastStatus: number | undefined;
     const url = `${opts.base}${rel}`;
     let waited = false;
@@ -84,14 +84,14 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
       const cool = coolUntil - opts.now();
       if (cool > 0 && !waited) await opts.sleep(cool);
       // Cancelled during a cool-down or back-off: don't send (or count) it.
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       waited = false;
       let res: Response;
       countRequest('json');
       try {
-        res = await opts.transport(url, signal ? { signal } : undefined);
+        res = await opts.transport(url, { signal });
       } catch (err) {
-        if (signal?.aborted) throw err;
+        if (signal.aborted) throw err;
         lastStatus = undefined;
         if (attempt < opts.maxRetries) {
           await opts.sleep(backoff(attempt));
@@ -122,6 +122,11 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
   /** Cache key and path+query, independent of which base serves it. */
   const relative = (path: string, params?: Params) => buildUrl('', path, params);
 
+  /** Drop a finished or cancelled request, unless a newer one for the URL has replaced it. */
+  function forget(url: string, entry: { promise: Promise<unknown> }) {
+    if (inFlight.get(url) === entry) inFlight.delete(url);
+  }
+
   function start(url: string, ttlMs: number) {
     const ctrl = new AbortController();
     const entry = {
@@ -142,9 +147,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
           }
           throw err;
         })
-        .finally(() => {
-          if (inFlight.get(url) === entry) inFlight.delete(url);
-        }),
+        .finally(() => forget(url, entry)),
     };
     // Callers that stop waiting are rejected on their own; this only silences the shared copy.
     entry.promise.catch(() => {});
@@ -174,7 +177,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
         reject(signal.reason);
         if (--entry.waiting === 0) {
           entry.ctrl.abort(signal.reason);
-          if (inFlight.get(url) === entry) inFlight.delete(url);
+          forget(url, entry);
         }
       };
       signal.addEventListener('abort', onAbort, { once: true });

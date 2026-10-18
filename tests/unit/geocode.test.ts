@@ -69,4 +69,24 @@ describe('searchPlaces', () => {
     const { searchPlaces } = await geocode();
     await expect(searchPlaces('x')).rejects.toThrow('geocoder 503');
   });
+
+  it('passes a signal to either provider, and falls back to the query for a nameless hit', async () => {
+    const seen: (AbortSignal | undefined)[] = [];
+    stubNetwork((url, init) => {
+      seen.push(init?.signal ?? undefined);
+      return url.host === 'photon.komoot.io' ? { features: [] } : [{ display_name: '', lat: '1', lon: '2' }];
+    });
+    const { signal } = new AbortController();
+    const nominatim = await geocode();
+    expect(await nominatim.searchPlaces('somewhere', signal)).toMatchObject([{ name: 'somewhere' }]);
+    const photon = await geocode('photon');
+    await photon.searchPlaces('somewhere', signal);
+    expect(seen).toEqual([signal, signal]);
+  });
+
+  it('throws on a failed Photon response', async () => {
+    stubNetwork(() => json({}, 500));
+    const { searchPlaces } = await geocode('photon');
+    await expect(searchPlaces('x')).rejects.toThrow('geocoder 500');
+  });
 });

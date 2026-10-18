@@ -1,4 +1,4 @@
-import { parseLicence, usableImages } from '~/lib/gbif/licence';
+import { attribution, parseLicence, usableImages } from '~/lib/gbif/licence';
 import type { Occurrence } from '~/lib/gbif/types';
 
 describe('licence', () => {
@@ -16,6 +16,7 @@ describe('licence', () => {
     ['http://creativecommons.org/licenses/by-nd-nc/1.0/', 'CC-BY-NC-ND'],
     ['cc-by-nc-sa', 'CC-BY-NC-SA'],
     ['CC BY-SA 4.0', 'CC-BY-SA'],
+    ['cc-by-nd-sa', null],
     ['https://creativecommons.org/publicdomain/mark/1.0/', null],
     ['Copyright', null],
     ['Copyright by the creator. For license and creator details, see https://example.org', null],
@@ -60,5 +61,34 @@ describe('licence', () => {
   it('lets unlicensed media inherit a ShareAlike record licence', () => {
     const imgs = usableImages(occ('https://creativecommons.org/licenses/by-sa/4.0/', [{ identifier: 'x.jpg' }]));
     expect(imgs.map((i) => i.licence)).toEqual(['CC-BY-SA']);
+  });
+
+  it('takes the rights holder and publisher from the media, else the record, with any references', () => {
+    const [own, inherited] = usableImages({
+      ...occ('CC0_1_0', [
+        { identifier: 'a.jpg', rightsHolder: 'Media RH', publisher: 'Media Pub', references: 'https://ref.test' },
+        { identifier: 'b.jpg' },
+      ]),
+      speciesKey: 7,
+      rightsHolder: 'Record RH',
+    });
+    expect(own).toMatchObject({
+      rightsHolder: 'Media RH',
+      publisher: 'Media Pub',
+      references: 'https://ref.test',
+      speciesKey: 7,
+    });
+    expect(inherited).toMatchObject({ rightsHolder: 'Record RH', publisher: 'Pub' });
+    expect(inherited).not.toHaveProperty('references');
+    const bare = usableImages({ key: 2, datasetKey: 'd', license: 'CC0_1_0', media: [{ identifier: 'c.jpg' }] });
+    expect(bare[0]).not.toHaveProperty('rightsHolder');
+    expect(bare[0]).not.toHaveProperty('publisher');
+    expect(usableImages({ key: 3, datasetKey: 'd' })).toEqual([]);
+  });
+
+  it('credits the creator, else the rights holder', () => {
+    expect(attribution({ creator: 'Ann', rightsHolder: 'Bo', licence: 'CC-BY' })).toBe('© Ann · CC-BY');
+    expect(attribution({ rightsHolder: 'Bo', licence: 'CC0' })).toBe('© Bo · CC0');
+    expect(attribution({ licence: 'CC0' })).toBe('CC0');
   });
 });
