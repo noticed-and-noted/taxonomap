@@ -69,13 +69,41 @@ describe('explorer filter stores', () => {
     const e = await import('~/stores/explorer');
     e.clearFilters();
     e.$taxonKeys.set([212]);
-    e.$iucn.set(['VU']);
+    e.$iucn.set(['VU', 'EN']);
     e.$yearRange.set([1990, 2000]);
     e.$hasPhoto.set(true);
     e.$hasSound.set(true);
-    expect(e.$groupCounts.get()).toEqual({ what: 2, when: 1, where: 0, how: 2 });
+    expect(e.$groupCounts.get()).toEqual({ what: 3, when: 1, where: 0, how: 2 });
     e.clearFilters();
     expect(Object.values(e.$groupCounts.get()).every((n) => n === 0)).toBe(true);
+  });
+
+  it('give each set filter but taxa a pill (one per IUCN category) that clears it', async () => {
+    const e = await import('~/stores/explorer');
+    e.clearFilters();
+    e.$taxonKeys.set([212]);
+    e.$iucn.set(['CR', 'VU']);
+    e.$yearRange.set([1990, 2000]);
+    e.$months.set([4, 5]);
+    e.$maxUncertainty.set(1000);
+    e.$hasPhoto.set(true);
+    expect(e.$filterPills.get().map((p) => [p.group, p.text])).toEqual([
+      ['what', 'Critically endangered'],
+      ['what', 'Vulnerable'],
+      ['when', '1990–2000'],
+      ['when', 'Apr, May'],
+      ['where', 'Accuracy ≤ 1 km'],
+      ['how', 'Has photo'],
+    ]);
+    e.$filterPills.get()[0]?.clear();
+    expect(e.$iucn.get()).toEqual(['VU']);
+    e.$filterPills
+      .get()
+      .find((p) => p.text === '1990–2000')
+      ?.clear();
+    expect(e.$yearRange.get()).toBeNull();
+    e.clearFilters();
+    expect(e.$filterPills.get()).toEqual([]);
   });
 
   it('read a pre-multi-select taxon link as a one-item list', async () => {

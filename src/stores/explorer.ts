@@ -4,6 +4,7 @@
  */
 import { atom, computed, type ReadableAtom, type WritableAtom } from 'nanostores';
 import { BASEMAP_IDS } from '~/lib/basemaps';
+import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTHS } from '~/lib/format';
 import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
@@ -185,7 +186,8 @@ export type FilterGroupId = 'what' | 'when' | 'where' | 'how';
 
 /**
  * One URL-synced filter: the rail group it sits in, when it counts as set,
- * the OccurrenceFilter fields it contributes, and its cleared value.
+ * the OccurrenceFilter fields it contributes, its cleared value, and its
+ * pills when set (none for taxa, which have their own chips).
  */
 interface FilterDef<T> {
   store: WritableAtom<T>;
@@ -193,6 +195,13 @@ interface FilterDef<T> {
   cleared: T;
   isSet: (value: T) => boolean;
   apply: (value: T) => OccurrenceFilter;
+  pills?: ((value: T) => FilterPill[]) | undefined;
+}
+
+/** A removable pill for (part of) a set filter. */
+export interface FilterPill {
+  text: string;
+  clear: () => void;
 }
 
 /** A FilterDef with its value type erased, so filters of every type share one list. */
@@ -201,6 +210,7 @@ export interface Filter {
   group: FilterGroupId;
   isSet: (value: unknown) => boolean;
   apply: (value: unknown) => OccurrenceFilter;
+  pills?: ((value: unknown) => FilterPill[]) | undefined;
   clear: () => void;
 }
 
@@ -210,16 +220,62 @@ function filter<T>(d: FilterDef<T>): Filter {
     group: d.group,
     isSet: (v) => d.isSet(v as T),
     apply: (v) => d.apply(v as T),
+    pills: d.pills && ((v) => d.pills!(v as T)),
     clear: () => d.store.set(d.cleared),
   };
 }
 
-const list = <T>(store: WritableAtom<T[]>, group: FilterGroupId, apply: (v: T[]) => OccurrenceFilter) =>
-  filter({ store, group, cleared: [], isSet: (v) => v.length > 0, apply });
-const flag = (store: WritableAtom<boolean>, group: FilterGroupId, fields: OccurrenceFilter) =>
-  filter({ store, group, cleared: false, isSet: (v) => v, apply: () => fields });
-const nullable = <T>(store: WritableAtom<T | null>, group: FilterGroupId, apply: (v: T) => OccurrenceFilter) =>
-  filter({ store, group, cleared: null, isSet: (v) => v !== null, apply: (v) => apply(v as T) });
+/** One pill for the whole filter: removing it clears the filter. */
+const whole =
+  <T>(store: WritableAtom<T>, cleared: T, label: (v: T) => string) =>
+  (v: T): FilterPill[] => [{ text: label(v), clear: () => store.set(cleared) }];
+
+/** A list filter shows one pill (`label`) or, with `{ each }`, one per item that removes just that item. */
+const list = <T>(
+  store: WritableAtom<T[]>,
+  group: FilterGroupId,
+  apply: (v: T[]) => OccurrenceFilter,
+  label?: ((v: T[]) => string) | { each: (item: T) => string },
+) =>
+  filter({
+    store,
+    group,
+    cleared: [],
+    isSet: (v) => v.length > 0,
+    apply,
+    pills:
+      label &&
+      (typeof label === 'function'
+        ? whole(store, [], label)
+        : (v) =>
+            v.map((item) => ({
+              text: label.each(item),
+              clear: () => store.set(store.get().filter((x) => x !== item)),
+            }))),
+  });
+const flag = (store: WritableAtom<boolean>, group: FilterGroupId, fields: OccurrenceFilter, label: string) =>
+  filter({
+    store,
+    group,
+    cleared: false,
+    isSet: (v) => v,
+    apply: () => fields,
+    pills: whole(store, false, () => label),
+  });
+const nullable = <T>(
+  store: WritableAtom<T | null>,
+  group: FilterGroupId,
+  apply: (v: T) => OccurrenceFilter,
+  label: (v: T) => string,
+) =>
+  filter({
+    store,
+    group,
+    cleared: null,
+    isSet: (v) => v !== null,
+    apply: (v) => apply(v as T),
+    pills: whole(store, null, (v) => label(v as T)),
+  });
 
 /**
  * Every filter, in one place: adding one here feeds the occurrence filter,
@@ -227,14 +283,39 @@ const nullable = <T>(store: WritableAtom<T | null>, group: FilterGroupId, apply:
  */
 export const FILTERS: readonly Filter[] = [
   list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
-  list($iucn, 'what', (iucn) => ({ iucn })),
-  nullable($yearRange, 'when', (year) => ({ year })),
-  list($months, 'when', (months) => ({ months })),
-  list($continents, 'where', (continents) => ({ continents })),
-  nullable($maxUncertainty, 'where', (maxUncertaintyM) => ({ maxUncertaintyM })),
-  list($basisOfRecord, 'how', (basisOfRecord) => ({ basisOfRecord })),
-  flag($hasPhoto, 'how', { hasImage: true }),
-  flag($hasSound, 'how', { hasSound: true }),
+  list($iucn, 'what', (iucn) => ({ iucn }), { each: (c) => IUCN_LABELS[c] ?? c }),
+  nullable(
+    $yearRange,
+    'when',
+    (year) => ({ year }),
+    ([a, b]) => (a === b ? `${a}` : `${a}–${b}`),
+  ),
+  list(
+    $months,
+    'when',
+    (months) => ({ months }),
+    (v) => v.map((m) => MONTHS[m - 1]).join(', '),
+  ),
+  list(
+    $continents,
+    'where',
+    (continents) => ({ continents }),
+    (v) => v.map((c) => CONTINENT_LABELS[c]).join(', '),
+  ),
+  nullable(
+    $maxUncertainty,
+    'where',
+    (maxUncertaintyM) => ({ maxUncertaintyM }),
+    (m) => `Accuracy ≤ ${distance(m)}`,
+  ),
+  list(
+    $basisOfRecord,
+    'how',
+    (basisOfRecord) => ({ basisOfRecord }),
+    (v) => v.map((b) => BASIS_LABELS[b]).join(', '),
+  ),
+  flag($hasPhoto, 'how', { hasImage: true }, 'Has photo'),
+  flag($hasSound, 'how', { hasSound: true }, 'Has sound'),
 ];
 
 const filterValues = computed(
@@ -251,11 +332,18 @@ export const $occurrenceFilter = computed(filterValues, (values): OccurrenceFilt
   return out;
 });
 
-/** Filters set per rail group (each control that is set counts once). */
+/** The set filters (other than taxa) as pills, with the rail group each sits in. */
+export const $filterPills = computed(filterValues, (values) =>
+  FILTERS.flatMap((f, i) =>
+    f.pills && f.isSet(values[i]) ? f.pills(values[i]).map((p, j) => ({ ...p, id: `${i}-${j}`, group: f.group })) : [],
+  ),
+);
+
+/** Filters set per rail group: one per pill (so each IUCN category), or one for taxa. */
 export const $groupCounts = computed(filterValues, (values) => {
   const counts: Record<FilterGroupId, number> = { what: 0, when: 0, where: 0, how: 0 };
   FILTERS.forEach((f, i) => {
-    if (f.isSet(values[i])) counts[f.group]++;
+    if (f.isSet(values[i])) counts[f.group] += f.pills ? f.pills(values[i]).length : 1;
   });
   return counts;
 });

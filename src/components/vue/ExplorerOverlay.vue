@@ -85,7 +85,7 @@ function closePanel() {
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
       <div class="min-w-0"><TaxonChip /></div>
-      <div class="ml-auto hidden items-start gap-2 sm:flex">
+      <div class="ml-auto hidden shrink-0 items-start gap-2 sm:flex">
         <button type="button" class="near-btn" aria-pressed="false" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"
