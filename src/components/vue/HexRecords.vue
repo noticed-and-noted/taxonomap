@@ -8,7 +8,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, distance, full } from '~/lib/format';
-import { parseLicence, searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
+import { searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
@@ -290,12 +290,9 @@ const place = (o: Occurrence) =>
                   <div class="grid grid-cols-2 items-start gap-3 rounded-md bg-surface-2 p-2">
                     <div class="relative aspect-square overflow-hidden rounded bg-photo">
                       <template v-if="image(o) && !broken.has(o.key)">
-                        <ThumbImage
-                          :image="image(o)!"
-                          size="400x"
-                          class="size-full object-cover"
-                          @broken="broken = new Set(broken).add(o.key)"
-                        />
+                        <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
+                        <ThumbImage :image="image(o)!" size="200x" class="absolute inset-0 size-full object-cover" />
+                        <ThumbImage :image="image(o)!" size="400x" class="relative size-full object-cover" />
                         <LicenceBadge
                           class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
                           :licence="image(o)!.licence"
@@ -331,10 +328,6 @@ const place = (o: Occurrence) =>
                       <div v-if="o.datasetName ?? o.publisher">
                         <dt class="text-subtle">Source</dt>
                         <dd>{{ o.datasetName ?? o.publisher }}</dd>
-                      </div>
-                      <div v-if="parseLicence(o.license)">
-                        <dt class="text-subtle">Licence</dt>
-                        <dd>{{ parseLicence(o.license) }}</dd>
                       </div>
                       <dd>
                         <a
