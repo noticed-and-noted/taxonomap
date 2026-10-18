@@ -21,7 +21,8 @@ import {
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
-import { createHoverCounter, knownCount } from '~/lib/map/cellCounts';
+import { needsAdhoc } from '~/lib/gbif';
+import { createHoverCounter, fetchCount, knownCount } from '~/lib/map/cellCounts';
 import type { Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
@@ -251,8 +252,46 @@ const records = (n: number, text: string) => `${text} record${n === 1 ? '' : 's'
 
 /** The hovered cell's exact count, once the pointer has rested on it (lib/map/cellCounts.ts). */
 const hoverCounter = createHoverCounter((wkt, n) => {
-  if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(n, full(n)) };
+  if (n === 0) {
+    clearHover();
+    occ?.redraw();
+  } else if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(n, full(n)) };
 });
+
+/** A cell whose exact count is known to be 0. */
+function knownEmpty(h: Hex): boolean {
+  const g = geometryOf(h);
+  return !!g && knownCount($occurrenceFilter.get(), g.wkt) === 0;
+}
+
+/** Estimates at or below this are checked for empty cells. */
+const SPARSE_MAX = 3;
+/** Most cells checked per draw. */
+const MAX_CHECKS = 40;
+
+/**
+ * Adhoc tiles snap records to a coarse grid (lib/map/occGrid.ts), so a record
+ * near an edge can make a neighbouring cell that holds none. Check low
+ * estimates and drop the cells that come back empty.
+ * shortcut: only estimates ≤ SPARSE_MAX, at most MAX_CHECKS per draw; a larger phantom cell goes when hovered.
+ */
+function checkSparse(hexes: Hex[]) {
+  const filter = $occurrenceFilter.get();
+  const b = $mapBounds.get();
+  if (!needsAdhoc(filter) || !b) return;
+  const inView = (h: Hex) => {
+    const [lng, lat] = h.geometry.coordinates[0]![0]!;
+    return lng! >= b[0] && lng! <= b[2] && lat! >= b[1] && lat! <= b[3];
+  };
+  for (const h of hexes.filter((c) => c.properties.total <= SPARSE_MAX && inView(c)).slice(0, MAX_CHECKS)) {
+    const g = geometryOf(h);
+    if (!g) continue;
+    fetchCount(filter, g.wkt).then(
+      (n) => n === 0 && filter === $occurrenceFilter.get() && occ?.redraw(),
+      () => undefined, // The estimate stays up.
+    );
+  }
+}
 
 function clearHover() {
   hoverCounter.cancel();
@@ -341,12 +380,15 @@ onMounted(async () => {
   occ = createOccLayer(map, {
     filter: () => $occurrenceFilter.get(),
     listenFilter: (fn) => $occurrenceFilter.listen(fn),
+    isEmpty: knownEmpty,
     onCells: (fc) => {
       replaceHexes(fc);
+      checkSparse(fc.features as Hex[]);
       if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
     },
     onChanges: (add, remove) => {
       changeHexes(add, remove);
+      checkSparse(add);
       if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
     },
     onLevel: (level) => {
@@ -400,6 +442,8 @@ onMounted(async () => {
     ]);
   };
   map.once('load', publishBounds);
+  // Cells drawn off-screen are checked once they come into view.
+  cleanups.push($mapBounds.listen(() => checkSparse((occ?.collection().features ?? []) as Hex[])));
   map.on('moveend', () => {
     if (!map) return;
     publishBounds();
@@ -522,6 +566,15 @@ onBeforeUnmount(() => {
 .map-canvas .maplibregl-ctrl-attrib {
   background: color-mix(in srgb, var(--surface) 85%, transparent);
   color: var(--text-muted);
+}
+
+/* Expanded attribution must sit above the explorer overlay (legend dock), or it's hidden on mobile. */
+.map-canvas .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
+  z-index: 20;
+}
+
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  background: var(--surface);
 }
 
 .map-canvas .maplibregl-ctrl-attrib a {

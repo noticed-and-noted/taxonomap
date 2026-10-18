@@ -33,6 +33,16 @@ describe('map tiles', () => {
     expect(url.searchParams.has('style')).toBe(false);
   });
 
+  it('matches exact taxa with acceptedTaxonKey on adhoc tiles', async () => {
+    const g = await gbif();
+    expect(g.needsAdhoc({ exactTaxon: true })).toBe(false);
+    const url = new URL(g.occurrenceTileTemplate({ taxonKey: 5219173, exactTaxon: true }).replace(/[{}]/g, ''));
+    expect(url.pathname).toBe('/v2/map/occurrence/adhoc/z/x/y@1x.png');
+    expect(url.searchParams.get('acceptedTaxonKey')).toBe('5219173');
+    expect(url.searchParams.has('taxonKey')).toBe(false);
+    expect(g.filterToParams({ taxonKeys: [1, 2], exactTaxon: true })).toMatchObject({ acceptedTaxonKey: [1, 2] });
+  });
+
   it('takes a style and fills in a concrete tile', async () => {
     const g = await gbif();
     expect(g.tileParams({}, { style: 'classic.point', srs: 'EPSG:3857' })).toMatchObject({ style: 'classic.point' });

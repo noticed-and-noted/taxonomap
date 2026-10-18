@@ -76,3 +76,20 @@ test('a hex selected in the URL opens the cell panel', async ({ page }) => {
   await expect(page.getByText(/records? in this cell/)).toBeVisible();
   await expect(page.getByRole('img', { name: /Records by month/ })).toBeVisible();
 });
+
+test('the cell panel lists records with their type, expands one and filters them by species', async ({ page }) => {
+  await page.goto('/?taxon=212&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  await page.getByRole('tab', { name: 'Records' }).click();
+  const rows = page.getByRole('table', { name: 'Records' }).locator('tbody tr');
+  await expect(rows.first().getByLabel('Human observation')).toHaveText('OBS');
+  await rows.first().getByRole('button').click();
+  await expect(page.getByRole('link', { name: 'View on GBIF' })).toBeVisible();
+  const search = page.getByRole('combobox', { name: 'Filter records by species' });
+  await search.click();
+  const first = page.getByRole('listbox', { name: 'Species in this cell' }).getByRole('option').first();
+  const name = (await first.locator('span').first().textContent())!;
+  await search.fill(name.slice(0, 4));
+  await page.getByRole('option', { name: new RegExp(`^${name}`) }).click();
+  await expect(search).toHaveValue(name);
+  await expect(rows).toHaveCount(3);
+});

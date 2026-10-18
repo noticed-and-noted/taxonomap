@@ -143,6 +143,8 @@ export interface Occurrence extends HigherKeys {
   countryCode?: string;
   locality?: string;
   recordedBy?: string;
+  institutionCode?: string;
+  catalogNumber?: string;
   rightsHolder?: string;
   media?: Media[];
 }

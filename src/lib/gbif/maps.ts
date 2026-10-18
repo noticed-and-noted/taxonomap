@@ -1,6 +1,6 @@
 import { GBIF_TILE_BASE } from './config';
 import { http } from './http';
-import { hasRefinements, refinementParams, type Refinements } from './occurrence';
+import { hasRefinements, refinementParams, taxonParams, type Refinements } from './occurrence';
 import { toQueryString, yearRangeParam, type Params } from './params';
 import type { BasisOfRecord, MapCapabilities } from './types';
 
@@ -11,13 +11,15 @@ import type { BasisOfRecord, MapCapabilities } from './types';
  * Verified behaviour: the density endpoint honours taxonKey, year,
  * basisOfRecord and country, but silently ignores mediaType, month and the
  * other refinements, and rejects a repeated taxonKey (400). Those filters
- * therefore need the (heavier) adhoc endpoint.
+ * therefore need the (heavier) adhoc endpoint, as does acceptedTaxonKey.
  */
 
 export interface TileFilter extends Refinements {
   taxonKey?: number | undefined;
   /** Several taxa, OR'd (adhoc only when more than one). */
   taxonKeys?: readonly number[] | undefined;
+  /** acceptedTaxonKey instead of taxonKey (adhoc only). */
+  exactTaxon?: boolean | undefined;
   year?: readonly [number, number] | null | undefined;
   basisOfRecord?: readonly BasisOfRecord[] | undefined;
   country?: string | undefined;
@@ -38,13 +40,13 @@ function suffix(format: TileFormat): string {
 }
 
 export function needsAdhoc(f: TileFilter): boolean {
-  return hasRefinements(f) || (f.taxonKeys?.length ?? 0) > 1;
+  return hasRefinements(f) || (f.taxonKeys?.length ?? 0) > 1 || 'acceptedTaxonKey' in taxonParams(f);
 }
 
 export function tileParams(f: TileFilter, s: TileStyle = {}, format: TileFormat = 'png'): Params {
   return {
     srs: s.srs ?? 'EPSG:3857',
-    taxonKey: f.taxonKeys ?? f.taxonKey,
+    ...taxonParams(f),
     year: yearRangeParam(f.year),
     basisOfRecord: f.basisOfRecord,
     country: f.country,

@@ -49,6 +49,8 @@ export interface OccLayer {
   collection(): GeoJSON.FeatureCollection<GeoJSON.Polygon>;
   /** The cell containing a point, if any. */
   cellAt(p: LngLat): Hex | undefined;
+  /** Draw again, e.g. after `isEmpty` learns of more empty cells. */
+  redraw(): void;
   destroy(): void;
 }
 
@@ -62,6 +64,8 @@ export interface OccLayerOptions {
   onLevel: (level: number) => void;
   /** The view's tiles: done of total. */
   onProgress: (done: number, total: number) => void;
+  /** Cells to leave out, e.g. ones whose exact count is known to be 0. */
+  isEmpty?: (h: Hex) => boolean;
   /** GBIF could not be reached at all. */
   onFailed: () => void;
   /** Subscribe to filter changes; returns an unsubscribe. */
@@ -167,7 +171,9 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
   /** The cells of the wanted tiles that are loaded. */
   function wantedCells(): Map<string, Hex> {
     const tiles = [...want.view, ...want.ring];
-    return mergeHexes(tiles.map((t) => cache.get(tileKey(want.filter, want.level, t)) ?? []));
+    const merged = mergeHexes(tiles.map((t) => cache.get(tileKey(want.filter, want.level, t)) ?? []));
+    if (o.isEmpty) for (const [id, h] of merged) if (o.isEmpty(h)) merged.delete(id);
+    return merged;
   }
 
   /** Draw what is loaded for the view: a whole new set, or the changes since last time. */
@@ -339,6 +345,7 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
       }
       return undefined;
     },
+    redraw: drawSoon,
     destroy() {
       abort.abort();
       map.easeTo = easeTo;

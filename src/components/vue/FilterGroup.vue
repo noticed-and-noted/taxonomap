@@ -11,6 +11,7 @@ import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTH_NAMES, MON
 import {
   $basisOfRecord,
   $continents,
+  $exactTaxon,
   $hasPhoto,
   $hasSound,
   $iucn,
@@ -31,6 +32,7 @@ defineProps<{ group: FilterGroupId }>();
 const uid = useId();
 
 const iucn = useStore($iucn);
+const exact = useStore($exactTaxon);
 const years = useStore($yearRange);
 const months = useStore($months);
 const continents = useStore($continents);
@@ -51,6 +53,7 @@ const toggleMonth = (m: number) => toggleIn($months, m, (a, b) => a - b);
 const toggleContinent = (v: (typeof CONTINENTS)[number]) => toggleIn($continents, v);
 const toggleBasis = (v: (typeof BASIS_OF_RECORD)[number]) => toggleIn($basisOfRecord, v);
 const setUncert = (m: number | null) => $maxUncertainty.set(m);
+const toggleExact = () => $exactTaxon.set(!exact.value);
 const togglePhoto = () => $hasPhoto.set(!photo.value);
 const toggleSound = () => $hasSound.set(!sound.value);
 const clearMonths = () => $months.set([]);
@@ -92,6 +95,15 @@ const clearYears = () => $yearRange.set(null);
   <div class="filter-group space-y-5 text-sm">
     <template v-if="group === 'what'">
       <TaxaPicker />
+
+      <fieldset>
+        <legend class="group-label">Taxon match</legend>
+        <label class="check-row">
+          <input type="checkbox" :checked="exact" @change="toggleExact" />
+          Exact taxon only
+        </label>
+        <p class="hint">Leaves out subspecies and lower ranks, e.g. domestic dogs filed under gray wolf.</p>
+      </fieldset>
 
       <fieldset>
         <legend class="group-label">IUCN Red List</legend>

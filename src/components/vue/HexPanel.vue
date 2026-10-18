@@ -4,11 +4,12 @@
  * table and radial seasonality.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { full } from '~/lib/format';
 import { loadSpeciesManifest } from '~/lib/species/links';
 import { $hexGeometry } from '~/stores/explorer';
 import { $taxa } from '~/stores/taxon';
+import HexRecords from './HexRecords.vue';
 import RadialSeasonality from './RadialSeasonality.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
@@ -21,6 +22,7 @@ const selectedKeys = computed(() => taxa.value.map((t) => t.key));
 const tableNote = computed(() => perGroupNote(classes.value.length, HEX_CLASSES, HEX_PER_CLASS));
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
+const tab = ref<'species' | 'records'>('species');
 </script>
 
 <template>
@@ -57,9 +59,33 @@ const geometry = useStore($hexGeometry);
         No records match the current filters here. Try widening the year range or removing a filter.
       </p>
 
-      <section v-if="loading || species.length" aria-labelledby="top-species-h">
-        <h3 id="top-species-h" class="mb-2 text-sm font-medium">Species</h3>
-        <SpeciesTable :rows="species" :groups="classes" :loading="loading" :selected="selectedKeys" :note="tableNote" />
+      <section v-if="loading || count">
+        <div role="tablist" aria-label="Cell lists" class="mb-2 flex gap-1 border-b border-border text-sm">
+          <button
+            v-for="t in ['species', 'records'] as const"
+            :key="t"
+            role="tab"
+            type="button"
+            :aria-selected="tab === t"
+            class="-mb-px border-b-2 px-3 py-1.5"
+            :class="tab === t ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
+            @click="tab = t"
+          >
+            {{ t === 'species' ? 'Species' : 'Records' }}
+          </button>
+        </div>
+        <div v-if="tab === 'species'" role="tabpanel" aria-label="Species">
+          <SpeciesTable
+            :rows="species"
+            :groups="classes"
+            :loading="loading"
+            :selected="selectedKeys"
+            :note="tableNote"
+          />
+        </div>
+        <div v-else role="tabpanel" aria-label="Records">
+          <HexRecords :species="species" />
+        </div>
       </section>
 
       <RadialSeasonality v-if="count" :counts="months" title="Records by month" />
