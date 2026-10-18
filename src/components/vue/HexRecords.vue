@@ -325,10 +325,6 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                       </span>
                     </div>
                     <dl class="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]">
-                      <div>
-                        <dt class="text-subtle">Type</dt>
-                        <dd>{{ typeLabel(o) }}</dd>
-                      </div>
                       <div v-if="o.recordedBy">
                         <dt class="text-subtle">Recorded by</dt>
                         <dd>{{ o.recordedBy }}</dd>
