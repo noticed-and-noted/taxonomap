@@ -10,7 +10,7 @@ import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, full } from '~/lib/format';
 import { searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
-import type { SpeciesRow } from '~/lib/species/groups';
+import { commonNames as lookupCommonNames, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import ThumbImage from './ThumbImage.vue';
 import { useLatestLoad } from './useLatestLoad';
@@ -93,6 +93,27 @@ function onKey(e: KeyboardEvent) {
   }
 }
 
+// Records rarely carry a common name: take the cell's species table's, else look it up (see load).
+const commonNames = computed(
+  () => new Map(props.species.filter((s) => s.commonName).map((s) => [s.key, s.commonName!])),
+);
+const lateNames = shallowRef(new Map<number, string>());
+const common = (o: Occurrence) =>
+  o.vernacularName ??
+  (o.speciesKey ? (commonNames.value.get(o.speciesKey) ?? lateNames.value.get(o.speciesKey)) : undefined);
+const sci = (o: Occurrence) => o.species ?? o.scientificName;
+const name = (o: Occurrence) => common(o) ?? sci(o) ?? 'Unnamed record';
+
+/** Names for a page's species the table hasn't named (cached, as on species pages); rows show meanwhile. */
+async function nameSpecies(page: readonly Occurrence[], signal: AbortSignal) {
+  const missing = [...new Set(page.map((o) => o.speciesKey))].filter(
+    (k): k is number => k !== undefined && !commonNames.value.has(k) && !lateNames.value.has(k),
+  );
+  if (!missing.length) return;
+  const found = await lookupCommonNames(missing, signal);
+  if (!signal.aborted && found.size) lateNames.value = new Map([...lateNames.value, ...found]);
+}
+
 async function load(more = false) {
   const g = geometry.value;
   if (!more) records.value = [];
@@ -103,6 +124,7 @@ async function load(more = false) {
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...r.results] : r.results;
     if (!more) expanded.value = null;
+    void nameSpecies(r.results, signal);
     total.value = r.count;
   });
 }
@@ -119,7 +141,6 @@ watch(
 );
 watch(speciesKey, () => void load());
 
-const name = (o: Occurrence) => o.vernacularName ?? o.species ?? o.scientificName ?? 'Unnamed record';
 const date = (o: Occurrence) => o.eventDate?.slice(0, 10) ?? (o.year ? String(o.year) : undefined);
 const typeLabel = (o: Occurrence) =>
   (o.basisOfRecord && (BASIS_LABELS[o.basisOfRecord] ?? o.basisOfRecord)) || 'Unknown';
@@ -271,8 +292,10 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                     :aria-controls="`${uid}-rec-${o.key}`"
                     @click.stop="toggle(o)"
                   >
-                    <span class="block truncate" :class="{ 'sci-name': !o.vernacularName }">{{ name(o) }}</span>
-                    <span v-if="o.recordedBy" class="block truncate text-xs text-muted">{{ o.recordedBy }}</span>
+                    <span class="block truncate" :class="{ 'sci-name': !common(o) }">{{ name(o) }}</span>
+                    <span v-if="common(o) && sci(o)" class="sci-name block truncate text-xs text-muted">{{
+                      sci(o)
+                    }}</span>
                   </button>
                 </td>
                 <td class="py-1.5">
@@ -305,10 +328,6 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                       <div>
                         <dt class="text-subtle">Type</dt>
                         <dd>{{ typeLabel(o) }}</dd>
-                      </div>
-                      <div v-if="o.scientificName">
-                        <dt class="text-subtle">Scientific name</dt>
-                        <dd class="sci-name">{{ o.scientificName }}</dd>
                       </div>
                       <div v-if="o.recordedBy">
                         <dt class="text-subtle">Recorded by</dt>
