@@ -228,14 +228,14 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       <div v-if="records.length" class="head-row text-xs text-subtle" aria-hidden="true">
         <table class="w-full table-fixed text-sm">
           <colgroup>
-            <col class="w-10" />
+            <col class="w-[2.875rem]" />
             <col />
             <col class="w-[3.25rem]" />
             <col class="w-[5.5rem]" />
           </colgroup>
           <tbody>
             <tr>
-              <td colspan="2" class="py-1.5">Species</td>
+              <td colspan="2" class="py-1.5 pl-1.5">Species</td>
               <td class="py-1.5">Type</td>
               <td class="py-1.5">Date</td>
             </tr>
@@ -250,7 +250,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       >
         <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
           <colgroup>
-            <col class="w-10" />
+            <col class="w-[2.875rem]" />
             <col />
             <col class="w-[3.25rem]" />
             <col class="w-[5.5rem]" />
@@ -270,7 +270,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                 :data-type="o.basisOfRecord"
                 @click="toggle(o)"
               >
-                <td class="py-1.5 pr-2">
+                <td class="py-1.5 pl-1.5 pr-2">
                   <span class="block size-8 overflow-hidden rounded bg-photo">
                     <ThumbImage
                       v-if="image(o) && !broken.has(o.key)"

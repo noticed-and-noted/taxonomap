@@ -132,6 +132,12 @@ watch([visible, scroller], () => void nextTick(observeRows), { immediate: true }
 
 const maxRecords = computed(() => Math.max(1, ...props.rows.map((r) => r.records)));
 
+/** A click anywhere on a row follows its species link (the link itself stays for keyboard and middle-click). */
+function openRow(e: MouseEvent) {
+  if ((e.target as HTMLElement).closest('a')) return;
+  (e.currentTarget as HTMLElement).querySelector('a')?.click();
+}
+
 function sortBy(key: SortKey) {
   if (sortKey.value === key) sortDesc.value = !sortDesc.value;
   else {
@@ -296,7 +302,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
             </colgroup>
             <thead>
               <tr>
-                <th class="py-1.5 text-left font-normal">
+                <th class="py-1.5 pl-1.5 text-left font-normal">
                   <button type="button" class="sort" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
                     Species<span aria-hidden="true">{{ sortKey === 'name' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
                   </button>
@@ -343,10 +349,11 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
                 v-for="r in visible"
                 :key="r.key"
                 :data-key="r.key"
-                class="border-b border-border"
+                class="cursor-pointer border-b border-border hover:bg-surface-2"
                 :class="{ 'bg-accent-soft': selected?.includes(r.key) }"
+                @click="openRow"
               >
-                <td class="py-1.5 pr-2">
+                <td class="py-1.5 pl-1.5 pr-2">
                   <a :href="speciesPath(r.key, manifest)" class="group flex min-w-0 items-center gap-2">
                     <span class="size-8 shrink-0 overflow-hidden rounded bg-photo">
                       <SkeletonBlock v-if="pendingPhoto(r)" height="100%" rounded="sm" aria-hidden="true" />
