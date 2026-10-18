@@ -144,14 +144,25 @@ const place = (o: Occurrence) =>
   <div class="space-y-2">
     <div class="relative text-sm">
       <label :for="`${uid}-input`" class="sr-only">Filter records by species</label>
+      <svg
+        class="pointer-events-none absolute left-2.5 top-[1.0625rem] size-3.5 -translate-y-1/2 text-subtle"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
       <input
         :id="`${uid}-input`"
         v-model="query"
         type="search"
-        class="picker-input"
+        class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none"
         role="combobox"
         autocomplete="off"
-        placeholder="All species — search to filter"
+        placeholder="Filter by species"
         :aria-expanded="open && options.length > 0"
         :aria-controls="`${uid}-list`"
         aria-autocomplete="list"
@@ -190,6 +201,9 @@ const place = (o: Occurrence) =>
     </div>
 
     <p v-else-if="!loading && !records.length" class="text-sm text-muted">No records to show.</p>
+    <p v-else-if="total !== null" class="text-xs text-subtle" aria-live="polite">
+      {{ full(records.length) }} of {{ full(total) }} record{{ total === 1 ? '' : 's' }}
+    </p>
 
     <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
     <div>
@@ -203,8 +217,7 @@ const place = (o: Occurrence) =>
           </colgroup>
           <tbody>
             <tr>
-              <td class="py-1.5"></td>
-              <td class="py-1.5">Species</td>
+              <td colspan="2" class="py-1.5">Species</td>
               <td class="py-1.5">Type</td>
               <td class="py-1.5">Date</td>
             </tr>
@@ -213,7 +226,7 @@ const place = (o: Occurrence) =>
       </div>
       <div
         ref="scroller"
-        class="fade-list max-h-[min(32rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        class="fade-list max-h-[min(23rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
         :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
         @scroll.passive="updateFade"
       >
@@ -434,15 +447,6 @@ const place = (o: Occurrence) =>
   box-shadow: inset 0 -1px 0 var(--border-strong);
 }
 
-.picker-input {
-  width: 100%;
-  height: 2rem;
-  padding: 0 0.625rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-}
 .options {
   margin-top: 0.25rem;
   padding: 0.25rem;
