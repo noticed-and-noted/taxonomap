@@ -568,8 +568,11 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 
-/* Expanded attribution must sit above the explorer overlay (legend dock), or it's hidden on mobile. */
-.map-canvas .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
+/* Expanded attribution must sit above the records-per-year dock, or it's hidden on mobile.
+   The overlay is one stacking context, so only lift it while no panel or flyout is open. */
+.app-shell:has(.bottom-dock):not(:has(.side-panel, .bottom-sheet, #filter-flyout))
+  .map-canvas
+  .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
   z-index: 20;
 }
 

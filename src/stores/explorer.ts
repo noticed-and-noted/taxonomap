@@ -294,12 +294,7 @@ export const FILTERS: readonly Filter[] = [
     (year) => ({ year }),
     ([a, b]) => (a === b ? `${a}` : `${a}–${b}`),
   ),
-  list(
-    $months,
-    'when',
-    (months) => ({ months }),
-    (v) => v.map((m) => MONTHS[m - 1]).join(', '),
-  ),
+  list($months, 'when', (months) => ({ months }), { each: (m) => MONTHS[m - 1]! }),
   list(
     $continents,
     'where',
