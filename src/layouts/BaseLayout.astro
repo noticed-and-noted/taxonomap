@@ -98,6 +98,21 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
           void wb.register();
         });
       }
+
+      // Dev only: Vite injects client:only island CSS into <head>, the server
+      // HTML of the next page doesn't list it, so ClientRouter drops it on swap
+      // and Vite never re-injects (module already loaded). Carry it across.
+      if (import.meta.env.DEV) {
+        document.addEventListener('astro:before-swap', (e) => {
+          const head = e.newDocument.head;
+          for (const style of document.head.querySelectorAll('style[data-vite-dev-id]')) {
+            const id = style.getAttribute('data-vite-dev-id');
+            if (!head.querySelector(`style[data-vite-dev-id="${CSS.escape(id!)}"]`)) {
+              head.append(style.cloneNode(true));
+            }
+          }
+        });
+      }
     </script>
   </body>
 </html>
