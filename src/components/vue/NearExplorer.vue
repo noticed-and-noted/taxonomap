@@ -192,6 +192,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="near-explorer pointer-events-none absolute inset-0 z-10">
+    <!-- Centred in the top row of pills; below it on phones, where the taxon chip can fill the row. -->
+    <MapProgress class="absolute left-1/2 top-12 -translate-x-1/2 sm:top-3" />
     <button
       v-if="!panelOpen"
       type="button"
@@ -201,13 +203,12 @@ onBeforeUnmount(() => {
       Show list
     </button>
 
-    <!-- Basemap and loading stay in near me; they slide with the panel when it's tucked away. -->
+    <!-- Basemap stays in near me; it slides with the panel when it's tucked away. -->
     <div
       class="near-bar pointer-events-none absolute right-3 top-3 *:pointer-events-auto"
       :class="{ tucked: !panelOpen }"
     >
       <div class="hidden sm:block"><BasemapSwitcher /></div>
-      <MapProgress class="absolute right-0 top-0 sm:top-10" />
     </div>
 
     <div class="pointer-events-auto">

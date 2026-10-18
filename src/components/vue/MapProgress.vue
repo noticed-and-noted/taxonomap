@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Tile loading ring ("40 / 60 tiles") under the map's top-right pills.
+ * Tile loading ring ("40 / 60 tiles") centred in the map's top row of pills.
  * Fades in only for loads that last, and lingers briefly after the map goes
  * idle, so quick pans don't make it flicker in and out.
  */

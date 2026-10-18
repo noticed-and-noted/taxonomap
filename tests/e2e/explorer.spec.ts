@@ -44,12 +44,17 @@ test('filters and year range live in the URL and survive reload', { tag: '@mobil
     await page.getByRole('tab', { name: /How/ }).click();
   } else await page.getByRole('button', { name: 'How recorded, 2 active' }).click();
   await expect(page.getByRole('button', { name: 'Has photo', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Close panel' }).click();
-  // The year histogram starts collapsed; opening it is remembered across the reload.
-  await page.getByRole('button', { name: 'Show records per year' }).click();
+  // The year slider lives in the When group.
+  const openWhen = () =>
+    info.project.name === 'mobile'
+      ? page.getByRole('tab', { name: /When/ }).click()
+      : page.getByRole('button', { name: /^When/ }).click();
+  await openWhen();
   const range = page.getByRole('region', { name: 'Year range' }).getByText('2000–2010');
   await expect(range).toBeVisible();
   await page.reload();
+  // The Filters sheet is in the URL, so on phones it reopens by itself.
+  await openWhen();
   await expect(range).toBeVisible();
 });
 

@@ -14,7 +14,7 @@ defineProps<{ title: string; caption?: string | undefined; compact?: boolean }>(
       <span v-if="caption" class="ml-2 text-subtle">{{ caption }}</span>
     </figcaption>
     <slot />
-    <details class="mt-1.5">
+    <details v-if="$slots.table" class="mt-1.5">
       <summary class="cursor-pointer text-xs text-muted hover:text-text">Show data table</summary>
       <div class="mt-2 max-h-56 overflow-auto rounded-sm border border-border">
         <slot name="table" />

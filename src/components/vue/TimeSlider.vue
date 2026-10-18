@@ -6,15 +6,16 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
-import { compact, full } from '~/lib/format';
+import { compact } from '~/lib/format';
 import { $yearRange } from '~/stores/explorer';
 import ChartFrame from './ChartFrame.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
-import type { YearCounts } from './useYearHistogram';
+import { useYearHistogram } from './useYearHistogram';
 
-const props = defineProps<{ counts: YearCounts; loading: boolean; failed: boolean; live: boolean }>();
+const { counts, loading, error, live } = useYearHistogram();
 
-const MIN = 1900;
+// GBIF rejects interpreted dates before 1500.
+const MIN = 1500;
 const MAX = new Date().getFullYear();
 const W = 600;
 const H = 56;
@@ -23,38 +24,38 @@ const range = useStore($yearRange);
 const lo = ref(range.value?.[0] ?? MIN);
 const hi = ref(range.value?.[1] ?? MAX);
 
+/** The visible span: zoomed to the selected range, with a little room either side to widen it. */
+type Span = readonly [number, number];
+function zoomTo(r: Span | null): Span {
+  if (!r) return [MIN, MAX];
+  const pad = Math.max(2, Math.round((r[1] - r[0]) * 0.1));
+  return [Math.max(MIN, r[0] - pad), Math.min(MAX, r[1] + pad)];
+}
+const view = ref<Span>(zoomTo(range.value));
+const zoomed = computed(() => view.value[0] > MIN || view.value[1] < MAX);
+const zoomOut = () => (view.value = [MIN, MAX]);
+
 watch(range, (r) => {
   lo.value = r?.[0] ?? MIN;
   hi.value = r?.[1] ?? MAX;
+  view.value = zoomTo(r);
 });
 
-const years = computed(() => Array.from({ length: MAX - MIN + 1 }, (_, i) => MIN + i));
-const earlier = computed(() => {
-  let n = 0;
-  for (const [y, c] of props.counts) if (y < MIN) n += c;
-  return n;
+const years = computed(() => {
+  const [a, b] = view.value;
+  return Array.from({ length: b - a + 1 }, (_, i) => a + i);
 });
-const max = computed(() => Math.max(1, ...years.value.map((y) => props.counts.get(y) ?? 0)));
+const max = computed(() => Math.max(1, ...years.value.map((y) => counts.value.get(y) ?? 0)));
 const bars = computed(() => {
   const bw = W / years.value.length;
   return years.value.map((y, i) => {
-    const c = props.counts.get(y) ?? 0;
+    const c = counts.value.get(y) ?? 0;
     // sqrt scale keeps early decades visible next to the recent boom.
     const h = c ? Math.max(1, Math.sqrt(c / max.value) * (H - 2)) : 0;
     return { y, c, x: i * bw, w: Math.max(bw - 0.6, 0.6), h, inRange: y >= lo.value && y <= hi.value };
   });
 });
 const inRangeTotal = computed(() => bars.value.reduce((s, b) => s + (b.inRange ? b.c : 0), 0));
-const decades = computed(() => {
-  const out: { label: string; c: number }[] = [];
-  for (let d = Math.floor(MIN / 10) * 10; d <= MAX; d += 10) {
-    let c = 0;
-    for (let y = d; y < d + 10; y++) c += props.counts.get(y) ?? 0;
-    out.push({ label: `${d}s`, c });
-  }
-  return out;
-});
-
 function commit() {
   if (lo.value > hi.value) [lo.value, hi.value] = [hi.value, lo.value];
   $yearRange.set(lo.value === MIN && hi.value === MAX ? null : [lo.value, hi.value]);
@@ -65,11 +66,6 @@ function onLo(e: Event) {
 }
 function onHi(e: Event) {
   hi.value = Math.max(Number((e.target as HTMLInputElement).value), lo.value);
-}
-function reset() {
-  lo.value = MIN;
-  hi.value = MAX;
-  commit();
 }
 
 const label = computed(() =>
@@ -86,7 +82,7 @@ const label = computed(() =>
     <ChartFrame title="Records per year" :caption="live ? 'filtered' : undefined" compact>
       <div class="relative">
         <SkeletonBlock v-if="loading && !counts.size" height="56px" label="Loading year histogram" />
-        <p v-else-if="failed && !counts.size" class="grid h-14 place-items-center text-xs text-muted">
+        <p v-else-if="error !== null && !counts.size" class="grid h-14 place-items-center text-xs text-muted">
           Year counts are unavailable right now.
         </p>
         <svg
@@ -95,7 +91,7 @@ const label = computed(() =>
           preserveAspectRatio="none"
           class="block h-14 w-full"
           role="img"
-          :aria-label="`Histogram of records per year from ${MIN} to ${MAX}`"
+          :aria-label="`Histogram of records per year from ${view[0]} to ${view[1]}`"
         >
           <rect
             v-for="b in bars"
@@ -111,8 +107,8 @@ const label = computed(() =>
         <div class="range-wrap" :class="{ 'opacity-50': loading }">
           <input
             type="range"
-            :min="MIN"
-            :max="MAX"
+            :min="view[0]"
+            :max="view[1]"
             :value="lo"
             aria-label="From year"
             :aria-valuetext="String(lo)"
@@ -121,8 +117,8 @@ const label = computed(() =>
           />
           <input
             type="range"
-            :min="MIN"
-            :max="MAX"
+            :min="view[0]"
+            :max="view[1]"
             :value="hi"
             aria-label="To year"
             :aria-valuetext="String(hi)"
@@ -131,38 +127,19 @@ const label = computed(() =>
           />
         </div>
       </div>
-      <template #table>
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Decade</th>
-              <th scope="col">Records</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="earlier">
-              <td>Before {{ MIN }}</td>
-              <td>{{ full(earlier) }}</td>
-            </tr>
-            <tr v-for="d in decades" :key="d.label">
-              <td>{{ d.label }}</td>
-              <td>{{ full(d.c) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </template>
     </ChartFrame>
-    <div class="mt-1.5 flex items-center justify-between text-xs">
-      <span class="font-medium text-text" aria-live="polite">{{ label }}</span>
-      <span class="text-subtle">
-        {{ compact(inRangeTotal) }} dated records
+    <div class="mt-1.5 flex items-center justify-between gap-2 text-xs">
+      <span class="whitespace-nowrap font-medium text-text" aria-live="polite">{{ label }}</span>
+      <span class="whitespace-nowrap text-subtle">
+        {{ compact(inRangeTotal) }} records
         <button
-          v-if="range"
+          v-if="zoomed"
           type="button"
           class="ml-2 text-muted underline-offset-2 hover:text-text hover:underline"
-          @click="reset"
+          aria-label="Zoom out to all years"
+          @click="zoomOut"
         >
-          Reset
+          Zoom out
         </button>
       </span>
     </div>

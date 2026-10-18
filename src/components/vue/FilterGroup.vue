@@ -28,6 +28,7 @@ import {
 import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
 import type { FilterGroupId } from './filterGroups';
 import TaxaPicker from './TaxaPicker.vue';
+import TimeSlider from './TimeSlider.vue';
 
 defineProps<{ group: FilterGroupId }>();
 
@@ -71,7 +72,7 @@ const toggleSound = () => $hasSound.set(!sound.value);
 const clearMonths = () => $months.set([]);
 
 /* Year inputs: edit freely, commit on change (blur / Enter), like the slider. */
-const MIN_YEAR = 1600;
+const MIN_YEAR = 1500;
 const MAX_YEAR = new Date().getFullYear();
 const fromYear = ref<number | ''>(years.value?.[0] ?? '');
 const toYear = ref<number | ''>(years.value?.[1] ?? '');
@@ -193,7 +194,7 @@ const clearYears = () => $yearRange.set(null);
             @change="commitYears"
           />
         </div>
-        <p class="hint">Or drag the records-per-year timeline.</p>
+        <TimeSlider class="mt-3" />
       </fieldset>
 
       <fieldset>

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
  * Map-page controls (client:only): taxon chip, filter rail, basemap
- * switcher, time slider + histogram, legend, and the side panel / bottom sheet.
+ * switcher, legend, and the side panel / bottom sheet.
  * On small screens the filters move into the sheet behind a Filters button.
  * "Near me" (`?near=1`) swaps these controls for the NearExplorer panel.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
 import BasemapSwitcher from './BasemapSwitcher.vue';
@@ -20,8 +20,6 @@ import MapSettings from './MapSettings.vue';
 import NearExplorer from './NearExplorer.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import TaxonChip from './TaxonChip.vue';
-import TimeSlider from './TimeSlider.vue';
-import { useYearHistogram } from './useYearHistogram';
 
 const panel = useStore($panel);
 const hex = useStore($selectedHex);
@@ -30,28 +28,9 @@ const groupCounts = useStore($groupCounts);
 /* Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
 const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
-const { counts, loading, error, live } = useYearHistogram();
 
-/* The year histogram starts collapsed; opening it is remembered per browser. */
-const TIMELINE_KEY = 'timeline-open';
-function readTimelineOpen() {
-  try {
-    return localStorage.getItem(TIMELINE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-const timelineOpen = ref(readTimelineOpen());
 /* Phone only: slide the dock off to the left to see the map behind it. */
 const dockStashed = ref(false);
-watch(timelineOpen, (open) => {
-  try {
-    localStorage.setItem(TIMELINE_KEY, String(open));
-  } catch {
-    /* Storage unavailable (private mode, blocked): keep the in-memory choice. */
-  }
-});
-
 function toggleNear() {
   if (near.value) {
     exitNearMode();
@@ -86,6 +65,9 @@ function closePanel() {
   </div>
 
   <div v-else class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen }">
+    <!-- Centred in the top row of pills; below it on phones, where the taxon chip can fill the row. -->
+    <MapProgress class="absolute left-1/2 top-12 -translate-x-1/2 sm:top-3" />
+
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
@@ -125,18 +107,16 @@ function closePanel() {
         </svg>
         Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
       </button>
-      <!-- Under the right-hand pills (2rem tall) on every screen size. -->
-      <MapProgress class="absolute right-0 top-10" />
     </div>
 
     <div
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
-      :class="{ collapsed: !timelineOpen, stashed: dockStashed }"
+      :class="{ stashed: dockStashed }"
     >
       <button
         type="button"
         class="stash-toggle"
-        :aria-label="dockStashed ? 'Show records per year panel' : 'Slide records per year panel away'"
+        :aria-label="dockStashed ? 'Show legend' : 'Slide legend away'"
         :aria-expanded="!dockStashed"
         @click="dockStashed = !dockStashed"
       >
@@ -149,28 +129,7 @@ function closePanel() {
           />
         </svg>
       </button>
-      <button
-        type="button"
-        class="timeline-toggle"
-        :aria-expanded="timelineOpen"
-        aria-controls="timeline"
-        :aria-label="timelineOpen ? 'Hide records per year' : 'Show records per year'"
-        @click="timelineOpen = !timelineOpen"
-      >
-        <span v-if="!timelineOpen">Records per year</span>
-        <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
-          <path
-            :d="timelineOpen ? 'M3 4.5l3 3 3-3' : 'M3 7.5l3-3 3 3'"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          />
-        </svg>
-      </button>
-      <div v-show="timelineOpen" id="timeline">
-        <TimeSlider :counts="counts" :loading="loading" :failed="error !== null" :live="live" />
-      </div>
-      <MapLegend class="w-full max-w-56" :class="{ 'mt-3': timelineOpen }" />
+      <MapLegend class="w-full max-w-56" />
     </div>
 
     <div class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block">
@@ -271,35 +230,8 @@ function closePanel() {
   border-color: var(--accent);
 }
 
-/* Expanded, the toggle sits in the chart's title row; collapsed, it leads the dock. */
 .bottom-dock {
-  width: min(34rem, calc(100% - 1.5rem));
-}
-.bottom-dock.collapsed {
   width: 15.5rem; /* the legend's 14rem plus padding */
-}
-.timeline-toggle {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 1.5rem;
-  padding: 0 0.375rem;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-.timeline-toggle:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-.collapsed .timeline-toggle {
-  position: static;
-  margin: -0.25rem 0 0.375rem -0.375rem;
-  color: var(--text);
 }
 
 /* Phone: a tab on the dock's right edge slides it off-screen, leaving the tab visible. */
@@ -370,9 +302,6 @@ function closePanel() {
   }
   .panel-open .rail-region {
     --flyout-max: calc(100vw - var(--panel-width) - 7.5rem);
-  }
-  .panel-open .bottom-dock:not(.collapsed) {
-    width: min(34rem, calc(100% - var(--panel-width) - 2.25rem));
   }
 }
 
