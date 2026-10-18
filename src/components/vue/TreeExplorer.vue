@@ -296,7 +296,9 @@ const share = (n: TreeNode) => {
             {{ detail.common ?? detail.name }}
             <span class="text-xs font-normal text-subtle">{{ RANK_LABELS[detail.rank] }}</span>
           </p>
-          <p class="text-xs text-muted">{{ compact(detail.records) }} records · {{ compact(detail.species) }} species</p>
+          <p class="text-xs text-muted">
+            {{ compact(detail.records) }} records · {{ compact(detail.species) }} species
+          </p>
         </div>
         <a
           :href="`/?taxon=${detail.key}`"
