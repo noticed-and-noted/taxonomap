@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('decade animation steps through years without flooding history', async ({ page }) => {
   await page.goto('/');
@@ -12,18 +12,20 @@ test('decade animation steps through years without flooding history', async ({ p
   expect(await page.evaluate(() => history.length)).toBe(before);
 });
 
-test('the app shell works offline; unvisited pages show the offline page', async ({ page, context, request }) => {
-  const manifest = (await (await request.get('/data/species-manifest.json')).json()) as Record<string, string>;
-  const [key, slug] = Object.entries(manifest)[0] ?? [];
-  await page.goto('/');
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.reload(); // now controlled by the service worker
-  await context.setOffline(true);
-  await page.goto('/tree?focus=1');
-  await expect(page.getByRole('heading', { name: 'Tree of life' })).toBeVisible();
-  if (key) {
-    await page.goto(`/species/${key}/${slug}`);
+test.describe(() => {
+  test.use({ serviceWorkers: 'allow' });
+
+  test('the app shell works offline; unvisited pages show the offline page', async ({ page, context }) => {
+    await page.goto('/');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload(); // now controlled by the service worker
+    // setOffline alone does not stop the service worker's own fetches in Chromium: refuse every request too.
+    await context.route('**/*', (route) => route.abort('internetdisconnected'));
+    await context.setOffline(true);
+    await page.goto('/tree?focus=1');
+    await expect(page.getByRole('heading', { name: 'Tree of life' })).toBeVisible();
+    // The fake world's one pre-rendered species page, never visited.
+    await page.goto('/species/2490719/turdus-merula');
     await expect(page.getByRole('heading', { name: 'You’re offline' })).toBeVisible();
-  }
-  await context.setOffline(false);
+  });
 });

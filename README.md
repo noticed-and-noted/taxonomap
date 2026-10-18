@@ -16,15 +16,15 @@ npm install
 npm run dev             # http://localhost:4321
 ```
 
-| Script                              | Purpose                                                                                    |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| `npm run dev`                       | Dev server                                                                                 |
-| `npm run build` / `npm run preview` | Static build to `dist/` (also generates `sw.js`) and serve it                              |
-| `npm run lint` / `npm run format`   | ESLint / Prettier                                                                          |
-| `npm run check`                     | `astro check` (TypeScript strictest)                                                       |
-| `npm test`                          | Unit tests (Vitest)                                                                        |
-| `npm run test:contract`             | **Live** GBIF contract tests. Hits each endpoint once. Not run in default CI.              |
-| `npm run test:e2e`                  | Playwright journeys against `npm run preview` (run `npx playwright install chromium` once) |
+| Script                                   | Purpose                                                                                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`                            | Dev server                                                                                                                           |
+| `npm run build` / `npm run preview`      | Static build to `dist/` (also generates `sw.js`) and serve it                                                                        |
+| `npm run lint` / `npm run format`        | ESLint / Prettier                                                                                                                    |
+| `npm run check`                          | `astro check` (TypeScript strictest)                                                                                                 |
+| `npm test`                               | Unit tests (Vitest)                                                                                                                  |
+| `npm run test:contract`                  | **Live** GBIF contract tests. Hits each endpoint once. Not run in default CI.                                                        |
+| `npm run build:e2e` / `npm run test:e2e` | Build against the fake GBIF in `tests/e2e/fake`, then run the Playwright journeys on it (run `npx playwright install chromium` once) |
 
 ## Environment variables
 
@@ -126,7 +126,8 @@ npm run dev             # http://localhost:4321
   - A notice shows while offline. `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
   - There's a 404 page.
 - **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. CI runs it on each push. **Not yet measured locally.**
-- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox, filters, hex panel, species pages and fallback, 404, tree, near me (including that geolocation is rounded before any request), the decade animation and offline. All 38 pass on desktop and mobile locally (`PW_CHANNEL=chrome` uses an installed Chrome instead of downloading one). CI runs them after the build.
+- **Unit tests** (`tests/unit/`). `src/lib`, `src/stores`, `src/pages` endpoints and `functions/` are held at 100% line, branch, function and statement coverage (`npm run test:coverage` fails below it); Vue components are covered by the journeys instead.
+- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox and place search, filters, hex panel, species pages and fallback, 404, tree, near me (species table, recent sightings, share card, and that geolocation is rounded before any request), the decade animation and offline. They never touch the network: `npm run build:e2e` builds the site against a small fake GBIF (`tests/e2e/fake/world.ts`: six species, served by a local server during the build), and in the browser every request off the site is answered by the same fake or fails the journey. Phones run only the journeys tagged `@mobile`, whose layout differs there. `PW_CHANNEL=chrome` uses an installed Chrome, or `PW_CHROMIUM` a Chromium binary, instead of Playwright's download.
 
 ## GBIF API findings (verified 2026-10-12)
 

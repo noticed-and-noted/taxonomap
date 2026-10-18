@@ -1,10 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('a pre-rendered species page has metadata, charts and attribution', async ({ page, request }) => {
-  const manifest = (await (await request.get('/data/species-manifest.json')).json()) as Record<string, string>;
-  const [key, slug] = Object.entries(manifest)[0] ?? [];
-  test.skip(!key, 'no pre-rendered species in this build');
-  await page.goto(`/species/${key}/${slug}`);
+  // The fake world pre-renders one species: the blackbird.
+  const key = 2490719;
+  await page.goto(`/species/${key}/turdus-merula`);
   await expect(page.locator('h1')).toBeVisible();
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     'content',
@@ -20,12 +19,10 @@ test('a pre-rendered species page has metadata, charts and attribution', async (
   expect(og.headers()['content-type']).toContain('image/png');
 });
 
-test('species without a static page render client-side, noindex', async ({ page, request }) => {
-  const manifest = (await (await request.get('/data/species-manifest.json')).json()) as Record<string, string>;
-  test.skip('2492462' in manifest, 'robin is pre-rendered in this build');
+test('species without a static page render client-side, noindex', async ({ page }) => {
   await page.goto('/species/view?key=2492462');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
-  await expect(page.getByRole('heading', { level: 1, name: 'European Robin' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { level: 1, name: 'European Robin' })).toBeVisible();
   await expect(page).toHaveTitle(/European Robin/);
 });
 
