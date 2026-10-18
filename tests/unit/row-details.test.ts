@@ -32,7 +32,6 @@ const row = (key: number, extra: Partial<SpeciesRow> = {}): SpeciesRow => ({
   key,
   scientificName: `Species ${key}`,
   records: 1,
-  classKey: 212,
   unnamed: true,
   ...extra,
 });

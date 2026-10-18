@@ -17,12 +17,15 @@ import {
   $iucn,
   $maxUncertainty,
   $months,
+  $taxonKeys,
   $yearRange,
   BASIS_OF_RECORD,
   CONTINENTS,
   IUCN_CATEGORIES,
+  MAX_TAXA,
   UNCERTAINTY_STEPS_M,
 } from '~/stores/explorer';
+import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
 import type { FilterGroupId } from './filterGroups';
 import TaxaPicker from './TaxaPicker.vue';
 
@@ -40,6 +43,15 @@ const uncert = useStore($maxUncertainty);
 const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
 const sound = useStore($hasSound);
+const taxonKeys = useStore($taxonKeys);
+
+const groupOn = (g: TaxonGroup) => g.taxa.every((t) => taxonKeys.value.includes(t.key));
+/** Set when a group would take the What filter past MAX_TAXA. */
+const groupsFull = ref(false);
+function toggleGroup(g: TaxonGroup) {
+  groupsFull.value = toggleTaxa(g.taxa) === 'full';
+}
+watch(taxonKeys, () => (groupsFull.value = false));
 
 function toggleIn<T>(store: WritableAtom<T[]>, value: T, sort?: (a: T, b: T) => number) {
   const cur = store.get();
@@ -95,6 +107,38 @@ const clearYears = () => $yearRange.set(null);
   <div class="filter-group space-y-5 text-sm">
     <template v-if="group === 'what'">
       <TaxaPicker />
+
+      <fieldset>
+        <legend class="group-label">Groups</legend>
+        <!-- Three across: the nine animal groups fill three rows, plants, mosses and fungi the fourth. -->
+        <div class="grid grid-cols-3 gap-0.5">
+          <button
+            v-for="g in TAXON_GROUPS"
+            :key="g.label"
+            type="button"
+            class="group-tile"
+            :aria-pressed="groupOn(g)"
+            @click="toggleGroup(g)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              class="size-5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path :d="g.icon" />
+            </svg>
+            {{ g.label }}
+          </button>
+        </div>
+        <p v-if="groupsFull" class="hint" role="alert">
+          Up to {{ MAX_TAXA }} taxa at once. Remove one to add this group.
+        </p>
+      </fieldset>
 
       <fieldset>
         <legend class="group-label">Taxon match</legend>
@@ -326,6 +370,39 @@ const clearYears = () => $yearRange.set(null);
   color: var(--text);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.group-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  /* The 44 px touch target; no taller, so all twelve groups stay compact. */
+  min-height: 2.75rem;
+  padding: 0.1875rem 0 0.125rem;
+  line-height: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+.group-tile:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+.group-tile[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.group-tile[aria-pressed='true'] svg {
+  color: var(--accent);
 }
 .toggle.radio:has(:focus-visible) {
   outline: 2px solid var(--focus);

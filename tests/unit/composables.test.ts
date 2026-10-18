@@ -37,13 +37,14 @@ describe('useHexSummary', () => {
   it('loads the selected cell: count, months, groups and species', async () => {
     const calls = stubNetwork((url) => {
       if (url.pathname !== '/v1/occurrence/search') return snapshots({ tree: TREE, names: [] })(url);
-      if (url.searchParams.get('facet') === 'speciesKey') return facets(4, 'SPECIES_KEY', [[1, 4]]);
+      if (url.searchParams.has('classKey')) return facets(4, 'SPECIES_KEY', [[2, 4]]);
       return {
         count: 40,
         results: [],
         facets: [
           { field: 'CLASS_KEY', counts: [{ name: '212', count: 40 }] },
           { field: 'MONTH', counts: [{ name: '3', count: 7 }] },
+          { field: 'SPECIES_KEY', counts: [{ name: '1', count: 4 }] },
         ],
       };
     });
@@ -60,6 +61,21 @@ describe('useHexSummary', () => {
     const facetCalls = calls.filter((u) => u.searchParams.has('facet'));
     expect(facetCalls.length).toBeGreaterThan(0);
     expect(facetCalls.every((u) => u.searchParams.get('geometry') === CELL.wkt)).toBe(true);
+    // Totals, groups, months and species in one request.
+    expect(facetCalls).toHaveLength(1);
+    expect(facetCalls[0]!.searchParams.getAll('facet')).toEqual(['classKey', 'month', 'speciesKey']);
+
+    // Picking a group asks once for its species; going back to all uses the loaded list.
+    await s.pickGroup(212);
+    expect(s.group.value).toBe(212);
+    expect(s.species.value.map((r) => r.key)).toEqual([2]);
+    expect(s.cellSpecies.value.map((r) => r.key)).toEqual([1]);
+    await s.pickGroup(null);
+    expect(s.species.value.map((r) => r.key)).toEqual([1]);
+    await s.pickGroup(212);
+    const groupCalls = calls.filter((u) => u.searchParams.get('classKey') === '212');
+    expect(groupCalls).toHaveLength(1);
+    expect(groupCalls[0]!.searchParams.get('geometry')).toBe(CELL.wkt);
     stop();
   });
 
@@ -147,11 +163,5 @@ describe('useLatestLoad', () => {
     });
     expect(l.error.value).toBe('unknown');
     stop();
-  });
-
-  it('words the per-group table note', async () => {
-    const { perGroupNote } = await import('~/components/vue/useLatestLoad');
-    expect(perGroupNote(9, 8, 25)).toBe('top 25 in each of the 8 most-recorded groups');
-    expect(perGroupNote(3, 8, 25)).toBe('top 25 in each group');
   });
 });

@@ -15,7 +15,7 @@ import {
   type Occurrence,
   type GbifImage,
 } from '~/lib/gbif';
-import { namedClasses, speciesInClasses, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
+import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 
 export type { ClassGroup, SpeciesRow };
 
@@ -27,7 +27,7 @@ export interface Area {
   month?: number | undefined;
 }
 
-const filterFor = (a: Area, extra: { taxonKey?: number } = {}) => ({
+const filterFor = (a: Area, extra: { taxonKey?: number; classKey?: number } = {}) => ({
   geometry: circleToWkt(a.lat, a.lng, a.radiusKm),
   month: a.month,
   ...extra,
@@ -35,17 +35,15 @@ const filterFor = (a: Area, extra: { taxonKey?: number } = {}) => ({
 
 /** Total records and the classes present, most-recorded first. */
 export async function classesNear(a: Area, signal?: AbortSignal): Promise<{ records: number; classes: ClassGroup[] }> {
-  const r = await occurrenceFacets(filterFor(a), ['classKey'], { facetLimit: 20, ...(signal && { signal }) });
+  const r = await occurrenceFacets(filterFor(a), ['classKey'], { facetLimit: 50, ...(signal && { signal }) });
   return { records: r.count, classes: await namedClasses(r.facets['classKey'] ?? []) };
 }
 
-/** Top species of the most-recorded classes (photos are added separately). */
-export const NEAR_CLASSES = 10;
-export const NEAR_PER_CLASS = 40;
-export function speciesNear(a: Area, classes: readonly ClassGroup[], signal?: AbortSignal): Promise<SpeciesRow[]> {
-  return speciesInClasses(filterFor(a), classes, {
-    maxClasses: NEAR_CLASSES,
-    perClass: NEAR_PER_CLASS,
+/** The area's top species, or one class's (photos are added separately). */
+export const NEAR_SPECIES = 200;
+export function speciesNear(a: Area, classKey: number | null, signal?: AbortSignal): Promise<SpeciesRow[]> {
+  return topSpecies(filterFor(a, classKey === null ? {} : { classKey }), {
+    limit: NEAR_SPECIES,
     ...(signal && { signal }),
   });
 }

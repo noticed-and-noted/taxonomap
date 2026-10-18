@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Selected cell summary: record count, a sortable and filterable species
- * table and radial seasonality.
+ * Selected cell summary: record count, a sortable species table that can be
+ * narrowed to one group, and radial seasonality.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onMounted, ref } from 'vue';
@@ -13,13 +13,14 @@ import HexRecords from './HexRecords.vue';
 import RadialSeasonality from './RadialSeasonality.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
-import { HEX_CLASSES, HEX_PER_CLASS, useHexSummary } from './useHexSummary';
-import { perGroupNote } from './useLatestLoad';
+import { HEX_SPECIES, useHexSummary } from './useHexSummary';
 
-const { loading, error, count, months, classes, species, reload } = useHexSummary();
+const { loading, error, count, months, classes, species, cellSpecies, group, pickGroup, reload } = useHexSummary();
 const taxa = useStore($taxa);
 const selectedKeys = computed(() => taxa.value.map((t) => t.key));
-const tableNote = computed(() => perGroupNote(classes.value.length, HEX_CLASSES, HEX_PER_CLASS));
+const tableNote = computed(() =>
+  species.value.length >= HEX_SPECIES ? `the ${HEX_SPECIES} most recorded` : undefined,
+);
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
 const tab = ref<'species' | 'records'>('species');
@@ -81,10 +82,12 @@ const tab = ref<'species' | 'records'>('species');
             :loading="loading"
             :selected="selectedKeys"
             :note="tableNote"
+            :group="group"
+            @update:group="pickGroup"
           />
         </div>
         <div v-else role="tabpanel" aria-label="Records">
-          <HexRecords :species="species" />
+          <HexRecords :species="cellSpecies" />
         </div>
       </section>
 
