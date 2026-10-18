@@ -7,7 +7,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
-import { BASIS_LABELS, distance, full } from '~/lib/format';
+import { BASIS_LABELS, full } from '~/lib/format';
 import { searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import type { SpeciesRow } from '~/lib/species/groups';
@@ -135,9 +135,6 @@ const initials = (o: Occurrence) =>
 const toggle = (o: Occurrence) => (expanded.value = expanded.value === o.key ? null : o.key);
 
 const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filter(Boolean).join(' ');
-const place = (o: Occurrence) =>
-  [o.locality, o.country].filter(Boolean).join(', ') +
-  (o.coordinateUncertaintyInMeters ? ` ±${distance(o.coordinateUncertaintyInMeters)}` : '');
 </script>
 
 <template>
@@ -320,10 +317,6 @@ const place = (o: Occurrence) =>
                       <div v-if="institution(o)">
                         <dt class="text-subtle">Institution</dt>
                         <dd>{{ institution(o) }}</dd>
-                      </div>
-                      <div v-if="place(o)">
-                        <dt class="text-subtle">Locality</dt>
-                        <dd>{{ place(o) }}</dd>
                       </div>
                       <div v-if="o.datasetName ?? o.publisher">
                         <dt class="text-subtle">Source</dt>
