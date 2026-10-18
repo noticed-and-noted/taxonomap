@@ -41,6 +41,8 @@ export interface OccurrenceFilter extends Refinements {
   taxonKey?: number | undefined;
   /** Several taxa of any rank (repeated taxonKey, OR'd); takes precedence over taxonKey. */
   taxonKeys?: readonly number[] | undefined;
+  /** Match only records filed at exactly these taxa, not their subspecies or lower ranks (acceptedTaxonKey). */
+  exactTaxon?: boolean | undefined;
   /** Several species at once (repeated speciesKey param). */
   speciesKeys?: readonly number[] | undefined;
   /** Narrow to one class (AND'd with any taxa, unlike taxonKey). */
@@ -58,9 +60,15 @@ export interface OccurrenceFilter extends Refinements {
   eventDate?: string | undefined;
 }
 
+/** The taxa as taxonKey (taxon and everything under it) or, when exact, acceptedTaxonKey. */
+export function taxonParams(f: Pick<OccurrenceFilter, 'taxonKey' | 'taxonKeys' | 'exactTaxon'>): Params {
+  const keys = f.taxonKeys ?? f.taxonKey;
+  return f.exactTaxon && keys !== undefined ? { acceptedTaxonKey: keys } : { taxonKey: keys };
+}
+
 export function filterToParams(f: OccurrenceFilter): Params {
   return {
-    taxonKey: f.taxonKeys ?? f.taxonKey,
+    ...taxonParams(f),
     speciesKey: f.speciesKeys,
     classKey: f.classKey,
     year: yearRangeParam(f.year),

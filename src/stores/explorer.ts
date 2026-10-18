@@ -109,6 +109,8 @@ export const $mapView = urlAtom(viewCodec);
 export const viewParam = (v: MapView): string => viewCodec.serialize(v);
 export const $yearRange = urlAtom(yearsCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
+/** Only records filed at exactly the chosen taxa (e.g. gray wolf without domestic dogs). */
+export const $exactTaxon = urlAtom(codecs.bool('exact', { scope: 'global' }));
 export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
 export const $hasSound = urlAtom(codecs.bool('sound', { scope: 'global' }));
 export const $months = urlAtom(codecs.intSet('months', { min: 1, max: 12 }, { scope: 'global' }));
@@ -284,6 +286,7 @@ const nullable = <T>(
  */
 export const FILTERS: readonly Filter[] = [
   list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
+  flag($exactTaxon, 'what', { exactTaxon: true }, 'Exact taxon only'),
   list($iucn, 'what', (iucn) => ({ iucn }), { each: (c) => IUCN_LABELS[c]! }),
   nullable(
     $yearRange,

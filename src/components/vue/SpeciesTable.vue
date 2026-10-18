@@ -319,7 +319,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
         <div
           ref="scroller"
           class="fade-list overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
-          :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(32rem,65dvh)]', { 'fade-bottom': resultsFade }]"
+          :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': resultsFade }]"
           tabindex="0"
           aria-label="Species results"
           role="region"

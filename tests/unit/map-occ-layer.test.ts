@@ -185,6 +185,29 @@ describe('occurrence layer', () => {
     layer.destroy();
   });
 
+  it('leaves out cells known to be empty, and drops them on redraw', async () => {
+    network();
+    const m = fakeMap();
+    const empty = new Set<string>();
+    const o = { ...callbacks().o, isEmpty: (h: { properties: { id: string } }) => empty.has(h.properties.id) };
+    const layer = createOccLayer(m.map, o);
+    await settle();
+    const cell = layer.collection().features[0]!;
+    const id = (cell.properties as { id: string }).id;
+    empty.add(id);
+    layer.redraw();
+    await settle();
+    expect(o.onChanges).toHaveBeenLastCalledWith([], [id]);
+    expect(ids(layer.collection())).not.toContain(id);
+    const ring = cell.geometry.coordinates[0]!;
+    expect(
+      layer.cellAt([
+        ring.reduce((s, p) => s + p[0]! / ring.length, 0),
+        ring.reduce((s, p) => s + p[1]! / ring.length, 0),
+      ]),
+    ).toBeUndefined();
+  });
+
   it('skips points off the globe when the whole world is in view', async () => {
     const asked = network();
     const m = fakeMap({ zoom: 0 });
