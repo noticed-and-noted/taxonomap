@@ -17,16 +17,6 @@ import { useScrollFade } from './useScrollFade';
 const PAGE = 20;
 const MAX_OPTIONS = 8;
 
-const BASIS_ICONS: Record<string, string> = {
-  HUMAN_OBSERVATION: '👁',
-  PRESERVED_SPECIMEN: '🫙',
-  MACHINE_OBSERVATION: '📷',
-  MATERIAL_SAMPLE: '🧪',
-  FOSSIL_SPECIMEN: '🦴',
-  LIVING_SPECIMEN: '🌱',
-  MATERIAL_CITATION: '📖',
-};
-
 const props = defineProps<{ species: readonly SpeciesRow[] }>();
 
 const geometry = useStore($hexGeometry);
@@ -182,7 +172,8 @@ const image = (o: Occurrence) => usableImages(o)[0];
             :href="`https://www.gbif.org/occurrence/${o.key}`"
             target="_blank"
             rel="noopener"
-            class="flex gap-3 rounded-md border border-border p-2 hover:bg-surface-2"
+            class="record flex gap-3 rounded-md border border-border p-2 hover:bg-surface-2"
+            :data-type="o.basisOfRecord"
           >
             <div class="size-14 shrink-0 overflow-hidden rounded bg-surface-2">
               <ThumbImage v-if="image(o)" :image="image(o)!" size="200x" class="size-full object-cover" />
@@ -191,7 +182,7 @@ const image = (o: Occurrence) => usableImages(o)[0];
               <span
                 v-if="o.basisOfRecord"
                 class="record-type inline-block rounded-sm bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium"
-                >{{ BASIS_ICONS[o.basisOfRecord] ?? '•' }} {{ BASIS_LABELS[o.basisOfRecord] ?? o.basisOfRecord }}</span
+                >{{ BASIS_LABELS[o.basisOfRecord] ?? o.basisOfRecord }}</span
               >
               <p class="truncate" :class="{ 'sci-name': !o.vernacularName }">{{ name(o) }}</p>
               <p class="truncate text-xs text-muted">
@@ -216,6 +207,49 @@ const image = (o: Occurrence) => usableImages(o)[0];
 </template>
 
 <style scoped>
+/* Record type stripe: ≥3:1 on --surface in each theme (non-text contrast). */
+.record {
+  --type: var(--border-strong);
+  border-left: 3px solid var(--type);
+}
+.record[data-type='HUMAN_OBSERVATION'] {
+  --type: #5dcaa5;
+}
+.record[data-type='FOSSIL_SPECIMEN'] {
+  --type: #f0997b;
+}
+.record[data-type='PRESERVED_SPECIMEN'],
+.record[data-type='LIVING_SPECIMEN'] {
+  --type: #afa9ec;
+}
+.record[data-type='MACHINE_OBSERVATION'] {
+  --type: #b4b2a9;
+}
+.record[data-type='MATERIAL_SAMPLE'],
+.record[data-type='MATERIAL_CITATION'] {
+  --type: #85b7eb;
+}
+:root[data-theme='light'] .record[data-type='HUMAN_OBSERVATION'] {
+  --type: #0f6e56;
+}
+:root[data-theme='light'] .record[data-type='FOSSIL_SPECIMEN'] {
+  --type: #993c1d;
+}
+:root[data-theme='light'] .record[data-type='PRESERVED_SPECIMEN'],
+:root[data-theme='light'] .record[data-type='LIVING_SPECIMEN'] {
+  --type: #534ab7;
+}
+:root[data-theme='light'] .record[data-type='MACHINE_OBSERVATION'] {
+  --type: #5f5e5a;
+}
+:root[data-theme='light'] .record[data-type='MATERIAL_SAMPLE'],
+:root[data-theme='light'] .record[data-type='MATERIAL_CITATION'] {
+  --type: #185fa5;
+}
+.record-type {
+  color: var(--type);
+}
+
 .picker-input {
   width: 100%;
   height: 2rem;
