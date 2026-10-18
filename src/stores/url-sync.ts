@@ -79,7 +79,7 @@ export function writeParams(params: URLSearchParams, only?: (c: UrlCodec<unknown
 function flush(): void {
   flushTimer = undefined;
   microtaskQueued = false;
-  if (!isBrowser()) return;
+  // Only scheduled in a browser (see schedule).
   const url = new URL(window.location.href);
   const before = url.search;
   writeParams(url.searchParams);

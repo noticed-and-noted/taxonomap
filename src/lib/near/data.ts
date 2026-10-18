@@ -66,7 +66,7 @@ const SIGHTING_WINDOWS_DAYS = [30, 365];
 /** Latest dated records with photos, newest first: the past 30 days, widened to a year if that has too few. */
 export async function recentSightings(a: Area, limit = 24, signal?: AbortSignal): Promise<Sighting[]> {
   const now = new Date();
-  let rows: { o: Occurrence; img: GbifImage }[] = [];
+  let rows: { o: Occurrence & { eventDate: string }; img: GbifImage }[] = [];
   for (const days of SIGHTING_WINDOWS_DAYS) {
     const from = new Date(now.getTime() - days * DAY);
     const res = await searchOccurrences(
@@ -76,8 +76,8 @@ export async function recentSightings(a: Area, limit = 24, signal?: AbortSignal)
     );
     rows = res.results
       .map((o) => ({ o, img: usableImages(o)[0] }))
-      .filter((x): x is { o: Occurrence; img: GbifImage } => !!x.img && !!x.o.eventDate)
-      .sort((x, y) => (y.o.eventDate ?? '').localeCompare(x.o.eventDate ?? ''))
+      .filter((x): x is { o: Occurrence & { eventDate: string }; img: GbifImage } => !!x.img && !!x.o.eventDate)
+      .sort((x, y) => y.o.eventDate.localeCompare(x.o.eventDate))
       .slice(0, limit);
     if (rows.length >= limit) break;
   }
@@ -97,7 +97,7 @@ export async function recentSightings(a: Area, limit = 24, signal?: AbortSignal)
     return {
       occurrence: o,
       image: img,
-      date: (o.eventDate ?? '').slice(0, 10),
+      date: o.eventDate.slice(0, 10),
       ...(common && { commonName: common }),
       ...(title && { datasetTitle: title }),
     };
@@ -125,10 +125,11 @@ export async function speciesTallies(
       .slice(0, 3);
     return { species: rows.length, topNames };
   };
-  const [all, ...per] = await Promise.all([tally(), ...classes.slice(0, 6).map((c) => tally(c.key))]);
+  const leading = classes.slice(0, 6);
+  const [all, per] = await Promise.all([tally(), Promise.all(leading.map((c) => tally(c.key)))]);
   return {
-    total: all?.species ?? 0,
-    topNames: all?.topNames ?? [],
-    groups: classes.slice(0, 6).map((c, i) => ({ ...c, ...(per[i] ?? { species: 0, topNames: [] }) })),
+    total: all.species,
+    topNames: all.topNames,
+    groups: leading.map((c, i) => ({ ...c, ...per[i]! })),
   };
 }

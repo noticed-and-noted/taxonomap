@@ -37,10 +37,10 @@ export class LruCache<V> {
   set(key: string, value: V, ttlMs: number): void {
     this.#map.delete(key);
     this.#map.set(key, { value, expires: this.#now() + ttlMs });
-    while (this.#map.size > this.#max) {
-      const oldest = this.#map.keys().next();
-      if (oldest.done) break;
-      this.#map.delete(oldest.value);
+    // Oldest first (Maps keep insertion order); deleting while iterating is safe.
+    for (const oldest of this.#map.keys()) {
+      if (this.#map.size <= this.#max) break;
+      this.#map.delete(oldest);
     }
   }
 

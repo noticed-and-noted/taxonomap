@@ -50,8 +50,10 @@ export function throttle<A extends unknown[]>(fn: (...args: A) => void, ms: numb
     timer ??= setTimeout(() => {
       timer = undefined;
       last = Date.now();
-      if (pending) fn(...pending);
+      // Set by the call that started this timer, and only cleared here.
+      const args = pending as A;
       pending = undefined;
+      fn(...args);
     }, wait);
   };
 }

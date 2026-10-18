@@ -72,7 +72,6 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
               { name: '5', count: 10 },
             ],
           },
-          { field: 'FAMILY_KEY', counts: [] },
         ],
       };
     }
@@ -164,5 +163,158 @@ describe('bake', () => {
     ]);
     const common = await b.bakedCommonNames();
     expect([common(212), common(44)]).toEqual(['Birds', null]);
+  });
+});
+
+/**
+ * A messier GBIF: facets left out, listings that page and then come back
+ * empty, taxa it no longer knows, names without a canonical form.
+ */
+function messyGbif() {
+  return stubNetwork((url) => {
+    const p = url.pathname;
+    const q = url.searchParams;
+    if (p === '/v1/species/search' && q.get('facet') === 'higherTaxonKey')
+      return facets(0, 'HIGHER_TAXON_KEY', [[30, 7]]);
+    if (p === '/v1/species/search') {
+      const rank = q.get('rank');
+      // Every listing pages once, then answers an empty page without saying it is the end.
+      if (q.get('offset') !== '0') return { endOfRecords: false, results: [] };
+      const byRank: Record<string, object[]> = {
+        KINGDOM: [{ key: 1, rank: 'KINGDOM', scientificName: 'Animalia Linnaeus' }],
+        PHYLUM: [
+          usage(2, 'PHYLUM', 'Chordata', { kingdomKey: 1 }),
+          usage(3, 'PHYLUM', 'Unrecorded', { kingdomKey: 1 }),
+        ],
+        CLASS: [usage(20, 'CLASS', 'Odd rank', { rank: 'SUBCLASS' })],
+        ORDER: [
+          usage(30, 'ORDER', 'Unplaced order', { phylumKey: 2 }),
+          usage(31, 'ORDER', 'Recorded, no species count', { classKey: 99, phylumKey: 2 }),
+        ],
+      };
+      return { endOfRecords: false, results: byRank[rank ?? ''] ?? [] };
+    }
+    if (p === '/v1/occurrence/search') {
+      const f = q.getAll('facet');
+      if (f.includes('year')) return { count: 0, results: [] };
+      if (f.includes('speciesKey')) {
+        if (q.get('taxonKey') === '212')
+          return facets(0, 'SPECIES_KEY', [
+            [10, 9000],
+            [11, 8000],
+            [13, 5000],
+          ]);
+        if (q.get('taxonKey') === '216') return facets(0, 'SPECIES_KEY', [[15, 3000]]);
+        if (q.get('taxonKey')) return { count: 0, results: [] };
+        return facets(0, 'SPECIES_KEY', [
+          [10, 9000],
+          [14, 4000],
+        ]);
+      }
+      return {
+        count: 0,
+        results: [],
+        facets: [
+          { field: 'KINGDOM_KEY', counts: [{ name: '1', count: 5000 }] },
+          { field: 'PHYLUM_KEY', counts: [{ name: '2', count: 4000 }] },
+          { field: 'ORDER_KEY', counts: [{ name: '31', count: 300 }] },
+          {
+            field: 'FAMILY_KEY',
+            counts: [
+              { name: '40', count: 2000 },
+              { name: '41', count: 1500 },
+            ],
+          },
+        ],
+      };
+    }
+    if (p === '/v1/species/40') return { key: 40, rank: 'FAMILY', scientificName: 'Turdidae Rafinesque' };
+    if (p === '/v1/species/14') return { key: 14, rank: 'SPECIES', scientificName: 'Species 14' };
+    if (p === '/v1/species/41' || p === '/v1/species/11' || p === '/v1/species/41/vernacularNames')
+      return json({}, 404);
+    const species = /^\/v1\/species\/(\d+)$/.exec(p);
+    if (species) return usage(Number(species[1]), 'SPECIES', `Species ${species[1]}`);
+    if (/^\/v1\/species\/\d+\/vernacularNames$/.test(p)) return { results: [] };
+    return undefined;
+  });
+}
+
+describe('bake against a messier GBIF', () => {
+  beforeEach(async () => (await import('~/lib/gbif/server')).http().clear());
+
+  it('bakes no years when the facet is missing', async () => {
+    messyGbif();
+    await expect((await bake()).bakeYears()).resolves.toMatchObject({ total: 0, years: [] });
+  });
+
+  it('builds the tree from what it can place', async () => {
+    messyGbif();
+    const { nodes } = await (await bake()).bakeTree();
+    expect(nodes).toEqual([
+      { k: 1, n: 'Animalia Linnaeus', r: 'K', o: 5000, s: 1 },
+      { k: 2, n: 'Chordata', r: 'P', o: 4000, s: 1, p: 1 },
+      // No records, but species: kept, under its phylum when it has no class.
+      { k: 30, n: 'Unplaced order', r: 'O', o: 0, s: 7, p: 2 },
+    ]);
+  });
+
+  it('indexes names with families, skipping taxa GBIF no longer knows', async () => {
+    // Birds get one new key (11, gone from GBIF); 13 is past their share.
+    messyGbif();
+    const b = await bake({ NAME_INDEX_SIZE: '2' });
+    const { names } = await b.bakeNames();
+    expect(names).toEqual([
+      [10, 'S', 'Species 10', null, 9000],
+      [1, 'K', 'Animalia Linnaeus', null, 5000],
+      [2, 'P', 'Chordata', null, 4000],
+      [14, 'S', 'Species 14', null, 4000],
+      [40, 'F', 'Turdidae Rafinesque', null, 2000],
+    ]);
+    expect((await b.bakedCommonNames())(10)).toBeNull();
+  });
+
+  it('pre-renders by class, then the global ranking, most-recorded first', async () => {
+    messyGbif();
+    const b = await bake({ SPECIES_PRERENDER_COUNT: '4' });
+    // Birds take two (11 is gone from GBIF), insects one, the global ranking fills in 14.
+    expect(await b.bakeSpeciesList()).toEqual([
+      { key: 10, slug: 'species-10', count: 9000 },
+      { key: 14, slug: 'species-14', count: 4000 },
+      { key: 15, slug: 'species-15', count: 3000 },
+    ]);
+  });
+
+  it('skips the global ranking when the classes fill the list', async () => {
+    const calls = messyGbif();
+    const b = await bake({ SPECIES_PRERENDER_COUNT: '2' });
+    expect((await b.bakeSpeciesList()).map((s) => s.key)).toEqual([10, 15]);
+    expect(calls.some((u) => u.searchParams.get('facet') === 'speciesKey' && !u.searchParams.has('taxonKey'))).toBe(
+      false,
+    );
+  });
+});
+
+const globalFacetLimit = (calls: URL[]) =>
+  calls
+    .find((u) => u.searchParams.get('facet') === 'speciesKey' && !u.searchParams.has('taxonKey'))
+    ?.searchParams.get('facetLimit');
+
+describe('build sizes', () => {
+  it('are smaller under astro dev, and the env overrides them', async () => {
+    gbif();
+    const dev = await bake({ SPECIES_PRERENDER_COUNT: 'many' });
+    expect(dev.prerenderCount()).toBe(12);
+    const devCalls = gbif();
+    await dev.bakeNames();
+    // 42% of the 300-name dev index comes from the global ranking.
+    expect(globalFacetLimit(devCalls)).toBe('126');
+    vi.resetModules();
+    vi.doMock('~/lib/env', async (orig) => ({ ...(await orig<typeof import('~/lib/env')>()), isDev: () => false }));
+    const prod = await import('~/lib/bake');
+    vi.doUnmock('~/lib/env');
+    expect(prod.prerenderCount()).toBe(2000);
+    const calls = gbif();
+    await prod.bakeNames();
+    expect(globalFacetLimit(calls)).toBe('2520');
   });
 });

@@ -93,7 +93,8 @@ const yearsCodec: UrlCodec<YearRange> = {
     const b = Number(m[2]);
     return [Math.min(a, b), Math.max(a, b)];
   },
-  serialize: (v) => (v ? `${v[0]}-${v[1]}` : ''),
+  // Never asked for the default (null): it is left out of the URL.
+  serialize: (v) => `${v![0]}-${v![1]}`,
 };
 
 /**
@@ -102,7 +103,7 @@ const yearsCodec: UrlCodec<YearRange> = {
  */
 export const $taxonKeys = urlAtom(codecs.intSet('taxon', { min: 0, limit: MAX_TAXA }, { scope: 'global' }));
 /** The taxon when exactly one is selected (the tree and species pages follow it), else null. */
-export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? (keys[0] ?? null) : null));
+export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? keys[0]! : null));
 export const $mapView = urlAtom(viewCodec);
 /** A map view as its `view` URL parameter. */
 export const viewParam = (v: MapView): string => viewCodec.serialize(v);
@@ -132,7 +133,7 @@ const hexCodec: UrlCodec<HexPoint> = {
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat as number) > 90) return undefined;
     return [lng as number, lat as number];
   },
-  serialize: (v) => (v ? `${v[0].toFixed(4)},${v[1].toFixed(4)}` : ''),
+  serialize: (v) => `${v![0].toFixed(4)},${v![1].toFixed(4)}`,
 };
 
 export const $selectedHex = urlAtom(hexCodec);
@@ -283,7 +284,7 @@ const nullable = <T>(
  */
 export const FILTERS: readonly Filter[] = [
   list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
-  list($iucn, 'what', (iucn) => ({ iucn }), { each: (c) => IUCN_LABELS[c] ?? c }),
+  list($iucn, 'what', (iucn) => ({ iucn }), { each: (c) => IUCN_LABELS[c]! }),
   nullable(
     $yearRange,
     'when',

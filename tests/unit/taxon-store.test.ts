@@ -89,6 +89,20 @@ describe('taxon selection', () => {
     off();
   });
 
+  it('keeps placeholders for taxa it cannot name, and drops answers for a selection that moved on', async () => {
+    stubNetwork(snapshots({}));
+    const s = await load();
+    const off = s.$taxa.listen(() => {});
+    s.$taxonKeys.set([1]);
+    s.$taxonKeys.set([2]);
+    await vi.waitFor(() => expect(s.$taxa.get()).toEqual([{ key: 2, scientificName: 'Taxon 2', rank: 'UNRANKED' }]));
+    // Known names need no lookup.
+    s.primeTaxonInfo({ key: 3, scientificName: 'Known', rank: 'GENUS' });
+    s.$taxonKeys.set([3]);
+    expect(s.$taxa.get()[0]?.scientificName).toBe('Known');
+    off();
+  });
+
   it('shows a picked taxon by name straight away (no lookup)', async () => {
     const s = await load();
     const off = s.$taxa.listen(() => {});

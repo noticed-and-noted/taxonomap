@@ -7,14 +7,7 @@
 import { useStore } from '@nanostores/vue';
 import type { WritableAtom } from 'nanostores';
 import { ref, useId, watch } from 'vue';
-import {
-  BASIS_LABELS,
-  CONTINENT_LABELS,
-  distance,
-  IUCN_LABELS,
-  MONTH_NAMES,
-  MONTHS,
-} from '~/lib/format';
+import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTH_NAMES, MONTHS } from '~/lib/format';
 import {
   $basisOfRecord,
   $continents,

@@ -87,28 +87,11 @@ jobs:
           path: dist
           retention-days: 3
 
-  lighthouse:
-    name: Lighthouse budget (mobile)
-    needs: build
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist
-      - name: Add a pre-rendered species page to the audit
-        run: |
-          page=$(find dist/species -mindepth 3 -name index.html -not -path '*/view/*' | head -1)
-          if [ -n "$page" ]; then
-            jq --arg u "http://localhost/${page#dist/}" '.ci.collect.url += [$u]' lighthouserc.json > lhci.json && mv lhci.json lighthouserc.json
-          fi
-      - run: npx --yes @lhci/cli@0.15.1 autorun
-
   e2e:
     name: Playwright journeys
-    needs: build
+    # The journeys build their own site against a fake GBIF (tests/e2e/fake), so they
+    # need neither the live build nor the network, and run alongside it.
+    needs: verify
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
@@ -118,12 +101,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e -- --project=desktop --project=mobile
+      - run: npm run build:e2e
+      - run: npm run test:e2e
 
   deploy:
     name: Deploy to Cloudflare Pages

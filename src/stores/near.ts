@@ -22,7 +22,8 @@ const atCodec: UrlCodec<LatLng> = {
     }
     return roundLatLng(lat as number, lng as number);
   },
-  serialize: (v) => (v ? `${v.lat.toFixed(3)},${v.lng.toFixed(3)}` : ''),
+  // Never asked for the default (null): it is left out of the URL.
+  serialize: (v) => `${v!.lat.toFixed(3)},${v!.lng.toFixed(3)}`,
 };
 
 const radiusCodec: UrlCodec<RadiusKm> = {

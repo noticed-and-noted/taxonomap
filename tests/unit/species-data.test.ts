@@ -1,5 +1,5 @@
 /** Everything a species page shows, and links to species pages. */
-import { facets, stubNetwork } from './helpers/network';
+import { facets, json, stubNetwork } from './helpers/network';
 
 const ROBIN = {
   key: 2492462,
@@ -112,6 +112,42 @@ describe('loadSpeciesData', () => {
   });
 });
 
+describe('loadSpeciesData with sparse answers', () => {
+  const bad = () => json({ message: 'bad' }, 400);
+
+  it('fills gaps from the lookup and leaves out what GBIF does not have', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/1') return { key: 1, scientificName: 'Alpha beta', rank: 'SPECIES' };
+      if (url.pathname === '/v1/occurrence/search') return { count: 2, results: [] };
+      return bad();
+    });
+    const { loadSpeciesData } = await load();
+    const d = await loadSpeciesData(1, () => 'Lookup name');
+    expect(d).toMatchObject({ canonicalName: 'Alpha beta', commonName: 'Lookup name', synonyms: [], vernacular: [] });
+    expect(d).not.toHaveProperty('authorship');
+    expect(d).not.toHaveProperty('status');
+    expect([d.years, d.countries, d.datasets, d.siblings]).toEqual([[], [], [], []]);
+    expect(d.months).toEqual(Array(12).fill(0));
+  });
+
+  it('has no siblings when the genus has no other recorded species, or cannot be loaded', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/2')
+        return { key: 2, scientificName: 'Alpha gamma', rank: 'SPECIES', genusKey: 9 };
+      if (url.pathname === '/v1/species/3')
+        return { key: 3, scientificName: 'Alpha delta', rank: 'SPECIES', genusKey: 10 };
+      if (url.pathname === '/v1/species/9/children') return { results: [] };
+      if (url.pathname === '/v1/occurrence/search') return { count: 0, results: [] };
+      return bad();
+    });
+    const { loadSpeciesData } = await load();
+    const d = await loadSpeciesData(2);
+    expect(d.siblings).toEqual([]);
+    expect(d).not.toHaveProperty('commonName');
+    await expect(loadSpeciesData(3)).resolves.toMatchObject({ siblings: [] });
+  });
+});
+
 describe('species links', () => {
   it('use the pre-rendered page when the manifest has one', async () => {
     const { speciesPath, similarItems } = await load();
@@ -126,5 +162,26 @@ describe('species links', () => {
     await Promise.all([loadSpeciesManifest(), loadSpeciesManifest()]);
     expect($speciesManifest.get()).toEqual({ 5: 'x' });
     expect(calls).toHaveLength(1);
+  });
+
+  it('publish null when the manifest is missing or unreachable', async () => {
+    stubNetwork(() => undefined);
+    const first = await load();
+    await expect(first.loadSpeciesManifest()).resolves.toBeNull();
+    vi.stubGlobal('fetch', () => Promise.reject(new TypeError('offline')));
+    const second = await load();
+    await expect(second.loadSpeciesManifest()).resolves.toBeNull();
+    expect(second.$speciesManifest.get()).toBeNull();
+  });
+});
+
+describe('species charts', () => {
+  it('names countries and links datasets', async () => {
+    const { speciesCharts } = await import('~/lib/species/charts');
+    const d = { countries: [['GB', 3]], datasets: [{ key: 'ds', title: 'Garden birds', count: 2 }] } as never;
+    expect(speciesCharts(d)).toEqual({
+      countries: [{ label: 'United Kingdom', value: 3 }],
+      datasets: [{ label: 'Garden birds', value: 2, href: 'https://www.gbif.org/dataset/ds' }],
+    });
   });
 });

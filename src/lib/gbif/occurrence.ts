@@ -1,15 +1,7 @@
 import { LIMITS } from './config';
 import { http } from './http';
 import { yearRangeParam, type Params } from './params';
-import type {
-  BasisOfRecord,
-  Continent,
-  Facet,
-  FacetCount,
-  IucnCategory,
-  Occurrence,
-  OccurrenceSearch,
-} from './types';
+import type { BasisOfRecord, Continent, Facet, FacetCount, IucnCategory, Occurrence, OccurrenceSearch } from './types';
 
 import { DAY, HOUR } from '~/lib/util/time';
 

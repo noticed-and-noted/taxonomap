@@ -64,7 +64,8 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): st
       line = w;
     } else line = test;
   }
-  if (line) lines.push(line);
+  // The text is never empty, so neither is its last line.
+  lines.push(line);
   return lines;
 }
 

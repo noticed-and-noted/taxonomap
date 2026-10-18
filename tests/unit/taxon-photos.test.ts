@@ -17,6 +17,8 @@ interface World {
   gbifAny: Record<number, object[]>;
   taxa: Record<number, InatTaxon>;
   voted: Record<number, Obs[]>;
+  /** GBIF keys whose record lookup fails, and iNaturalist taxa whose observations fail. */
+  fail?: { records?: number[]; voted?: number[] };
 }
 
 const photo = (id: number, license_code: string | null = 'cc-by'): InatPhoto => ({
@@ -56,6 +58,7 @@ function network(w: World) {
     if (u.host === 'api.gbif.org' && u.pathname === '/v1/occurrence/search') {
       const key = Number(q.get('taxonKey'));
       if (q.get('limit') === '1') {
+        if (w.fail?.records?.includes(key)) return new Response('bad', { status: 400 });
         const r = w.records[key];
         return json({ results: r ? [{ key: 1, datasetKey: 'd', ...r }] : [], count: 0, endOfRecords: true });
       }
@@ -67,6 +70,7 @@ function network(w: World) {
       return json({ results: ids.flatMap((id) => w.taxa[id] ?? []) });
     }
     if (u.host === 'api.inaturalist.org' && u.pathname === '/v2/observations') {
+      if (w.fail?.voted?.includes(Number(q.get('taxon_id')))) return new Response('bad', { status: 400 });
       return json({ results: w.voted[Number(q.get('taxon_id'))] ?? [] });
     }
     return new Response('not found', { status: 404 });
@@ -248,5 +252,68 @@ describe('iNaturalist photo URLs', () => {
     expect(retryWithoutCors(url)).toBe(false);
     // GBIF photos never load with CORS, so there is nothing to retry.
     expect(retryWithoutCors('https://api.gbif.org/v1/image/cache/400x/occurrence/1/media/abc')).toBe(false);
+  });
+});
+
+describe('taxon photo edge cases', () => {
+  const empty = { records: {}, taxa: {}, voted: {}, gbifInat: {}, gbifAny: {} };
+
+  it('falls back to GBIF photos for unmatched ranks, failed lookups and taxa without an ancestor at the rank', async () => {
+    network({
+      ...empty,
+      records: { 3: { taxonID: '30' }, 4: { taxonID: '40' } },
+      taxa: { 30: { id: 30, name: 'No ancestors', rank_level: 5 }, 40: taxon(40, 10, [], [1, 40]) },
+      gbifAny: { 1: [occ(11, 'u.jpg')], 2: [occ(12, 'f.jpg')], 3: [occ(13, 's.jpg')], 4: [occ(14, 'g.jpg')] },
+      fail: { records: [2] },
+    });
+    const m = await load();
+    const { images } = await m.leadPhotos(
+      [
+        { key: 1, rank: 'UNRANKED' as never },
+        { key: 2, rank: 'SPECIES' },
+        { key: 3, rank: 'SPECIES' },
+        { key: 4, rank: 'GENUS' },
+      ],
+      { signal: new AbortController().signal },
+    );
+    expect([1, 2, 3, 4].map((k) => label(images.get(k)!))).toEqual([
+      'gbif:u.jpg',
+      'gbif:f.jpg',
+      'gbif:s.jpg',
+      'gbif:g.jpg',
+    ]);
+  });
+
+  it('skips a source that fails, and takes one photo per GBIF record', async () => {
+    network({
+      ...empty,
+      records: { 5: { taxonID: '50' } },
+      taxa: { 50: { id: 50, name: 'Bare', rank_level: 10 } },
+      gbifInat: { 5: [{ ...occ(15, 'a.jpg'), media: [{ identifier: 'a.jpg' }, { identifier: 'b.jpg' }] }] },
+      fail: { voted: [50] },
+    });
+    const m = await load();
+    const photos = await m.taxonPhotos({ key: 5, rank: 'SPECIES' }, { signal: new AbortController().signal });
+    expect(photos.map(label)).toEqual(['gbif:a.jpg']);
+  });
+
+  it('stops once its signal aborts', async () => {
+    const calls = network({ ...empty, gbifAny: { 6: [occ(16, 'x.jpg')] } });
+    const m = await load();
+    const { images } = await m.leadPhotos([{ key: 6, rank: 'SPECIES' }], { signal: AbortSignal.abort() });
+    expect(images.size).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('iNaturalist photos', () => {
+  it('credit the attribution name, and allow taxa and observations without photos', async () => {
+    vi.resetModules();
+    const inat = await import('~/lib/photos/inat');
+    const p = { ...photo(1), attribution_name: 'Ann' };
+    expect(inat.toImage(p)).toMatchObject({ creator: 'Ann' });
+    expect(inat.toImage({ ...photo(2), attribution: 'odd' })).not.toHaveProperty('creator');
+    expect(inat.curatedImages({ id: 1, name: 'x', rank_level: 10 })).toEqual([]);
+    expect(inat.observationImages([{ id: 1 }, { id: 2, photos: [photo(3, null)] }])).toEqual([]);
   });
 });

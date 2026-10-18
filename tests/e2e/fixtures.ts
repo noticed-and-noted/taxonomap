@@ -1,0 +1,42 @@
+/**
+ * The journeys' `test`: every request that leaves the site is answered by the
+ * fake world (fake/world.ts) or refused, so no journey depends on GBIF,
+ * iNaturalist or the basemaps being up, or on what they hold today. The site
+ * is built against the same fake (`npm run build:e2e`).
+ */
+import { test as base, expect } from '@playwright/test';
+import { answer } from './fake/world';
+
+export const test = base.extend<{ external: string[] }>({
+  // Auto: every journey gets it. Tests can read `external` to see what was refused.
+  external: [
+    async ({ context, baseURL }, use) => {
+      const site = new URL(baseURL!).origin;
+      /** Requests nothing here answers: refused, and listed for the test to check. */
+      const refused: string[] = [];
+      await context.route(
+        (url) => url.origin !== site,
+        async (route) => {
+          const url = new URL(route.request().url());
+          const out = answer(url);
+          if (!out) {
+            refused.push(url.href);
+            return route.abort('blockedbyclient');
+          }
+          return route.fulfill({
+            status: out.status,
+            contentType: out.contentType,
+            body: Buffer.from(out.body),
+            headers: { 'access-control-allow-origin': '*' },
+          });
+        },
+      );
+      await use(refused);
+      // A request the fake does not know is a gap in the fake (or a new dependency): fail rather than pass by luck.
+      expect(refused, 'requests off the site that the fake world does not answer').toEqual([]);
+    },
+    { auto: true },
+  ],
+});
+
+export { expect };

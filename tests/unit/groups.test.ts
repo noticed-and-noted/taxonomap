@@ -165,3 +165,83 @@ describe('resolveNames', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe('without the baked data', () => {
+  it('names classes by lookup and treats a missing facet as no species', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/212') return { key: 212, scientificName: 'Aves' };
+      if (url.pathname === '/v1/occurrence/search') return { count: 0, results: [] };
+      return undefined;
+    });
+    const { namedClasses, speciesInClasses } = await load();
+    const classes = await namedClasses([{ name: '212', count: 5 }]);
+    expect(classes).toEqual([{ key: 212, name: 'Aves', records: 5 }]);
+    await expect(speciesInClasses({}, classes)).resolves.toEqual([]);
+  });
+});
+
+describe('nameFromRecords', () => {
+  const rows = [
+    { key: 1, scientificName: 'Species 1', records: 3, classKey: 212, unnamed: true as const },
+    { key: 2, scientificName: 'Passer domesticus', records: 2, classKey: 212 },
+  ];
+
+  it('returns the rows unchanged when the search fails or names nothing', async () => {
+    stubNetwork(() => json({}, 400));
+    const { nameFromRecords } = await load();
+    await expect(nameFromRecords(rows)).resolves.toBe(rows);
+    stubNetwork(() => ({
+      count: 2,
+      results: [
+        { key: 9, speciesKey: 1 },
+        { key: 10, species: 'No key' },
+      ],
+    }));
+    await expect(nameFromRecords(rows)).resolves.toBe(rows);
+  });
+});
+
+describe('commonNames', () => {
+  it('picks each English name, leaving out failures and species without one', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/1/vernacularNames')
+        return { results: [{ vernacularName: 'robin', language: 'eng' }] };
+      if (url.pathname === '/v1/species/2/vernacularNames')
+        return { results: [{ vernacularName: 'moineau', language: 'fra' }] };
+      return json({}, 400);
+    });
+    const { commonNames } = await load();
+    expect([...(await commonNames([1, 2, 3]))]).toEqual([[1, 'Robin']]);
+  });
+
+  it('skips the remaining lookups once superseded', async () => {
+    const calls = stubNetwork(() => ({ results: [] }));
+    const { commonNames } = await load();
+    expect((await commonNames([1, 2], AbortSignal.abort())).size).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('photosForKeys', () => {
+  afterEach(() => vi.doUnmock('~/lib/photos/taxon-photos'));
+
+  it('asks for each species’ lead photo, passing the signal on', async () => {
+    const leadPhotos = vi.fn(async () => ({ images: new Map(), names: new Map() }));
+    vi.resetModules();
+    vi.doMock('~/lib/photos/taxon-photos', () => ({ leadPhotos }));
+    const { photosForKeys } = await import('~/lib/species/groups');
+    const { signal } = new AbortController();
+    await photosForKeys([1, 2], signal);
+    await photosForKeys([3]);
+    expect(leadPhotos.mock.calls).toEqual([
+      [
+        [
+          { key: 1, rank: 'SPECIES' },
+          { key: 2, rank: 'SPECIES' },
+        ],
+        { signal },
+      ],
+      [[{ key: 3, rank: 'SPECIES' }], {}],
+    ]);
+  });
+});

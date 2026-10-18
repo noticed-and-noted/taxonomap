@@ -75,8 +75,8 @@ function inside([x, y]: LngLat, ring: GeoJSON.Position[]): boolean {
   const py = mercY(y);
   let hit = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi = 0, yi = 0] = ring[i]!;
-    const [xj = 0, yj = 0] = ring[j]!;
+    const [xi, yi] = ring[i] as [number, number];
+    const [xj, yj] = ring[j] as [number, number];
     const myi = mercY(yi);
     const myj = mercY(yj);
     if (myi > py !== myj > py && x < ((xj - xi) * (py - myi)) / (myj - myi) + xi) hit = !hit;
@@ -105,8 +105,7 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
   o.onLevel(level);
 
   /** Which hexes: the filters (the tile path and query, whichever host serves it). */
-  const filterKey = () =>
-    occurrenceTileTemplate(o.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt').split('/v2/map/')[1] ?? '';
+  const filterKey = () => occurrenceTileTemplate(o.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt').split('/v2/map/')[1]!;
   const tileKey = (f: string, l: number, t: TileId) => `${f}|${l}|${t.x}/${t.y}`;
 
   const cache = new Map<string, Hex[]>();
@@ -334,7 +333,7 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
     collection,
     cellAt([lng, lat]) {
       for (const c of cells.values()) {
-        const ring = c.geometry.coordinates[0] ?? [];
+        const ring = c.geometry.coordinates[0]!;
         // Cells by the antimeridian keep their vertices unwrapped (past ±180).
         if (inside([lng, lat], ring) || inside([lng + 360, lat], ring) || inside([lng - 360, lat], ring)) return c;
       }

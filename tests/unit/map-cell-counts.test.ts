@@ -70,6 +70,19 @@ describe('createHoverCounter', () => {
   });
 });
 
+describe('a failed count', () => {
+  it('leaves the estimate up and is asked for again next time', async () => {
+    const { createHoverCounter, HOVER_DELAY_MS, knownCount } = await load();
+    const onCount = vi.fn();
+    occurrenceCount.mockRejectedValueOnce(new Error('offline'));
+    const c = createHoverCounter(onCount);
+    c.hover(NONE, A);
+    await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
+    expect(onCount).not.toHaveBeenCalled();
+    expect(knownCount(NONE, A)).toBeUndefined();
+  });
+});
+
 describe('fetchCount', () => {
   it('shares one request between callers', async () => {
     const { fetchCount } = await load();

@@ -84,20 +84,26 @@ async function matchTaxa(
   );
   const candidateIds = records.flatMap((r) => (r.taxonId ? [r.taxonId] : []));
   const candidates = await getTaxa(candidateIds, opts.signal);
+  /** The iNaturalist taxon of each taxon's record (records line up with taxa). */
+  const candidateOf = (i: number) => {
+    const id = records[i]!.taxonId;
+    return id === undefined ? undefined : candidates.get(id);
+  };
 
   // Records below the taxon's rank: look up their ancestors to find the one at its rank.
   const needAncestors = taxa.flatMap((t, i) => {
-    const c = candidates.get(records[i]?.taxonId ?? -1);
-    return c && c.rank_level < (RANK_LEVEL[t.rank] ?? 0) ? (c.ancestor_ids ?? []).filter((a) => a !== c.id) : [];
+    // Only taxa of a ranked level have a record, so a candidate implies a level.
+    const c = candidateOf(i);
+    return c && c.rank_level < RANK_LEVEL[t.rank]! ? (c.ancestor_ids ?? []).filter((a) => a !== c.id) : [];
   });
   const ancestors = needAncestors.length ? await getTaxa(needAncestors, opts.signal) : new Map<number, InatTaxon>();
 
   const matched = new Map<number, InatTaxon | null>();
   taxa.forEach((t, i) => {
-    const r = records[i] ?? {};
-    if (r.species) names.set(t.key, r.species);
+    const species = records[i]!.species;
+    if (species) names.set(t.key, species);
     const level = RANK_LEVEL[t.rank];
-    const c = candidates.get(r.taxonId ?? -1);
+    const c = candidateOf(i);
     let match: InatTaxon | null = null;
     if (c && level && c.rank_level === level) match = c;
     else if (c && level && c.rank_level < level) {

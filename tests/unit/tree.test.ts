@@ -112,4 +112,74 @@ describe('tree lazy levels', () => {
     // Known nodes need no requests.
     await expect(resolve(tree, 212)).resolves.toBe(findNode(tree, 212));
   });
+
+  it('loads species under a genus, each counting as one, named from the index', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/2490/children')
+        return {
+          results: [
+            { key: 11, scientificName: 'Turdus merula L.', rank: 'SPECIES' },
+            { key: 12, scientificName: 'Turdus pilaris', canonicalName: 'Turdus pilaris', rank: 'SPECIES' },
+            { key: 13, scientificName: 'Turdus iliacus', rank: 'SPECIES' },
+          ],
+        };
+      // No facet for the rank in the response: every species counts as unrecorded.
+      if (url.pathname === '/v1/occurrence/search') return facets(0, 'OTHER', []);
+      return snapshots({ names: [[12, 'S', 'Turdus pilaris', 'fieldfare', 1]] })(url);
+    });
+    // A fresh module, so the name index is read from this snapshot.
+    vi.resetModules();
+    const model = await import('~/lib/tree/model');
+    const genus = {
+      key: 2490,
+      name: 'Turdus',
+      rank: 'G' as const,
+      records: 1,
+      species: 3,
+      loaded: false,
+      kingdom: 'Animalia',
+    };
+    const kids = await model.loadChildren(genus, undefined, new AbortController().signal);
+    expect(kids.map((k) => [k.name, k.common, k.records, k.species, k.loaded])).toEqual([
+      ['Turdus merula L.', undefined, 0, 1, true],
+      ['Turdus pilaris', 'Fieldfare', 0, 1, true],
+      ['Turdus iliacus', undefined, 0, 1, true],
+    ]);
+  });
+
+  it('has nothing to load at the root or below species', async () => {
+    const calls = stubNetwork(() => undefined);
+    const tree = buildTree(rows);
+    await expect(loadChildren(tree)).resolves.toBe(tree.children);
+    const species = { key: 1, name: 's', rank: 'S' as const, records: 1, species: 1, loaded: true, kingdom: '' };
+    await expect(loadChildren(species)).resolves.toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('stops at the deepest ancestor it can find', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/77/parents')
+        return [{ key: 1 }, { key: 44 }, { key: 212 }, { key: 729 }, { key: 5 }];
+      if (url.pathname === '/v1/species/729/children') return { results: [] };
+      if (url.pathname === '/v1/species/search' || url.pathname === '/v1/occurrence/search') return facets(0, 'X', []);
+      return snapshots({ names: [] })(url);
+    });
+    const tree = buildTree(rows);
+    await expect(resolve(tree, 77)).resolves.toBe(findNode(tree, 729));
+  });
+});
+
+describe('baked tree', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('builds from /data/tree.json, or is null without it', async () => {
+    stubNetwork(snapshots({ tree: rows }));
+    vi.resetModules();
+    const withTree = await import('~/lib/tree/model');
+    expect((await withTree.loadBakedTree())?.children?.map((c) => c.key)).toEqual([1, 6]);
+    stubNetwork(snapshots({}));
+    vi.resetModules();
+    const without = await import('~/lib/tree/model');
+    await expect(without.loadBakedTree()).resolves.toBeNull();
+  });
 });

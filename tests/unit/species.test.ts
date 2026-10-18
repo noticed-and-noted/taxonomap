@@ -27,6 +27,24 @@ describe('species helpers', () => {
     );
     expect(englishName([n('Robin'), n('Redbreast', 'eng', true)])).toBe('Redbreast');
     expect(englishName([n('Rouge-gorge', 'fra')])).toBeNull();
+    // Equal counts: the capitalised variant, then the shorter name.
+    expect(englishName([n('robin'), n('Robin'), n('Redbreast robin'), n('redbreast robin')])).toBe('Robin');
+  });
+
+  it('names languages, falling back to the code', () => {
+    expect(languageName(undefined)).toBe('Other');
+    expect(languageName('qqq')).toBe('qqq');
+    expect(languageName('not a code')).toBe('not a code');
+  });
+
+  it('puts names without a language under Other, and orders ties by language', () => {
+    const groups = groupByLanguage([
+      { vernacularName: 'Robin', language: 'eng' },
+      { vernacularName: 'Rotkehlchen', language: 'deu' },
+      { vernacularName: 'Petirrojo', language: 'spa' },
+      { vernacularName: 'Mystery' } as never,
+    ]);
+    expect(groups.map((g) => g.language)).toEqual(['English', 'German', 'Other', 'Spanish']);
   });
 
   it('groups names by language with English first', () => {

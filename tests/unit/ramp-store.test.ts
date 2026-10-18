@@ -30,6 +30,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe('a blocked storage', () => {
+  it('falls back to the default ramp when it cannot be read', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new DOMException('blocked', 'SecurityError');
+      },
+    });
+    const { $ramp } = await store();
+    expect($ramp.get()).toBe(DEFAULT_RAMP);
+  });
+});
+
 describe('ramp catalogue', () => {
   it('gives every ramp a unique id and eight hex stops', () => {
     expect(new Set(RAMPS.map((r) => r.id)).size).toBe(RAMPS.length);

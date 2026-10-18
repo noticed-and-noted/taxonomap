@@ -1,6 +1,7 @@
 /** The map's style: our layers spliced into each kind of basemap, and the GeoJSON helpers. */
 import type { MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
-import { buildStyle, EMPTY, fillColor, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
+import { buildStyle, EMPTY, fetchStyle, fillColor, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
+import { json, stubNetwork } from './helpers/network';
 import { thresholdsAt } from '~/lib/ramp';
 
 const COLORS = { accent: '#a', accentContrast: '#c', bg: '#b', text: '#t' };
@@ -79,6 +80,13 @@ describe('buildStyle', () => {
     expect(s.glyphs).toMatch(/openfreemap/);
   });
 
+  it('puts the data on top of a basemap without labels', async () => {
+    const unlabelled = { ...vectorBase, layers: vectorBase.layers.filter((l) => l.type !== 'symbol') };
+    const s = await buildStyle('plain', 'dark', COLORS, DATA, async () => unlabelled);
+    expect(ids(s).slice(0, 3)).toEqual(['background', 'road_major', 'water']);
+    expect(ids(s).indexOf('occ-fill')).toBe(3);
+  });
+
   it('falls back to a plain background when the vector style cannot load', async () => {
     const s = await buildStyle('plain', 'dark', COLORS, DATA, async () => null);
     expect(ids(s).slice(0, 2)).toEqual(['background', 'occ-fill']);
@@ -150,5 +158,21 @@ describe('map GeoJSON', () => {
         }),
       ),
     ).toBeNull();
+  });
+});
+
+describe('fetchStyle', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('fetches each style once, and is null when it cannot be loaded', async () => {
+    const calls = stubNetwork((url) =>
+      url.pathname === '/ok' ? vectorBase : url.pathname === '/bad' ? json({}, 500) : undefined,
+    );
+    await expect(fetchStyle('https://style.test/ok')).resolves.toEqual(vectorBase);
+    await fetchStyle('https://style.test/ok');
+    await expect(fetchStyle('https://style.test/bad')).resolves.toBeNull();
+    vi.stubGlobal('fetch', () => Promise.reject(new TypeError('offline')));
+    await expect(fetchStyle('https://style.test/down')).resolves.toBeNull();
+    expect(calls.filter((u) => u.pathname === '/ok')).toHaveLength(1);
   });
 });

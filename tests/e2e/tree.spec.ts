@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('tree loads the baked levels and zooms via the keyboard-accessible list', async ({ page }) => {
   await page.goto('/tree');
@@ -12,11 +12,11 @@ test('tree loads the baked levels and zooms via the keyboard-accessible list', a
 
 test('deep links lazy-load levels below order', async ({ page }) => {
   await page.goto('/tree?focus=729');
-  await expect(page.getByRole('heading', { level: 2, name: 'Perching Birds' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { level: 2, name: 'Perching Birds' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Corvidae/ })).toBeVisible();
 });
 
-test('layout and metric live in the URL', async ({ page }, info) => {
+test('layout and metric live in the URL', { tag: '@mobile' }, async ({ page }, info) => {
   await page.goto('/tree');
   // Narrow screens default to the icicle, so switch to the other layout.
   const [label, value, chart] =

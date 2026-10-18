@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
+const FULL = { lines: 100, statements: 100, functions: 100, branches: 100 };
+
 export default defineConfig({
   resolve: { alias: { '~': fileURLToPath(new URL('./src', import.meta.url)) } },
   test: {
@@ -11,10 +13,20 @@ export default defineConfig({
       provider: 'v8',
       // Vue and Astro files are covered by the Playwright journeys, not measured here.
       include: ['src/**/*.ts', 'functions/**/*.ts', 'integrations/**/*.ts'],
-      exclude: ['src/**/*.d.ts', 'src/lib/data/types.ts', 'src/lib/gbif/types.ts'],
+      exclude: ['src/**/*.d.ts', '**/types.ts'],
       reporter: ['text-summary', 'html'],
-      // Floors a little under the current figures, so coverage cannot quietly slip.
-      thresholds: { lines: 80, statements: 78, functions: 75, branches: 70 },
+      thresholds: {
+        // Floors a little under the current figures, so coverage cannot quietly slip.
+        lines: 90,
+        statements: 90,
+        functions: 90,
+        branches: 85,
+        // The libraries, stores, endpoints and Pages Functions are fully covered.
+        'src/lib/**': FULL,
+        'src/stores/**': FULL,
+        'src/pages/**': FULL,
+        'functions/**': FULL,
+      },
     },
   },
 });
