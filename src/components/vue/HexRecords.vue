@@ -287,7 +287,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                 <td class="py-1.5 pr-2">
                   <button
                     type="button"
-                    class="block w-full min-w-0 text-left"
+                    class="block w-full min-w-0 cursor-pointer text-left"
                     :aria-expanded="expanded === o.key"
                     :aria-controls="`${uid}-rec-${o.key}`"
                     @click.stop="toggle(o)"
@@ -417,7 +417,6 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
   letter-spacing: 0.02em;
   color: var(--type);
   background: color-mix(in srgb, var(--type) 16%, transparent);
-  cursor: help;
 }
 /* Tooltip to the left, so the scroll box never clips it above or below. */
 .type-code::after {
