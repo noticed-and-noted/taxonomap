@@ -141,7 +141,7 @@ const place = (o: Occurrence) =>
 </script>
 
 <template>
-  <div class="space-y-2">
+  <div class="flex min-h-0 flex-1 flex-col gap-2">
     <div class="relative text-sm">
       <label :for="`${uid}-input`" class="sr-only">Filter records by species</label>
       <input
@@ -193,7 +193,7 @@ const place = (o: Occurrence) =>
 
     <div
       ref="scroller"
-      class="fade-list max-h-[min(22rem,45dvh)] overflow-y-auto overscroll-contain"
+      class="fade-list min-h-48 flex-1 overflow-y-auto overscroll-contain"
       :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
       @scroll.passive="updateFade"
     >

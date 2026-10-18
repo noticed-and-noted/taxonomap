@@ -74,6 +74,7 @@ test('a hex selected in the URL opens the cell panel', async ({ page }) => {
   await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
   await expect(page.getByRole('heading', { name: 'Selected cell' })).toBeVisible();
   await expect(page.getByText(/records? in this cell/)).toBeVisible();
+  await page.getByRole('tab', { name: 'By month' }).click();
   await expect(page.getByRole('img', { name: /Records by month/ })).toBeVisible();
 });
 
