@@ -54,11 +54,13 @@ const peak = computed(() => series.value.reduce((p, s) => (s.count > p.count ? s
 const caption = computed(
   () => props.caption ?? (props.kind === 'years' && peak.value.count ? `peak ${peak.value.year}` : undefined),
 );
+// Undated records only: an all-zero series breaks the y scale (NaN ticks).
+const empty = computed(() => props.kind === 'years' && !peak.value.count);
 const height = computed(() => (props.kind === 'years' ? 170 : (props.bars?.length ?? 0) * 26 + 34));
 
 async function draw() {
   const el = box.value;
-  if (!el) return;
+  if (!el || empty.value) return;
   const width = Math.round(el.clientWidth);
   if (!width || (drawn.value && width === lastWidth)) return;
   lastWidth = width;
@@ -148,13 +150,19 @@ onBeforeUnmount(() => {
   <ChartFrame :title="title" :caption="caption">
     <div ref="box" class="plot-box w-full" :style="{ minHeight: `${height}px` }">
       <p v-if="!drawn" class="grid place-items-center text-xs text-subtle" :style="{ height: `${height}px` }">
-        {{ failed ? 'The chart could not be drawn; the data table below has the same figures.' : 'Loading chart…' }}
+        {{
+          empty
+            ? 'None of these records has a year.'
+            : failed
+              ? 'The chart could not be drawn; the data table below has the same figures.'
+              : 'Loading chart…'
+        }}
       </p>
     </div>
     <p v-if="kind === 'years' && earlier" class="mt-1 text-xs text-subtle">
       Plus {{ full(earlier) }} records before {{ series[0]?.year }}.
     </p>
-    <template #table>
+    <template v-if="!empty" #table>
       <table>
         <thead>
           <tr>

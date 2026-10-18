@@ -167,10 +167,10 @@ describe('occurrence layer', () => {
     expect(o.onLevel).toHaveBeenCalledWith(4);
     expect(key(asked[0]!)).toBe('8/8');
     // The view at zoom 4 spans a few tiles each way; the ring adds a tile on every side.
-    const view = o.onProgress.mock.calls[0]![1] as number;
-    expect(view).toBeGreaterThan(1);
-    expect(asked.length).toBeGreaterThan(view);
-    expect(o.onProgress).toHaveBeenLastCalledWith(view, view);
+    // Progress counts every tile fetched, view and ring.
+    expect(asked.length).toBeGreaterThan(1);
+    expect(o.onProgress).toHaveBeenNthCalledWith(1, 0, asked.length);
+    expect(o.onProgress).toHaveBeenLastCalledWith(asked.length, asked.length);
     expect(o.onCells).toHaveBeenCalled();
     // Every tile's hex is drawn, view and ring, once it has loaded.
     expect(layer.collection().features).toHaveLength(new Set(asked.map(key)).size);

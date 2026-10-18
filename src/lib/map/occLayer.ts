@@ -62,7 +62,7 @@ export interface OccLayerOptions {
   onChanges: (add: Hex[], remove: string[]) => void;
   /** The grid level changed (zooming). */
   onLevel: (level: number) => void;
-  /** The view's tiles: done of total. */
+  /** Tiles being loaded (view, ring and look-ahead): done of total. */
   onProgress: (done: number, total: number) => void;
   /** Cells to leave out, e.g. ones whose exact count is known to be 0. */
   isEmpty?: (h: Hex) => boolean;
@@ -253,11 +253,13 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
     want = { filter: f, level, view, ring };
     const jobs = (tiles: TileId[]) => tiles.map((t) => ({ key: tileKey(f, level, t), t, level }));
     const missing = (js: Job[]) => js.filter((j) => !cache.has(j.key) && !inflight.has(j.key));
-    const viewJobs = jobs(view);
-    high = missing([...viewJobs, ...ahead]);
-    low = missing([...jobs(ring), ...later]);
-    const pending = viewJobs.filter((j) => !cache.has(j.key));
-    progress = { done: 0, total: pending.length, keys: new Set(pending.map((j) => j.key)) };
+    const first = [...jobs(view), ...ahead];
+    const second = [...jobs(ring), ...later];
+    high = missing(first);
+    low = missing(second);
+    // Every tile this plan fetches (or is still fetching), so the count matches what is loading.
+    const keys = new Set([...first, ...second].filter((j) => !cache.has(j.key)).map((j) => j.key));
+    progress = { done: 0, total: keys.size, keys };
     o.onProgress(0, progress.total);
     drawSoon();
     pump();
