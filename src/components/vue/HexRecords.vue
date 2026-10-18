@@ -12,6 +12,8 @@ import { searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import { commonNames as lookupCommonNames, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
+import ListSkeleton from './ListSkeleton.vue';
+import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import { useLatestLoad } from './useLatestLoad';
 import { useScrollFade } from './useScrollFade';
@@ -214,10 +216,11 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
         :id="`${uid}-input`"
         v-model="query"
         type="search"
-        class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none"
+        class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none disabled:opacity-60"
         role="combobox"
         autocomplete="off"
         placeholder="Filter by species"
+        :disabled="!species.length"
         :aria-expanded="open && options.length > 0"
         :aria-controls="`${uid}-list`"
         aria-autocomplete="list"
@@ -255,14 +258,18 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       <button type="button" class="ml-1 text-text underline" @click="load()">Try again</button>
     </div>
 
-    <p v-else-if="!loading && !records.length" class="text-sm text-muted">No records to show.</p>
+    <ListSkeleton v-else-if="loading && !records.length" label="Loading records">
+      <span class="w-[3.25rem] shrink-0"><SkeletonBlock width="2rem" height="1rem" rounded="sm" /></span>
+      <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="4.5rem" height="0.75rem" /></span>
+    </ListSkeleton>
+    <p v-else-if="!records.length" class="text-sm text-muted">No records to show.</p>
     <p v-else-if="total !== null" class="text-xs text-subtle" aria-live="polite">
       {{ full(records.length) }} of {{ full(total) }} record{{ total === 1 ? '' : 's' }}
     </p>
 
     <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
-    <div>
-      <div v-if="records.length" class="head-row -mx-4 text-xs text-subtle" aria-hidden="true">
+    <div v-if="records.length">
+      <div class="head-row -mx-4 text-xs text-subtle" aria-hidden="true">
         <table class="w-full table-fixed text-sm">
           <colgroup>
             <col class="w-14" />
@@ -285,7 +292,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
         :class="{ 'fade-bottom': fadeBottom }"
         @scroll.passive="updateFade"
       >
-        <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
+        <table class="w-full table-fixed text-sm" aria-label="Records">
           <colgroup>
             <col class="w-14" />
             <col />
@@ -394,7 +401,10 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
           </tbody>
         </table>
 
-        <p v-if="loading" class="mx-4 mt-2 text-xs text-subtle" role="status">Loading records…</p>
+        <ListSkeleton v-if="loading" label="Loading more records" :rows="3">
+          <span class="w-[3.25rem] shrink-0"><SkeletonBlock width="2rem" height="1rem" rounded="sm" /></span>
+          <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="4.5rem" height="0.75rem" /></span>
+        </ListSkeleton>
         <button
           v-else-if="total !== null && records.length < total"
           type="button"

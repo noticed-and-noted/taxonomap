@@ -13,6 +13,7 @@ import { normalise } from '~/lib/data/name-index';
 import { debounce } from '~/lib/util/debounce';
 import type { ClassGroup, SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
+import ListSkeleton from './ListSkeleton.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import { useRowDetails } from './useRowDetails';
@@ -77,6 +78,8 @@ const groupOptions = computed(() => {
   return gs.map((g) => ({ ...g, bar: g.records / max }));
 });
 const canFilter = computed(() => groupOptions.value.length > 1);
+/** First load: nothing to search or filter yet. */
+const pending = computed(() => props.loading && !props.rows.length);
 
 const activeFilters = computed(() => (groupsOn.value.length ? 1 : 0));
 
@@ -219,16 +222,18 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
             v-model="query"
             type="search"
             placeholder="Find in results"
-            class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none"
+            :disabled="pending"
+            class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none disabled:opacity-60"
           />
         </span>
       </label>
       <button
-        v-if="canFilter"
+        v-if="canFilter || pending"
         ref="filterBtn"
         type="button"
-        class="flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors duration-200"
-        :class="activeFilters ? 'border-accent bg-accent-soft' : 'border-border hover:border-border-strong'"
+        :disabled="pending"
+        class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors duration-200 disabled:cursor-default disabled:opacity-60"
+        :class="activeFilters ? 'border-accent bg-accent-soft' : 'border-border enabled:hover:border-border-strong'"
         :aria-expanded="filterOpen"
         :aria-controls="`${id}-filters`"
         @click="filterOpen = !filterOpen"
@@ -280,9 +285,13 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
       </div>
     </div>
 
-    <div v-if="loading && !rows.length" class="space-y-1.5" role="status" aria-label="Loading species">
-      <SkeletonBlock v-for="i in 6" :key="i" height="2.25rem" />
-    </div>
+    <ListSkeleton v-if="pending" label="Loading species" :fill="fill">
+      <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="3.5rem" height="0.7rem" /></span>
+      <span class="flex w-[5rem] shrink-0 items-center justify-end gap-1.5">
+        <SkeletonBlock width="1.5rem" height="0.25rem" rounded="full" />
+        <SkeletonBlock width="2rem" height="0.8rem" />
+      </span>
+    </ListSkeleton>
 
     <template v-else-if="rows.length">
       <p class="text-xs text-subtle" aria-live="polite">
