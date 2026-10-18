@@ -9,18 +9,11 @@
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref } from 'vue';
 import { clearFilters } from '~/stores/explorer';
-import { $activeFilterCount, $groupCounts, FILTER_GROUPS, type FilterGroupId } from './filterGroups';
+import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterGroup from './FilterGroup.vue';
 import MapSettings from './MapSettings.vue';
 
 type PanelId = FilterGroupId | 'settings';
-
-const SETTINGS = {
-  id: 'settings',
-  label: 'Settings',
-  title: 'Settings',
-  icon: 'M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2M14 4v4M8 10v4M16 16v4',
-} as const;
 
 const counts = useStore($groupCounts);
 const total = useStore($activeFilterCount);

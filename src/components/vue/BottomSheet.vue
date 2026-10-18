@@ -118,6 +118,8 @@ function onKey(e: KeyboardEvent) {
           </svg>
         </button>
       </header>
+      <!-- Fixed above the scrolling body (e.g. tabs). -->
+      <div v-if="$slots.top" class="px-4"><slot name="top" /></div>
       <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <slot />
       </div>

@@ -11,7 +11,7 @@ import { $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/
 import { $nearMode, exitNearMode } from '~/stores/near';
 import BasemapSwitcher from './BasemapSwitcher.vue';
 import FilterGroup from './FilterGroup.vue';
-import { $activeFilterCount, FILTER_GROUPS } from './filterGroups';
+import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterRail from './FilterRail.vue';
 import HexPanel from './HexPanel.vue';
 import MapLegend from './MapLegend.vue';
@@ -26,6 +26,9 @@ import { useYearHistogram } from './useYearHistogram';
 const panel = useStore($panel);
 const hex = useStore($selectedHex);
 const activeFilters = useStore($activeFilterCount);
+const groupCounts = useStore($groupCounts);
+/* Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
+const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
 const { counts, loading, error, live } = useYearHistogram();
 
@@ -176,17 +179,49 @@ function closePanel() {
 
     <div class="pointer-events-auto">
       <ResponsivePanel :title="panelTitle" :open="panelOpen" @close="closePanel">
-        <div v-if="filtersOpen" class="space-y-6">
-          <section v-for="g in FILTER_GROUPS" :key="g.id">
-            <h3 class="mb-2 font-display text-base">{{ g.title }}</h3>
-            <FilterGroup :group="g.id" />
-          </section>
-          <button v-if="activeFilters" type="button" class="clear-all" @click="clearFilters">Clear all filters</button>
-          <div>
-            <p class="mb-2 text-sm font-medium">Basemap</p>
-            <BasemapSwitcher />
+        <template v-if="filtersOpen" #top>
+          <div role="tablist" aria-label="Filter groups" class="flex border-b border-border">
+            <button
+              v-for="t in [...FILTER_GROUPS, { ...SETTINGS, label: 'Map' }]"
+              :key="t.id"
+              role="tab"
+              type="button"
+              :aria-selected="filterTab === t.id"
+              class="-mb-px flex flex-1 flex-col items-center gap-0.5 border-b-2 px-1 py-1.5 text-xs"
+              :class="filterTab === t.id ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
+              @click="filterTab = t.id"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                class="size-5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                aria-hidden="true"
+              >
+                <path :d="t.icon" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>
+                {{ t.label
+                }}<span v-if="t.id !== 'settings' && groupCounts[t.id]" class="tabular-nums">
+                  ({{ groupCounts[t.id] }})</span
+                >
+              </span>
+            </button>
           </div>
-          <MapSettings />
+        </template>
+        <div v-if="filtersOpen" class="space-y-4 pt-4">
+          <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
+            <div>
+              <p class="mb-2 text-sm font-medium">Basemap</p>
+              <BasemapSwitcher />
+            </div>
+            <MapSettings inline />
+          </div>
+          <div v-else role="tabpanel">
+            <FilterGroup :group="filterTab" />
+          </div>
+          <button v-if="activeFilters" type="button" class="clear-all" @click="clearFilters">Clear all filters</button>
         </div>
         <HexPanel v-else />
       </ResponsivePanel>

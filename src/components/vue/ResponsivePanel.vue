@@ -40,8 +40,15 @@ onBeforeUnmount(() => mq?.removeEventListener('change', update));
     @collapse="emit('close')"
     @expand="emit('open')"
   >
+    <template v-if="$slots.top" #top><slot name="top" /></template>
     <slot />
   </SidePanel>
-  <SidePanel v-else-if="desktop" :title="title" :open="open" @close="emit('close')"><slot /></SidePanel>
-  <BottomSheet v-else :title="title" :open="open" :close-label="dismissible" @close="closeSheet"><slot /></BottomSheet>
+  <SidePanel v-else-if="desktop" :title="title" :open="open" @close="emit('close')">
+    <template v-if="$slots.top" #top><slot name="top" /></template>
+    <slot />
+  </SidePanel>
+  <BottomSheet v-else :title="title" :open="open" :close-label="dismissible" @close="closeSheet">
+    <template v-if="$slots.top" #top><slot name="top" /></template>
+    <slot />
+  </BottomSheet>
 </template>

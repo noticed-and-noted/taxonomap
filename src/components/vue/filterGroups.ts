@@ -44,4 +44,12 @@ export const FILTER_GROUPS: readonly FilterGroupMeta[] = [
   },
 ];
 
+/** Map settings: the rail's foot button and the phone sheet's last tab. */
+export const SETTINGS = {
+  id: 'settings',
+  label: 'Settings',
+  title: 'Settings',
+  icon: 'M4 6h8M16 6h4M4 12h2M10 12h10M4 18h10M18 18h2M14 4v4M8 10v4M16 16v4',
+} as const;
+
 export const $activeFilterCount = computed($groupCounts, (c) => Object.values(c).reduce((a, b) => a + b, 0));

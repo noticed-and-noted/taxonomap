@@ -16,9 +16,11 @@ test('omnibox finds a species by common name and filters the map', async ({ page
 
 test('filters and year range live in the URL and survive reload', async ({ page }, info) => {
   await page.goto('/?taxon=2492462&photo=1&years=2000-2010&basis=HUMAN_OBSERVATION');
-  // Phones show every group in the Filters sheet; desktop opens one group from the rail.
-  if (info.project.name === 'mobile') await page.getByRole('button', { name: /Filters/ }).click();
-  else await page.getByRole('button', { name: 'How recorded, 2 active' }).click();
+  // Phones pick a group's tab in the Filters sheet; desktop opens one group from the rail.
+  if (info.project.name === 'mobile') {
+    await page.getByRole('button', { name: /Filters/ }).click();
+    await page.getByRole('tab', { name: /How/ }).click();
+  } else await page.getByRole('button', { name: 'How recorded, 2 active' }).click();
   await expect(page.getByRole('button', { name: 'Has photo' })).toHaveAttribute('aria-pressed', 'true');
   if (info.project.name === 'mobile') await page.getByRole('button', { name: 'Close panel' }).click();
   // The year histogram starts collapsed; opening it is remembered across the reload.

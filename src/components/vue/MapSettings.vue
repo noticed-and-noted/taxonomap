@@ -6,6 +6,8 @@ import { RAMPS, type RampId } from '~/lib/ramp';
 import { $ramp, setRamp } from '~/stores/ramp';
 import { useScrollFade } from './useScrollFade';
 
+/** Inline: the list grows with its parent's scroll (phone sheet) instead of scrolling itself. */
+const props = defineProps<{ inline?: boolean }>();
 const current = useStore($ramp);
 // Unique per instance: the rail flyout and the phone sheet can both render one.
 const group = `ramp-${useId()}`;
@@ -24,7 +26,8 @@ onBeforeUnmount(() => resize?.disconnect());
 
 <!--
   In a height-bounded parent (the rail flyout) only the option list scrolls;
-  the heading and description stay put. Elsewhere the list just grows.
+  the heading and description stay put. `inline` (the phone sheet) never
+  scrolls the list itself, so swipes always reach the sheet.
 -->
 <template>
   <div class="flex min-h-0 flex-1 flex-col" role="radiogroup" :aria-labelledby="`${group}-title`">
@@ -32,8 +35,15 @@ onBeforeUnmount(() => resize?.disconnect());
     <p class="mb-3 text-xs text-muted">How the hexagons are shaded by record count. Saved in this browser.</p>
     <div
       ref="list"
-      class="fade-list -mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-1 pb-3"
-      :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
+      class="-mx-1 flex flex-col gap-1 px-1 pb-3"
+      :class="
+        props.inline
+          ? undefined
+          : [
+              'fade-list min-h-0 flex-1 overflow-y-auto overscroll-contain',
+              { 'fade-top': fadeTop, 'fade-bottom': fadeBottom },
+            ]
+      "
       @scroll.passive="update"
     >
       <label v-for="r in RAMPS" :key="r.id" class="ramp-option">
