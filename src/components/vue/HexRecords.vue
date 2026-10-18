@@ -172,7 +172,7 @@ const image = (o: Occurrence) => usableImages(o)[0];
             :href="`https://www.gbif.org/occurrence/${o.key}`"
             target="_blank"
             rel="noopener"
-            class="record flex gap-3 rounded-md border border-border p-2 hover:bg-surface-2"
+            class="record flex gap-3 rounded-r-md border border-border p-2 hover:bg-surface-2"
             :data-type="o.basisOfRecord"
           >
             <div class="size-14 shrink-0 overflow-hidden rounded bg-surface-2">
