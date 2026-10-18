@@ -179,7 +179,7 @@ const initials = (o: Occurrence) =>
             :href="`https://www.gbif.org/occurrence/${o.key}`"
             target="_blank"
             rel="noopener"
-            class="record flex gap-3 rounded-r-md border border-border p-2 hover:bg-surface-2"
+            class="record relative flex gap-3 rounded-md border border-border p-2 hover:bg-surface-2"
             :data-type="o.basisOfRecord"
           >
             <div class="size-14 shrink-0 overflow-hidden rounded bg-surface-2">
@@ -226,7 +226,18 @@ const initials = (o: Occurrence) =>
 /* Record type stripe: ≥3:1 on --surface in each theme (non-text contrast). */
 .record {
   --type: var(--border-strong);
-  border-left: 3px solid var(--type);
+  padding-left: 0.875rem;
+}
+/* An inset bar, not a border, so the card's rounded corners never clip it. */
+.record::before {
+  content: '';
+  position: absolute;
+  left: 0.3125rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 3px;
+  border-radius: 9999px;
+  background: var(--type);
 }
 .record[data-type='HUMAN_OBSERVATION'] {
   --type: #5dcaa5;
