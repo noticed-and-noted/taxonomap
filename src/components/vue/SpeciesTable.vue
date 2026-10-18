@@ -293,16 +293,16 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
 
       <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
       <div v-if="filtered.length" :class="{ 'flex min-h-0 flex-1 flex-col': fill }">
-        <div class="head-row text-xs text-subtle">
+        <div class="head-row -mx-4 text-xs text-subtle">
           <table class="w-full table-fixed text-sm" role="presentation">
             <colgroup>
               <col />
               <col class="w-[5.5rem]" />
-              <col class="w-[5rem]" />
+              <col class="w-[6rem]" />
             </colgroup>
             <thead>
               <tr>
-                <th class="py-1.5 pl-1.5 text-left font-normal">
+                <th class="py-1.5 pl-4 text-left font-normal">
                   <button type="button" class="sort" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
                     Species<span aria-hidden="true">{{ sortKey === 'name' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
                   </button>
@@ -312,7 +312,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
                     Group<span aria-hidden="true">{{ sortKey === 'group' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
                   </button>
                 </th>
-                <th class="w-[5rem] py-1.5 text-right font-normal">
+                <th class="py-1.5 pr-4 text-right font-normal">
                   <button type="button" class="sort" :class="{ on: sortKey === 'records' }" @click="sortBy('records')">
                     Records<span aria-hidden="true">{{ sortKey === 'records' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
                   </button>
@@ -324,7 +324,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
         <!-- Scrolls on its own so whatever follows (e.g. the seasonality chart) stays close. -->
         <div
           ref="scroller"
-          class="fade-list overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+          class="fade-list -mx-4 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
           :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': resultsFade }]"
           tabindex="0"
           aria-label="Species results"
@@ -335,7 +335,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
             <colgroup>
               <col />
               <col class="w-[5.5rem]" />
-              <col class="w-[5rem]" />
+              <col class="w-[6rem]" />
             </colgroup>
             <thead class="sr-only">
               <tr>
@@ -353,7 +353,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
                 :class="{ 'bg-accent-soft': selected?.includes(r.key) }"
                 @click="openRow"
               >
-                <td class="py-1.5 pl-1.5 pr-2">
+                <td class="py-1.5 pl-4 pr-2">
                   <a :href="speciesPath(r.key, manifest)" class="group flex min-w-0 items-center gap-2">
                     <span class="size-8 shrink-0 overflow-hidden rounded bg-photo">
                       <SkeletonBlock v-if="pendingPhoto(r)" height="100%" rounded="sm" aria-hidden="true" />
@@ -383,7 +383,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
                   </a>
                 </td>
                 <td class="truncate py-1.5 pr-1 text-xs text-muted">{{ groupLabel(r.classKey) }}</td>
-                <td class="py-1.5 text-right tabular-nums">
+                <td class="py-1.5 pr-4 text-right tabular-nums">
                   <span class="flex items-center justify-end gap-1.5">
                     <span class="h-1 w-6 shrink-0 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
                       <span
@@ -401,7 +401,7 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
           <button
             v-if="sorted.length > limit"
             type="button"
-            class="mt-2 w-full rounded-md border border-border py-1.5 text-xs text-muted hover:border-accent"
+            class="mx-4 mt-2 w-[calc(100%-2rem)] rounded-md border border-border py-1.5 text-xs text-muted hover:border-accent"
             @click="limit += PAGE"
           >
             Show {{ Math.min(PAGE, sorted.length - limit) }} more

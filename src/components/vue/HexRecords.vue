@@ -225,35 +225,35 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
 
     <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
     <div>
-      <div v-if="records.length" class="head-row text-xs text-subtle" aria-hidden="true">
+      <div v-if="records.length" class="head-row -mx-4 text-xs text-subtle" aria-hidden="true">
         <table class="w-full table-fixed text-sm">
           <colgroup>
-            <col class="w-[2.875rem]" />
+            <col class="w-14" />
             <col />
             <col class="w-[3.25rem]" />
-            <col class="w-[5.5rem]" />
+            <col class="w-[6.5rem]" />
           </colgroup>
           <tbody>
             <tr>
-              <td colspan="2" class="py-1.5 pl-1.5">Species</td>
+              <td colspan="2" class="py-1.5 pl-4">Species</td>
               <td class="py-1.5">Type</td>
-              <td class="py-1.5">Date</td>
+              <td class="py-1.5 pr-4">Date</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div
         ref="scroller"
-        class="fade-list max-h-[min(23rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        class="fade-list -mx-4 max-h-[min(23rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
         :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
         @scroll.passive="updateFade"
       >
         <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
           <colgroup>
-            <col class="w-[2.875rem]" />
+            <col class="w-14" />
             <col />
             <col class="w-[3.25rem]" />
-            <col class="w-[5.5rem]" />
+            <col class="w-[6.5rem]" />
           </colgroup>
           <thead class="sr-only">
             <tr>
@@ -270,7 +270,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                 :data-type="o.basisOfRecord"
                 @click="toggle(o)"
               >
-                <td class="py-1.5 pl-1.5 pr-2">
+                <td class="py-1.5 pl-4 pr-2">
                   <span class="block size-8 overflow-hidden rounded bg-photo">
                     <ThumbImage
                       v-if="image(o) && !broken.has(o.key)"
@@ -303,10 +303,10 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                     TYPE_CODES[o.basisOfRecord ?? ''] ?? '—'
                   }}</span>
                 </td>
-                <td class="truncate py-1.5 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
+                <td class="truncate py-1.5 pr-4 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
               </tr>
               <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
-                <td colspan="4" class="pb-2">
+                <td colspan="4" class="px-4 pb-2">
                   <div class="grid grid-cols-2 items-start gap-3 rounded-md bg-surface-2 p-2">
                     <div class="relative aspect-square overflow-hidden rounded bg-photo">
                       <template v-if="image(o) && !broken.has(o.key)">
@@ -354,11 +354,11 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
           </tbody>
         </table>
 
-        <p v-if="loading" class="mt-2 text-xs text-subtle" role="status">Loading records…</p>
+        <p v-if="loading" class="mx-4 mt-2 text-xs text-subtle" role="status">Loading records…</p>
         <button
           v-else-if="total !== null && records.length < total"
           type="button"
-          class="mt-2 w-full rounded-md border border-border py-1 text-sm hover:bg-surface-2"
+          class="mx-4 mt-2 w-[calc(100%-2rem)] rounded-md border border-border py-1 text-sm hover:bg-surface-2"
           @click="load(true)"
         >
           Show more ({{ full(records.length) }} of {{ full(total) }})
