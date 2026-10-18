@@ -214,14 +214,14 @@ export function hexesOf(tile: VectorTile, t: TileId, level: number): Hex[] {
       const f = layer.feature(i);
       if (f.type !== 3) continue;
       const g = f.toGeoJSON(t.x, t.y, level).geometry;
-      const outer =
-        g.type === 'Polygon' ? g.coordinates[0] : g.type === 'MultiPolygon' ? g.coordinates[0]?.[0] : undefined;
+      // Polygon features decode to a Polygon, or a MultiPolygon with any other number of rings (none when empty).
+      const outer = g.type === 'Polygon' ? g.coordinates[0] : (g as GeoJSON.MultiPolygon).coordinates[0]?.[0];
       if (!outer) continue;
       // Cells are computed by their unclipped centre, so a polar cell keeps one id.
       const whole = outer.map((p) => [p[0], p[1]] as LngLat);
       const ring = clipRingLat(whole, -MAX_LAT, MAX_LAT);
       if (!ring.length) continue;
-      const [dx, dy] = homeOffset(f.loadGeometry()[0] ?? [], layer.extent);
+      const [dx, dy] = homeOffset(f.loadGeometry()[0]!, layer.extent);
       out.push({
         type: 'Feature',
         properties: { id: cellId(whole, level), total: hexRecords(f.properties['total']), home: dx === 0 && dy === 0 },

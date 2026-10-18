@@ -6,6 +6,7 @@ import {
   clipRingLat,
   decodeHexes,
   fillZoom,
+  homeOffset,
   gridLevel,
   mergeHexes,
   ringAround,
@@ -45,7 +46,9 @@ const hexAt = (cx: number, cy: number, r = 100): Px[] =>
 
 describe('adhocLevel', () => {
   it('drops levels where adhoc geohash cells are wider than hexes, keeps the rest', () => {
-    expect([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(adhocLevel)).toEqual([2, 2, 4, 5, 5, 7, 7, 7, 10, 10, 12, 12, 12]);
+    expect([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(adhocLevel)).toEqual([
+      2, 2, 4, 5, 5, 7, 7, 7, 10, 10, 12, 12, 12,
+    ]);
   });
 });
 
@@ -117,6 +120,10 @@ describe('tilesFor', () => {
     expect(tileAt([10, 89], 3).y).toBe(0);
   });
 
+  it('lists no tiles for no points', () => {
+    expect(tilesFor([], 2)).toEqual([]);
+  });
+
   it('lists each tile under the view once, centre tile first, wrapping at the antimeridian', () => {
     const view: LngLat[] = [
       [179.9, 0.1],
@@ -174,6 +181,8 @@ describe('clipRingLat', () => {
       [0, 80],
     ];
     const out = clipRingLat(ring, -85, 85);
+    // An open ring is clipped the same way.
+    expect(clipRingLat(ring.slice(0, -1), -85, 85)).toEqual(out);
     expect(out[0]).toEqual(out.at(-1));
     expect(Math.max(...out.map((p) => p[1]))).toBe(85);
     expect(
@@ -215,6 +224,52 @@ describe('decodeHexes', () => {
     // A hex straddling the top edge of the top row (85.05°).
     const [hex] = await decodeHexes(mvt([{ ring: hexAt(2048, 0), total: 3 }]), { x: 0, y: 0 }, 0);
     expect(Math.max(...hex!.geometry.coordinates[0]!.map((p) => p[1]!))).toBe(85);
+  });
+
+  it('skips points and empty polygons, and takes the first ring of a multipolygon', async () => {
+    const feature = (type: 1 | 3, rings: Px[][], total: unknown = 4) => ({
+      type,
+      extent: E,
+      properties: { total } as Record<string, number>,
+      loadGeometry: () => rings.map((r) => r.map(([x, y]) => ({ x, y }) as Point)),
+    });
+    const closed = (r: Px[]) => [...r, r[0]!];
+    const features = [
+      feature(1, [[[100, 100]]]),
+      feature(3, []),
+      // Two outer rings: a MultiPolygon. Its ring is left open, and the total is not a number.
+      feature(3, [hexAt(1000, 1000), closed(hexAt(3000, 3000))], 'n/a'),
+    ];
+    const bytes = fromVectorTileJs({
+      layers: { occurrence: { version: 2, name: 'occurrence', extent: E, length: 3, feature: (i) => features[i]! } },
+    });
+    const hexes = await decodeHexes(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+      { x: 0, y: 0 },
+      0,
+    );
+    expect(hexes).toHaveLength(1);
+    expect(hexes[0]!.properties).toMatchObject({ total: 0, home: true });
+  });
+
+  it('places a hex by its centre, closed ring or not', () => {
+    const ring = hexAt(5000, 100).map(([x, y]) => ({ x, y }));
+    expect(homeOffset(ring, E)).toEqual([1, 0]);
+    expect(homeOffset([...ring, ring[0]!], E)).toEqual([1, 0]);
+  });
+
+  it('drops a cell wholly past the latitude limit', async () => {
+    // Above the top of the tile: past 85.05°.
+    expect(await decodeHexes(mvt([{ ring: hexAt(2048, -400, 100), total: 3 }]), { x: 0, y: 0 }, 0)).toEqual([]);
+  });
+
+  it('keeps the higher count of two copies from tiles of the same standing', () => {
+    const hex = (total: number) => ({
+      type: 'Feature' as const,
+      properties: { id: 'a', total, home: false },
+      geometry: { type: 'Polygon' as const, coordinates: [] },
+    });
+    expect(mergeHexes([[hex(5)], [hex(3)]]).get('a')!.properties.total).toBe(5);
   });
 
   it('is empty for an empty tile', async () => {

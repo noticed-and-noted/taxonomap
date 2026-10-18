@@ -115,3 +115,38 @@ describe('near data', () => {
     expect(calls.filter((u) => u.pathname === '/v1/occurrence/search')).toHaveLength(7);
   });
 });
+
+describe('near data without much to go on', () => {
+  it('copes with missing facets, keys and names, and passes signals on', async () => {
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v1/occurrence/search' && url.searchParams.get('limit') === '60')
+        return {
+          count: 2,
+          results: [
+            { ...photoRecord(1, '2026-10-01', 0), speciesKey: undefined, taxonKey: 2 },
+            { ...photoRecord(2, '2026-10-02', 0), speciesKey: undefined },
+          ],
+        };
+      if (url.pathname === '/v1/occurrence/search') return { count: 0, results: [] };
+      return snapshots({})(url);
+    });
+    const { classesNear, recentSightings, speciesNear, speciesTallies } = await load();
+    const { signal } = new AbortController();
+    await expect(classesNear(AREA, signal)).resolves.toEqual({ records: 0, classes: [] });
+    const sightings = await recentSightings(AREA, 2, signal);
+    expect(sightings.map((s) => [s.date, s.commonName, s.datasetTitle])).toEqual([
+      ['2026-10-02', undefined, undefined],
+      ['2026-10-01', undefined, undefined],
+    ]);
+    const classes = [{ key: 212, name: 'Aves', records: 1 }];
+    await expect(speciesNear(AREA, classes, signal)).resolves.toEqual([]);
+    await expect(speciesNear(AREA, classes)).resolves.toEqual([]);
+    await expect(speciesTallies(AREA, classes)).resolves.toEqual({
+      total: 0,
+      topNames: [],
+      groups: [{ ...classes[0], species: 0, topNames: [] }],
+    });
+    const perClass = calls.filter((u) => u.searchParams.get('classKey') === '212');
+    expect(perClass[0]!.searchParams.get('facetLimit')).toBe('40');
+  });
+});
