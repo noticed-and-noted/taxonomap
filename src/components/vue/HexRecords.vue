@@ -44,7 +44,7 @@ const records = shallowRef<Occurrence[]>([]);
 const expanded = ref<number | null>(null);
 const total = ref<number | null>(null);
 const scroller = ref<HTMLElement>();
-const { fadeTop, fadeBottom, update: updateFade } = useScrollFade(scroller);
+const { fadeBottom, update: updateFade } = useScrollFade(scroller);
 watch(records, () => void nextTick(updateFade));
 
 const uid = useId();
@@ -245,7 +245,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       <div
         ref="scroller"
         class="fade-list -mx-4 max-h-[min(23rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
-        :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
+        :class="{ 'fade-bottom': fadeBottom }"
         @scroll.passive="updateFade"
       >
         <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
