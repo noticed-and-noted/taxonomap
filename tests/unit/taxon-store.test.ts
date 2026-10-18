@@ -111,3 +111,19 @@ describe('taxon selection', () => {
     off();
   });
 });
+
+describe('toggleTaxa', () => {
+  it('adds a whole group, removes it again, and refuses past the limit', async () => {
+    stubNetwork(snapshots({ names: NAMES }));
+    const { $taxonKeys, MAX_TAXA, TAXON_GROUPS, toggleTaxa } = await load();
+    const reptiles = TAXON_GROUPS.find((g) => g.label === 'Reptiles')!.taxa;
+    $taxonKeys.set([212]);
+    expect(toggleTaxa(reptiles)).toBe('added');
+    expect($taxonKeys.get()).toEqual([212, 11418114, 11493978, 11592253]);
+    expect(toggleTaxa(reptiles)).toBe('removed');
+    expect($taxonKeys.get()).toEqual([212]);
+    $taxonKeys.set(Array.from({ length: MAX_TAXA - 1 }, (_, i) => i + 1));
+    expect(toggleTaxa(reptiles)).toBe('full');
+    expect($taxonKeys.get()).toHaveLength(MAX_TAXA - 1);
+  });
+});

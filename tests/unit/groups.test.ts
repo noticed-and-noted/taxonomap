@@ -1,7 +1,7 @@
 /**
- * Species grouped by class (the cell and Near me tables): naming classes,
- * one facet request per leading class, names from the index with a batched
- * fallback, and stopping once superseded.
+ * Species for the cell and Near me tables: naming classes, one facet request
+ * for the top species (overall or one class), names from the index with a
+ * batched fallback, and stopping once superseded.
  */
 import type { NameRow, TreeNodeRow } from '~/lib/data/types';
 import { facets, json, nums, snapshots, stubNetwork } from './helpers/network';
@@ -44,18 +44,15 @@ describe('namedClasses', () => {
   });
 });
 
-describe('speciesInClasses', () => {
-  it('queries each leading class, ranks rows by records and names them', async () => {
+describe('topSpecies', () => {
+  it('asks once for the top species, ranks them and names them', async () => {
     const calls = stubNetwork((url) => {
-      if (url.pathname === '/v1/occurrence/search' && url.searchParams.get('facet') === 'speciesKey') {
-        const cls = Number(url.searchParams.get('classKey'));
-        if (cls === 212)
-          return facets(30, 'SPECIES_KEY', [
-            [1, 20],
-            [3, 5],
-          ]);
-        if (cls === 359) return facets(9, 'SPECIES_KEY', [[2, 9]]);
-      }
+      if (url.pathname === '/v1/occurrence/search' && url.searchParams.get('facet') === 'speciesKey')
+        return facets(34, 'SPECIES_KEY', [
+          [1, 20],
+          [2, 9],
+          [3, 5],
+        ]);
       if (url.pathname === '/v1/occurrence/search') {
         // Batched fallback for names the index lacks.
         expect(nums(url, 'speciesKey')).toEqual([3]);
@@ -63,51 +60,30 @@ describe('speciesInClasses', () => {
       }
       return snapshots({ names: NAMES })(url);
     });
-    const { nameFromRecords, speciesInClasses } = await load();
-    const indexed = await speciesInClasses(
-      { taxonKeys: [5] },
-      [
-        { key: 212, name: 'Aves', records: 30 },
-        { key: 359, name: 'Mammalia', records: 9 },
-        { key: 131, name: 'Amphibia', records: 1 },
-      ],
-      { maxClasses: 2, perClass: 10 },
-    );
+    const { nameFromRecords, topSpecies } = await load();
+    const indexed = await topSpecies({ taxonKeys: [5], classKey: 212 }, { limit: 10 });
     // Index names first, so rows can show before the batched search.
     expect(indexed.find((r) => r.key === 3)).toMatchObject({ scientificName: 'Species 3', unnamed: true });
     const rows = await nameFromRecords(indexed);
     expect(rows).toEqual([
-      { key: 1, records: 20, classKey: 212, scientificName: 'Erithacus rubecula', commonName: 'European robin' },
-      { key: 2, records: 9, classKey: 359, scientificName: 'Passer domesticus' },
-      { key: 3, records: 5, classKey: 212, scientificName: 'Turdus merula' },
+      { key: 1, records: 20, scientificName: 'Erithacus rubecula', commonName: 'European robin' },
+      { key: 2, records: 9, scientificName: 'Passer domesticus' },
+      { key: 3, records: 5, scientificName: 'Turdus merula' },
     ]);
-    const perClass = calls.filter((u) => u.searchParams.get('facet') === 'speciesKey');
-    // Only the two leading classes, each AND'd with the caller's filter.
-    expect(perClass.map((u) => u.searchParams.get('classKey'))).toEqual(['212', '359']);
-    expect(perClass.every((u) => u.searchParams.get('taxonKey') === '5')).toBe(true);
-    expect(perClass[0]?.searchParams.get('facetLimit')).toBe('10');
+    const facetCalls = calls.filter((u) => u.searchParams.get('facet') === 'speciesKey');
+    // One request, the group AND'd with the caller's filter.
+    expect(facetCalls).toHaveLength(1);
+    expect(facetCalls[0]?.searchParams.get('classKey')).toBe('212');
+    expect(facetCalls[0]?.searchParams.get('taxonKey')).toBe('5');
+    expect(facetCalls[0]?.searchParams.get('facetLimit')).toBe('10');
   });
 
-  it('uses facets the caller already has instead of querying their class', async () => {
-    const calls = stubNetwork((url) => {
-      if (url.searchParams.get('facet') === 'speciesKey') return facets(9, 'SPECIES_KEY', [[2, 9]]);
-      return snapshots({ names: NAMES })(url);
-    });
-    const { speciesInClasses } = await load();
-    const rows = await speciesInClasses(
-      {},
-      [
-        { key: 212, name: 'Aves', records: 30 },
-        { key: 359, name: 'Mammalia', records: 9 },
-      ],
-      { known: new Map([[212, [{ name: '1', count: 20 }]]]) },
-    );
-    expect(rows.map((r) => [r.key, r.classKey])).toEqual([
-      [1, 212],
-      [2, 359],
-    ]);
-    const perClass = calls.filter((u) => u.searchParams.get('facet') === 'speciesKey');
-    expect(perClass.map((u) => u.searchParams.get('classKey'))).toEqual(['359']);
+  it('uses a facet the caller already has instead of asking', async () => {
+    const calls = stubNetwork(snapshots({ names: NAMES }));
+    const { topSpecies } = await load();
+    const rows = await topSpecies({}, { known: [{ name: '1', count: 20 }] });
+    expect(rows.map((r) => r.key)).toEqual([1]);
+    expect(calls.some((u) => u.pathname === '/v1/occurrence/search')).toBe(false);
   });
 
   it('marks rows it could not name', async () => {
@@ -116,28 +92,26 @@ describe('speciesInClasses', () => {
       if (url.pathname === '/v1/occurrence/search') return { count: 0, results: [] };
       return snapshots({ names: NAMES })(url);
     });
-    const { nameFromRecords, speciesInClasses } = await load();
-    const rows = await nameFromRecords(await speciesInClasses({}, [{ key: 212, name: 'Aves', records: 1 }]));
-    expect(rows).toEqual([{ key: 77, records: 1, classKey: 212, scientificName: 'Species 77', unnamed: true }]);
+    const { nameFromRecords, topSpecies } = await load();
+    const rows = await nameFromRecords(await topSpecies({}));
+    expect(rows).toEqual([{ key: 77, records: 1, scientificName: 'Species 77', unnamed: true }]);
   });
 
-  it('returns nothing (and asks for no names) when the classes are empty', async () => {
+  it('returns nothing (and asks for no names) when there are no species', async () => {
     const calls = stubNetwork((url) =>
       url.searchParams.get('facet') === 'speciesKey' ? facets(0, 'SPECIES_KEY', []) : undefined,
     );
-    const { speciesInClasses } = await load();
-    await expect(speciesInClasses({}, [{ key: 212, name: 'Aves', records: 0 }])).resolves.toEqual([]);
+    const { topSpecies } = await load();
+    await expect(topSpecies({})).resolves.toEqual([]);
     expect(calls.some((u) => u.pathname === '/data/names.json')).toBe(false);
   });
 
   it('stops once its signal aborts', async () => {
     stubNetwork(() => facets(0, 'SPECIES_KEY', []));
-    const { speciesInClasses } = await load();
+    const { topSpecies } = await load();
     const ctrl = new AbortController();
     ctrl.abort();
-    await expect(
-      speciesInClasses({}, [{ key: 212, name: 'Aves', records: 0 }], { signal: ctrl.signal }),
-    ).rejects.toThrow();
+    await expect(topSpecies({}, { signal: ctrl.signal })).rejects.toThrow();
   });
 });
 
@@ -173,17 +147,17 @@ describe('without the baked data', () => {
       if (url.pathname === '/v1/occurrence/search') return { count: 0, results: [] };
       return undefined;
     });
-    const { namedClasses, speciesInClasses } = await load();
+    const { namedClasses, topSpecies } = await load();
     const classes = await namedClasses([{ name: '212', count: 5 }]);
     expect(classes).toEqual([{ key: 212, name: 'Aves', records: 5 }]);
-    await expect(speciesInClasses({}, classes)).resolves.toEqual([]);
+    await expect(topSpecies({ classKey: 212 })).resolves.toEqual([]);
   });
 });
 
 describe('nameFromRecords', () => {
   const rows = [
-    { key: 1, scientificName: 'Species 1', records: 3, classKey: 212, unnamed: true as const },
-    { key: 2, scientificName: 'Passer domesticus', records: 2, classKey: 212 },
+    { key: 1, scientificName: 'Species 1', records: 3, unnamed: true as const },
+    { key: 2, scientificName: 'Passer domesticus', records: 2 },
   ];
 
   it('returns the rows unchanged when the search fails or names nothing', async () => {

@@ -39,7 +39,7 @@ describe('near data', () => {
     const q = calls[0]!.searchParams;
     expect(q.get('geometry')).toMatch(/^POLYGON\(\(/);
     expect(q.get('month')).toBe('5');
-    expect(q.get('facetLimit')).toBe('20');
+    expect(q.get('facetLimit')).toBe('50');
   });
 
   it('lists recent photographed sightings newest first, with names and dataset titles', async () => {
@@ -139,14 +139,14 @@ describe('near data without much to go on', () => {
       ['2026-10-01', undefined, undefined],
     ]);
     const classes = [{ key: 212, name: 'Aves', records: 1 }];
-    await expect(speciesNear(AREA, classes, signal)).resolves.toEqual([]);
-    await expect(speciesNear(AREA, classes)).resolves.toEqual([]);
+    await expect(speciesNear(AREA, null, signal)).resolves.toEqual([]);
+    await expect(speciesNear(AREA, 212)).resolves.toEqual([]);
     await expect(speciesTallies(AREA, classes)).resolves.toEqual({
       total: 0,
       topNames: [],
       groups: [{ ...classes[0], species: 0, topNames: [] }],
     });
     const perClass = calls.filter((u) => u.searchParams.get('classKey') === '212');
-    expect(perClass[0]!.searchParams.get('facetLimit')).toBe('40');
+    expect(perClass[0]!.searchParams.get('facetLimit')).toBe('200');
   });
 });

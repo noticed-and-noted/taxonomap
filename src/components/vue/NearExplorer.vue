@@ -11,8 +11,7 @@ import { full } from '~/lib/format';
 import { RADIUS_STEPS_KM } from '~/lib/gbif';
 import {
   classesNear,
-  NEAR_CLASSES,
-  NEAR_PER_CLASS,
+  NEAR_SPECIES,
   recentSightings,
   speciesNear,
   speciesTallies,
@@ -42,7 +41,7 @@ import ShareDialog from './ShareDialog.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
 import ThumbImage from './ThumbImage.vue';
-import { perGroupNote, useLatestLoad } from './useLatestLoad';
+import { useLatestLoad } from './useLatestLoad';
 import { useScrollFade } from './useScrollFade';
 
 const at = useStore($nearAt);
@@ -60,6 +59,8 @@ const total = ref(0);
 
 const classes = shallowRef<ClassGroup[]>([]);
 const species = shallowRef<SpeciesRow[]>([]);
+/** Class the species list is narrowed to, or null for the whole area. */
+const group = ref<number | null>(null);
 const recent = shallowRef<Sighting[] | null>(null);
 /** Recent thumbnails that have loaded (or failed), so their skeletons can go. */
 const thumbDone = ref(new Set<number>());
@@ -79,7 +80,9 @@ const area = computed<Area | null>(() =>
     : null,
 );
 const radiusIndex = computed(() => (RADIUS_STEPS_KM as readonly number[]).indexOf(radius.value));
-const tableNote = computed(() => perGroupNote(classes.value.length, NEAR_CLASSES, NEAR_PER_CLASS));
+const tableNote = computed(() =>
+  species.value.length >= NEAR_SPECIES ? `the ${NEAR_SPECIES} most recorded` : undefined,
+);
 
 function onRadius(e: Event) {
   const i = Number((e.target as HTMLInputElement).value);
@@ -110,6 +113,7 @@ async function loadArea() {
   const a = area.value;
   classes.value = [];
   species.value = [];
+  group.value = null;
   recent.value = null;
   tallies.value = null;
   if (!a) {
@@ -119,16 +123,30 @@ async function loadArea() {
   }
   $flyTo.set({ kind: 'point', lng: a.lng, lat: a.lat, zoom: zoomForRadius(a.radiusKm) });
   await runArea(async (signal) => {
-    const r = await classesNear(a, signal);
+    const [r, rows] = await Promise.all([classesNear(a, signal), speciesNear(a, null, signal)]);
     if (signal.aborted) return;
     total.value = r.records;
     if (tab.value === 'recent') void loadRecent();
-    const rows = await speciesNear(a, r.classes, signal);
-    if (signal.aborted) return;
     classes.value = r.classes;
-    species.value = rows;
-    const named = await nameFromRecords(rows, signal);
-    if (!signal.aborted) species.value = named;
+    await showSpecies(rows, signal);
+  });
+}
+
+async function showSpecies(rows: SpeciesRow[], signal: AbortSignal) {
+  species.value = rows;
+  const named = await nameFromRecords(rows, signal);
+  if (!signal.aborted) species.value = named;
+}
+
+/** Narrow the species list to one group (null for all); one request each time. */
+async function pickGroup(key: number | null) {
+  const a = area.value;
+  if (!a || key === group.value) return;
+  group.value = key;
+  species.value = [];
+  await runArea(async (signal) => {
+    const rows = await speciesNear(a, key, signal);
+    if (!signal.aborted) await showSpecies(rows, signal);
   });
 }
 
@@ -303,7 +321,16 @@ onBeforeUnmount(() => {
                 thisMonth ? ' or all months' : ''
               }}.
             </p>
-            <SpeciesTable v-else :rows="species" :groups="classes" :loading="loading" :note="tableNote" fill />
+            <SpeciesTable
+              v-else
+              :rows="species"
+              :groups="classes"
+              :loading="loading"
+              :note="tableNote"
+              :group="group"
+              fill
+              @update:group="pickGroup"
+            />
           </div>
 
           <!-- Recent sightings -->

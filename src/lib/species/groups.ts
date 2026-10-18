@@ -1,9 +1,9 @@
 /**
- * Species in an area grouped by class, for the cell and Near me tables.
- * The baked data has no species → class mapping, so each class is queried:
+ * Species in an area, and the classes (groups) they fall in, for the cell and Near me tables.
+ * The baked data has no species → class mapping, so a group's species are queried when picked:
  *   classes            → 1 facet request (callers fold it into one they make anyway)
- *   species per class  → 1 facet request per class, 2 at a time (classKey AND the filter)
- *                         (skipped for a class whose facet the caller already has)
+ *   top species        → 1 facet request, AND'd with classKey for one group
+ *                         (skipped when the caller's request already had the facet)
  *   names              → baked index; then `nameFromRecords`, one batched record search
  *                         for misses, run after the rows are shown; the table calls
  *                         `resolveNames` for any it still needs (cached detail lookups, 2 at a time)
@@ -39,7 +39,6 @@ export interface SpeciesRow {
   scientificName: string;
   commonName?: string;
   records: number;
-  classKey: number;
   image?: UsableImage;
   /** Name not known yet (see resolveNames). */
   unnamed?: true;
@@ -76,33 +75,23 @@ export async function namedClasses(counts: readonly FacetCount[]): Promise<Class
 }
 
 /**
- * Top species of each of the leading classes, most-recorded first, named from
- * the baked index (see nameFromRecords for the rest). `known` holds speciesKey
- * facets the caller already fetched, by classKey; those classes are not queried.
+ * Top species for a filter (add `classKey` for one group), most-recorded first, named
+ * from the baked index (see nameFromRecords for the rest). One facet request, or none
+ * when the caller already has the speciesKey facet (`known`).
  */
-export async function speciesInClasses(
+export async function topSpecies(
   filter: OccurrenceFilter,
-  classes: readonly ClassGroup[],
-  opts: { maxClasses?: number; perClass?: number; signal?: AbortSignal; known?: Map<number, FacetCount[]> } = {},
+  opts: { limit?: number; signal?: AbortSignal; known?: readonly FacetCount[] } = {},
 ): Promise<SpeciesRow[]> {
-  const { maxClasses = 8, perClass = 30, signal, known } = opts;
-  const limit = pLimit(CONCURRENCY);
-  const pages = await Promise.all(
-    classes.slice(0, maxClasses).map(async (c) => {
-      const counts =
-        known?.get(c.key) ??
-        (await limit(async () => {
-          signal?.throwIfAborted();
-          const r = await occurrenceFacets({ ...filter, classKey: c.key }, ['speciesKey'], {
-            facetLimit: perClass,
-            ...(signal && { signal }),
-          });
-          return r.facets['speciesKey'] ?? [];
-        }));
-      return counts.map((f) => ({ key: Number(f.name), records: f.count, classKey: c.key }));
-    }),
-  );
-  const rows = pages.flat().sort((a, b) => b.records - a.records);
+  const { limit = 200, signal, known } = opts;
+  signal?.throwIfAborted();
+  const counts =
+    known ??
+    (await occurrenceFacets(filter, ['speciesKey'], { facetLimit: limit, ...(signal && { signal }) })).facets[
+      'speciesKey'
+    ] ??
+    [];
+  const rows = counts.map((f) => ({ key: Number(f.name), records: f.count }));
   if (!rows.length) return [];
 
   // Wait for the whole index: without it nearly every row misses.

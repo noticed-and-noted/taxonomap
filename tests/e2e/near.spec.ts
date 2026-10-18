@@ -37,18 +37,21 @@ test('geolocation is rounded to ~100 m before use', async ({ page, context }) =>
   expect(precise).toEqual([]);
 });
 
-test('lists species in a sortable, filterable table', async ({ page }) => {
+test('lists species in a sortable table that one group can narrow', async ({ page }) => {
   await page.goto(LONDON);
-  await expect(page.getByRole('cell', { name: 'Birds' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /Common Blackbird/ })).toBeVisible();
   await page.getByRole('button', { name: /^Species/ }).click();
   await expect(page.getByRole('columnheader', { name: /Species/ })).toHaveAttribute('aria-sort', 'ascending');
   await page.getByRole('button', { name: 'Filter' }).click();
-  // The checkbox is sr-only under its label text, so click the label as a person would.
+  // The radio is sr-only under its label text, so click the label as a person would.
   const filters = page.getByRole('dialog', { name: 'Filter species' });
-  await filters.locator('label', { hasText: 'Birds' }).click();
-  await expect(filters.getByRole('checkbox', { name: /Birds/ })).toBeChecked();
+  await filters.locator('label', { hasText: 'Mammals' }).click();
+  await expect(filters.getByRole('radio', { name: /Mammals/ })).toBeChecked();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: /Filter · 1/ })).toBeVisible();
+  // The group's own species are loaded, not just the area's list filtered.
+  await expect(page.getByRole('link', { name: /Red Fox/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Common Blackbird/ })).toHaveCount(0);
 });
 
 test('recent sightings list photographed records with their dataset', async ({ page }) => {
@@ -62,7 +65,7 @@ test('recent sightings list photographed records with their dataset', async ({ p
 
 test('the share card counts the species in the circle', async ({ page }) => {
   await page.goto(LONDON);
-  await expect(page.getByRole('cell', { name: 'Birds' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /Common Blackbird/ })).toBeVisible();
   await page.getByRole('button', { name: 'Share', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Share what’s near' });
   await expect(dialog.getByRole('img', { name: /species recorded within 2 km/ })).toBeVisible();

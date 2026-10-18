@@ -38,10 +38,3 @@ export function useLatestLoad() {
 
   return { loading, error, run, cancel };
 }
-
-/** "top 25 in each of the 8 most-recorded groups", for tables cut per group. */
-export function perGroupNote(groups: number, maxGroups: number, perGroup: number): string {
-  return groups > maxGroups
-    ? `top ${perGroup} in each of the ${maxGroups} most-recorded groups`
-    : `top ${perGroup} in each group`;
-}
