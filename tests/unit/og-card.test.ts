@@ -42,13 +42,8 @@ function texts(el: unknown): string[] {
 const imgSrc = (el: unknown) =>
   (el as { props: { children: { props: { src?: string } }[] } }).props.children[0]!.props.src;
 
-const PHOTO: UsableImage = {
-  occurrenceKey: 1,
-  datasetKey: 'd',
-  licence: 'CC-BY',
-  url: 'https://img.test/a.jpg',
-  creator: 'Ann',
-};
+const BARE: UsableImage = { occurrenceKey: 1, datasetKey: 'd', licence: 'CC-BY', url: 'https://img.test/a.jpg' };
+const PHOTO: UsableImage = { ...BARE, creator: 'Ann' };
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'og-'));
@@ -97,7 +92,7 @@ describe('renderSpeciesCard', () => {
   });
 
   it('downloads the photo once, credits it, and falls back to initials when it cannot', async () => {
-    const fetch = vi.fn(async (url: string) =>
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) =>
       url.includes('/occurrence/1/')
         ? new Response('jpeg bytes', { headers: { 'content-type': 'image/jpeg; charset=binary' } })
         : url.includes('/occurrence/2/')
@@ -122,8 +117,8 @@ describe('renderSpeciesCard', () => {
     expect(new Headers(fetch.mock.calls[0]![1]?.headers).get('user-agent')).toMatch(/^Taxonomap\//);
 
     const others: UsableImage[] = [
-      { ...PHOTO, occurrenceKey: 2, creator: undefined, rightsHolder: 'Bo' } as UsableImage,
-      { ...PHOTO, occurrenceKey: 3, creator: undefined } as UsableImage,
+      { ...BARE, occurrenceKey: 2, rightsHolder: 'Bo' },
+      { ...BARE, occurrenceKey: 3 },
       { ...PHOTO, occurrenceKey: 4 },
       { ...PHOTO, occurrenceKey: 5 },
     ];

@@ -34,7 +34,12 @@ async function setup(opts: Parameters<typeof import('~/components/vue/useNameSea
   return { ...s, stop: () => scope.stop() };
 }
 
-afterEach(() => vi.unstubAllGlobals());
+// Fake timers: tests step past the 250 ms debounce instead of waiting for it.
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('useNameSearch', () => {
   it('answers from the index, then adds a few live matches without duplicates', async () => {
@@ -42,6 +47,7 @@ describe('useNameSearch', () => {
     const s = await setup({ max: 8 });
     s.search('robin');
     await vi.waitFor(() => expect(s.hits.value.map((h) => h.key)).toEqual([2492462, 9510564]));
+    await vi.advanceTimersByTimeAsync(250);
     // Index hits first; with index answers, only three live hits are kept (one a duplicate).
     await vi.waitFor(() => expect(s.hits.value.map((h) => h.key)).toEqual([2492462, 9510564, 1, 2]));
     expect(s.loading.value).toBe(false);
@@ -55,6 +61,7 @@ describe('useNameSearch', () => {
     gbif();
     const s = await setup({ max: 2, exclude: () => [2492462] });
     s.search('robin');
+    await vi.advanceTimersByTimeAsync(250);
     await vi.waitFor(() => expect(s.hits.value.map((h) => h.key)).toEqual([9510564, 1]));
     s.stop();
   });
@@ -63,6 +70,7 @@ describe('useNameSearch', () => {
     gbif({ suggestFails: true });
     const s = await setup({ max: 8 });
     s.search('zzzz');
+    await vi.advanceTimersByTimeAsync(250);
     await vi.waitFor(() => expect(s.failed.value).toBe(true));
     expect(s.hits.value).toEqual([]);
     s.stop();
@@ -73,7 +81,7 @@ describe('useNameSearch', () => {
     const s = await setup({ max: 8 });
     s.search('ro');
     await vi.waitFor(() => expect(s.hits.value).toHaveLength(2));
-    await new Promise((r) => setTimeout(r, 300));
+    await vi.advanceTimersByTimeAsync(300);
     expect(calls.some((u) => u.pathname.startsWith('/v1/'))).toBe(false);
     s.search('r');
     expect(s.hits.value).toEqual([]);

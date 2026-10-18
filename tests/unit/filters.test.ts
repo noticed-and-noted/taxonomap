@@ -106,6 +106,20 @@ describe('explorer filter stores', () => {
     expect(e.$filterPills.get()).toEqual([]);
   });
 
+  it('label one year, continents and record types', async () => {
+    const e = await import('~/stores/explorer');
+    e.clearFilters();
+    e.$yearRange.set([2001, 2001]);
+    e.$continents.set(['EUROPE', 'ASIA']);
+    e.$basisOfRecord.set(['HUMAN_OBSERVATION', 'FOSSIL_SPECIMEN']);
+    expect(e.$filterPills.get().map((p) => p.text)).toEqual([
+      '2001',
+      'Europe, Asia',
+      'Human observation, Fossil specimen',
+    ]);
+    e.clearFilters();
+  });
+
   it('read a pre-multi-select taxon link as a one-item list', async () => {
     const { codecs } = await import('~/stores/url-sync');
     const c = codecs.intSet('taxon', { min: 0, limit: 10 });

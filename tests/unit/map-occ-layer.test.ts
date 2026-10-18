@@ -6,7 +6,7 @@
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import { $gbifStale, type TileFilter } from '~/lib/gbif';
-import { createOccLayer } from '~/lib/map/occLayer';
+import { createOccLayer as create, type OccLayer } from '~/lib/map/occLayer';
 import { hexAt, mvt } from './helpers/tiles';
 
 const W = 1024;
@@ -128,18 +128,31 @@ function gate() {
   };
 }
 
-/** Let fetches, decoding and the frame-batched draws run. */
+/** Let fetches, decoding and the frame-batched draws run (setImmediate, unlike setTimeout, has no 1 ms floor). */
 const settle = async () => {
-  for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
+  for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r));
 };
 const key = (t: { x: number; y: number }) => `${t.x}/${t.y}`;
 const ids = (fc: GeoJSON.FeatureCollection) => fc.features.map((f) => (f.properties as { id: string }).id).sort();
 
+/** Every layer a test makes, destroyed after it so none keeps loading into the next. */
+const layers: OccLayer[] = [];
+const createOccLayer = (...args: Parameters<typeof create>) => {
+  const layer = create(...args);
+  layers.push(layer);
+  return layer;
+};
+
+// The tile decoder is imported on first use; load it up front so a busy machine can't slow the first test.
+beforeAll(async () => {
+  await Promise.all([import('@mapbox/vector-tile'), import('pbf')]);
+});
 beforeEach(() => {
-  vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setTimeout(cb, 0));
+  vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setImmediate(cb));
   $gbifStale.set(false);
 });
 afterEach(() => {
+  layers.splice(0).forEach((l) => l.destroy());
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -221,15 +234,15 @@ describe('occurrence layer', () => {
     const layer = createOccLayer(m.map, o);
     await settle();
     expect(o.onCells).toHaveBeenCalledOnce();
-    const [padded] = layer.collection().features;
-    expect(padded!.properties).toMatchObject({ total: 30, home: false });
+    const padded = layer.collection().features[0]!.properties as { id: string; total: number; home: boolean };
+    expect(padded).toMatchObject({ total: 30, home: false });
     g.release();
     await settle();
     expect(o.onChanges).toHaveBeenCalledWith(
       [expect.objectContaining({ properties: expect.objectContaining({ total: 10 }) })],
-      [padded!.properties.id],
+      [padded.id],
     );
-    expect(layer.collection().features.map((f) => f.properties.total)).toEqual([10]);
+    expect(layer.collection().features.map((f) => (f.properties as { total: number }).total)).toEqual([10]);
   });
 
   it('copes with failures: unreachable, throttled, rejected and empty tiles', async () => {

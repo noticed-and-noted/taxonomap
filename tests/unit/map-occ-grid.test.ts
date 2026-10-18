@@ -202,6 +202,7 @@ describe('decodeHexes', () => {
 
   it('skips points and empty polygons, and takes the first ring of a multipolygon', async () => {
     const feature = (type: 1 | 3, rings: Px[][], total: unknown = 4) => ({
+      id: 1,
       type,
       extent: E,
       properties: { total } as Record<string, number>,

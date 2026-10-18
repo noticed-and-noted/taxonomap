@@ -39,6 +39,16 @@ describe('explorer URL state', () => {
     expect(new URLSearchParams(location.search).get('hex')).toBe('1.2346,-2.0000');
   });
 
+  it('writes the map view rounded, as viewParam does', async () => {
+    const s = await stores();
+    vi.useFakeTimers();
+    s.$mapView.set({ lng: 1.234, lat: -5.678, zoom: 3.45 });
+    vi.advanceTimersByTime(350);
+    vi.useRealTimers();
+    expect(new URLSearchParams(location.search).get('view')).toBe('1.23,-5.68,3.5');
+    expect(s.viewParam({ lng: 0, lat: 0, zoom: 2 })).toBe('0.00,0.00,2.0');
+  });
+
   it('clears the cell and its panel together', async () => {
     const s = await stores('?hex=1,2&panel=hex');
     s.$hexGeometry.set({ ring: [], wkt: '', tileTotal: 1 });
@@ -60,6 +70,15 @@ describe('near me URL state', () => {
     expect((await stores('?at=95,0')).$nearAt.get()).toBeNull();
     expect((await stores('?r=3')).$nearRadius.get()).toBe(2);
     expect((await stores('?r=25')).$nearRadius.get()).toBe(25);
+  });
+
+  it('writes a chosen radius', async () => {
+    const s = await stores();
+    vi.useFakeTimers();
+    s.$nearRadius.set(10);
+    vi.advanceTimersByTime(350);
+    vi.useRealTimers();
+    expect(new URLSearchParams(location.search).get('r')).toBe('10');
   });
 
   it('rounds a dropped pin before storing it', async () => {

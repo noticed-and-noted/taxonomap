@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /** Small shared helpers: basemaps, env, country names, the ramp's colours and counts. */
 import { countryName } from '~/lib/format';
 import { binLabels, formatCount, nice, rampById, rampColors, RAMPS } from '~/lib/ramp';
@@ -71,12 +70,19 @@ describe('countryName', () => {
 
 describe('ramp', () => {
   it('reads the colours from the --ramp-* tokens, defaulting each', () => {
-    document.documentElement.style.setProperty('--ramp-1', ' #123456 ');
+    // A page whose stylesheet sets only the first token.
+    vi.stubGlobal('document', { documentElement: {} });
+    vi.stubGlobal('getComputedStyle', () => ({
+      getPropertyValue: (p: string) => (p === '--ramp-1' ? ' #123456 ' : ''),
+    }));
     const colors = rampColors();
     expect(colors).toHaveLength(7);
     expect(colors[0]).toBe('#123456');
     expect(colors[1]).toBe(rampById('lichen-fern').colors[2]);
-    document.documentElement.removeAttribute('style');
+  });
+
+  it('uses the default ramp’s colours without a document', () => {
+    expect(rampColors()).toEqual(rampById('lichen-fern').colors.slice(1));
   });
 
   it('falls back to the first ramp for an unknown id', () => {
