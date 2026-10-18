@@ -107,6 +107,13 @@ const source = (o: Occurrence) =>
   o.recordedBy ?? ([o.institutionCode, o.catalogNumber].filter(Boolean).join(' ') || o.datasetName || o.publisher);
 const date = (o: Occurrence) => o.eventDate?.slice(0, 10) ?? (o.year ? String(o.year) : undefined);
 const image = (o: Occurrence) => usableImages(o)[0];
+const broken = ref(new Set<number>());
+const initials = (o: Occurrence) =>
+  name(o)
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('');
 </script>
 
 <template>
@@ -176,7 +183,16 @@ const image = (o: Occurrence) => usableImages(o)[0];
             :data-type="o.basisOfRecord"
           >
             <div class="size-14 shrink-0 overflow-hidden rounded bg-surface-2">
-              <ThumbImage v-if="image(o)" :image="image(o)!" size="200x" class="size-full object-cover" />
+              <ThumbImage
+                v-if="image(o) && !broken.has(o.key)"
+                :image="image(o)!"
+                size="200x"
+                class="size-full object-cover"
+                @broken="broken = new Set(broken).add(o.key)"
+              />
+              <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
+                {{ initials(o) }}
+              </span>
             </div>
             <div class="min-w-0 text-sm">
               <span
