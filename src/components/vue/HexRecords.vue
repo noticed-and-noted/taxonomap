@@ -306,8 +306,8 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                 <td class="truncate py-1.5 pr-4 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
               </tr>
               <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
-                <td colspan="4" class="px-4 pb-2">
-                  <div class="grid grid-cols-2 items-start gap-3 rounded-md bg-surface-2 p-2">
+                <td colspan="4" class="bg-surface-2 px-4 py-3">
+                  <div class="grid grid-cols-2 items-start gap-3">
                     <div class="relative aspect-square overflow-hidden rounded bg-photo">
                       <template v-if="image(o) && !broken.has(o.key)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
