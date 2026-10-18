@@ -1,13 +1,15 @@
 <script setup lang="ts">
 /**
  * Individual records in the selected cell, a page at a time in GBIF's order,
- * each badged with its record type (fossil, preserved specimen…). A species
- * search (ARIA 1.2 combobox over the cell's species table) narrows the list.
+ * as a table with a short record type code (FOS, SPE…; the full type on hover).
+ * A row expands to its photo and details. No column sorts: GBIF's occurrence
+ * search has no sort parameter. A species search (ARIA 1.2 combobox over the cell's species table) narrows the list.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
-import { BASIS_LABELS, full } from '~/lib/format';
-import { searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
+import { BASIS_LABELS, distance, full } from '~/lib/format';
+import { parseLicence, searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
+import LicenceBadge from './LicenceBadge.vue';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import ThumbImage from './ThumbImage.vue';
@@ -16,6 +18,18 @@ import { useScrollFade } from './useScrollFade';
 
 const PAGE = 20;
 const MAX_OPTIONS = 8;
+
+const TYPE_CODES: Record<string, string> = {
+  HUMAN_OBSERVATION: 'OBS',
+  MACHINE_OBSERVATION: 'MAC',
+  PRESERVED_SPECIMEN: 'SPE',
+  LIVING_SPECIMEN: 'LIV',
+  FOSSIL_SPECIMEN: 'FOS',
+  MATERIAL_SAMPLE: 'SAM',
+  MATERIAL_CITATION: 'CIT',
+  OCCURRENCE: 'OCC',
+  OBSERVATION: 'OBS',
+};
 
 const props = defineProps<{ species: readonly SpeciesRow[] }>();
 
@@ -26,6 +40,8 @@ const { loading, error, run } = useLatestLoad();
 /** Chosen speciesKey, or '' for all species. */
 const speciesKey = ref<number | ''>('');
 const records = shallowRef<Occurrence[]>([]);
+/** Expanded row's occurrence key. */
+const expanded = ref<number | null>(null);
 const total = ref<number | null>(null);
 const scroller = ref<HTMLElement>();
 const { fadeTop, fadeBottom, update: updateFade } = useScrollFade(scroller);
@@ -86,6 +102,7 @@ async function load(more = false) {
     const r = await searchOccurrences(f, { limit: PAGE, offset: more ? records.value.length : 0 }, signal);
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...r.results] : r.results;
+    if (!more) expanded.value = null;
     total.value = r.count;
   });
 }
@@ -103,9 +120,9 @@ watch(
 watch(speciesKey, () => void load());
 
 const name = (o: Occurrence) => o.vernacularName ?? o.species ?? o.scientificName ?? 'Unnamed record';
-const source = (o: Occurrence) =>
-  o.recordedBy ?? ([o.institutionCode, o.catalogNumber].filter(Boolean).join(' ') || o.datasetName || o.publisher);
 const date = (o: Occurrence) => o.eventDate?.slice(0, 10) ?? (o.year ? String(o.year) : undefined);
+const typeLabel = (o: Occurrence) =>
+  (o.basisOfRecord && (BASIS_LABELS[o.basisOfRecord] ?? o.basisOfRecord)) || 'Unknown';
 const image = (o: Occurrence) => usableImages(o)[0];
 const broken = ref(new Set<number>());
 const initials = (o: Occurrence) =>
@@ -114,6 +131,13 @@ const initials = (o: Occurrence) =>
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase())
     .join('');
+
+const toggle = (o: Occurrence) => (expanded.value = expanded.value === o.key ? null : o.key);
+
+const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filter(Boolean).join(' ');
+const place = (o: Occurrence) =>
+  [o.locality, o.country].filter(Boolean).join(', ') +
+  (o.coordinateUncertaintyInMeters ? ` ±${distance(o.coordinateUncertaintyInMeters)}` : '');
 </script>
 
 <template>
@@ -173,41 +197,122 @@ const initials = (o: Occurrence) =>
       :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
       @scroll.passive="updateFade"
     >
-      <ul class="space-y-2" aria-label="Records">
-        <li v-for="o in records" :key="o.key">
-          <a
-            :href="`https://www.gbif.org/occurrence/${o.key}`"
-            target="_blank"
-            rel="noopener"
-            class="record relative flex gap-3 rounded-md border border-border p-2 hover:bg-surface-2"
-            :data-type="o.basisOfRecord"
-          >
-            <div class="size-14 shrink-0 overflow-hidden rounded bg-surface-2">
-              <ThumbImage
-                v-if="image(o) && !broken.has(o.key)"
-                :image="image(o)!"
-                size="200x"
-                class="size-full object-cover"
-                @broken="broken = new Set(broken).add(o.key)"
-              />
-              <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
-                {{ initials(o) }}
-              </span>
-            </div>
-            <div class="min-w-0 text-sm">
-              <span
-                v-if="o.basisOfRecord"
-                class="record-type inline-block rounded-sm bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium"
-                >{{ BASIS_LABELS[o.basisOfRecord] ?? o.basisOfRecord }}</span
-              >
-              <p class="truncate" :class="{ 'sci-name': !o.vernacularName }">{{ name(o) }}</p>
-              <p class="truncate text-xs text-muted">
-                {{ [date(o), source(o)].filter(Boolean).join(' · ') }}
-              </p>
-            </div>
-          </a>
-        </li>
-      </ul>
+      <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
+        <thead class="text-xs text-subtle">
+          <tr>
+            <th class="th w-10 py-1.5 font-normal"><span class="sr-only">Photo</span></th>
+            <th class="th py-1.5 text-left font-normal" scope="col">Species</th>
+            <th class="th w-[3.25rem] py-1.5 text-left font-normal" scope="col">Type</th>
+            <th class="th w-[5.5rem] py-1.5 text-left font-normal" scope="col">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="o in records" :key="o.key">
+            <tr
+              class="record cursor-pointer border-b border-border hover:bg-surface-2"
+              :data-type="o.basisOfRecord"
+              @click="toggle(o)"
+            >
+              <td class="py-1.5 pr-2">
+                <span class="block size-8 overflow-hidden rounded bg-photo">
+                  <ThumbImage
+                    v-if="image(o) && !broken.has(o.key)"
+                    :image="image(o)!"
+                    size="200x"
+                    class="size-full object-cover"
+                    @broken="broken = new Set(broken).add(o.key)"
+                  />
+                  <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
+                    {{ initials(o) }}
+                  </span>
+                </span>
+              </td>
+              <td class="py-1.5 pr-2">
+                <button
+                  type="button"
+                  class="block w-full min-w-0 text-left"
+                  :aria-expanded="expanded === o.key"
+                  :aria-controls="`${uid}-rec-${o.key}`"
+                  @click.stop="toggle(o)"
+                >
+                  <span class="block truncate" :class="{ 'sci-name': !o.vernacularName }">{{ name(o) }}</span>
+                  <span v-if="o.recordedBy" class="block truncate text-xs text-muted">{{ o.recordedBy }}</span>
+                </button>
+              </td>
+              <td class="py-1.5">
+                <span class="type-code" tabindex="0" :data-tip="typeLabel(o)" :aria-label="typeLabel(o)">{{
+                  TYPE_CODES[o.basisOfRecord ?? ''] ?? '—'
+                }}</span>
+              </td>
+              <td class="truncate py-1.5 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
+            </tr>
+            <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
+              <td colspan="4" class="pb-2">
+                <div class="grid grid-cols-2 items-start gap-3 rounded-md bg-surface-2 p-2">
+                  <div class="relative aspect-square overflow-hidden rounded bg-photo">
+                    <template v-if="image(o) && !broken.has(o.key)">
+                      <ThumbImage
+                        :image="image(o)!"
+                        size="400x"
+                        class="size-full object-cover"
+                        @broken="broken = new Set(broken).add(o.key)"
+                      />
+                      <LicenceBadge
+                        class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
+                        :licence="image(o)!.licence"
+                        :creator="image(o)!.creator"
+                        :rights-holder="image(o)!.rightsHolder"
+                      />
+                    </template>
+                    <span v-else class="grid size-full place-items-center font-display text-xl text-subtle">
+                      {{ initials(o) }}
+                    </span>
+                  </div>
+                  <dl class="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]">
+                    <div>
+                      <dt class="text-subtle">Type</dt>
+                      <dd>{{ typeLabel(o) }}</dd>
+                    </div>
+                    <div v-if="o.scientificName">
+                      <dt class="text-subtle">Scientific name</dt>
+                      <dd class="sci-name">{{ o.scientificName }}</dd>
+                    </div>
+                    <div v-if="o.recordedBy">
+                      <dt class="text-subtle">Recorded by</dt>
+                      <dd>{{ o.recordedBy }}</dd>
+                    </div>
+                    <div v-if="institution(o)">
+                      <dt class="text-subtle">Institution</dt>
+                      <dd>{{ institution(o) }}</dd>
+                    </div>
+                    <div v-if="place(o)">
+                      <dt class="text-subtle">Locality</dt>
+                      <dd>{{ place(o) }}</dd>
+                    </div>
+                    <div v-if="o.datasetName ?? o.publisher">
+                      <dt class="text-subtle">Source</dt>
+                      <dd>{{ o.datasetName ?? o.publisher }}</dd>
+                    </div>
+                    <div v-if="parseLicence(o.license)">
+                      <dt class="text-subtle">Licence</dt>
+                      <dd>{{ parseLicence(o.license) }}</dd>
+                    </div>
+                    <dd>
+                      <a
+                        :href="`https://www.gbif.org/occurrence/${o.key}`"
+                        target="_blank"
+                        rel="noopener"
+                        class="underline"
+                        >View on GBIF</a
+                      >
+                    </dd>
+                  </dl>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
 
       <p v-if="loading" class="mt-2 text-xs text-subtle" role="status">Loading records…</p>
       <button
@@ -223,21 +328,9 @@ const initials = (o: Occurrence) =>
 </template>
 
 <style scoped>
-/* Record type stripe: ≥3:1 on --surface in each theme (non-text contrast). */
+/* Type colours: ≥4.5:1 on the code's tint in each theme. */
 .record {
-  --type: var(--border-strong);
-  padding-left: 0.875rem;
-}
-/* An inset bar, not a border, so the card's rounded corners never clip it. */
-.record::before {
-  content: '';
-  position: absolute;
-  left: 0.3125rem;
-  top: 0.5rem;
-  bottom: 0.5rem;
-  width: 3px;
-  border-radius: 9999px;
-  background: var(--type);
+  --type: var(--text-muted);
 }
 .record[data-type='HUMAN_OBSERVATION'] {
   --type: #5dcaa5;
@@ -273,8 +366,47 @@ const initials = (o: Occurrence) =>
 :root[data-theme='light'] .record[data-type='MATERIAL_CITATION'] {
   --type: #185fa5;
 }
-.record-type {
+.type-code {
+  position: relative;
+  display: inline-block;
+  padding: 0.0625rem 0.25rem;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--type);
+  background: color-mix(in srgb, var(--type) 16%, transparent);
+  cursor: help;
+}
+/* Tooltip to the left, so the scroll box never clips it above or below. */
+.type-code::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 0.375rem);
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 2;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 400;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.type-code:hover::after,
+.type-code:focus-visible::after {
+  opacity: 1;
+}
+.th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border-strong);
 }
 
 .picker-input {
