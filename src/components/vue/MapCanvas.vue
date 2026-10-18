@@ -524,6 +524,15 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 
+/* Expanded attribution must sit above the explorer overlay (legend dock), or it's hidden on mobile. */
+.map-canvas .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
+  z-index: 20;
+}
+
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  background: var(--surface);
+}
+
 .map-canvas .maplibregl-ctrl-attrib a {
   color: var(--text);
 }
