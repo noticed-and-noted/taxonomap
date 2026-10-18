@@ -22,8 +22,7 @@ const selectedKeys = computed(() => taxa.value.map((t) => t.key));
 const tableNote = computed(() => perGroupNote(classes.value.length, HEX_CLASSES, HEX_PER_CLASS));
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
-const TABS = { species: 'Species', records: 'Records', months: 'By month' } as const;
-const tab = ref<keyof typeof TABS>('species');
+const tab = ref<'species' | 'records'>('species');
 </script>
 
 <template>
@@ -32,9 +31,7 @@ const tab = ref<keyof typeof TABS>('species');
     <p class="text-xs text-subtle">Finding the selected cell on the map…</p>
   </div>
 
-  <!-- Exactly the panel's height, so the active list fills what's left and scrolls on its own under
-       the count and tabs. On a very short screen a list keeps its 12rem minimum and the panel scrolls. -->
-  <div v-else class="hex-panel flex h-full flex-col gap-5">
+  <div v-else class="hex-panel space-y-5">
     <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
       {{
         error === 'unavailable'
@@ -62,10 +59,10 @@ const tab = ref<keyof typeof TABS>('species');
         No records match the current filters here. Try widening the year range or removing a filter.
       </p>
 
-      <section v-if="loading || count" class="flex min-h-0 flex-1 flex-col">
+      <section v-if="loading || count">
         <div role="tablist" aria-label="Cell lists" class="mb-2 flex gap-1 border-b border-border text-sm">
           <button
-            v-for="(label, t) in TABS"
+            v-for="t in ['species', 'records'] as const"
             :key="t"
             role="tab"
             type="button"
@@ -74,26 +71,24 @@ const tab = ref<keyof typeof TABS>('species');
             :class="tab === t ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
             @click="tab = t"
           >
-            {{ label }}
+            {{ t === 'species' ? 'Species' : 'Records' }}
           </button>
         </div>
-        <div v-if="tab === 'species'" role="tabpanel" aria-label="Species" class="flex min-h-0 flex-1 flex-col">
+        <div v-if="tab === 'species'" role="tabpanel" aria-label="Species">
           <SpeciesTable
             :rows="species"
             :groups="classes"
             :loading="loading"
             :selected="selectedKeys"
             :note="tableNote"
-            fill
           />
         </div>
-        <div v-else-if="tab === 'records'" role="tabpanel" aria-label="Records" class="flex min-h-0 flex-1 flex-col">
+        <div v-else role="tabpanel" aria-label="Records">
           <HexRecords :species="species" />
         </div>
-        <div v-else role="tabpanel" aria-label="By month">
-          <RadialSeasonality v-if="count" :counts="months" title="Records by month" />
-        </div>
       </section>
+
+      <RadialSeasonality v-if="count" :counts="months" title="Records by month" />
     </template>
   </div>
 </template>

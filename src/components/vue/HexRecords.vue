@@ -141,7 +141,7 @@ const place = (o: Occurrence) =>
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-2">
+  <div class="space-y-2">
     <div class="relative text-sm">
       <label :for="`${uid}-input`" class="sr-only">Filter records by species</label>
       <input
@@ -191,138 +191,165 @@ const place = (o: Occurrence) =>
 
     <p v-else-if="!loading && !records.length" class="text-sm text-muted">No records to show.</p>
 
-    <div
-      ref="scroller"
-      class="fade-list min-h-48 flex-1 overflow-y-auto overscroll-contain"
-      :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
-      @scroll.passive="updateFade"
-    >
-      <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
-        <thead class="text-xs text-subtle">
-          <tr>
-            <th class="th w-10 py-1.5 font-normal"><span class="sr-only">Photo</span></th>
-            <th class="th py-1.5 text-left font-normal" scope="col">Species</th>
-            <th class="th w-[3.25rem] py-1.5 text-left font-normal" scope="col">Type</th>
-            <th class="th w-[5.5rem] py-1.5 text-left font-normal" scope="col">Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="o in records" :key="o.key">
-            <tr
-              class="record cursor-pointer border-b border-border hover:bg-surface-2"
-              :data-type="o.basisOfRecord"
-              @click="toggle(o)"
-            >
-              <td class="py-1.5 pr-2">
-                <span class="block size-8 overflow-hidden rounded bg-photo">
-                  <ThumbImage
-                    v-if="image(o) && !broken.has(o.key)"
-                    :image="image(o)!"
-                    size="200x"
-                    class="size-full object-cover"
-                    @broken="broken = new Set(broken).add(o.key)"
-                  />
-                  <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
-                    {{ initials(o) }}
-                  </span>
-                </span>
-              </td>
-              <td class="py-1.5 pr-2">
-                <button
-                  type="button"
-                  class="block w-full min-w-0 text-left"
-                  :aria-expanded="expanded === o.key"
-                  :aria-controls="`${uid}-rec-${o.key}`"
-                  @click.stop="toggle(o)"
-                >
-                  <span class="block truncate" :class="{ 'sci-name': !o.vernacularName }">{{ name(o) }}</span>
-                  <span v-if="o.recordedBy" class="block truncate text-xs text-muted">{{ o.recordedBy }}</span>
-                </button>
-              </td>
-              <td class="py-1.5">
-                <span class="type-code" tabindex="0" :data-tip="typeLabel(o)" :aria-label="typeLabel(o)">{{
-                  TYPE_CODES[o.basisOfRecord ?? ''] ?? '—'
-                }}</span>
-              </td>
-              <td class="truncate py-1.5 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
+    <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
+    <div>
+      <div v-if="records.length" class="head-row text-xs text-subtle" aria-hidden="true">
+        <table class="w-full table-fixed text-sm">
+          <colgroup>
+            <col class="w-10" />
+            <col />
+            <col class="w-[3.25rem]" />
+            <col class="w-[5.5rem]" />
+          </colgroup>
+          <tbody>
+            <tr>
+              <td class="py-1.5"></td>
+              <td class="py-1.5">Species</td>
+              <td class="py-1.5">Type</td>
+              <td class="py-1.5">Date</td>
             </tr>
-            <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
-              <td colspan="4" class="pb-2">
-                <div class="grid grid-cols-2 items-start gap-3 rounded-md bg-surface-2 p-2">
-                  <div class="relative aspect-square overflow-hidden rounded bg-photo">
-                    <template v-if="image(o) && !broken.has(o.key)">
-                      <ThumbImage
-                        :image="image(o)!"
-                        size="400x"
-                        class="size-full object-cover"
-                        @broken="broken = new Set(broken).add(o.key)"
-                      />
-                      <LicenceBadge
-                        class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
-                        :licence="image(o)!.licence"
-                        :creator="image(o)!.creator"
-                        :rights-holder="image(o)!.rightsHolder"
-                      />
-                    </template>
-                    <span v-else class="grid size-full place-items-center font-display text-xl text-subtle">
+          </tbody>
+        </table>
+      </div>
+      <div
+        ref="scroller"
+        class="fade-list max-h-[min(32rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
+        @scroll.passive="updateFade"
+      >
+        <table v-if="records.length" class="w-full table-fixed text-sm" aria-label="Records">
+          <colgroup>
+            <col class="w-10" />
+            <col />
+            <col class="w-[3.25rem]" />
+            <col class="w-[5.5rem]" />
+          </colgroup>
+          <thead class="sr-only">
+            <tr>
+              <th scope="col">Photo</th>
+              <th scope="col">Species</th>
+              <th scope="col">Type</th>
+              <th scope="col">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="o in records" :key="o.key">
+              <tr
+                class="record cursor-pointer border-b border-border hover:bg-surface-2"
+                :data-type="o.basisOfRecord"
+                @click="toggle(o)"
+              >
+                <td class="py-1.5 pr-2">
+                  <span class="block size-8 overflow-hidden rounded bg-photo">
+                    <ThumbImage
+                      v-if="image(o) && !broken.has(o.key)"
+                      :image="image(o)!"
+                      size="200x"
+                      class="size-full object-cover"
+                      @broken="broken = new Set(broken).add(o.key)"
+                    />
+                    <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
                       {{ initials(o) }}
                     </span>
+                  </span>
+                </td>
+                <td class="py-1.5 pr-2">
+                  <button
+                    type="button"
+                    class="block w-full min-w-0 text-left"
+                    :aria-expanded="expanded === o.key"
+                    :aria-controls="`${uid}-rec-${o.key}`"
+                    @click.stop="toggle(o)"
+                  >
+                    <span class="block truncate" :class="{ 'sci-name': !o.vernacularName }">{{ name(o) }}</span>
+                    <span v-if="o.recordedBy" class="block truncate text-xs text-muted">{{ o.recordedBy }}</span>
+                  </button>
+                </td>
+                <td class="py-1.5">
+                  <span class="type-code" tabindex="0" :data-tip="typeLabel(o)" :aria-label="typeLabel(o)">{{
+                    TYPE_CODES[o.basisOfRecord ?? ''] ?? '—'
+                  }}</span>
+                </td>
+                <td class="truncate py-1.5 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
+              </tr>
+              <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
+                <td colspan="4" class="pb-2">
+                  <div class="grid grid-cols-2 items-start gap-3 rounded-md bg-surface-2 p-2">
+                    <div class="relative aspect-square overflow-hidden rounded bg-photo">
+                      <template v-if="image(o) && !broken.has(o.key)">
+                        <ThumbImage
+                          :image="image(o)!"
+                          size="400x"
+                          class="size-full object-cover"
+                          @broken="broken = new Set(broken).add(o.key)"
+                        />
+                        <LicenceBadge
+                          class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
+                          :licence="image(o)!.licence"
+                          :creator="image(o)!.creator"
+                          :rights-holder="image(o)!.rightsHolder"
+                        />
+                      </template>
+                      <span v-else class="grid size-full place-items-center font-display text-xl text-subtle">
+                        {{ initials(o) }}
+                      </span>
+                    </div>
+                    <dl class="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]">
+                      <div>
+                        <dt class="text-subtle">Type</dt>
+                        <dd>{{ typeLabel(o) }}</dd>
+                      </div>
+                      <div v-if="o.scientificName">
+                        <dt class="text-subtle">Scientific name</dt>
+                        <dd class="sci-name">{{ o.scientificName }}</dd>
+                      </div>
+                      <div v-if="o.recordedBy">
+                        <dt class="text-subtle">Recorded by</dt>
+                        <dd>{{ o.recordedBy }}</dd>
+                      </div>
+                      <div v-if="institution(o)">
+                        <dt class="text-subtle">Institution</dt>
+                        <dd>{{ institution(o) }}</dd>
+                      </div>
+                      <div v-if="place(o)">
+                        <dt class="text-subtle">Locality</dt>
+                        <dd>{{ place(o) }}</dd>
+                      </div>
+                      <div v-if="o.datasetName ?? o.publisher">
+                        <dt class="text-subtle">Source</dt>
+                        <dd>{{ o.datasetName ?? o.publisher }}</dd>
+                      </div>
+                      <div v-if="parseLicence(o.license)">
+                        <dt class="text-subtle">Licence</dt>
+                        <dd>{{ parseLicence(o.license) }}</dd>
+                      </div>
+                      <dd>
+                        <a
+                          :href="`https://www.gbif.org/occurrence/${o.key}`"
+                          target="_blank"
+                          rel="noopener"
+                          class="underline"
+                          >View on GBIF</a
+                        >
+                      </dd>
+                    </dl>
                   </div>
-                  <dl class="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]">
-                    <div>
-                      <dt class="text-subtle">Type</dt>
-                      <dd>{{ typeLabel(o) }}</dd>
-                    </div>
-                    <div v-if="o.scientificName">
-                      <dt class="text-subtle">Scientific name</dt>
-                      <dd class="sci-name">{{ o.scientificName }}</dd>
-                    </div>
-                    <div v-if="o.recordedBy">
-                      <dt class="text-subtle">Recorded by</dt>
-                      <dd>{{ o.recordedBy }}</dd>
-                    </div>
-                    <div v-if="institution(o)">
-                      <dt class="text-subtle">Institution</dt>
-                      <dd>{{ institution(o) }}</dd>
-                    </div>
-                    <div v-if="place(o)">
-                      <dt class="text-subtle">Locality</dt>
-                      <dd>{{ place(o) }}</dd>
-                    </div>
-                    <div v-if="o.datasetName ?? o.publisher">
-                      <dt class="text-subtle">Source</dt>
-                      <dd>{{ o.datasetName ?? o.publisher }}</dd>
-                    </div>
-                    <div v-if="parseLicence(o.license)">
-                      <dt class="text-subtle">Licence</dt>
-                      <dd>{{ parseLicence(o.license) }}</dd>
-                    </div>
-                    <dd>
-                      <a
-                        :href="`https://www.gbif.org/occurrence/${o.key}`"
-                        target="_blank"
-                        rel="noopener"
-                        class="underline"
-                        >View on GBIF</a
-                      >
-                    </dd>
-                  </dl>
-                </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
 
-      <p v-if="loading" class="mt-2 text-xs text-subtle" role="status">Loading records…</p>
-      <button
-        v-else-if="total !== null && records.length < total"
-        type="button"
-        class="mt-2 w-full rounded-md border border-border py-1 text-sm hover:bg-surface-2"
-        @click="load(true)"
-      >
-        Show more ({{ full(records.length) }} of {{ full(total) }})
-      </button>
+        <p v-if="loading" class="mt-2 text-xs text-subtle" role="status">Loading records…</p>
+        <button
+          v-else-if="total !== null && records.length < total"
+          type="button"
+          class="mt-2 w-full rounded-md border border-border py-1 text-sm hover:bg-surface-2"
+          @click="load(true)"
+        >
+          Show more ({{ full(records.length) }} of {{ full(total) }})
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -401,11 +428,9 @@ const place = (o: Occurrence) =>
 .type-code:focus-visible::after {
   opacity: 1;
 }
-.th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: var(--surface);
+.head-row {
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
   box-shadow: inset 0 -1px 0 var(--border-strong);
 }
 

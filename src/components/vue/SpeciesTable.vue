@@ -285,98 +285,121 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
         <template v-if="note"> · {{ note }}</template>
       </p>
 
-      <!-- Scrolls on its own so whatever follows (e.g. the seasonality chart) stays close. -->
-      <div
-        v-if="filtered.length"
-        ref="scroller"
-        class="fade-list overflow-y-auto overscroll-contain"
-        :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(22rem,45dvh)]', { 'fade-bottom': resultsFade }]"
-        tabindex="0"
-        aria-label="Species results"
-        role="region"
-        @scroll.passive="updateResultsFade"
-      >
-        <table class="w-full table-fixed text-sm">
-          <thead class="text-xs text-subtle">
-            <tr>
-              <th class="th py-1.5 text-left font-normal" :aria-sort="ariaSort('name')">
-                <button type="button" class="sort" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
-                  Species<span aria-hidden="true">{{ sortKey === 'name' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
-                </button>
-              </th>
-              <th class="th w-[5.5rem] py-1.5 text-left font-normal" :aria-sort="ariaSort('group')">
-                <button type="button" class="sort" :class="{ on: sortKey === 'group' }" @click="sortBy('group')">
-                  Group<span aria-hidden="true">{{ sortKey === 'group' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
-                </button>
-              </th>
-              <th class="th w-[5rem] py-1.5 text-right font-normal" :aria-sort="ariaSort('records')">
-                <button type="button" class="sort" :class="{ on: sortKey === 'records' }" @click="sortBy('records')">
-                  Records<span aria-hidden="true">{{ sortKey === 'records' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="r in visible"
-              :key="r.key"
-              :data-key="r.key"
-              class="border-b border-border"
-              :class="{ 'bg-accent-soft': selected?.includes(r.key) }"
-            >
-              <td class="py-1.5 pr-2">
-                <a :href="speciesPath(r.key, manifest)" class="group flex min-w-0 items-center gap-2">
-                  <span class="size-8 shrink-0 overflow-hidden rounded bg-photo">
-                    <SkeletonBlock v-if="pendingPhoto(r)" height="100%" rounded="sm" aria-hidden="true" />
-                    <ThumbImage
-                      v-else-if="photoOf(r) && !broken.has(r.key)"
-                      :image="photoOf(r)!"
-                      size="200x"
-                      alt=""
-                      class="size-full object-cover"
-                      @broken="broken = new Set(broken).add(r.key)"
-                    />
-                    <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
-                      {{ initials(r) }}
-                    </span>
-                  </span>
-                  <span v-if="pendingName(r)" class="min-w-0 flex-1 space-y-1" aria-hidden="true">
-                    <SkeletonBlock height="0.8rem" width="70%" />
-                    <SkeletonBlock height="0.6rem" width="45%" />
-                  </span>
-                  <span v-if="pendingName(r)" class="sr-only">Loading name</span>
-                  <span v-else class="min-w-0">
-                    <span class="block truncate group-hover:underline">{{ displayName(r) }}</span>
-                    <span v-if="commonName(r)" class="sci-name block truncate text-xs text-muted">{{
-                      sciName(r)
-                    }}</span>
-                  </span>
-                </a>
-              </td>
-              <td class="truncate py-1.5 pr-1 text-xs text-muted">{{ groupLabel(r.classKey) }}</td>
-              <td class="py-1.5 text-right tabular-nums">
-                <span class="flex items-center justify-end gap-1.5">
-                  <span class="h-1 w-6 shrink-0 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
-                    <span
-                      class="block h-full rounded-full bg-accent"
-                      :style="{ width: `${Math.max(4, (r.records / maxRecords) * 100)}%` }"
-                    ></span>
-                  </span>
-                  <!-- Fixed width so bars line up whether or not the count has a decimal. -->
-                  <span class="w-[2.75rem] shrink-0">{{ compact(r.records) }}</span>
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <button
-          v-if="sorted.length > limit"
-          type="button"
-          class="mt-2 w-full rounded-md border border-border py-1.5 text-xs text-muted hover:border-accent"
-          @click="limit += PAGE"
+      <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
+      <div v-if="filtered.length" :class="{ 'flex min-h-0 flex-1 flex-col': fill }">
+        <div class="head-row text-xs text-subtle">
+          <table class="w-full table-fixed text-sm" role="presentation">
+            <colgroup>
+              <col />
+              <col class="w-[5.5rem]" />
+              <col class="w-[5rem]" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="py-1.5 text-left font-normal">
+                  <button type="button" class="sort" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
+                    Species<span aria-hidden="true">{{ sortKey === 'name' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
+                  </button>
+                </th>
+                <th class="w-[5.5rem] py-1.5 text-left font-normal">
+                  <button type="button" class="sort" :class="{ on: sortKey === 'group' }" @click="sortBy('group')">
+                    Group<span aria-hidden="true">{{ sortKey === 'group' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
+                  </button>
+                </th>
+                <th class="w-[5rem] py-1.5 text-right font-normal">
+                  <button type="button" class="sort" :class="{ on: sortKey === 'records' }" @click="sortBy('records')">
+                    Records<span aria-hidden="true">{{ sortKey === 'records' ? (sortDesc ? ' ▼' : ' ▲') : ' ↕' }}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <!-- Scrolls on its own so whatever follows (e.g. the seasonality chart) stays close. -->
+        <div
+          ref="scroller"
+          class="fade-list overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+          :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(32rem,65dvh)]', { 'fade-bottom': resultsFade }]"
+          tabindex="0"
+          aria-label="Species results"
+          role="region"
+          @scroll.passive="updateResultsFade"
         >
-          Show {{ Math.min(PAGE, sorted.length - limit) }} more
-        </button>
+          <table class="w-full table-fixed text-sm">
+            <colgroup>
+              <col />
+              <col class="w-[5.5rem]" />
+              <col class="w-[5rem]" />
+            </colgroup>
+            <thead class="sr-only">
+              <tr>
+                <th :aria-sort="ariaSort('name')">Species</th>
+                <th :aria-sort="ariaSort('group')">Group</th>
+                <th :aria-sort="ariaSort('records')">Records</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="r in visible"
+                :key="r.key"
+                :data-key="r.key"
+                class="border-b border-border"
+                :class="{ 'bg-accent-soft': selected?.includes(r.key) }"
+              >
+                <td class="py-1.5 pr-2">
+                  <a :href="speciesPath(r.key, manifest)" class="group flex min-w-0 items-center gap-2">
+                    <span class="size-8 shrink-0 overflow-hidden rounded bg-photo">
+                      <SkeletonBlock v-if="pendingPhoto(r)" height="100%" rounded="sm" aria-hidden="true" />
+                      <ThumbImage
+                        v-else-if="photoOf(r) && !broken.has(r.key)"
+                        :image="photoOf(r)!"
+                        size="200x"
+                        alt=""
+                        class="size-full object-cover"
+                        @broken="broken = new Set(broken).add(r.key)"
+                      />
+                      <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
+                        {{ initials(r) }}
+                      </span>
+                    </span>
+                    <span v-if="pendingName(r)" class="min-w-0 flex-1 space-y-1" aria-hidden="true">
+                      <SkeletonBlock height="0.8rem" width="70%" />
+                      <SkeletonBlock height="0.6rem" width="45%" />
+                    </span>
+                    <span v-if="pendingName(r)" class="sr-only">Loading name</span>
+                    <span v-else class="min-w-0">
+                      <span class="block truncate group-hover:underline">{{ displayName(r) }}</span>
+                      <span v-if="commonName(r)" class="sci-name block truncate text-xs text-muted">{{
+                        sciName(r)
+                      }}</span>
+                    </span>
+                  </a>
+                </td>
+                <td class="truncate py-1.5 pr-1 text-xs text-muted">{{ groupLabel(r.classKey) }}</td>
+                <td class="py-1.5 text-right tabular-nums">
+                  <span class="flex items-center justify-end gap-1.5">
+                    <span class="h-1 w-6 shrink-0 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
+                      <span
+                        class="block h-full rounded-full bg-accent"
+                        :style="{ width: `${Math.max(4, (r.records / maxRecords) * 100)}%` }"
+                      ></span>
+                    </span>
+                    <!-- Fixed width so bars line up whether or not the count has a decimal. -->
+                    <span class="w-[2.75rem] shrink-0">{{ compact(r.records) }}</span>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <button
+            v-if="sorted.length > limit"
+            type="button"
+            class="mt-2 w-full rounded-md border border-border py-1.5 text-xs text-muted hover:border-accent"
+            @click="limit += PAGE"
+          >
+            Show {{ Math.min(PAGE, sorted.length - limit) }} more
+          </button>
+        </div>
       </div>
 
       <p v-else class="rounded-md bg-surface-2 p-3 text-sm text-muted">
@@ -389,11 +412,9 @@ watch([query, groupsOn, sortKey, sortDesc], () => {
 
 <style scoped>
 /* Sticky header: the row border would scroll away, so draw it on the cells. */
-.th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--surface);
+.head-row {
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
   box-shadow: inset 0 -1px 0 var(--border-strong);
 }
 .sort {
