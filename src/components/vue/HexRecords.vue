@@ -153,7 +153,28 @@ const initials = (o: Occurrence) =>
     .map((w) => w[0]?.toUpperCase())
     .join('');
 
-const toggle = (o: Occurrence) => (expanded.value = expanded.value === o.key ? null : o.key);
+/** Row whose photo and name carry view-transition names while it opens or closes (one row, so others don't animate). */
+const animating = ref<number | null>(null);
+const vt = (o: Occurrence, part: 'photo' | 'name') =>
+  animating.value === o.key ? { viewTransitionName: `rec-${part}-${o.key}` } : undefined;
+/** Expand or collapse a row; where supported the photo moves into the details and the name slides into its place. */
+function toggle(o: Occurrence) {
+  const next = expanded.value === o.key ? null : o.key;
+  if (!document.startViewTransition) {
+    expanded.value = next;
+    return;
+  }
+  animating.value = o.key;
+  void nextTick(() => {
+    const t = document.startViewTransition(async () => {
+      expanded.value = next;
+      await nextTick();
+    });
+    void t.finished.finally(() => {
+      if (animating.value === o.key) animating.value = null;
+    });
+  });
+}
 
 const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filter(Boolean).join(' ');
 </script>
@@ -270,8 +291,8 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                 :data-type="o.basisOfRecord"
                 @click="toggle(o)"
               >
-                <td class="py-1.5 pl-4 pr-2">
-                  <span class="block size-8 overflow-hidden rounded bg-photo">
+                <td v-if="expanded !== o.key" class="py-1.5 pl-4 pr-2">
+                  <span class="block size-8 overflow-hidden rounded bg-photo" :style="vt(o, 'photo')">
                     <ThumbImage
                       v-if="image(o) && !broken.has(o.key)"
                       :image="image(o)!"
@@ -284,7 +305,8 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                     </span>
                   </span>
                 </td>
-                <td class="py-1.5 pr-2">
+                <!-- Expanded, the photo is in the details below and the name takes its column. -->
+                <td :colspan="expanded === o.key ? 2 : 1" class="py-1.5 pr-2" :class="{ 'pl-4': expanded === o.key }">
                   <button
                     type="button"
                     class="block w-full min-w-0 cursor-pointer text-left"
@@ -292,10 +314,12 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                     :aria-controls="`${uid}-rec-${o.key}`"
                     @click.stop="toggle(o)"
                   >
-                    <span class="block truncate" :class="{ 'sci-name': !common(o) }">{{ name(o) }}</span>
-                    <span v-if="common(o) && sci(o)" class="sci-name block truncate text-xs text-muted">{{
-                      sci(o)
-                    }}</span>
+                    <span class="inline-block max-w-full align-top" :style="vt(o, 'name')">
+                      <span class="block truncate" :class="{ 'sci-name': !common(o) }">{{ name(o) }}</span>
+                      <span v-if="common(o) && sci(o)" class="sci-name block truncate text-xs text-muted">{{
+                        sci(o)
+                      }}</span>
+                    </span>
                   </button>
                 </td>
                 <td class="py-1.5">
@@ -308,7 +332,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
               <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
                 <td colspan="4" class="bg-surface-2 px-4 py-3">
                   <div class="grid grid-cols-2 items-start gap-3">
-                    <div class="relative aspect-square overflow-hidden rounded bg-photo">
+                    <div class="relative aspect-square overflow-hidden rounded bg-photo" :style="vt(o, 'photo')">
                       <template v-if="image(o) && !broken.has(o.key)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
                         <ThumbImage :image="image(o)!" size="200x" class="absolute inset-0 size-full object-cover" />
