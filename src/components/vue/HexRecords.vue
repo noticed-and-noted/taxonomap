@@ -153,6 +153,21 @@ const initials = (o: Occurrence) =>
     .map((w) => w[0]?.toUpperCase())
     .join('');
 
+/**
+ * Scroll only the list (not the panel) so `el` is in view: the animation draws above the
+ * list, unclipped, so its end point must be inside the list for it to stay inside.
+ */
+function revealInList(el: HTMLElement | null) {
+  const box = scroller.value;
+  if (!el || !box) return;
+  const b = box.getBoundingClientRect();
+  // The panel body may hide the list's lower edge; use whichever bottom is higher.
+  const panel = box.parentElement?.closest<HTMLElement>('.overflow-y-auto');
+  const bottom = Math.min(b.bottom, panel?.getBoundingClientRect().bottom ?? Infinity);
+  const r = el.getBoundingClientRect();
+  if (r.bottom > bottom) box.scrollTop += Math.min(r.bottom - bottom, r.top - b.top);
+}
+
 /** Row whose photo and name carry view-transition names while it opens or closes (one row, so others don't animate). */
 const animating = ref<number | null>(null);
 const vt = (o: Occurrence, part: 'photo' | 'name') =>
@@ -169,6 +184,7 @@ function toggle(o: Occurrence) {
     const t = document.startViewTransition(async () => {
       expanded.value = next;
       await nextTick();
+      if (next !== null) revealInList(document.getElementById(`${uid}-rec-${next}`));
     });
     void t.finished.finally(() => {
       if (animating.value === o.key) animating.value = null;
