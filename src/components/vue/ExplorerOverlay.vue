@@ -39,6 +39,8 @@ function readTimelineOpen() {
   }
 }
 const timelineOpen = ref(readTimelineOpen());
+/* Phone only: slide the dock off to the left to see the map behind it. */
+const dockStashed = ref(false);
 watch(timelineOpen, (open) => {
   try {
     localStorage.setItem(TIMELINE_KEY, String(open));
@@ -126,8 +128,24 @@ function closePanel() {
 
     <div
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
-      :class="{ collapsed: !timelineOpen }"
+      :class="{ collapsed: !timelineOpen, stashed: dockStashed }"
     >
+      <button
+        type="button"
+        class="stash-toggle"
+        :aria-label="dockStashed ? 'Show records per year panel' : 'Slide records per year panel away'"
+        :aria-expanded="!dockStashed"
+        @click="dockStashed = !dockStashed"
+      >
+        <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
+          <path
+            :d="dockStashed ? 'M4.5 3l3 3-3 3' : 'M7.5 3l-3 3 3 3'"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+        </svg>
+      </button>
       <button
         type="button"
         class="timeline-toggle"
@@ -249,8 +267,42 @@ function closePanel() {
   color: var(--text);
 }
 
+/* Phone: a tab on the dock's right edge slides it off-screen, leaving the tab visible. */
+.bottom-dock {
+  transition: transform 200ms ease;
+}
+.bottom-dock.stashed {
+  transform: translateX(calc(-100% - 0.75rem));
+}
+.stash-toggle {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: inherit; /* match the dock so the tab reads as part of it */
+  color: var(--text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bottom-dock {
+    transition: none;
+  }
+}
+
 /* Phone-only control (scoped display would otherwise beat a sm:hidden utility). */
 @media (min-width: 640px) {
+  .stash-toggle {
+    display: none;
+  }
+  .bottom-dock.stashed {
+    transform: none;
+  }
   .filters-btn,
   .near-phone {
     display: none;
