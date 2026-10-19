@@ -4,14 +4,35 @@
  * policy, see geocode.ts); one match moves the pin straight away, several
  * are listed to pick from.
  */
-import { ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { searchPlaces, type Place } from '~/lib/geocode';
 import { setNearLocation } from '~/stores/near';
 
 const query = ref('');
 const results = ref<Place[] | null>(null);
 const state = ref<'idle' | 'searching' | 'failed'>('idle');
+const root = ref<HTMLElement>();
 let abort: AbortController | undefined;
+
+const open = ref(true);
+
+function close() {
+  open.value = false;
+}
+function onOutside(e: Event) {
+  if (!root.value?.contains(e.target as Node)) close();
+}
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') close();
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', onOutside);
+  document.addEventListener('keydown', onKey);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onOutside);
+  document.removeEventListener('keydown', onKey);
+});
 
 async function submit() {
   const q = query.value.trim();
@@ -19,6 +40,7 @@ async function submit() {
   abort?.abort();
   abort = new AbortController();
   state.value = 'searching';
+  open.value = true;
   try {
     const found = await searchPlaces(q, abort.signal);
     state.value = 'idle';
@@ -42,7 +64,7 @@ function onInput() {
 </script>
 
 <template>
-  <div class="space-y-1.5">
+  <div ref="root" class="relative">
     <form role="search" class="flex gap-2" @submit.prevent="submit">
       <label class="min-w-0 flex-1">
         <span class="sr-only">Search for a place</span>
@@ -66,6 +88,7 @@ function onInput() {
             autocomplete="off"
             class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
             @input="onInput"
+            @focus="open = true"
           />
         </span>
       </label>
@@ -77,7 +100,9 @@ function onInput() {
         {{ state === 'searching' ? 'Searching…' : 'Go' }}
       </button>
     </form>
-    <ul v-if="results?.length" class="overflow-hidden rounded-md border border-border text-sm" aria-label="Places">
+    <ul
+      v-if="open && results?.length"
+      class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-surface text-sm shadow-panel" aria-label="Places">
       <li v-for="(p, i) in results" :key="i">
         <button type="button" class="block w-full px-3 py-2 text-left hover:bg-surface-2" @click="pick(p)">
           <span class="block truncate text-text">{{ p.name }}</span>
@@ -85,7 +110,7 @@ function onInput() {
         </button>
       </li>
     </ul>
-    <p v-else-if="results" class="text-xs text-muted" role="status">No places found.</p>
-    <p v-if="state === 'failed'" class="text-xs text-muted" role="status">Place search is unavailable right now.</p>
+    <p v-else-if="open && results" class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel" role="status">No places found.</p>
+    <p v-if="open && state === 'failed'" class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel" role="status">Place search is unavailable right now.</p>
   </div>
 </template>

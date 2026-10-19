@@ -36,7 +36,7 @@ export async function searchPlaces(q: string, signal?: AbortSignal): Promise<Pla
   const query = q.trim();
   if (!query) return [];
   if (PROVIDER === 'photon') {
-    const res = await fetch(`${BASE}?q=${encodeURIComponent(query)}&limit=5&lang=en`, signal ? { signal } : {});
+    const res = await fetch(`${BASE}?q=${encodeURIComponent(query)}&limit=10&lang=en`, signal ? { signal } : {});
     if (!res.ok) throw new Error(`geocoder ${res.status}`);
     const data = (await res.json()) as { features: PhotonFeature[] };
     return data.features.map((f) => {
@@ -54,7 +54,7 @@ export async function searchPlaces(q: string, signal?: AbortSignal): Promise<Pla
       };
     });
   }
-  const res = await fetch(`${BASE}?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&accept-language=en`, {
+  const res = await fetch(`${BASE}?q=${encodeURIComponent(query)}&format=jsonv2&limit=10&accept-language=en`, {
     ...(signal && { signal }),
   });
   if (!res.ok) throw new Error(`geocoder ${res.status}`);

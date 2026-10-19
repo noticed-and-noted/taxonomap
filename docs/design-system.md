@@ -23,7 +23,7 @@ The code is the source of truth. This file explains it and names where each part
 
 ## Colour
 
-Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`, `border-border` and so on). Don't write hex values in components. The exceptions are places that can't read CSS: the satori Open Graph card, the canvas share card and MapLibre fallbacks. Keep those in step with the tokens by hand.
+Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`, `border-border` and so on). Don't write hex values in components. The exceptions are places that can't read CSS: the satori Open Graph card and MapLibre fallbacks. Keep those in step with the tokens by hand.
 
 ### Dark theme (default)
 

@@ -3,7 +3,6 @@
  *   classes in the area      → 1 facet request
  *   species in the area      → 1 facet request per leading class, then 1 batched name search (see species/groups.ts)
  */
-import { nameIndexWithin } from '~/lib/data/name-index';
 import { circleToWkt, occurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
 import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 
@@ -40,36 +39,4 @@ export function speciesNear(a: Area, classKey: number | null, signal?: AbortSign
     limit: NEAR_SPECIES,
     ...(signal && { signal }),
   });
-}
-
-/**
- * Distinct species (and the top names) overall and per class — fetched when
- * the share dialog opens (click), one facet request per group.
- */
-export async function speciesTallies(
-  a: Area,
-  classes: readonly ClassGroup[],
-): Promise<{ total: number; topNames: string[]; groups: (ClassGroup & { species: number; topNames: string[] })[] }> {
-  const LIMIT = 3000;
-  const idx = await nameIndexWithin(800);
-  const tally = async (taxonKey?: number) => {
-    const r = await occurrenceFacets(nearFilter(a, taxonKey ? { taxonKey } : {}), ['speciesKey'], {
-      facetLimit: LIMIT,
-    });
-    const rows = r.facets['speciesKey'] ?? [];
-    const topNames = rows
-      .slice(0, 6)
-      .map((c) => idx?.get(Number(c.name)))
-      .map((n) => n?.commonName ?? n?.scientificName)
-      .filter((n): n is string => !!n)
-      .slice(0, 3);
-    return { species: rows.length, topNames };
-  };
-  const leading = classes.slice(0, 6);
-  const [all, per] = await Promise.all([tally(), Promise.all(leading.map((c) => tally(c.key)))]);
-  return {
-    total: all.species,
-    topNames: all.topNames,
-    groups: leading.map((c, i) => ({ ...c, ...per[i]! })),
-  };
 }

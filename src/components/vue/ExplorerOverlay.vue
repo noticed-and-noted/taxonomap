@@ -71,7 +71,10 @@ function closePanel() {
         v-if="!near"
         class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0"
       />
-      <div v-if="!near" class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1">
+      <div
+        v-if="!near"
+        class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1"
+      >
         <button type="button" class="near-btn" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"

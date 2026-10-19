@@ -3,7 +3,7 @@
  * What's near me (client:only). The persisted map switches to "pin" mode:
  * click to drop a pin, or use geolocation after an explainer. Location is
  * rounded to 3 dp before any use. Panel: sortable species table, the
- * circle's records (as in a map cell's Records tab), share card.
+ * circle's records (as in a map cell's Records tab).
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
@@ -14,7 +14,6 @@ import {
   NEAR_SPECIES,
   nearFilter,
   speciesNear,
-  speciesTallies,
   type Area,
   type ClassGroup,
   type SpeciesRow,
@@ -36,7 +35,6 @@ import HexRecords from './HexRecords.vue';
 import MapProgress from './MapProgress.vue';
 import NearPlaceSearch from './NearPlaceSearch.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
-import ShareDialog from './ShareDialog.vue';
 import SpeciesTable from './SpeciesTable.vue';
 import { useLatestLoad } from './useLatestLoad';
 
@@ -58,12 +56,16 @@ const classes = shallowRef<ClassGroup[]>([]);
 const species = shallowRef<SpeciesRow[]>([]);
 /** Class the species list is narrowed to, or null for the whole area. */
 const group = ref<number | null>(null);
-const shareOpen = ref(false);
-const tallies = shallowRef<Awaited<ReturnType<typeof speciesTallies>> | null>(null);
 
 const area = computed<Area | null>(() =>
   at.value
-    ? { lat: at.value.lat, lng: at.value.lng, radiusKm: radius.value, filter: filter.value, ...(thisMonth.value && { month: MONTH }) }
+    ? {
+        lat: at.value.lat,
+        lng: at.value.lng,
+        radiusKm: radius.value,
+        filter: filter.value,
+        ...(thisMonth.value && { month: MONTH }),
+      }
     : null,
 );
 const recordsFilter = computed(() => area.value && nearFilter(area.value));
@@ -102,7 +104,6 @@ async function loadArea() {
   classes.value = [];
   species.value = [];
   group.value = null;
-  tallies.value = null;
   if (!a) {
     cancelArea();
     error.value = null;
@@ -134,13 +135,6 @@ async function pickGroup(key: number | null) {
     const rows = await speciesNear(a, key, signal);
     if (!signal.aborted) await showSpecies(rows, signal);
   });
-}
-
-async function openShare() {
-  const a = area.value;
-  if (!a) return;
-  shareOpen.value = true;
-  if (!tallies.value) tallies.value = await speciesTallies(a, classes.value).catch(() => null);
 }
 
 const setTab = (t: 'species' | 'recent') => $nearTab.set(t);
@@ -243,9 +237,8 @@ onBeforeUnmount(() => {
             </label>
             <div class="flex flex-wrap items-center gap-2 text-xs">
               <button type="button" class="chip" @click="locate">Use my location</button>
-              <button type="button" class="chip ml-auto" :disabled="!classes.length" @click="openShare">Share</button>
+              <span class="text-subtle">Search a place or click the map to move the pin.</span>
             </div>
-            <p class="text-xs text-subtle">Search a place or click the map to move the pin.</p>
           </div>
 
           <p v-if="!loading && !error" class="text-sm text-muted" aria-live="polite">
@@ -299,21 +292,6 @@ onBeforeUnmount(() => {
           </div>
         </section>
       </ResponsivePanel>
-    </div>
-
-    <div class="pointer-events-auto">
-      <ShareDialog
-        v-if="at"
-        :open="shareOpen"
-        :lat="at.lat"
-        :lng="at.lng"
-        :radius-km="radius"
-        :month="thisMonth ? monthName : undefined"
-        :groups="tallies?.groups ?? []"
-        :total-species="tallies?.total ?? 0"
-        :all-top-names="tallies?.topNames ?? []"
-        @close="shareOpen = false"
-      />
     </div>
   </div>
 </template>

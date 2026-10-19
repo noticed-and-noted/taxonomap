@@ -62,20 +62,8 @@ test("the records tab lists the circle's records as a map cell does", async ({ p
   await expect(records.getByText('Common Blackbird').first()).toBeVisible();
 });
 
-test('the share card counts the species in the circle', async ({ page }) => {
+test('radius lives in the URL', { tag: '@mobile' }, async ({ page }) => {
   await page.goto(LONDON);
-  await expect(page.getByRole('link', { name: /Common Blackbird/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Share what’s near' });
-  await expect(dialog.getByRole('img', { name: /species recorded within 2 km/ })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Close' }).click();
-  await expect(dialog).toBeHidden();
-});
-
-test('this-month filter and radius live in the URL', { tag: '@mobile' }, async ({ page }) => {
-  await page.goto(LONDON);
-  await page.getByRole('button', { name: /Recorded in/ }).click();
-  await expect(page).toHaveURL(/month=1/);
   await page.getByRole('slider').first().fill('3');
   await expect(page).toHaveURL(/r=10/);
 });

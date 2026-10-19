@@ -115,7 +115,6 @@ npm run dev             # http://localhost:4321
 - **Species table.** One facet request gives the classes in the area, then one species facet per class for the 10 most-recorded classes (top 40 each, 2 at a time), and photos and names as for the hex panel. Sorting and filtering make no requests; moving the pin or changing the radius aborts the previous load.
 - **"Recorded in {month}".** Restricts to records from the current calendar month in any year.
 - **Recent sightings.** Photographed records from the past year, newest first, each showing its dataset and photo licence. GBIF ignores sort parameters, so the feed filters by date range and sorts on the client.
-- **Share card.** Drawn on a `<canvas>` using only CORS-enabled GBIF imagery (basemap and density tiles), so it can be exported. It's shared as an image with the Web Share API where supported, otherwise downloaded, or the link copied. It doesn't print coordinates. The per-group species tallies are fetched when the dialog opens.
 
 ## Polish
 
@@ -127,7 +126,7 @@ npm run dev             # http://localhost:4321
   - There's a 404 page.
 - **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. Run it with `npx @lhci/cli autorun` after a build. **Not yet measured locally.**
 - **Unit tests** (`tests/unit/`). `src/lib`, `src/stores`, `src/pages` endpoints and `functions/` are held at 100% line, branch, function and statement coverage (`npm run test:coverage` fails below it); Vue components are covered by the journeys instead.
-- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox and place search, filters, hex panel, species pages and fallback, 404, tree, near me (species table, recent sightings, share card, and that geolocation is rounded before any request), the decade animation and offline. They never touch the network: `npm run build:e2e` builds the site against a small fake GBIF (`tests/e2e/fake/world.ts`: six species, served by a local server during the build), and in the browser every request off the site is answered by the same fake or fails the journey. Phones run only the journeys tagged `@mobile`, whose layout differs there. `PW_CHANNEL=chrome` uses an installed Chrome, or `PW_CHROMIUM` a Chromium binary, instead of Playwright's download.
+- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox and place search, filters, hex panel, species pages and fallback, 404, tree, near me (species table, recent sightings, and that geolocation is rounded before any request), the decade animation and offline. They never touch the network: `npm run build:e2e` builds the site against a small fake GBIF (`tests/e2e/fake/world.ts`: six species, served by a local server during the build), and in the browser every request off the site is answered by the same fake or fails the journey. Phones run only the journeys tagged `@mobile`, whose layout differs there. `PW_CHANNEL=chrome` uses an installed Chrome, or `PW_CHROMIUM` a Chromium binary, instead of Playwright's download.
 
 ## GBIF API findings (verified 2026-10-12)
 
