@@ -205,13 +205,13 @@ describe('photosForKeys', () => {
     vi.doMock('~/lib/photos/taxon-photos', () => ({ leadPhotos }));
     const { photosForKeys } = await import('~/lib/species/groups');
     const { signal } = new AbortController();
-    await photosForKeys([1, 2], signal);
+    await photosForKeys([1, 2], signal, new Map([[2, 'Two two']]));
     await photosForKeys([3]);
     expect(leadPhotos.mock.calls).toEqual([
       [
         [
           { key: 1, rank: 'SPECIES' },
-          { key: 2, rank: 'SPECIES' },
+          { key: 2, rank: 'SPECIES', name: 'Two two' },
         ],
         { signal },
       ],

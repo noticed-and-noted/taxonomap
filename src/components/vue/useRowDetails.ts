@@ -90,7 +90,8 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
       for (const k of names) nameAsked.add(k);
 
       if (photos.length) {
-        const found = await photosForKeys(photos, mine?.signal);
+        const named = new Map(rows().flatMap((r) => (r.unnamed ? [] : [[r.key, r.scientificName] as const])));
+        const found = await photosForKeys(photos, mine?.signal, named);
         if (mine !== ctrl) return;
         if (found.images.size) latePhotos.value = new Map([...latePhotos.value, ...found.images]);
         photoDone.value = new Set([...photoDone.value, ...photos]);

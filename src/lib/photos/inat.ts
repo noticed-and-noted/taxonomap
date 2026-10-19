@@ -115,6 +115,21 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
   );
 }
 
+/**
+ * The species iNaturalist names `name`, found by name: one request each, so
+ * only for species GBIF holds no iNaturalist record of. Null when there is none.
+ */
+export async function searchTaxon(name: string, signal?: AbortSignal): Promise<InatTaxon | null> {
+  const res = await inat.getJson<{ results: InatTaxon[] }>(
+    '/v2/taxa',
+    { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS },
+    { ...(signal && { signal }) },
+  );
+  const found = res.results.find((t) => t.name.toLowerCase() === name.toLowerCase());
+  if (found) taxa.set(String(found.id), found, Infinity);
+  return found ?? null;
+}
+
 /** Research-grade observations of a taxon with an openly licensed photo, most-voted first. */
 export async function votedObservations(taxonId: number, signal?: AbortSignal): Promise<InatObservation[]> {
   const res = await inat.getJson<{ results: InatObservation[] }>(

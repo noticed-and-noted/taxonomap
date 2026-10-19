@@ -27,7 +27,17 @@ import {
   type Rank,
   type UsableImage,
 } from '~/lib/gbif';
-import { curatedImages, getTaxa, inatPhotoId, observationImages, votedObservations, type InatTaxon } from './inat';
+import { nameIndexIfLoaded } from '~/lib/data/name-index';
+import {
+  curatedImages,
+  getTaxa,
+  inatPhotoId,
+  observationImages,
+  searchTaxon,
+  votedObservations,
+  type InatTaxon,
+} from './inat';
+import { forgetInatId, knownInatId, rememberInatIds } from './inat-ids';
 
 export const MAX_PHOTOS = 20;
 
@@ -35,6 +45,8 @@ export interface PhotoTaxon {
   /** GBIF taxon key. */
   key: number;
   rank: Rank;
+  /** Scientific name, for finding a species by name when GBIF holds no iNaturalist record of it. */
+  name?: string;
 }
 
 type Opts = { signal?: AbortSignal };
@@ -70,48 +82,131 @@ async function inatRecord(key: number, opts: Opts): Promise<{ taxonId?: number; 
   return { ...(Number.isInteger(id) && id > 0 && { taxonId: id }), ...(r?.species && { species: r.species }) };
 }
 
-/** Match GBIF taxa to iNaturalist taxa (null: no match). Also returns species names from the records. */
+type InatRecord = Awaited<ReturnType<typeof inatRecord>>;
+
+/** Species per GBIF search for iNaturalist records: one with many records crowds the rest out of a bigger page. */
+const RECORD_BATCH = 5;
+
+/** The iNaturalist records GBIF holds of several species in one search; species it returns none for are left out. */
+async function inatRecords(keys: readonly number[], opts: Opts): Promise<Map<number, InatRecord>> {
+  const res = await gbifLimit(() =>
+    http().getJson<OccurrenceSearch>(
+      '/v1/occurrence/search',
+      { speciesKey: keys, datasetKey: INATURALIST_DATASET_KEY, limit: 300 },
+      { ttlMs: 6 * HOUR, ...(opts.signal && { signal: opts.signal }) },
+    ),
+  );
+  const found = new Map<number, InatRecord>();
+  for (const r of res.results) {
+    const id = Number(r.taxonID);
+    if (r.speciesKey === undefined || !Number.isInteger(id) || id <= 0 || found.has(r.speciesKey)) continue;
+    found.set(r.speciesKey, { taxonId: id, ...(r.species && { species: r.species }) });
+  }
+  return found;
+}
+
+/** A taxon's iNaturalist match: settled, or still being searched for by name. */
+type Match = InatTaxon | null | Promise<InatTaxon | null>;
+
+/** Search iNaturalist for a species by name, remembering a hit; null on none or on failure. */
+async function byName(key: number, name: string, opts: Opts): Promise<InatTaxon | null> {
+  const found = await searchTaxon(name, opts.signal).catch(() => null);
+  if (found) rememberInatIds(new Map([[key, found.id]]));
+  return found;
+}
+
+/**
+ * Match GBIF taxa to iNaturalist taxa (null: no match). Also returns species names from the records.
+ * An ID already known (remembered from before, or baked into the name index when it has loaded)
+ * skips the GBIF search. Otherwise species are searched a few to a request, then one by one for
+ * those that missed. A species GBIF holds no record of is searched for by name (iNaturalist,
+ * one request each) when it has one; that match arrives later, so others needn't wait for it.
+ */
 async function matchTaxa(
   taxa: readonly PhotoTaxon[],
   opts: Opts,
-): Promise<{ matched: Map<number, InatTaxon | null>; names: Map<number, string> }> {
-  type InatRecord = Awaited<ReturnType<typeof inatRecord>>;
+): Promise<{ matched: Map<number, Match>; names: Map<number, string> }> {
   const names = new Map<number, string>();
-  const records = await Promise.all(
-    taxa.map((t): Promise<InatRecord> =>
-      RANK_LEVEL[t.rank] ? inatRecord(t.key, opts).catch(() => ({})) : Promise.resolve({}),
-    ),
+  const index = nameIndexIfLoaded();
+  const known = new Map<number, number>();
+  const searches = new Map<number, InatRecord>();
+  const unknown: PhotoTaxon[] = [];
+  for (const t of taxa) {
+    if (!RANK_LEVEL[t.rank]) continue;
+    const id = knownInatId(t.key) ?? (t.rank === 'SPECIES' ? index?.get(t.key)?.inatId : undefined);
+    if (id) known.set(t.key, id);
+    else unknown.push(t);
+  }
+
+  const species = unknown.filter((t) => t.rank === 'SPECIES');
+  const batches: PhotoTaxon[][] = [];
+  // A single species is no cheaper in a batch.
+  if (species.length > 1)
+    for (let i = 0; i < species.length; i += RECORD_BATCH) batches.push(species.slice(i, i + RECORD_BATCH));
+  await Promise.all(
+    batches.map(async (b) => {
+      const found = await inatRecords(
+        b.map((t) => t.key),
+        opts,
+      ).catch(() => new Map<number, InatRecord>());
+      for (const [k, r] of found) searches.set(k, r);
+    }),
   );
-  const candidateIds = records.flatMap((r) => (r.taxonId ? [r.taxonId] : []));
+  await Promise.all(
+    unknown
+      .filter((t) => !searches.has(t.key))
+      .map(async (t) => void searches.set(t.key, await inatRecord(t.key, opts).catch((): InatRecord => ({})))),
+  );
+
+  const candidateIds = [...known.values(), ...[...searches.values()].flatMap((r) => (r.taxonId ? [r.taxonId] : []))];
   const candidates = await getTaxa(candidateIds, opts.signal);
-  /** The iNaturalist taxon of each taxon's record (records line up with taxa). */
-  const candidateOf = (i: number) => {
-    const id = records[i]!.taxonId;
-    return id === undefined ? undefined : candidates.get(id);
-  };
 
   // Records below the taxon's rank: look up their ancestors to find the one at its rank.
-  const needAncestors = taxa.flatMap((t, i) => {
-    // Only taxa of a ranked level have a record, so a candidate implies a level.
-    const c = candidateOf(i);
+  const needAncestors = unknown.flatMap((t) => {
+    const c = candidates.get(searches.get(t.key)?.taxonId ?? 0);
     return c && c.rank_level < RANK_LEVEL[t.rank]! ? (c.ancestor_ids ?? []).filter((a) => a !== c.id) : [];
   });
   const ancestors = needAncestors.length ? await getTaxa(needAncestors, opts.signal) : new Map<number, InatTaxon>();
 
-  const matched = new Map<number, InatTaxon | null>();
-  taxa.forEach((t, i) => {
-    const species = records[i]!.species;
-    if (species) names.set(t.key, species);
+  const matched = new Map<number, Match>();
+  const found = new Map<number, number>();
+  for (const t of taxa) {
     const level = RANK_LEVEL[t.rank];
-    const c = candidateOf(i);
+    const rec = searches.get(t.key);
+    if (rec?.species) names.set(t.key, rec.species);
     let match: InatTaxon | null = null;
-    if (c && level && c.rank_level === level) match = c;
-    else if (c && level && c.rank_level < level) {
-      match = (c.ancestor_ids ?? []).map((a) => ancestors.get(a)).find((a) => a?.rank_level === level) ?? null;
+    const knownId = known.get(t.key);
+    if (knownId) {
+      match = candidates.get(knownId) ?? null;
+      // A remembered ID iNaturalist no longer has: look it up afresh next time.
+      if (!match) forgetInatId(t.key);
+    } else if (level) {
+      const c = rec?.taxonId === undefined ? undefined : candidates.get(rec.taxonId);
+      if (c && c.rank_level === level) match = c;
+      else if (c && c.rank_level < level) {
+        match = (c.ancestor_ids ?? []).map((a) => ancestors.get(a)).find((a) => a?.rank_level === level) ?? null;
+      }
+      if (match) found.set(t.key, match.id);
+      else if (!c && t.name && t.rank === 'SPECIES') {
+        matched.set(t.key, byName(t.key, t.name, opts));
+        continue;
+      }
     }
     matched.set(t.key, match);
-  });
+  }
+  rememberInatIds(found);
   return { matched, names };
+}
+
+/** iNaturalist's species for GBIF species, by GBIF key; the ones it has none for are left out. */
+export async function resolveInatIds(taxa: readonly PhotoTaxon[], opts: Opts = {}): Promise<Map<number, number>> {
+  const { matched } = await matchTaxa(taxa, opts);
+  const ids = new Map<number, number>();
+  for (const [key, m] of matched) {
+    const t = await m;
+    if (t) ids.set(key, t.id);
+  }
+  return ids;
 }
 
 // Source C: GBIF photos. The same requests whether for a list or a lead photo.
@@ -144,7 +239,7 @@ export async function taxonPhotos(t: PhotoTaxon, opts: Opts = {}): Promise<Usabl
   /** GBIF records: one photo each, for variety. */
   const seenRecords = new Set<number>();
   const out: UsableImage[] = [];
-  for (const source of sources(t.key, matched.get(t.key) ?? null, opts)) {
+  for (const source of sources(t.key, (await matched.get(t.key)) ?? null, opts)) {
     if (out.length >= MAX_PHOTOS) break;
     for (const img of await source()) {
       const k = photoKey(img);
@@ -176,7 +271,7 @@ export async function leadPhotos(
   await Promise.all(
     taxa.map((t) =>
       limit(async () => {
-        for (const source of sources(t.key, matched.get(t.key) ?? null, opts)) {
+        for (const source of sources(t.key, (await matched.get(t.key)) ?? null, opts)) {
           if (opts.signal?.aborted) return;
           const first = (await source())[0];
           if (first) return void images.set(t.key, first);

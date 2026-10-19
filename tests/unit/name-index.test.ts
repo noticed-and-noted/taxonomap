@@ -27,6 +27,18 @@ describe('NameIndex', () => {
     expect(idx.get(1)).toBeUndefined();
   });
 
+  it('decodes the iNaturalist ID a row carries, when it has one', () => {
+    const withId = new NameIndex([[5, 'S', 'Passer domesticus', null, 9, 3017]]);
+    expect(withId.get(5)).toEqual({
+      key: 5,
+      rank: 'SPECIES',
+      scientificName: 'Passer domesticus',
+      count: 9,
+      inatId: 3017,
+    });
+    expect(idx.get(5231190)).not.toHaveProperty('inatId');
+  });
+
   it('finds common names by word prefix, most-recorded first', () => {
     expect(idx.search('robin').map((h) => h.key)).toEqual([9510564, 2492462, 7]);
   });
@@ -78,6 +90,15 @@ describe('loading the index', () => {
     await expect((await fresh()).bakedIndexProvider.search('robin')).resolves.toEqual([]);
     vi.stubGlobal('fetch', () => Promise.reject(new TypeError('offline')));
     await expect((await fresh()).loadNameIndex()).resolves.toBeNull();
+  });
+
+  it('hands out the index only once it has loaded, without starting a load', async () => {
+    const calls = stubNetwork(snapshots({ names: rows }));
+    const m = await fresh();
+    expect(m.nameIndexIfLoaded()).toBeNull();
+    expect(calls).toHaveLength(0);
+    const loaded = await m.loadNameIndex();
+    expect(m.nameIndexIfLoaded()).toBe(loaded);
   });
 
   it('gives up waiting after the time limit', async () => {

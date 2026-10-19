@@ -17,6 +17,7 @@ import {
 import type { NameRow, NamesSnapshot, TreeNodeRow, TreeSnapshot, YearsSnapshot } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import { isDev } from '~/lib/env';
+import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { englishName } from '~/lib/species/names';
 import { speciesSlug } from '~/lib/species/data';
 
@@ -159,7 +160,26 @@ async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
       }),
     ),
   );
-  return rows.filter((r): r is NameRow => r !== null);
+  const named = rows.filter((r): r is NameRow => r !== null);
+  const ids = await inatIds(named);
+  return named.map((r): NameRow => (ids.has(r[0]) ? [r[0], r[1], r[2], r[3], r[4], ids.get(r[0])!] : r));
+}
+
+/**
+ * iNaturalist's taxon for each species, so the browser skips the search that finds it.
+ * A chunk that fails is left without IDs; the browser finds those itself.
+ */
+async function inatIds(rows: readonly NameRow[]): Promise<Map<number, number>> {
+  const ids = new Map<number, number>();
+  for (let i = 0; i < rows.length; i += 300) {
+    const chunk = rows.slice(i, i + 300).map((r) => ({ key: r[0], rank: 'SPECIES' as const, name: r[2] }));
+    try {
+      for (const [k, id] of await resolveInatIds(chunk)) ids.set(k, id);
+    } catch (e) {
+      console.warn(`iNaturalist IDs skipped for species ${i}-${i + chunk.length}:`, e);
+    }
+  }
+  return ids;
 }
 
 export function bakeNames(): Promise<NamesSnapshot> {
