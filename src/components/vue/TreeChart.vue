@@ -237,7 +237,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
             </text>
           </template>
         </g>
-        <circle :r="ring - 2" fill="var(--surface)" stroke="var(--border)" class="cursor-pointer" @click="emit('up')" />
+        <circle :r="ring - 2" fill="var(--surface)" stroke="var(--border)" class="cursor-pointer" @pointerenter="tip = null" @click="emit('up')" />
         <text text-anchor="middle" class="pointer-events-none fill-[var(--text)] font-display text-sm" y="-6">
           {{ centreLabel.length > 18 ? `${centreLabel.slice(0, 17)}…` : centreLabel }}
         </text>
