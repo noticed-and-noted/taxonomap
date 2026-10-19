@@ -45,7 +45,7 @@ const emit = defineEmits<{ close: []; collapse: []; expand: [] }>();
           <button
             v-if="!collapsible || closable"
             type="button"
-            class="grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
+            class="grid size-11 place-items-center sm:size-8 rounded-md text-muted hover:bg-surface-2 hover:text-text"
             :aria-label="closeLabel ?? 'Close panel'"
             @click="emit('close')"
           >

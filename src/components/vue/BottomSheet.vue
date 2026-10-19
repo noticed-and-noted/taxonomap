@@ -108,7 +108,7 @@ function onKey(e: KeyboardEvent) {
         <h2 class="truncate font-display text-lg">{{ title }}</h2>
         <button
           type="button"
-          class="grid size-8 place-items-center rounded-md text-muted hover:bg-surface-2"
+          class="grid size-11 place-items-center sm:size-8 rounded-md text-muted hover:bg-surface-2"
           :aria-label="closeLabel ?? 'Close panel'"
           @pointerdown.stop
           @click="emit('close')"

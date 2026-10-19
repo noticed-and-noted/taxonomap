@@ -581,6 +581,7 @@ onBeforeUnmount(() => {
 }
 
 .map-canvas .maplibregl-ctrl-attrib a {
+  text-decoration: underline;
   color: var(--text);
 }
 

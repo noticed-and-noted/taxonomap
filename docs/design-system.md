@@ -37,7 +37,7 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 | `--border-strong`   | `#3f5c4c`                |        | Emphasised dividers               |
 | `--text`            | `#f2ede2`                | Bone   | Body text, wordmark (15.5:1)      |
 | `--text-muted`      | `#a8b8ae`                | Lichen | Secondary text, fern leaflets     |
-| `--text-subtle`     | `#84998c`                |        | Captions, metadata (5.6:1)        |
+| `--text-subtle`     | `#93a79b`                |        | Captions, metadata (7.1:1)        |
 | `--accent`          | `#f0b443`                | Pollen | Selection, focus, the fern's coil |
 | `--accent-contrast` | `#1d1404`                |        | Text on an accent fill            |
 | `--accent-soft`     | `rgb(240 180 67 / 0.16)` |        | Selected-row and active tints     |
@@ -56,7 +56,7 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 | `--border-strong`   | `#b9a989`              |        | Emphasised dividers                   |
 | `--text`            | `#0e1813`              | Forest | Body text, wordmark (15.8:1)          |
 | `--text-muted`      | `#3f5c4c`              | Fern   | Secondary text, fern leaflets (6.4:1) |
-| `--text-subtle`     | `#66726a`              |        | Captions, metadata (4.7:1)            |
+| `--text-subtle`     | `#556159`              |        | Captions, metadata (5.7:1)            |
 | `--accent`          | `#9c5200`              | Rust   | Selection, focus, the fern's coil     |
 | `--accent-contrast` | `#fffaf0`              |        | Text on an accent fill                |
 | `--accent-soft`     | `rgb(156 82 0 / 0.12)` |        | Selected-row and active tints         |

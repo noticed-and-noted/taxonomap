@@ -239,8 +239,8 @@ function onBackdrop(e: MouseEvent) {
   position: absolute;
   top: 50%;
   translate: 0 -50%;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 50%;
   background: rgb(0 0 0 / 0.55);
   color: white;

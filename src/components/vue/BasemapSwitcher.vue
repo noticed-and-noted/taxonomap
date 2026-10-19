@@ -16,7 +16,7 @@ const choose = (id: BasemapId) => $basemap.set(id);
     <label
       v-for="id in BASEMAP_IDS"
       :key="id"
-      class="cursor-pointer rounded-sm px-2.5 py-1 text-xs text-muted transition-colors duration-200 has-[:checked]:bg-accent has-[:checked]:text-accent-contrast has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)] hover:text-text"
+      class="cursor-pointer rounded-sm px-2.5 py-2 text-xs sm:py-1 text-muted transition-colors duration-200 has-[:checked]:bg-accent has-[:checked]:text-accent-contrast has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--focus)] hover:text-text"
     >
       <input type="radio" :name="group" class="sr-only" :value="id" :checked="current === id" @change="choose(id)" />
       {{ BASEMAPS[id].label }}

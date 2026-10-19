@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
   <div class="omnibox relative w-full max-w-xl" @focusout="onBlur">
     <label for="omnibox-input" class="sr-only">Search species or places</label>
     <div
-      class="flex items-center gap-2 rounded-[var(--radius)] border border-border bg-surface px-3 shadow-panel transition-colors duration-200 focus-within:border-accent"
+      class="flex items-center gap-2 rounded-[var(--radius)] border border-border bg-surface px-3 shadow-panel transition-colors duration-200 focus-within:border-accent focus-within:outline focus-within:outline-2 focus-within:outline-[var(--focus)]"
     >
       <svg
         viewBox="0 0 24 24"

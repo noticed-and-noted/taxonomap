@@ -241,12 +241,12 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
         <text text-anchor="middle" class="pointer-events-none fill-[var(--text)] font-display text-sm" y="-6">
           {{ centreLabel.length > 18 ? `${centreLabel.slice(0, 17)}…` : centreLabel }}
         </text>
-        <text text-anchor="middle" class="pointer-events-none fill-[var(--text-subtle)] text-[11px]" y="12">
+        <text text-anchor="middle" class="pointer-events-none fill-[var(--text-subtle)] text-xs" y="12">
           {{ compact(focusTotal) }} {{ metric }}
         </text>
         <g v-if="focus.parent" class="pointer-events-none text-[var(--text-subtle)]">
           <UiIcon name="arrow-up" :size="10" x="-27" y="20" />
-          <text text-anchor="middle" class="fill-current text-[10px]" x="6" y="28">zoom out</text>
+          <text text-anchor="middle" class="fill-current text-xs" x="6" y="28">zoom out</text>
         </g>
       </g>
     </svg>
@@ -265,19 +265,17 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
         <text :x="focus.parent ? 26 : 10" :y="25" class="fill-[var(--text)] font-display text-sm">
           {{ centreLabel.length > 22 ? `${centreLabel.slice(0, 21)}…` : centreLabel }}
         </text>
-        <text :x="width - 10" :y="25" text-anchor="end" class="fill-[var(--text-subtle)] text-[11px]">
+        <text :x="width - 10" :y="25" text-anchor="end" class="fill-[var(--text-subtle)] text-xs">
           {{ compact(focusTotal) }} {{ metric }}
         </text>
       </g>
       <g v-else class="cursor-pointer" @click="emit('up')">
         <rect :width="colW - 2" :height="height - 1" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
         <text :x="10" :y="20" class="fill-[var(--text)] font-display text-sm">{{ centreLabel }}</text>
-        <text :x="10" :y="38" class="fill-[var(--text-subtle)] text-[11px]">
-          {{ compact(focusTotal) }} {{ metric }}
-        </text>
+        <text :x="10" :y="38" class="fill-[var(--text-subtle)] text-xs">{{ compact(focusTotal) }} {{ metric }}</text>
         <g v-if="focus.parent" class="text-[var(--text-subtle)]">
           <UiIcon name="arrow-left" :size="10" x="10" y="48" />
-          <text :x="23" :y="56" class="fill-current text-[10px]">zoom out</text>
+          <text :x="23" :y="56" class="fill-current text-xs">zoom out</text>
         </g>
       </g>
       <g
