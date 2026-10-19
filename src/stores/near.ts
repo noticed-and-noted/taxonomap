@@ -10,6 +10,7 @@ export type LatLng = { lat: number; lng: number } | null;
 const atCodec: UrlCodec<LatLng> = {
   key: 'at',
   default: null,
+  scope: 'map',
   parse(raw) {
     const [lat, lng] = raw.split(',').map(Number);
     if (
@@ -29,6 +30,7 @@ const atCodec: UrlCodec<LatLng> = {
 const radiusCodec: UrlCodec<RadiusKm> = {
   key: 'r',
   default: 2,
+  scope: 'map',
   history: 'replace',
   parse: (raw) =>
     (RADIUS_STEPS_KM as readonly number[]).includes(Number(raw)) ? (Number(raw) as RadiusKm) : undefined,
@@ -36,12 +38,12 @@ const radiusCodec: UrlCodec<RadiusKm> = {
 };
 
 /** "Near me" mode on the map page (`?near=1`). */
-export const $nearMode = urlAtom(codecs.bool('near'));
+export const $nearMode = urlAtom(codecs.bool('near', { scope: 'map' }));
 export const $nearAt = urlAtom(atCodec);
 export const $nearRadius = urlAtom(radiusCodec);
 /** Only species recorded in the current calendar month (any year). */
-export const $nearThisMonth = urlAtom(codecs.bool('month', { history: 'replace' }));
-export const $nearTab = urlAtom(codecs.enumOf('tab', ['species', 'recent'] as const, 'species'));
+export const $nearThisMonth = urlAtom(codecs.bool('month', { history: 'replace', scope: 'map' }));
+export const $nearTab = urlAtom(codecs.enumOf('tab', ['species', 'recent'] as const, 'species', { scope: 'map' }));
 
 /** Set the location, rounding first (privacy rule). */
 export function setNearLocation(lat: number, lng: number): void {

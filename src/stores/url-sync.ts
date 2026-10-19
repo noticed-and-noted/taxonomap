@@ -7,8 +7,9 @@
  *
  * - history 'push' entries (taxon, panel, hex…) create a back-button step.
  * - history 'replace' entries (map view) are throttled and never add steps.
- * - scope 'global' params are carried onto internal navigations, so the
- *   selected taxon follows you from the map to the tree and back.
+ * - scope 'map' params belong to the map page (/). Other pages leave them out
+ *   of their URL but keep their values, and they are put back on the way to
+ *   the map, so the map comes back as you left it.
  */
 import { atom, type WritableAtom } from 'nanostores';
 
@@ -18,7 +19,7 @@ export interface UrlCodec<T> {
   parse: (raw: string) => T | undefined;
   serialize: (value: T) => string;
   history?: 'push' | 'replace';
-  scope?: 'global' | 'page';
+  scope?: 'map' | 'page';
   equals?: (a: T, b: T) => boolean;
 }
 
@@ -51,6 +52,8 @@ export function withHistoryMode(mode: 'push' | 'replace', fn: () => void): void 
 }
 
 const isBrowser = () => typeof window !== 'undefined' && typeof history !== 'undefined';
+const isMapParam = (c: UrlCodec<unknown>) => c.scope === 'map';
+const onMap = (path: string) => path === '/';
 
 function defaultEquals(a: unknown, b: unknown): boolean {
   return a === b || JSON.stringify(a) === JSON.stringify(b);
@@ -82,7 +85,7 @@ function flush(): void {
   // Only scheduled in a browser (see schedule).
   const url = new URL(window.location.href);
   const before = url.search;
-  writeParams(url.searchParams);
+  writeParams(url.searchParams, onMap(url.pathname) ? undefined : (c) => !isMapParam(c));
   if (url.search === before) {
     pendingPush = false;
     return;
@@ -113,9 +116,11 @@ function schedule(requested: 'push' | 'replace'): void {
 /** Re-read all stores from the current URL without writing back. */
 export function syncFromUrl(search = isBrowser() ? window.location.search : ''): void {
   const params = new URLSearchParams(search);
+  const mapToo = !isBrowser() || onMap(window.location.pathname);
   applyingFromUrl = true;
   try {
     for (const { codec, store } of registry.values()) {
+      if (!mapToo && isMapParam(codec)) continue;
       const next = readValue(codec, params);
       if (!(codec.equals ?? defaultEquals)(next, store.get())) store.set(next);
     }
@@ -129,11 +134,11 @@ function listen(): void {
   listening = true;
   window.addEventListener('popstate', () => syncFromUrl());
   document.addEventListener('astro:after-swap', () => syncFromUrl());
-  // Carry global params (taxon, filters) onto internal navigations.
+  // Put the map's params back on internal navigations to the map.
   document.addEventListener('astro:before-preparation', (e) => {
     const ev = e as Event & { to: URL; navigationType?: string };
-    if (ev.navigationType === 'traverse' || ev.to.origin !== window.location.origin) return;
-    const missing = (c: UrlCodec<unknown>) => (c.scope ?? 'page') === 'global' && !ev.to.searchParams.has(c.key);
+    if (ev.navigationType === 'traverse' || ev.to.origin !== window.location.origin || !onMap(ev.to.pathname)) return;
+    const missing = (c: UrlCodec<unknown>) => isMapParam(c) && !ev.to.searchParams.has(c.key);
     const to = new URL(ev.to);
     writeParams(to.searchParams, missing);
     ev.to = to;
@@ -142,7 +147,8 @@ function listen(): void {
 
 /** Create an atom bound to one query-string key. */
 export function urlAtom<T>(codec: UrlCodec<T>): WritableAtom<T> {
-  const initial = isBrowser() ? readValue(codec, new URLSearchParams(window.location.search)) : codec.default;
+  const fromUrl = isBrowser() && (codec.scope !== 'map' || onMap(window.location.pathname));
+  const initial = fromUrl ? readValue(codec, new URLSearchParams(window.location.search)) : codec.default;
   const store = atom<T>(initial);
   registry.set(codec.key, { codec: codec as UrlCodec<unknown>, store: store as WritableAtom<unknown> });
   store.listen(() => schedule(codec.history ?? 'push'));
@@ -152,7 +158,7 @@ export function urlAtom<T>(codec: UrlCodec<T>): WritableAtom<T> {
 
 /** Build a query string for a link that applies `overrides` on top of current state. */
 export function hrefWith(path: string, overrides: Record<string, string | null> = {}): string {
-  const params = writeParams(new URLSearchParams(), (c) => (c.scope ?? 'page') === 'global');
+  const params = writeParams(new URLSearchParams(), isMapParam);
   for (const [k, v] of Object.entries(overrides)) {
     if (v === null) params.delete(k);
     else params.set(k, v);

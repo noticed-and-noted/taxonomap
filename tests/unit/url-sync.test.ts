@@ -64,13 +64,13 @@ describe('url-sync', () => {
     expect(location.search).toBe('?taxon=1');
   });
 
-  it('hrefWith carries only global params', () => {
-    const taxon = urlAtom(codecs.int('taxon', null, { scope: 'global' }));
-    const hex = urlAtom(codecs.string('hex'));
+  it('hrefWith carries only map params', () => {
+    const taxon = urlAtom(codecs.int('taxon', null, { scope: 'map' }));
+    const focus = urlAtom(codecs.int('focus', null));
     taxon.set(5);
-    hex.set('abc');
-    expect(hrefWith('/tree')).toBe('/tree?taxon=5');
-    expect(hrefWith('/tree', { taxon: null })).toBe('/tree');
+    focus.set(1);
+    expect(hrefWith('/')).toBe('/?taxon=5');
+    expect(hrefWith('/', { taxon: null })).toBe('/');
   });
 });
 
@@ -134,8 +134,8 @@ describe('url-sync edge cases', () => {
     expect(taxon.get()).toBe(4);
   });
 
-  it('carries global params onto same-site navigations that do not set them', () => {
-    const taxon = urlAtom(codecs.int('t5', null, { scope: 'global' }));
+  it('puts map params back on same-site navigations to the map that do not set them', () => {
+    const taxon = urlAtom(codecs.int('t5', null, { scope: 'map' }));
     const page = urlAtom(codecs.int('p5', null));
     taxon.set(9);
     page.set(1);
@@ -147,10 +147,24 @@ describe('url-sync edge cases', () => {
       document.dispatchEvent(ev);
       return ev.to.href;
     };
-    expect(navigate('/tree')).toBe(`${location.origin}/tree?t5=9`);
-    expect(navigate('/tree?t5=2')).toBe(`${location.origin}/tree?t5=2`);
-    expect(navigate('/tree', 'traverse')).toBe(`${location.origin}/tree`);
+    expect(navigate('/')).toBe(`${location.origin}/?t5=9`);
+    expect(navigate('/?t5=2')).toBe(`${location.origin}/?t5=2`);
+    expect(navigate('/', 'traverse')).toBe(`${location.origin}/`);
+    expect(navigate('/tree')).toBe(`${location.origin}/tree`);
     expect(navigate('https://elsewhere.test/')).toBe('https://elsewhere.test/');
+  });
+
+  it('keeps map params out of other pages but remembers their values', async () => {
+    const taxon = urlAtom(codecs.int('t7', null, { scope: 'map' }));
+    const focus = urlAtom(codecs.int('f7', null));
+    taxon.set(9);
+    await flushMicrotasks();
+    history.pushState(null, '', '/tree');
+    document.dispatchEvent(new Event('astro:after-swap'));
+    expect(taxon.get()).toBe(9);
+    focus.set(3);
+    await flushMicrotasks();
+    expect(location.search).toBe('?f7=3');
   });
 
   it('leaves stores alone when the URL matches them', () => {

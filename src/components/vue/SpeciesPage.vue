@@ -64,7 +64,7 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
           >View on map</a
         >
         <a
-          :href="`/tree?focus=${d.key}&taxon=${d.key}`"
+          :href="`/tree?focus=${d.key}`"
           class="rounded-md border border-border px-3 py-2 hover:border-accent"
           >Tree of life</a
         >

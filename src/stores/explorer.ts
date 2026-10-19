@@ -64,8 +64,7 @@ const viewCodec: UrlCodec<MapView> = {
   key: 'view',
   default: DEFAULT_VIEW,
   history: 'replace',
-  // The map persists across pages, so its view travels with navigation.
-  scope: 'global',
+  scope: 'map',
   parse(raw) {
     const [lng, lat, zoom] = raw.split(',').map(Number);
     if (![lng, lat, zoom].every((n) => Number.isFinite(n))) return undefined;
@@ -82,7 +81,7 @@ const viewCodec: UrlCodec<MapView> = {
 const dateRangeCodec: UrlCodec<DateRange | null> = {
   key: 'when',
   default: null,
-  scope: 'global',
+  scope: 'map',
   // The slider and the date menu commit on release / Apply, so each change is a deliberate step.
   history: 'push',
   parse: parseRange,
@@ -94,7 +93,7 @@ const dateRangeCodec: UrlCodec<DateRange | null> = {
  * Taxa to show, of any rank (records of any of them). "taxon=212" links from
  * before multi-select still parse as a one-item list.
  */
-export const $taxonKeys = urlAtom(codecs.intSet('taxon', { min: 0, limit: MAX_TAXA }, { scope: 'global' }));
+export const $taxonKeys = urlAtom(codecs.intSet('taxon', { min: 0, limit: MAX_TAXA }, { scope: 'map' }));
 /** The taxon when exactly one is selected (the tree and species pages follow it), else null. */
 export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? keys[0]! : null));
 export const $mapView = urlAtom(viewCodec);
@@ -102,12 +101,12 @@ export const $mapView = urlAtom(viewCodec);
 export const viewParam = (v: MapView): string => viewCodec.serialize(v);
 /** The When date range: a rolling preset or fixed dates (see lib/dates.ts). */
 export const $dateRange = urlAtom(dateRangeCodec);
-export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
+export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'map' }));
 /** Only records filed at exactly the chosen taxa (e.g. gray wolf without domestic dogs). */
-export const $exactTaxon = urlAtom(codecs.bool('exact', { scope: 'global' }));
-export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
-export const $hasSound = urlAtom(codecs.bool('sound', { scope: 'global' }));
-export const $months = urlAtom(codecs.intSet('months', { min: 1, max: 12 }, { scope: 'global' }));
+export const $exactTaxon = urlAtom(codecs.bool('exact', { scope: 'map' }));
+export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'map' }));
+export const $hasSound = urlAtom(codecs.bool('sound', { scope: 'map' }));
+export const $months = urlAtom(codecs.intSet('months', { min: 1, max: 12 }, { scope: 'map' }));
 /** Months only combine with a range in whole years: Any time, "Last N years" or a years range. */
 export const monthsAllowed = (r: DateRange | null): boolean =>
   !r || ('preset' in r ? r.preset.endsWith('y') : r.unit === 'y');
@@ -115,12 +114,12 @@ export const monthsAllowed = (r: DateRange | null): boolean =>
 $dateRange.subscribe((r) => {
   if (!monthsAllowed(r) && $months.get().length) $months.set([]);
 });
-export const $continents = urlAtom(codecs.setOf('continent', CONTINENTS, { scope: 'global' }));
+export const $continents = urlAtom(codecs.setOf('continent', CONTINENTS, { scope: 'map' }));
 export const $maxUncertainty = urlAtom({
-  ...codecs.int('uncert', null, { scope: 'global' }),
+  ...codecs.int('uncert', null, { scope: 'map' }),
   parse: (raw) => (UNCERTAINTY_STEPS_M as readonly number[]).find((m) => String(m) === raw),
 });
-export const $iucn = urlAtom(codecs.setOf('iucn', IUCN_CATEGORIES, { scope: 'global' }));
+export const $iucn = urlAtom(codecs.setOf('iucn', IUCN_CATEGORIES, { scope: 'map' }));
 export type HexPoint = readonly [lng: number, lat: number] | null;
 
 /**
@@ -131,6 +130,7 @@ export type HexPoint = readonly [lng: number, lat: number] | null;
 const hexCodec: UrlCodec<HexPoint> = {
   key: 'hex',
   default: null,
+  scope: 'map',
   parse(raw) {
     const [lng, lat] = raw.split(',').map(Number);
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat as number) > 90) return undefined;
@@ -140,8 +140,8 @@ const hexCodec: UrlCodec<HexPoint> = {
 };
 
 export const $selectedHex = urlAtom(hexCodec);
-export const $panel = urlAtom(codecs.enumOf('panel', PANELS, 'none'));
-export const $basemap = urlAtom(codecs.enumOf('base', BASEMAP_IDS, 'plain', { history: 'replace' }));
+export const $panel = urlAtom(codecs.enumOf('panel', PANELS, 'none', { scope: 'map' }));
+export const $basemap = urlAtom(codecs.enumOf('base', BASEMAP_IDS, 'plain', { history: 'replace', scope: 'map' }));
 
 /* ---- Ephemeral (not in the URL): derived from URL state or one-shot requests ---- */
 
