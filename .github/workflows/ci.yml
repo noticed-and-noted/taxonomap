@@ -6,9 +6,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # Nightly rebuild and deploy, using the data from the last bake.
-    - cron: '0 3 * * *'
-    # Daily bake: fetch the GBIF data the build uses (02:00 UTC, an hour before the nightly deploy).
+    # Daily bake: fetch the GBIF data the next build uses (02:00 UTC). It deploys nothing.
     - cron: '0 2 * * *'
     # Weekly live contract tests (Monday 04:00 UTC).
     - cron: '0 4 * * 1'
@@ -150,7 +148,7 @@ jobs:
     needs: build
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -144,7 +144,7 @@ These are cases where the live API differs from the original brief:
 
 ## Deployment
 
-`.github/workflows/ci.yml` runs lint, format check, `astro check` and unit tests, then builds. It deploys to Cloudflare Pages on pushes to `main` and nightly at 03:00 UTC. A separate job runs `pnpm bake` daily (02:00 UTC, or on manual dispatch with the `bake` input) and saves the result in the Actions cache; builds use the latest saved bake and only fetch from GBIF when there is none. Live contract tests run weekly or on manual dispatch.
+`.github/workflows/ci.yml` runs lint, format check, `astro check` and unit tests, then builds. It deploys to Cloudflare Pages on pushes to `main` (and manual dispatch); there is no scheduled deploy. A separate job runs `pnpm bake` daily (02:00 UTC, or on manual dispatch with the `bake` input) and saves the result in the Actions cache; the next build uses the latest saved bake and only fetches from GBIF when there is none, so fresh data reaches the site with the next deploy. Live contract tests run weekly or on manual dispatch.
 
 Configure the repository with:
 
