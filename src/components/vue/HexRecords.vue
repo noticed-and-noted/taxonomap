@@ -34,7 +34,7 @@ const TYPE_CODES: Record<string, string> = {
   OBSERVATION: 'OBS',
 };
 
-const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceFilter | null }>();
+const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceFilter | null; fill?: boolean }>();
 
 const geometry = useStore($hexGeometry);
 const storeFilter = useStore($occurrenceFilter);
@@ -202,7 +202,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
 </script>
 
 <template>
-  <div class="space-y-2">
+  <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
     <div class="relative text-sm">
       <label :for="`${uid}-input`" class="sr-only">Filter records by species</label>
       <svg
@@ -262,7 +262,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       <button type="button" class="ml-1 text-text underline" @click="load()">Try again</button>
     </div>
 
-    <ListSkeleton v-else-if="loading && !records.length" label="Loading records">
+    <ListSkeleton v-else-if="loading && !records.length" label="Loading records" :fill="fill">
       <span class="w-[3.25rem] shrink-0"><SkeletonBlock width="2rem" height="1rem" rounded="sm" /></span>
       <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="4.5rem" height="0.75rem" /></span>
     </ListSkeleton>
@@ -272,7 +272,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
     </p>
 
     <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
-    <div v-if="records.length">
+    <div v-if="records.length" :class="{ 'flex min-h-0 flex-1 flex-col': fill }">
       <div class="head-row -mx-4 text-xs text-subtle" aria-hidden="true">
         <table class="w-full table-fixed text-sm">
           <colgroup>
@@ -292,8 +292,8 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       </div>
       <div
         ref="scroller"
-        class="fade-list -mx-4 max-h-[min(23rem,65dvh)] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
-        :class="{ 'fade-bottom': fadeBottom }"
+        class="fade-list -mx-4 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': fadeBottom }]"
         @scroll.passive="updateFade"
       >
         <table class="w-full table-fixed text-sm" aria-label="Records">

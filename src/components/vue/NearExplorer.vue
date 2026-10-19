@@ -287,8 +287,8 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Records: the same list as a map cell's Records tab -->
-          <div v-else role="tabpanel" aria-label="Records">
-            <HexRecords :species="species" :filter="recordsFilter" />
+          <div v-else role="tabpanel" aria-label="Records" class="flex min-h-0 flex-1 flex-col">
+            <HexRecords :species="species" :filter="recordsFilter" fill />
           </div>
         </section>
       </ResponsivePanel>
