@@ -157,7 +157,9 @@ jobs:
       # The Pages Functions in functions/ (the login gate) deploy alongside dist.
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: functions
+          # Only functions/: with package.json present the action installs wrangler into the project and fails.
+          sparse-checkout: /functions/
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           name: dist
@@ -166,8 +168,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # The checkout has package.json, so the action would otherwise look for pnpm to install wrangler.
-          packageManager: npm
           command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT || 'taxonomap' }} --branch=main
 
   contract:
