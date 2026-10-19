@@ -38,7 +38,7 @@ onMounted(async () => {
       <SpeciesCard
         :species-key="s.key"
         :scientific-name="s.scientificName"
-        :common-name="s.commonName"
+        :common-name="s.commonName ?? s.scientificName"
         :count="s.count"
         :image="images.get(s.key)"
         :loading="loading"

@@ -39,13 +39,13 @@ const initials = computed(() =>
 
 <template>
   <article
-    class="species-card group overflow-hidden rounded-md border bg-surface-2 transition-colors duration-200"
+    class="species-card group flex h-full flex-col overflow-hidden rounded-md border bg-surface-2 transition-colors duration-200"
     :class="selected ? 'border-accent' : 'border-transparent hover:border-border-strong'"
   >
     <component
       :is="href ? 'a' : 'button'"
       v-bind="href ? { href } : { type: 'button', 'aria-pressed': selected }"
-      class="block w-full text-left"
+      class="block w-full flex-1 text-left"
       @click="!href && emit('select', speciesKey)"
     >
       <span class="relative block aspect-[4/3] overflow-hidden bg-photo">

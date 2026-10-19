@@ -94,15 +94,20 @@ async function siblingsOf(u: NameUsage, commonName: CommonNameLookup): Promise<S
     .filter((s) => s.key !== u.key && names.has(s.key))
     .slice(0, 8);
   if (!top.length) return [];
-  return top.map((s) => {
-    const cn = commonName(s.key);
-    return {
-      key: s.key,
-      scientificName: names.get(s.key) as string,
-      count: s.count,
-      ...(cn && { commonName: cn }),
-    };
-  });
+  // The baked index misses many species, so fall back to their GBIF vernacular names.
+  return Promise.all(
+    top.map(async (s) => {
+      const cn =
+        commonName(s.key) ??
+        englishName((await getVernacularNames(s.key, 300).catch(() => ({ results: [] }))).results);
+      return {
+        key: s.key,
+        scientificName: names.get(s.key) as string,
+        count: s.count,
+        ...(cn && { commonName: cn }),
+      };
+    }),
+  );
 }
 
 export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
