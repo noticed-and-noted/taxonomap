@@ -44,7 +44,7 @@ function toggleNear() {
 
 const pinIcon = 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z';
 
-const hexOpen = computed(() => panel.value === 'hex' && hex.value !== null);
+const hexOpen = computed(() => !near.value && panel.value === 'hex' && hex.value !== null);
 const filtersOpen = computed(() => panel.value === 'filters');
 const panelOpen = computed(() => hexOpen.value || filtersOpen.value);
 const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : 'Selected cell'));
@@ -60,18 +60,18 @@ function closePanel() {
 </script>
 
 <template>
-  <div v-if="near" class="pointer-events-none absolute inset-0 z-10">
-    <NearExplorer />
-  </div>
-
-  <div v-else class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen }">
+  <div class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen && !near }">
+    <NearExplorer v-if="near" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
-      <div class="min-w-0 sm:flex-1"><TaxonChip /></div>
+      <div v-if="!near" class="min-w-0 sm:flex-1"><TaxonChip /></div>
       <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
-      <MapProgress class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0" />
-      <div class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1">
+      <MapProgress
+        v-if="!near"
+        class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0"
+      />
+      <div v-if="!near" class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1">
         <button type="button" class="near-btn" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"
@@ -88,7 +88,7 @@ function closePanel() {
         <BasemapSwitcher />
       </div>
       <!-- Phone: Near me + Filters button (the rail is hidden). -->
-      <button type="button" class="near-btn near-phone ml-auto" @click="toggleNear">
+      <button v-if="!near" type="button" class="near-btn near-phone ml-auto" @click="toggleNear">
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path :d="pinIcon" />
         </svg>
@@ -98,7 +98,7 @@ function closePanel() {
         type="button"
         class="filters-btn"
         :aria-expanded="filtersOpen"
-        :class="{ active: activeFilters }"
+        :class="{ active: activeFilters, 'ml-auto': near }"
         @click="openFilters"
       >
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -109,6 +109,7 @@ function closePanel() {
     </div>
 
     <div
+      v-if="!near"
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
       :class="{ stashed: dockStashed }"
     >

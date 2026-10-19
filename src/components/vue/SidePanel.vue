@@ -26,7 +26,7 @@ const emit = defineEmits<{ close: []; collapse: []; expand: [] }>();
       <button
         v-if="collapsible"
         type="button"
-        class="edge-tab absolute right-full top-1/2 grid h-14 w-6 -translate-y-1/2 place-items-center rounded-l-md border border-r-0 border-border bg-surface text-muted shadow-panel hover:text-text"
+        class="edge-tab absolute -z-10 right-full [clip-path:inset(-30px_0_-30px_-30px)] top-1/2 grid h-14 w-6 -translate-y-1/2 place-items-center rounded-l-md border border-r-0 border-border bg-surface text-muted shadow-panel hover:text-text"
         :aria-label="collapsed ? `Show ${title}` : `Hide ${title}`"
         :aria-expanded="!collapsed"
         @click="collapsed ? emit('expand') : emit('collapse')"

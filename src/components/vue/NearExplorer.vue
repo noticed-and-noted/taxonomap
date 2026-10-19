@@ -21,7 +21,7 @@ import {
 } from '~/lib/near/data';
 import { nameFromRecords } from '~/lib/species/groups';
 import { loadSpeciesManifest } from '~/lib/species/links';
-import { $flyTo, $mapMode } from '~/stores/explorer';
+import { $flyTo, $mapMode, $occurrenceFilter } from '~/stores/explorer';
 import {
   $nearAt,
   $nearRadius,
@@ -44,6 +44,7 @@ const at = useStore($nearAt);
 const radius = useStore($nearRadius);
 const thisMonth = useStore($nearThisMonth);
 const tab = useStore($nearTab);
+const filter = useStore($occurrenceFilter);
 
 const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
@@ -62,7 +63,7 @@ const tallies = shallowRef<Awaited<ReturnType<typeof speciesTallies>> | null>(nu
 
 const area = computed<Area | null>(() =>
   at.value
-    ? { lat: at.value.lat, lng: at.value.lng, radiusKm: radius.value, ...(thisMonth.value && { month: MONTH }) }
+    ? { lat: at.value.lat, lng: at.value.lng, radiusKm: radius.value, filter: filter.value, ...(thisMonth.value && { month: MONTH }) }
     : null,
 );
 const recordsFilter = computed(() => area.value && nearFilter(area.value));
@@ -143,7 +144,6 @@ async function openShare() {
 }
 
 const setTab = (t: 'species' | 'recent') => $nearTab.set(t);
-const toggleMonth = () => $nearThisMonth.set(!thisMonth.value);
 
 watch(area, () => void loadArea(), { deep: true });
 
@@ -242,15 +242,6 @@ onBeforeUnmount(() => {
               </span>
             </label>
             <div class="flex flex-wrap items-center gap-2 text-xs">
-              <button
-                type="button"
-                class="chip"
-                :class="{ on: thisMonth }"
-                :aria-pressed="thisMonth"
-                @click="toggleMonth"
-              >
-                Recorded in {{ monthName }}
-              </button>
               <button type="button" class="chip" @click="locate">Use my location</button>
               <button type="button" class="chip ml-auto" :disabled="!classes.length" @click="openShare">Share</button>
             </div>

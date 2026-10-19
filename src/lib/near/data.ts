@@ -4,7 +4,7 @@
  *   species in the area      → 1 facet request per leading class, then 1 batched name search (see species/groups.ts)
  */
 import { nameIndexWithin } from '~/lib/data/name-index';
-import { circleToWkt, occurrenceFacets } from '~/lib/gbif';
+import { circleToWkt, occurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
 import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 
 export type { ClassGroup, SpeciesRow };
@@ -15,10 +15,13 @@ export interface Area {
   radiusKm: number;
   /** 1–12: only records from this calendar month (any year). */
   month?: number | undefined;
+  /** The map's filters (taxa, dates, basis…), applied inside the circle. */
+  filter?: OccurrenceFilter | undefined;
 }
 
 /** The circle (and month) as an occurrence filter; the Records tab searches with it. */
-export const nearFilter = (a: Area, extra: { taxonKey?: number; classKey?: number } = {}) => ({
+export const nearFilter = (a: Area, extra: { taxonKey?: number; classKey?: number } = {}): OccurrenceFilter => ({
+  ...a.filter,
   geometry: circleToWkt(a.lat, a.lng, a.radiusKm),
   month: a.month,
   ...extra,
