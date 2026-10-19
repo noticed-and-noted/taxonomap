@@ -12,18 +12,15 @@ for (const [k, v] of Object.entries(loadEnv(process.env.NODE_ENV ?? 'production'
   process.env[k] ??= v;
 }
 
-// public/_redirects rewrites /species/view/{key} to the view page on Pages; do the same in dev and preview.
+// public/_redirects rewrites /species/view/{key} to the view page on Pages; do the same in dev
+// (`astro preview` drops Vite plugins, so it 404s there).
 const rewriteSpeciesView = (/** @type {{ middlewares: import('vite').Connect.Server }} */ server) => {
   server.middlewares.use((req, _res, next) => {
     req.url = req.url?.replace(/^\/species\/view\/\d+\/?(?=\?|$)/, '/species/view/');
     next();
   });
 };
-const speciesViewRewrite = {
-  name: 'species-view-rewrite',
-  configureServer: rewriteSpeciesView,
-  configurePreviewServer: rewriteSpeciesView,
-};
+const speciesViewRewrite = { name: 'species-view-rewrite', configureServer: rewriteSpeciesView };
 
 const site = process.env.PUBLIC_SITE_URL || 'https://app.taxonomap.com';
 

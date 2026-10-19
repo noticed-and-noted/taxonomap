@@ -64,7 +64,8 @@ test('rail filters write the URL and clear in one step', async ({ page }) => {
   await page.getByRole('button', { name: 'April' }).click();
   await page.getByRole('button', { name: 'May' }).click();
   await expect(page).toHaveURL(/months=4%2C5/);
-  await expect(page.getByRole('button', { name: 'When, 1 active' })).toBeVisible();
+  // Each month is its own filter.
+  await expect(page.getByRole('button', { name: 'When, 2 active' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#filter-flyout')).toBeHidden();
   // One step back undoes Clear, which resets every filter, taxa included.

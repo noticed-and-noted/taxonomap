@@ -78,7 +78,7 @@ describe('explorer filter stores', () => {
     expect(Object.values(e.$groupCounts.get()).every((n) => n === 0)).toBe(true);
   });
 
-  it('give each set filter but taxa a pill (one per IUCN category) that clears it', async () => {
+  it('give each set filter but taxa a pill (one per IUCN category or month) that clears it', async () => {
     const e = await import('~/stores/explorer');
     e.clearFilters();
     e.$taxonKeys.set([212]);
@@ -91,7 +91,8 @@ describe('explorer filter stores', () => {
       ['what', 'Critically endangered'],
       ['what', 'Vulnerable'],
       ['when', '1990–2000'],
-      ['when', 'Apr, May'],
+      ['when', 'Apr'],
+      ['when', 'May'],
       ['where', 'Accuracy ≤ 1 km'],
       ['how', 'Has photo'],
     ]);

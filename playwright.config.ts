@@ -30,7 +30,8 @@ export default defineConfig({
     { name: 'mobile', grep: /@mobile/, use: { ...devices['Pixel 7'], ...browser } },
   ],
   webServer: {
-    command: `npm run preview -- --port ${PORT}`,
+    // --ignore-lock keeps the server in the foreground; Astro backgrounds it when it detects a coding agent.
+    command: `npm run preview -- --port ${PORT} --ignore-lock`,
     port: PORT,
     reuseExistingServer: !process.env['CI'],
   },

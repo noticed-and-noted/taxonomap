@@ -20,6 +20,10 @@ test('a pre-rendered species page has metadata, charts and attribution', async (
 });
 
 test('species without a static page render client-side, noindex', async ({ page }) => {
+  // Stand in for the Pages rewrite in public/_redirects, which `astro preview` does not apply.
+  await page.route(/\/species\/view\/\d+$/, async (route) =>
+    route.fulfill({ response: await route.fetch({ url: new URL('/species/view/', route.request().url()).href }) }),
+  );
   await page.goto('/species/view/2492462');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
   await expect(page.getByRole('heading', { level: 1, name: 'European Robin' })).toBeVisible();
