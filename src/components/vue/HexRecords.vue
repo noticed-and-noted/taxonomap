@@ -220,7 +220,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
         :id="`${uid}-input`"
         v-model="query"
         type="search"
-        class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none disabled:opacity-60"
+        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
         role="combobox"
         autocomplete="off"
         placeholder="Filter by species"

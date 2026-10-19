@@ -21,6 +21,12 @@ import { generateSW } from 'workbox-build';
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const trim = (s: string) => s.replace(/\/+$/, '');
 
+// An opaque copy (cached from a no-cors load) fails a crossorigin <img>; refetch so the CORS copy replaces it.
+const noOpaqueForCors = {
+  cachedResponseWillBeUsed: async ({ request, cachedResponse }: { request: Request; cachedResponse?: Response }) =>
+    request.mode === 'cors' && cachedResponse?.type === 'opaque' ? null : cachedResponse,
+};
+
 export default function serviceWorker(): AstroIntegration {
   return {
     name: 'taxonomap:service-worker',
@@ -115,6 +121,7 @@ export default function serviceWorker(): AstroIntegration {
                 cacheName: 'basemap',
                 expiration: { maxEntries: 1500, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true },
                 cacheableResponse: { statuses: [0, 200] },
+                plugins: [noOpaqueForCors],
               },
             },
             {
@@ -124,6 +131,7 @@ export default function serviceWorker(): AstroIntegration {
                 cacheName: 'images',
                 expiration: { maxEntries: 300, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true },
                 cacheableResponse: { statuses: [0, 200] },
+                plugins: [noOpaqueForCors],
               },
             },
           ],

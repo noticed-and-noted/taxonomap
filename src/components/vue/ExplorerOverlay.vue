@@ -72,7 +72,7 @@ function closePanel() {
       <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
       <MapProgress class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0" />
       <div class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1">
-        <button type="button" class="near-btn" aria-pressed="false" @click="toggleNear">
+        <button type="button" class="near-btn" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"
             class="size-4"
@@ -88,7 +88,7 @@ function closePanel() {
         <BasemapSwitcher />
       </div>
       <!-- Phone: Near me + Filters button (the rail is hidden). -->
-      <button type="button" class="near-btn near-phone ml-auto" aria-pressed="false" @click="toggleNear">
+      <button type="button" class="near-btn near-phone ml-auto" @click="toggleNear">
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path :d="pinIcon" />
         </svg>

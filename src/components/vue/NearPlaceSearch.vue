@@ -64,7 +64,7 @@ function onInput() {
             enterkeyhint="search"
             placeholder="Search a place"
             autocomplete="off"
-            class="w-full rounded-md border border-border bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus:outline-none"
+            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
             @input="onInput"
           />
         </span>

@@ -72,7 +72,7 @@ const wedges = computed(() => {
         :y="w.ly"
         text-anchor="middle"
         dominant-baseline="middle"
-        class="fill-[var(--text-subtle)] text-[9px]"
+        class="fill-[var(--text-subtle)] text-[11px]"
       >
         {{ w.m[0] }}
       </text>
