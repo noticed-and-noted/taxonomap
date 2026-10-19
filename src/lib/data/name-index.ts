@@ -23,11 +23,20 @@ export interface IndexedName {
   commonName?: string;
   /** Occurrence records. */
   count: number;
+  /** iNaturalist's taxon for it (species only), when the bake matched one. */
+  inatId?: number;
 }
 
-/** The baked row format, [key, rank code, scientific name, common name | null, count], decoded. */
-function decode([key, code, scientificName, commonName, count]: NameRow): IndexedName {
-  return { key, rank: RANK_BY_CODE[code], scientificName, ...(commonName && { commonName }), count };
+/** The baked row format, [key, rank code, scientific name, common name | null, count, iNaturalist ID?], decoded. */
+function decode([key, code, scientificName, commonName, count, inatId]: NameRow): IndexedName {
+  return {
+    key,
+    rank: RANK_BY_CODE[code],
+    scientificName,
+    ...(commonName && { commonName }),
+    count,
+    ...(inatId && { inatId }),
+  };
 }
 
 interface Entry {
@@ -84,11 +93,17 @@ export class NameIndex {
 }
 
 let indexPromise: Promise<NameIndex | null> | undefined;
+let loaded: NameIndex | null = null;
 
 /** Lazily load /data/names.json (first omnibox focus). */
 export function loadNameIndex(): Promise<NameIndex | null> {
-  indexPromise ??= loadSnapshot('names').then((s) => (s ? new NameIndex(s.names) : null));
+  indexPromise ??= loadSnapshot('names').then((s) => (loaded = s ? new NameIndex(s.names) : null));
   return indexPromise;
+}
+
+/** The index if it has already loaded, without starting a load (for callers that only use it when it's free). */
+export function nameIndexIfLoaded(): NameIndex | null {
+  return loaded;
 }
 
 /**

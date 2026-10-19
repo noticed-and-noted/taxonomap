@@ -15,8 +15,8 @@ export interface YearsSnapshot extends BakedMeta {
 /** Rank codes used in the name index. */
 export type RankCode = 'K' | 'P' | 'C' | 'O' | 'F' | 'G' | 'S';
 
-/** [key, rank, scientificName, commonName | null, occurrenceCount] */
-export type NameRow = [number, RankCode, string, string | null, number];
+/** [key, rank, scientificName, commonName | null, occurrenceCount, iNaturalistTaxonId?] */
+export type NameRow = [number, RankCode, string, string | null, number, number?];
 
 /** /data/names.json — common-name index for the omnibox, descending by count. */
 export interface NamesSnapshot extends BakedMeta {

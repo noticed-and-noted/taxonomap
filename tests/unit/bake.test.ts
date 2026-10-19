@@ -239,6 +239,39 @@ function messyGbif() {
   });
 }
 
+describe('bake with iNaturalist IDs', () => {
+  beforeEach(async () => (await import('~/lib/gbif/server')).http().clear());
+
+  /** GBIF holds an iNaturalist record of species 10 only; iNaturalist knows its taxon. */
+  const inat = (url: URL) => {
+    if (url.host === 'api.inaturalist.org' && url.pathname === '/v2/taxa') return { results: [] };
+    if (url.host === 'api.inaturalist.org') return { results: [{ id: 777, name: 'Species number10', rank_level: 10 }] };
+    const keys = [...url.searchParams.getAll('speciesKey'), ...url.searchParams.getAll('taxonKey')];
+    if (url.searchParams.has('datasetKey'))
+      return {
+        count: 1,
+        endOfRecords: true,
+        results: keys.includes('10') ? [{ key: 1, speciesKey: 10, taxonID: '777', species: 'Species number10' }] : [],
+      };
+    return undefined;
+  };
+
+  it('adds the iNaturalist taxon to each species it can match', async () => {
+    gbif(inat);
+    const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
+    expect(names.filter((r) => r.length === 6).map((r) => [r[0], r[5]])).toEqual([[10, 777]]);
+  });
+
+  it('leaves a chunk without IDs when iNaturalist fails, rather than failing the build', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    gbif((url) => (url.host === 'api.inaturalist.org' ? json({}, 400) : inat(url)));
+    const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
+    expect(names.some((r) => r.length === 6)).toBe(false);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+});
+
 describe('bake against a messier GBIF', () => {
   beforeEach(async () => (await import('~/lib/gbif/server')).http().clear());
 
