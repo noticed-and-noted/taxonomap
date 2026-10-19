@@ -9,7 +9,7 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
     // old links can point at ones that are gone); every taxon renders at /species/view.
     {
       const m = /^\/species\/(\d+)(\/|$)/.exec(location.pathname);
-      if (m) location.replace(`/species/view?key=${m[1]}`);
+      if (m) location.replace(`/species/view/${m[1]}`);
     }
   </script>
   <PageShell>

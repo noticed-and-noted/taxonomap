@@ -20,7 +20,7 @@ test('a pre-rendered species page has metadata, charts and attribution', async (
 });
 
 test('species without a static page render client-side, noindex', async ({ page }) => {
-  await page.goto('/species/view?key=2492462');
+  await page.goto('/species/view/2492462');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
   await expect(page.getByRole('heading', { level: 1, name: 'European Robin' })).toBeVisible();
   await expect(page).toHaveTitle(/European Robin/);

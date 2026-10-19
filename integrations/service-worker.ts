@@ -52,7 +52,7 @@ export default function serviceWorker(): AstroIntegration {
           maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           // Astro hashes everything in _astro/, so the URL is the revision.
           dontCacheBustURLsMatching: /\/_astro\//,
-          // Serve page shells for "/tree", "/species/view?key=1" etc.: for pages the
+          // Serve page shells for "/tree", "/species/view" etc.: for pages the
           // query string is client-side state, and precached assets are hashed.
           templatedURLs: Object.fromEntries(
             ['tree', 'near', 'species/view', 'offline']

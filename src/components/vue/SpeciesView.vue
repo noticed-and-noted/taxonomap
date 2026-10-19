@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * /species/view?key= — renders any taxon (species or group) in the browser
+ * /species/view/{key} — renders any taxon (species or group) in the browser
  * with the same components as the pre-rendered pages. If it does have a
  * static page, it redirects there instead; if GBIF cannot give us the taxon
  * at all, it falls back to the tree of life, focused on that key. Transient
@@ -26,7 +26,7 @@ const key = ref<number | null>(null);
 
 async function load() {
   error.value = null;
-  const k = Number(new URLSearchParams(window.location.search).get('key'));
+  const k = Number(window.location.pathname.split('/')[3]);
   if (!Number.isInteger(k) || k <= 0) {
     error.value = 'missing-key';
     return;

@@ -89,7 +89,7 @@ npm run dev             # http://localhost:4321
 ## Species pages
 
 - **Pre-rendered pages.** `/species/{key}/{slug}` is built for `SPECIES_PRERENDER_COUNT` species (default 2000; 12 in dev). They are chosen by record count, with a quota for each major class (birds, insects, flowering plants, mammals, fungi and so on), so the set isn't nearly all birds (`src/lib/bake/index.ts`).
-- **Fallback page.** Every other species uses `/species/view?key=`. It is client-rendered with the same components and marked `noindex`; if the species does have a static page, it redirects there.
+- **Fallback page.** Every other species uses `/species/view/{key}`. It is client-rendered with the same components and marked `noindex`; if the species does have a static page, it redirects there.
 - **Linking.** The build writes `/data/species-manifest.json` (key → slug) so links can choose between the two routes.
 - **Requests per species.** About 10, with no per-record loops (`src/lib/species/data.ts`): detail, vernacular names, synonyms, one facet request (years, months, countries, datasets), genus siblings (one facet request and the genus's children), and dataset titles. Photos are fetched in the browser (see Photos above).
 - **Build time.** A cold build of 2000 species makes about 20,000 cached GBIF requests: roughly 25 minutes at concurrency 5 (`build.concurrency: 8` renders routes in parallel). Warm builds reuse `.cache/gbif` and `.cache/og`.
@@ -122,7 +122,7 @@ npm run dev             # http://localhost:4321
 - **Decade animation.** The play button on the time slider steps through 1900s → 2020s. While it plays, URL writes use `replaceState` (`withHistoryMode`), so Back isn't flooded.
 - **Offline.**
   - Pages are network-first, falling back to the last copy, or to `/offline` for pages never visited.
-  - Page shells (`/tree`, `/species/view?key=…`) are served from the precache whatever the query string.
+  - Page shells (`/tree`, `/species/view/{key}`) are served from the precache whatever the query string.
   - A notice shows while offline. `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
   - There's a 404 page.
 - **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. Run it with `npx @lhci/cli autorun` after a build. **Not yet measured locally.**

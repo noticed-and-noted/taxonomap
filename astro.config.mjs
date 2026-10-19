@@ -12,6 +12,19 @@ for (const [k, v] of Object.entries(loadEnv(process.env.NODE_ENV ?? 'production'
   process.env[k] ??= v;
 }
 
+// public/_redirects rewrites /species/view/{key} to the view page on Pages; do the same in dev and preview.
+const rewriteSpeciesView = (/** @type {{ middlewares: import('vite').Connect.Server }} */ server) => {
+  server.middlewares.use((req, _res, next) => {
+    req.url = req.url?.replace(/^\/species\/view\/\d+\/?(?=\?|$)/, '/species/view/');
+    next();
+  });
+};
+const speciesViewRewrite = {
+  name: 'species-view-rewrite',
+  configureServer: rewriteSpeciesView,
+  configurePreviewServer: rewriteSpeciesView,
+};
+
 const site = process.env.PUBLIC_SITE_URL || 'https://app.taxonomap.com';
 
 export default defineConfig({
@@ -31,7 +44,7 @@ export default defineConfig({
   ],
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [tailwindcss(), speciesViewRewrite],
     // Native/WASM build-time renderers for Open Graph images stay external.
     ssr: { external: ['@resvg/resvg-js', 'satori'] },
     optimizeDeps: { exclude: ['@resvg/resvg-js'] },

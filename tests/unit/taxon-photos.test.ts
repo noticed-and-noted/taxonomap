@@ -232,9 +232,9 @@ describe('iNaturalist photo URLs', () => {
       licence: 'CC-BY' as const,
       url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/square.jpeg',
     };
-    expect(thumbnailUrl(img, '200x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg');
-    expect(thumbnailUrl(img, '400x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpeg');
-    expect(thumbnailUrl(img, '800x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg');
+    expect(thumbnailUrl(img, '200x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg?x-cors');
+    expect(thumbnailUrl(img, '400x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpeg?x-cors');
+    expect(thumbnailUrl(img, '800x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg?x-cors');
   });
 
   it('asks for CORS only from hosts that send it (GBIF’s image cache does not)', async () => {

@@ -75,7 +75,10 @@ export function thumbnailUrl(img: UsableImage, size: ThumbSize = '400x'): string
   if (img.source === 'inat') {
     const want = parseInt(size, 10);
     const name = INAT_SIZES.find(([, px]) => px >= want)?.[0] ?? 'large';
-    return img.url.replace(/\/(square|thumb|small|medium|large|original)\.(\w+)(\?.*)?$/, `/${name}.$2`);
+    const url = img.url.replace(/\/(square|thumb|small|medium|large|original)\.(\w+)(\?.*)?$/, `/${name}.$2`);
+    // S3 doesn't vary on Origin, so a cached plain copy would answer a CORS load and be blocked: keep them apart.
+    // Not `?cors`: S3 reads that as its CORS-config subresource and returns no image.
+    return CORS_PHOTO_HOST.test(url) ? `${url}?x-cors` : url;
   }
   return `${GBIF_API_BASE}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
 }

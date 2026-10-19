@@ -1,6 +1,6 @@
 /**
  * Links to species pages. Pre-rendered species live at /species/{key}/{slug};
- * every other species uses the client-rendered /species/view?key= fallback.
+ * every other species uses the client-rendered /species/view/{key} fallback.
  * The build writes /data/species-manifest.json (key → slug) to decide.
  */
 import { atom } from 'nanostores';
@@ -10,7 +10,7 @@ export type SpeciesManifest = Record<string, string>;
 
 export function speciesPath(key: number, manifest: SpeciesManifest | null | undefined): string {
   const slug = manifest?.[String(key)];
-  return slug ? `/species/${key}/${slug}` : `/species/view?key=${key}`;
+  return slug ? `/species/${key}/${slug}` : `/species/view/${key}`;
 }
 
 /** Similar species with their page links, for the SimilarSpecies island (which gets no manifest). */
