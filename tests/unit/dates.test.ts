@@ -66,6 +66,28 @@ describe('typed dates', () => {
     expect(parseDateInput('2020-3-7')).toBe('2020-03-07');
     expect(parseDateInput('12/03/2020')).toBe('2020-03-12');
     expect(parseDateInput('03/2020')).toBe('2020-03');
-    for (const bad of ['', 'soon', '31 Feb 2021', '13/2020', 'Ma 2020', '1499']) expect(parseDateInput(bad)).toBeNull();
+    for (const bad of ['', 'soon', '31 Feb 2021', '13/2020', 'Ma 2020', 'Foo 2020', '1499'])
+      expect(parseDateInput(bad)).toBeNull();
+  });
+});
+
+describe('open-ended ranges', () => {
+  const day = (from: string | null, to: string | null) => ({ unit: 'd' as const, from, to });
+
+  it('filter with a * for the open end', () => {
+    expect(rangeFilter(day(null, '2020-05-01'), today)).toEqual({ eventDate: '*,2020-05-01' });
+    expect(rangeFilter(day('2020-05-01', null), today)).toEqual({ eventDate: '2020-05-01,*' });
+  });
+
+  it('span from the first year, or to this year', () => {
+    expect(rangeYears(day(null, '2020-05-01'), today)![0]).toBeLessThan(1900);
+    expect(rangeYears(day('2020-05-01', null), today)).toEqual([2020, 2026]);
+  });
+
+  it('read as a label', () => {
+    expect(rangeLabel(day('2020-05-01', '2020-05-01'))).toBe('1 May 2020');
+    expect(rangeLabel(day('2020-05-01', null))).toBe('Since 1 May 2020');
+    expect(rangeLabel(day(null, '2020-05-01'))).toBe('Up to 1 May 2020');
+    expect(rangeLabel(day(null, null))).toBe('Any time');
   });
 });

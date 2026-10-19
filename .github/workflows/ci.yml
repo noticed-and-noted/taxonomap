@@ -6,14 +6,20 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # Nightly rebuild refreshes baked data and pre-rendered species pages.
+    # Nightly rebuild and deploy, using the data from the last weekly bake.
     - cron: '0 3 * * *'
+    # Weekly bake: fetch the GBIF data the build uses (Monday 02:00 UTC).
+    - cron: '0 2 * * 1'
     # Weekly live contract tests (Monday 04:00 UTC).
     - cron: '0 4 * * 1'
   workflow_dispatch:
     inputs:
       contract:
         description: Run live GBIF contract tests
+        type: boolean
+        default: false
+      bake:
+        description: Bake fresh GBIF data now
         type: boolean
         default: false
 
@@ -31,18 +37,49 @@ env:
 jobs:
   verify:
     name: Lint, typecheck, unit tests
-    if: github.event.schedule != '0 4 * * 1'
+    if: github.event.schedule != '0 4 * * 1' && github.event.schedule != '0 2 * * 1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run check
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm check
+
+  bake:
+    name: Bake GBIF data
+    if: github.event.schedule == '0 2 * * 1' || inputs.bake
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PUBLIC_GBIF_API_BASE: ${{ vars.PUBLIC_GBIF_API_BASE || 'https://api.gbif.org' }}
+      GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
+      SPECIES_PRERENDER_COUNT: ${{ vars.SPECIES_PRERENDER_COUNT || '0' }}
+      NAME_INDEX_SIZE: ${{ vars.NAME_INDEX_SIZE || '300' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # GBIF response cache, so a failed run can pick up where it stopped.
+      - uses: actions/cache@v4
+        with:
+          path: .cache/gbif
+          key: gbif-${{ github.run_id }}
+          restore-keys: gbif-
+      - run: pnpm bake
+      - uses: actions/cache/save@v4
+        with:
+          path: .cache/baked
+          key: baked-${{ github.run_id }}
 
   build:
     name: Build
@@ -60,26 +97,28 @@ jobs:
       NAME_INDEX_SIZE: ${{ vars.NAME_INDEX_SIZE || '300' }}
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
 
-      # GBIF response cache persists between runs. A new key is saved each day;
-      # restore-keys picks up the most recent previous cache.
-      - name: Date stamp
-        id: date
-        run: echo "today=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      # Data from the latest weekly bake. Without one, the build fetches it from GBIF itself.
+      - uses: actions/cache/restore@v4
+        with:
+          path: .cache/baked
+          key: baked-none
+          restore-keys: baked-
+
+      # GBIF response cache for what the build still fetches (species pages, if pre-rendered).
       - uses: actions/cache@v4
         with:
           path: .cache/gbif
-          key: gbif-${{ steps.date.outputs.today }}-${{ github.run_id }}
-          restore-keys: |
-            gbif-${{ steps.date.outputs.today }}-
-            gbif-
+          key: gbif-${{ github.run_id }}
+          restore-keys: gbif-
 
-      - run: npm run build
+      - run: pnpm build
         timeout-minutes: 40
       - uses: actions/upload-artifact@v4
         with:
@@ -96,14 +135,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run build:e2e
-      - run: npm run test:e2e
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build:e2e
+      - run: pnpm test:e2e
 
   deploy:
     name: Deploy to Cloudflare Pages
@@ -138,9 +178,10 @@ jobs:
       GBIF_CONTACT_EMAIL: ${{ vars.GBIF_CONTACT_EMAIL }}
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm run test:contract
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:contract

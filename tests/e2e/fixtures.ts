@@ -2,7 +2,7 @@
  * The journeys' `test`: every request that leaves the site is answered by the
  * fake world (fake/world.ts) or refused, so no journey depends on GBIF,
  * iNaturalist or the basemaps being up, or on what they hold today. The site
- * is built against the same fake (`npm run build:e2e`).
+ * is built against the same fake (`pnpm build:e2e`).
  */
 import { test as base, expect } from '@playwright/test';
 import { answer } from './fake/world';

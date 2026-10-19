@@ -1,6 +1,6 @@
 /**
  * Live contract tests: one request per endpoint we depend on, asserting the
- * response fields the app reads. Run with `npm run test:contract`.
+ * response fields the app reads. Run with `pnpm test:contract`.
  * Not part of default CI (network-dependent); a scheduled job runs them weekly.
  */
 import {

@@ -3,6 +3,9 @@
  * endpoint in src/pages/data/ and memoised so several pages can share one
  * result within a build.
  */
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import pLimit from 'p-limit';
 import {
   getSpecies,
@@ -22,13 +25,36 @@ import { englishName } from '~/lib/species/names';
 import { speciesSlug } from '~/lib/species/data';
 
 const memo = new Map<string, Promise<unknown>>();
+let readFiles = true;
+// The default is only used outside the tests, which always set BAKE_DIR.
+/* v8 ignore next */
+const bakeDir = () => process.env['BAKE_DIR'] ?? '.cache/baked';
+
+/**
+ * Memoised per build. A file left by `pnpm bake` (baked/<key>.json) is used
+ * instead of asking GBIF, so a build needs no GBIF requests once data is baked.
+ */
 function once<T>(key: string, fn: () => Promise<T>): Promise<T> {
   let p = memo.get(key) as Promise<T> | undefined;
   if (!p) {
-    p = fn();
+    const file = join(bakeDir(), `${key}.json`);
+    p = readFiles && existsSync(file) ? readFile(file, 'utf8').then((s) => JSON.parse(s) as T) : fn();
     memo.set(key, p);
   }
   return p;
+}
+
+/** The `pnpm bake` command: fetch everything the build bakes and save it for later builds. */
+export async function bakeToDisk(): Promise<string[]> {
+  readFiles = false;
+  memo.clear();
+  const dir = bakeDir();
+  await mkdir(dir, { recursive: true });
+  const snapshots = { years: bakeYears, names: bakeNames, tree: bakeTree, 'species-list': bakeSpeciesList };
+  for (const [key, bake] of Object.entries(snapshots)) {
+    await writeFile(join(dir, `${key}.json`), JSON.stringify(await bake()));
+  }
+  return Object.keys(snapshots);
 }
 
 /** Skip taxa GBIF doesn't know; any other failure fails the build, so a GBIF outage can't deploy a smaller site. */

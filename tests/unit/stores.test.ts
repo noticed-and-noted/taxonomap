@@ -102,3 +102,12 @@ describe('near me URL state', () => {
     expect(zoomForRadius(0.01)).toBe(14);
   });
 });
+
+describe('months', () => {
+  it('are dropped when the range stops being in whole years', async () => {
+    const s = await stores('?months=3,4&when=y:2020..2021');
+    expect(s.$months.get()).toEqual([3, 4]);
+    s.$dateRange.set({ unit: 'd', from: '2020-01-01', to: '2020-02-01' });
+    expect(s.$months.get()).toEqual([]);
+  });
+});

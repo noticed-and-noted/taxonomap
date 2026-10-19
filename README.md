@@ -8,23 +8,24 @@ A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, buil
 
 ## Local setup
 
-Requirements: Node ≥ 22.12 (CI uses Node 24).
+Requirements: Node 22.22.3+, 24.16+ or 26.3+ (CI uses Node 24). Odd-numbered releases such as 25 are not supported by the ESLint Astro plugins. `.nvmrc` pins 24.
 
 ```bash
 cp .env.example .env    # set GBIF_CONTACT_EMAIL at least
-npm install
-npm run dev             # http://localhost:4321
+pnpm install
+pnpm dev             # http://localhost:4321
 ```
 
-| Script                                   | Purpose                                                                                                                              |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev`                            | Dev server                                                                                                                           |
-| `npm run build` / `npm run preview`      | Static build to `dist/` (also generates `sw.js`) and serve it                                                                        |
-| `npm run lint` / `npm run format`        | ESLint / Prettier                                                                                                                    |
-| `npm run check`                          | `astro check` (TypeScript strictest)                                                                                                 |
-| `npm test`                               | Unit tests (Vitest)                                                                                                                  |
-| `npm run test:contract`                  | **Live** GBIF contract tests. Hits each endpoint once. Not run in default CI.                                                        |
-| `npm run build:e2e` / `npm run test:e2e` | Build against the fake GBIF in `tests/e2e/fake`, then run the Playwright journeys on it (run `npx playwright install chromium` once) |
+| Script                             | Purpose                                                                                                                                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                         | Dev server                                                                                                                                                                                |
+| `pnpm bake`                        | Fetch the data the build bakes (years, name index, tree, species list) from GBIF into `.cache/baked/`. Builds use it instead of fetching; delete it to go back to fetching on every build |
+| `pnpm build` / `pnpm preview`      | Static build to `dist/` (also generates `sw.js`) and serve it                                                                                                                             |
+| `pnpm lint` / `pnpm format`        | ESLint / Prettier                                                                                                                                                                         |
+| `pnpm check`                       | `astro check` (TypeScript strictest)                                                                                                                                                      |
+| `pnpm test`                        | Unit tests (Vitest)                                                                                                                                                                       |
+| `pnpm test:contract`               | **Live** GBIF contract tests. Hits each endpoint once. Not run in default CI.                                                                                                             |
+| `pnpm build:e2e` / `pnpm test:e2e` | Build against the fake GBIF in `tests/e2e/fake`, then run the Playwright journeys on it (run `pnpm exec playwright install chromium` once)                                                |
 
 ## Environment variables
 
@@ -124,9 +125,9 @@ npm run dev             # http://localhost:4321
   - Page shells (`/tree`, `/species/view/{key}`) are served from the precache whatever the query string.
   - A notice shows while offline. `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
   - There's a 404 page.
-- **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. Run it with `npx @lhci/cli autorun` after a build. **Not yet measured locally.**
-- **Unit tests** (`tests/unit/`). `src/lib`, `src/stores`, `src/pages` endpoints and `functions/` are held at 100% line, branch, function and statement coverage (`npm run test:coverage` fails below it); Vue components are covered by the journeys instead.
-- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox and place search, filters, hex panel, species pages and fallback, 404, tree, near me (species table, recent sightings, and that geolocation is rounded before any request), the decade animation and offline. They never touch the network: `npm run build:e2e` builds the site against a small fake GBIF (`tests/e2e/fake/world.ts`: six species, served by a local server during the build), and in the browser every request off the site is answered by the same fake or fails the journey. Phones run only the journeys tagged `@mobile`, whose layout differs there. `PW_CHANNEL=chrome` uses an installed Chrome, or `PW_CHROMIUM` a Chromium binary, instead of Playwright's download.
+- **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. Run it with `pnpm dlx @lhci/cli autorun` after a build. **Not yet measured locally.**
+- **Unit tests** (`tests/unit/`). `src/lib`, `src/stores`, `src/pages` endpoints and `functions/` are held at 100% line, branch, function and statement coverage (`pnpm test:coverage` fails below it); Vue components are covered by the journeys instead.
+- **Playwright journeys** (`tests/e2e/`). Cover the map, omnibox and place search, filters, hex panel, species pages and fallback, 404, tree, near me (species table, recent sightings, and that geolocation is rounded before any request), the decade animation and offline. They never touch the network: `pnpm build:e2e` builds the site against a small fake GBIF (`tests/e2e/fake/world.ts`: six species, served by a local server during the build), and in the browser every request off the site is answered by the same fake or fails the journey. Phones run only the journeys tagged `@mobile`, whose layout differs there. `PW_CHANNEL=chrome` uses an installed Chrome, or `PW_CHROMIUM` a Chromium binary, instead of Playwright's download.
 
 ## GBIF API findings (verified 2026-10-12)
 
@@ -143,7 +144,7 @@ These are cases where the live API differs from the original brief:
 
 ## Deployment
 
-`.github/workflows/ci.yml` runs lint, format check, `astro check` and unit tests, then builds. It deploys to Cloudflare Pages on pushes to `main` and nightly at 03:00 UTC. Live contract tests run weekly or on manual dispatch.
+`.github/workflows/ci.yml` runs lint, format check, `astro check` and unit tests, then builds. It deploys to Cloudflare Pages on pushes to `main` and nightly at 03:00 UTC. A separate job runs `pnpm bake` weekly (Monday 02:00 UTC, or on manual dispatch with the `bake` input) and saves the result in the Actions cache; builds use the latest saved bake and only fetch from GBIF when there is none. Live contract tests run weekly or on manual dispatch.
 
 Configure the repository with:
 
