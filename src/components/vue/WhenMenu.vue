@@ -204,6 +204,18 @@ onBeforeUnmount(() => {
       :aria-label="`Date range: ${label}`"
       @click="toggle"
     >
+      <svg
+        viewBox="0 0 24 24"
+        class="size-3.5 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM16 3v4M8 3v4M4 11h16" />
+      </svg>
       <span class="whitespace-nowrap" aria-live="polite">{{ label }}</span>
       <svg
         viewBox="0 0 24 24"
@@ -344,22 +356,27 @@ onBeforeUnmount(() => {
 .when-menu {
   flex-shrink: 0;
 }
+/* A bordered pill with a calendar, so it reads as a dropdown before hover. */
 .trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  margin: -0.125rem -0.25rem;
-  padding: 0.125rem 0.25rem;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
   font-weight: 500;
   color: var(--text);
-  transition: background var(--dur-fast) var(--ease);
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 .trigger:hover,
 .trigger[aria-expanded='true'] {
-  background: var(--surface-2);
+  border-color: var(--border-strong);
+  background: var(--surface-3);
 }
-.trigger .chevron {
+.trigger svg {
   color: var(--text-muted);
 }
 .trigger[aria-expanded='true'] .chevron {
@@ -520,7 +537,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   margin-top: 0.25rem;
-  padding-top: 0.25rem;
+  padding-top: 0.375rem;
   border-top: 1px solid var(--border);
 }
 .link {

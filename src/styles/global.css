@@ -45,6 +45,14 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Tailwind v4 leaves buttons on the default cursor. */
+  button:not(:disabled),
+  [role='button'],
+  summary,
+  label:has(> input:not(:disabled):is([type='radio'], [type='checkbox'])) {
+    cursor: pointer;
+  }
+
   /* Disclosure markers differ per browser; summaries carry a <UiIcon name="chevron-right" class="chevron" /> instead. */
   summary {
     list-style: none;

@@ -90,7 +90,7 @@ function label(name: string, n: number) {
     </nav>
 
     <Transition name="flyout">
-      <section v-if="current" id="filter-flyout" class="flyout" :aria-labelledby="'filter-flyout-title'">
+      <section v-if="current" id="filter-flyout" class="flyout" :class="{ when: current.id === 'when' }" :aria-labelledby="'filter-flyout-title'">
         <header class="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
           <h2 id="filter-flyout-title" class="font-display text-base">{{ current.title }}</h2>
           <button
@@ -214,6 +214,10 @@ function label(name: string, n: number) {
   padding-top: 0.5rem;
 }
 
+/* The date pill and record count need the extra room to share a line. */
+.flyout.when {
+  width: 20rem;
+}
 .flyout {
   display: flex;
   flex-direction: column;

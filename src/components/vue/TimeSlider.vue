@@ -151,7 +151,7 @@ const label = computed(() =>
         </div>
       </div>
     </ChartFrame>
-    <div class="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+    <div class="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
       <!-- The live range while dragging; FilterGroup puts the date menu here. -->
       <slot name="label" :live="dragging ? label : null">
         <span class="whitespace-nowrap font-medium text-text" aria-live="polite">{{ label }}</span>
