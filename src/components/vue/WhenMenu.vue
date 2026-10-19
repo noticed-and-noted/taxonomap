@@ -83,6 +83,7 @@ const show = (iso: string | null) => (iso ? formatDate(iso, unit.value) : '');
 const fromText = ref('');
 const toText = ref('');
 const typeError = ref('');
+let errorTimer: ReturnType<typeof setTimeout> | undefined;
 const syncText = () => {
   fromText.value = show(from.value);
   toText.value = show(to.value);
@@ -94,6 +95,8 @@ function commitText(end: 'from' | 'to') {
   const key = text.trim() ? parseDateInput(text) : '';
   if (key === null) {
     typeError.value = `Try a date like ${EXAMPLE[unit.value]}.`;
+    clearTimeout(errorTimer);
+    errorTimer = setTimeout(() => (typeError.value = ''), 3000);
     return;
   }
   typeError.value = '';
@@ -183,7 +186,10 @@ watch(open, (o) => {
   if (o) position();
   listen(o);
 });
-onBeforeUnmount(() => listen(false));
+onBeforeUnmount(() => {
+  listen(false);
+  clearTimeout(errorTimer);
+});
 </script>
 
 <template>
@@ -315,8 +321,8 @@ onBeforeUnmount(() => listen(false));
                   @keydown.enter.prevent="commitText('to')"
                 />
               </label>
+              <p v-if="typeError" :id="`${uid}-err`" class="error" role="alert">{{ typeError }}</p>
             </div>
-            <p v-if="typeError" :id="`${uid}-err`" class="error" role="alert">{{ typeError }}</p>
 
             <DatePicker :unit="unit" :from="from" :to="to" :at="at" @pick="pick" />
 
@@ -456,6 +462,7 @@ onBeforeUnmount(() => listen(false));
   outline-offset: -2px;
 }
 .ends {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.25rem;
@@ -496,8 +503,15 @@ onBeforeUnmount(() => listen(false));
   line-height: 1rem;
   color: var(--text-subtle);
 }
+/* Floats over the calendar's top edge so showing it doesn't shift the layout. */
 .error {
-  margin-top: 0.25rem;
+  position: absolute;
+  top: calc(100% + 0.125rem);
+  left: 0;
+  right: 0;
+  z-index: 1;
+  padding: 0.125rem 0.375rem;
+  background: var(--surface);
   font-size: 0.75rem;
   color: var(--danger);
 }
@@ -541,6 +555,10 @@ onBeforeUnmount(() => listen(false));
   .unit,
   .btn {
     min-height: 2.75rem;
+  }
+  .back {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.5rem 0.625rem;
   }
 }
 </style>

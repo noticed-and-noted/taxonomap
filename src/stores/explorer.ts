@@ -108,6 +108,13 @@ export const $exactTaxon = urlAtom(codecs.bool('exact', { scope: 'global' }));
 export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'global' }));
 export const $hasSound = urlAtom(codecs.bool('sound', { scope: 'global' }));
 export const $months = urlAtom(codecs.intSet('months', { min: 1, max: 12 }, { scope: 'global' }));
+/** Months only combine with a range in whole years: Any time, "Last N years" or a years range. */
+export const monthsAllowed = (r: DateRange | null): boolean =>
+  !r || ('preset' in r ? r.preset.endsWith('y') : r.unit === 'y');
+// Drop months the moment the range stops being in years, so no hidden filter stays applied.
+$dateRange.subscribe((r) => {
+  if (!monthsAllowed(r) && $months.get().length) $months.set([]);
+});
 export const $continents = urlAtom(codecs.setOf('continent', CONTINENTS, { scope: 'global' }));
 export const $maxUncertainty = urlAtom({
   ...codecs.int('uncert', null, { scope: 'global' }),

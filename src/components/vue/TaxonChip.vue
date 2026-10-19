@@ -46,12 +46,18 @@ const nameOf = (t: { commonName?: string; scientificName: string }) => t.commonN
 
 <style scoped>
 /* One row (the filter rail sits just below it); scrolls sideways when full.
-   The padding keeps the chips' shadows inside the scroll box. */
+   The padding fits --shadow (8px down, 28px blur) inside the scroll box, which clips it;
+   the box ignores the pointer so that padding doesn't block the map. */
 .pills {
   overflow-x: auto;
   scrollbar-width: none;
-  margin: -0.25rem;
-  padding: 0.25rem;
+  margin: -1.25rem -1.75rem -2.25rem;
+  padding: 1.25rem 1.75rem 2.25rem;
+  pointer-events: none;
+}
+
+.chip {
+  pointer-events: auto;
 }
 
 .chip {

@@ -75,6 +75,21 @@ function onHi(e: Event) {
   hi.value = Math.max(Number((e.target as HTMLInputElement).value), lo.value);
 }
 
+/** A click on the chart moves the nearer handle to the clicked year's edge. */
+function onTrack(e: PointerEvent) {
+  if (e.button !== 0 || e.target instanceof HTMLInputElement) return;
+  const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const n = years.value.length;
+  const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - box.left) / box.width) * n)));
+  const y = years.value[i]!;
+  // Edge distances in bars: From marks a bar's left edge, To its right edge.
+  const toLo = Math.abs(y - lo.value);
+  const toHi = Math.abs(y - hi.value);
+  if (y < lo.value || (y <= hi.value && toLo <= toHi)) lo.value = y;
+  else hi.value = y;
+  commit();
+}
+
 const label = computed(() =>
   lo.value === MIN && hi.value === MAX
     ? 'All years'
@@ -88,7 +103,7 @@ const label = computed(() =>
   <!-- Positioned so a menu in the label slot can float below it. -->
   <section class="time-slider relative" aria-label="Year range">
     <ChartFrame title="Records per year" :caption="live ? 'filtered' : undefined" compact>
-      <div class="relative">
+      <div class="relative cursor-pointer" @pointerdown="onTrack">
         <SkeletonBlock v-if="loading && !counts.size" height="56px" label="Loading year histogram" />
         <p v-else-if="error !== null && !counts.size" class="grid h-14 place-items-center text-xs text-muted">
           Year counts are unavailable right now.
@@ -112,7 +127,7 @@ const label = computed(() =>
             :fill-opacity="b.inRange ? 0.9 : 0.6"
           />
         </svg>
-        <div class="range-wrap" :class="{ 'opacity-50': loading }">
+        <div class="range-wrap" :class="{ 'opacity-50': loading }" :style="{ '--n': years.length }">
           <input
             type="range"
             :min="view[0]"
@@ -164,15 +179,23 @@ const label = computed(() =>
   height: 16px;
 }
 
+/* Each input spans one bar less, plus a thumb, so From sits on a bar's left edge
+   and To on its right edge: one year shows a handle either side of its bar. */
 .range-wrap input {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: calc(100% - 100% / var(--n) + 16px);
   margin: 0;
   background: none;
   pointer-events: none;
   appearance: none;
   -webkit-appearance: none;
+}
+
+.range-wrap input + input {
+  left: calc(100% / var(--n) - 8px);
 }
 
 .range-wrap input::-webkit-slider-runnable-track {
@@ -196,8 +219,9 @@ const label = computed(() =>
 
 .range-wrap input::-moz-range-thumb {
   pointer-events: auto;
-  width: 14px;
-  height: 14px;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid var(--surface);

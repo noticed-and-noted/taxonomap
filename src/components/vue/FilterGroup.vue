@@ -6,7 +6,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import type { WritableAtom } from 'nanostores';
-import { ref, useId, watch } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTH_NAMES, MONTHS } from '~/lib/format';
 import {
   $basisOfRecord,
@@ -17,6 +17,7 @@ import {
   $iucn,
   $maxUncertainty,
   $months,
+  monthsAllowed,
   $taxonKeys,
   $dateRange,
   BASIS_OF_RECORD,
@@ -40,6 +41,7 @@ const iucn = useStore($iucn);
 const exact = useStore($exactTaxon);
 const dateRange = useStore($dateRange);
 const months = useStore($months);
+const monthsOn = computed(() => monthsAllowed(dateRange.value));
 const continents = useStore($continents);
 const uncert = useStore($maxUncertainty);
 const basis = useStore($basisOfRecord);
@@ -143,7 +145,7 @@ const clearDates = () => $dateRange.set(null);
         </TimeSlider>
       </fieldset>
 
-      <fieldset>
+      <fieldset :disabled="!monthsOn" :aria-describedby="`${uid}-months-hint`">
         <legend class="group-label flex w-full justify-between">
           Months
           <button v-if="months.length" type="button" class="link-btn" @click="clearMonths">Clear</button>
@@ -161,7 +163,9 @@ const clearDates = () => $dateRange.set(null);
             {{ m }}
           </button>
         </div>
-        <p class="hint">In any year. Pick several for a season.</p>
+        <p :id="`${uid}-months-hint`" class="hint">
+          {{ monthsOn ? 'In any year. Pick several for a season.' : 'Select a date range in years to filter by month' }}
+        </p>
       </fieldset>
     </template>
 
@@ -291,6 +295,11 @@ const clearDates = () => $dateRange.set(null);
 .toggle:hover {
   color: var(--text);
   border-color: var(--border-strong);
+}
+.toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 .toggle.month {
   padding: 0;
