@@ -245,8 +245,8 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
           {{ compact(focusTotal) }} {{ metric }}
         </text>
         <g v-if="focus.parent" class="pointer-events-none text-[var(--text-subtle)]">
-          <UiIcon name="arrow-up" :size="10" x="-27" y="20" />
-          <text text-anchor="middle" class="fill-current text-xs" x="6" y="28">zoom out</text>
+          <UiIcon name="arrow-up" :size="10" x="-33" y="20" />
+          <text class="fill-current text-xs" x="-19" y="28">zoom out</text>
         </g>
       </g>
     </svg>
