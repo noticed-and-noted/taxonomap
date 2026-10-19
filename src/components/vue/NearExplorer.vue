@@ -2,22 +2,21 @@
 /**
  * What's near me (client:only). The persisted map switches to "pin" mode:
  * click to drop a pin, or use geolocation after an explainer. Location is
- * rounded to 3 dp before any use. Panel: sortable species table, recent
- * sightings, share card.
+ * rounded to 3 dp before any use. Panel: sortable species table, the
+ * circle's records (as in a map cell's Records tab), share card.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { full } from '~/lib/format';
 import { RADIUS_STEPS_KM } from '~/lib/gbif';
 import {
   classesNear,
   NEAR_SPECIES,
-  recentSightings,
+  nearFilter,
   speciesNear,
   speciesTallies,
   type Area,
   type ClassGroup,
-  type Sighting,
   type SpeciesRow,
 } from '~/lib/near/data';
 import { nameFromRecords } from '~/lib/species/groups';
@@ -33,16 +32,13 @@ import {
   zoomForRadius,
 } from '~/stores/near';
 import BasemapSwitcher from './BasemapSwitcher.vue';
-import LicenceBadge from './LicenceBadge.vue';
+import HexRecords from './HexRecords.vue';
 import MapProgress from './MapProgress.vue';
 import NearPlaceSearch from './NearPlaceSearch.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import ShareDialog from './ShareDialog.vue';
-import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesTable from './SpeciesTable.vue';
-import ThumbImage from './ThumbImage.vue';
 import { useLatestLoad } from './useLatestLoad';
-import { useScrollFade } from './useScrollFade';
 
 const at = useStore($nearAt);
 const radius = useStore($nearRadius);
@@ -61,16 +57,6 @@ const classes = shallowRef<ClassGroup[]>([]);
 const species = shallowRef<SpeciesRow[]>([]);
 /** Class the species list is narrowed to, or null for the whole area. */
 const group = ref<number | null>(null);
-const recent = shallowRef<Sighting[] | null>(null);
-/** Recent thumbnails that have loaded (or failed), so their skeletons can go. */
-const thumbDone = ref(new Set<number>());
-const thumbSettled = (key: number) => (thumbDone.value = new Set(thumbDone.value).add(key));
-/** The Recent list fills the rest of the panel and scrolls inside it, fading at either edge. */
-const recentBox = ref<HTMLElement>();
-const { fadeTop: recentFadeTop, fadeBottom: recentFade, update: updateRecentFade } = useScrollFade(recentBox);
-watch([recent, recentBox], () => void nextTick(updateRecentFade));
-const recentLoading = ref(false);
-const recentError = ref(false);
 const shareOpen = ref(false);
 const tallies = shallowRef<Awaited<ReturnType<typeof speciesTallies>> | null>(null);
 
@@ -79,6 +65,7 @@ const area = computed<Area | null>(() =>
     ? { lat: at.value.lat, lng: at.value.lng, radiusKm: radius.value, ...(thisMonth.value && { month: MONTH }) }
     : null,
 );
+const recordsFilter = computed(() => area.value && nearFilter(area.value));
 const radiusIndex = computed(() => (RADIUS_STEPS_KM as readonly number[]).indexOf(radius.value));
 const tableNote = computed(() =>
   species.value.length >= NEAR_SPECIES ? `the ${NEAR_SPECIES} most recorded` : undefined,
@@ -114,7 +101,6 @@ async function loadArea() {
   classes.value = [];
   species.value = [];
   group.value = null;
-  recent.value = null;
   tallies.value = null;
   if (!a) {
     cancelArea();
@@ -126,7 +112,6 @@ async function loadArea() {
     const [r, rows] = await Promise.all([classesNear(a, signal), speciesNear(a, null, signal)]);
     if (signal.aborted) return;
     total.value = r.records;
-    if (tab.value === 'recent') void loadRecent();
     classes.value = r.classes;
     await showSpecies(rows, signal);
   });
@@ -150,20 +135,6 @@ async function pickGroup(key: number | null) {
   });
 }
 
-async function loadRecent() {
-  const a = area.value;
-  if (!a || recentLoading.value) return;
-  recentLoading.value = true;
-  recentError.value = false;
-  try {
-    recent.value = await recentSightings(a);
-  } catch {
-    recentError.value = true;
-  } finally {
-    recentLoading.value = false;
-  }
-}
-
 async function openShare() {
   const a = area.value;
   if (!a) return;
@@ -171,10 +142,7 @@ async function openShare() {
   if (!tallies.value) tallies.value = await speciesTallies(a, classes.value).catch(() => null);
 }
 
-const setTab = (t: 'species' | 'recent') => {
-  $nearTab.set(t);
-  if (t === 'recent' && !recent.value) void loadRecent();
-};
+const setTab = (t: 'species' | 'recent') => $nearTab.set(t);
 const toggleMonth = () => $nearThisMonth.set(!thisMonth.value);
 
 watch(area, () => void loadArea(), { deep: true });
@@ -308,7 +276,7 @@ onBeforeUnmount(() => {
               :class="tab === t ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
               @click="setTab(t)"
             >
-              {{ t === 'species' ? 'Species' : 'Recent' }}
+              {{ t === 'species' ? 'Species' : 'Records' }}
             </button>
           </div>
 
@@ -334,68 +302,9 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <!-- Recent sightings -->
-          <div v-else role="tabpanel" class="flex min-h-0 flex-1 flex-col">
-            <div v-if="recentLoading" class="space-y-2"><SkeletonBlock v-for="i in 4" :key="i" height="5rem" /></div>
-            <p v-else-if="recentError" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
-              Recent sightings are unavailable right now.
-              <button type="button" class="underline" @click="loadRecent">Try again</button>
-            </p>
-            <p v-else-if="recent && !recent.length" class="rounded-md bg-surface-2 p-3 text-sm text-muted">
-              No photographed records from the past year here. Try a larger radius.
-            </p>
-            <div
-              v-else-if="recent"
-              ref="recentBox"
-              class="fade-list min-h-48 flex-1 overflow-y-auto overscroll-contain"
-              :class="{ 'fade-top': recentFadeTop, 'fade-bottom': recentFade }"
-              tabindex="0"
-              role="region"
-              aria-label="Recent sightings"
-              @scroll.passive="updateRecentFade"
-            >
-              <ul class="space-y-2">
-                <li v-for="r in recent" :key="r.occurrence.key" class="flex gap-3 rounded-md bg-surface-2 p-2">
-                  <a
-                    :href="`https://www.gbif.org/occurrence/${r.occurrence.key}`"
-                    target="_blank"
-                    rel="noopener"
-                    class="relative size-20 shrink-0 overflow-hidden rounded bg-photo"
-                  >
-                    <SkeletonBlock
-                      v-if="!thumbDone.has(r.occurrence.key)"
-                      class="absolute inset-0"
-                      height="100%"
-                      rounded="sm"
-                      aria-hidden="true"
-                    />
-                    <ThumbImage
-                      :image="r.image"
-                      size="200x"
-                      :alt="r.commonName ?? r.occurrence.species ?? ''"
-                      class="relative size-full object-cover"
-                      @loaded="thumbSettled(r.occurrence.key)"
-                      @broken="thumbSettled(r.occurrence.key)"
-                    />
-                  </a>
-                  <div class="min-w-0 text-sm">
-                    <p class="truncate font-medium">
-                      {{ r.commonName ?? r.occurrence.species ?? r.occurrence.scientificName }}
-                    </p>
-                    <p v-if="r.commonName" class="sci-name truncate text-xs text-muted">{{ r.occurrence.species }}</p>
-                    <p class="text-xs text-subtle">
-                      {{ r.date }}<span v-if="r.datasetTitle"> · {{ r.datasetTitle }}</span>
-                    </p>
-                    <LicenceBadge
-                      class="mt-1"
-                      :licence="r.image.licence"
-                      :creator="r.image.creator"
-                      :rights-holder="r.image.rightsHolder"
-                    />
-                  </div>
-                </li>
-              </ul>
-            </div>
+          <!-- Records: the same list as a map cell's Records tab -->
+          <div v-else role="tabpanel" aria-label="Records">
+            <HexRecords :species="species" :filter="recordsFilter" />
           </div>
         </section>
       </ResponsivePanel>

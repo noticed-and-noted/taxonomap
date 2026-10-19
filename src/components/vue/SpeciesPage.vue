@@ -9,6 +9,7 @@ import { computed } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import type { SpeciesData } from '~/lib/species/data';
 import RadialSeasonality from './RadialSeasonality.vue';
+import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ data: SpeciesData }>();
 
@@ -84,7 +85,9 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
           <h2 id="names-h" class="mb-2 font-display text-xl">Common names</h2>
           <p v-if="englishNames.length" class="text-sm">{{ englishNames.join(' · ') }}</p>
           <details v-if="otherNames.length" class="mt-2 text-sm">
-            <summary class="cursor-pointer text-muted hover:text-text">{{ otherNames.length }} other languages</summary>
+            <summary class="cursor-pointer text-muted hover:text-text">
+              <UiIcon name="chevron-right" class="chevron" /> {{ otherNames.length }} other languages
+            </summary>
             <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
               <template v-for="g in otherNames" :key="g.code">
                 <dt class="text-subtle">{{ g.language }}</dt>
@@ -124,7 +127,9 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
     <section v-if="d.synonyms.length" class="mt-10" aria-labelledby="syn-h">
       <h2 id="syn-h" class="mb-2 font-display text-xl">Synonyms</h2>
       <details class="text-sm">
-        <summary class="cursor-pointer text-muted hover:text-text">{{ d.synonyms.length }} names</summary>
+        <summary class="cursor-pointer text-muted hover:text-text">
+          <UiIcon name="chevron-right" class="chevron" /> {{ d.synonyms.length }} names
+        </summary>
         <ul class="mt-2 columns-1 gap-6 sm:columns-2">
           <li v-for="s in d.synonyms" :key="s" class="sci-name py-0.5">{{ s }}</li>
         </ul>
@@ -137,7 +142,7 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
       }}
       records, top datasets listed above). Photos are shown under their stated licences. Snapshot {{ generated }} ·
       <a :href="`https://www.gbif.org/species/${d.key}`" class="underline" target="_blank" rel="noopener"
-        >GBIF species page ↗</a
+        >GBIF species page <UiIcon name="external" /></a
       >
     </footer>
   </article>

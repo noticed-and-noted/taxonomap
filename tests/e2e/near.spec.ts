@@ -54,13 +54,12 @@ test('lists species in a sortable table that one group can narrow', async ({ pag
   await expect(page.getByRole('link', { name: /Common Blackbird/ })).toHaveCount(0);
 });
 
-test('recent sightings list photographed records with their dataset', async ({ page }) => {
+test('the records tab lists the circle\'s records as a map cell does', async ({ page }) => {
   await page.goto(LONDON);
-  await page.getByRole('tab', { name: 'Recent' }).click();
+  await page.getByRole('tab', { name: 'Records' }).click();
   await expect(page).toHaveURL(/tab=recent/);
-  const recent = page.getByRole('region', { name: 'Recent sightings' });
-  await expect(recent.getByText('Common Blackbird').first()).toBeVisible();
-  await expect(recent.getByText(/· Garden bird survey/).first()).toBeVisible();
+  const records = page.getByRole('table', { name: 'Records' });
+  await expect(records.getByText('Common Blackbird').first()).toBeVisible();
 });
 
 test('the share card counts the species in the circle', async ({ page }) => {

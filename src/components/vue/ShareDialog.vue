@@ -6,6 +6,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { canvasToBlob, drawShareCard, type DrawToken } from '~/lib/near/share-card';
 import type { ClassGroup } from '~/lib/near/data';
+import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{
   open: boolean;
@@ -154,7 +155,7 @@ function onCancel(e: Event) {
           aria-label="Close"
           @click="emit('close')"
         >
-          ✕
+          <UiIcon name="close" :size="18" />
         </button>
       </div>
       <canvas

@@ -20,6 +20,7 @@ import { taxonPhotos } from '~/lib/photos/taxon-photos';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ taxonKey: number; rank: Rank; name: string }>();
 
@@ -218,7 +219,7 @@ function onBackdrop(e: MouseEvent) {
               rel="noopener"
               class="text-xs text-accent underline-offset-2 hover:underline"
             >
-              {{ sourceOf(current).label }} ↗
+              {{ sourceOf(current).label }} <UiIcon name="external" />
             </a>
           </span>
           <span class="flex items-center gap-3 text-xs text-muted">

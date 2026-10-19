@@ -37,7 +37,7 @@ test('a place search moves the map there', async ({ page }) => {
 });
 
 test('filters and year range live in the URL and survive reload', { tag: '@mobile' }, async ({ page }, info) => {
-  await page.goto('/?taxon=2492462&photo=1&years=2000-2010&basis=HUMAN_OBSERVATION');
+  await page.goto('/?taxon=2492462&photo=1&when=y:2000..2010&basis=HUMAN_OBSERVATION');
   // Phones pick a group's tab in the Filters sheet; desktop opens one group from the rail.
   if (info.project.name === 'mobile') {
     await page.getByRole('button', { name: /Filters/ }).click();

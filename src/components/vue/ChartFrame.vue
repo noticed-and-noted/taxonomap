@@ -4,6 +4,8 @@
  * (WCAG: the same information must be available without the graphic).
  * Uses <details>, so it works on pre-rendered pages without any JavaScript.
  */
+import UiIcon from './UiIcon.vue';
+
 defineProps<{ title: string; caption?: string | undefined; compact?: boolean }>();
 </script>
 
@@ -15,7 +17,9 @@ defineProps<{ title: string; caption?: string | undefined; compact?: boolean }>(
     </figcaption>
     <slot />
     <details v-if="$slots.table" class="mt-1.5">
-      <summary class="cursor-pointer text-xs text-muted hover:text-text">Show data table</summary>
+      <summary class="cursor-pointer text-xs text-muted hover:text-text">
+        <UiIcon name="chevron-right" class="chevron" /> Show data table
+      </summary>
       <div class="mt-2 max-h-56 overflow-auto rounded-sm border border-border">
         <slot name="table" />
       </div>
@@ -45,17 +49,5 @@ defineProps<{ title: string; caption?: string | undefined; compact?: boolean }>(
   position: sticky;
   top: 0;
   background: var(--surface);
-}
-summary {
-  list-style: none;
-}
-summary::-webkit-details-marker {
-  display: none;
-}
-summary::before {
-  content: '▸ ';
-}
-details[open] > summary::before {
-  content: '▾ ';
 }
 </style>

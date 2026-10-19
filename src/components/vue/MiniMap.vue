@@ -12,6 +12,7 @@ import { gbifBasemapTile, occurrenceTileTemplate } from '~/lib/gbif';
 import { hexRecords, homeOffset } from '~/lib/map/occGrid';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
 import { $ramp } from '~/stores/ramp';
+import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ taxonKey: number; label: string }>();
 
@@ -144,7 +145,7 @@ onBeforeUnmount(() => unlisten?.());
       <span
         class="absolute bottom-2 right-2 rounded-sm bg-surface/90 px-2 py-1 text-xs text-text shadow-panel transition-colors duration-200 group-hover:bg-accent group-hover:text-accent-contrast"
       >
-        Explore on the map →
+        Explore on the map <UiIcon name="arrow-right" />
       </span>
     </a>
     <figcaption class="mt-1 text-xs text-subtle">Where {{ label }} has been recorded (all years).</figcaption>

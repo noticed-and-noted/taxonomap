@@ -7,20 +7,22 @@
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
 import { compact } from '~/lib/format';
-import { $yearRange } from '~/stores/explorer';
+import { MIN_YEAR, rangeYears, yearsRange } from '~/lib/dates';
+import { $dateRange } from '~/stores/explorer';
 import ChartFrame from './ChartFrame.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import { useYearHistogram } from './useYearHistogram';
 
 const { counts, loading, error, live } = useYearHistogram();
 
-// GBIF rejects interpreted dates before 1500.
-const MIN = 1500;
+const MIN = MIN_YEAR;
 const MAX = new Date().getFullYear();
 const W = 600;
 const H = 56;
 
-const range = useStore($yearRange);
+// The years the date range touches; dragging sets a whole-years range.
+const dateRange = useStore($dateRange);
+const range = computed(() => rangeYears(dateRange.value));
 const lo = ref(range.value?.[0] ?? MIN);
 const hi = ref(range.value?.[1] ?? MAX);
 
@@ -56,15 +58,20 @@ const bars = computed(() => {
   });
 });
 const inRangeTotal = computed(() => bars.value.reduce((s, b) => s + (b.inRange ? b.c : 0), 0));
+/** True while a handle is dragged (the store only updates on release). */
+const dragging = ref(false);
 function commit() {
+  dragging.value = false;
   if (lo.value > hi.value) [lo.value, hi.value] = [hi.value, lo.value];
-  $yearRange.set(lo.value === MIN && hi.value === MAX ? null : [lo.value, hi.value]);
+  $dateRange.set(lo.value === MIN && hi.value === MAX ? null : yearsRange(lo.value, hi.value));
 }
 
 function onLo(e: Event) {
+  dragging.value = true;
   lo.value = Math.min(Number((e.target as HTMLInputElement).value), hi.value);
 }
 function onHi(e: Event) {
+  dragging.value = true;
   hi.value = Math.max(Number((e.target as HTMLInputElement).value), lo.value);
 }
 
@@ -78,7 +85,8 @@ const label = computed(() =>
 </script>
 
 <template>
-  <section class="time-slider" aria-label="Year range">
+  <!-- Positioned so a menu in the label slot can float below it. -->
+  <section class="time-slider relative" aria-label="Year range">
     <ChartFrame title="Records per year" :caption="live ? 'filtered' : undefined" compact>
       <div class="relative">
         <SkeletonBlock v-if="loading && !counts.size" height="56px" label="Loading year histogram" />
@@ -128,8 +136,11 @@ const label = computed(() =>
         </div>
       </div>
     </ChartFrame>
-    <div class="mt-1.5 flex items-center justify-between gap-2 text-xs">
-      <span class="whitespace-nowrap font-medium text-text" aria-live="polite">{{ label }}</span>
+    <div class="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+      <!-- The live range while dragging; FilterGroup puts the date menu here. -->
+      <slot name="label" :live="dragging ? label : null">
+        <span class="whitespace-nowrap font-medium text-text" aria-live="polite">{{ label }}</span>
+      </slot>
       <span class="whitespace-nowrap text-subtle">
         {{ compact(inRangeTotal) }} records
         <button

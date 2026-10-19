@@ -125,9 +125,11 @@ describe('useYearHistogram', () => {
     const live = calls.find((u) => u.pathname === '/v1/occurrence/search')!;
     expect(live.searchParams.get('mediaType')).toBe('StillImage');
 
-    // The year filter itself never changes the histogram.
+    // The date filter itself never changes the histogram.
     const before = calls.length;
-    explorer.$yearRange.set([1990, 2000]);
+    explorer.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
+    await nextTick();
+    explorer.$dateRange.set({ preset: '1m' });
     await nextTick();
     expect(calls).toHaveLength(before);
     stop();

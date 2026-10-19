@@ -23,6 +23,8 @@ describe('map tiles', () => {
     expect(g.needsAdhoc({ hasImage: true })).toBe(true);
     expect(g.needsAdhoc({ taxonKeys: [1] })).toBe(false);
     expect(g.needsAdhoc({ taxonKeys: [1, 2] })).toBe(true);
+    // Density tiles ignore eventDate (checked against the live API).
+    expect(g.needsAdhoc({ eventDate: '2025-01-01,2025-01-07' })).toBe(true);
     const url = new URL(
       g.occurrenceTileTemplate({ taxonKeys: [1, 2], months: [5] }, { hexPerTile: 28 }, 'mvt').replace(/[{}]/g, ''),
     );

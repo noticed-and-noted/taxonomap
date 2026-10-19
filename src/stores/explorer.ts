@@ -4,6 +4,7 @@
  */
 import { atom, computed, type ReadableAtom, type WritableAtom } from 'nanostores';
 import { BASEMAP_IDS } from '~/lib/basemaps';
+import { parseRange, rangeFilter, rangeLabel, serializeRange, type DateRange } from '~/lib/dates';
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTHS } from '~/lib/format';
 import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
@@ -78,23 +79,15 @@ const viewCodec: UrlCodec<MapView> = {
   equals: sameView,
 };
 
-export type YearRange = readonly [number, number] | null;
-
-const yearsCodec: UrlCodec<YearRange> = {
-  key: 'years',
+const dateRangeCodec: UrlCodec<DateRange | null> = {
+  key: 'when',
   default: null,
   scope: 'global',
-  // The slider commits on release, so each change is a deliberate step.
+  // The slider and the date menu commit on release / Apply, so each change is a deliberate step.
   history: 'push',
-  parse(raw) {
-    const m = /^(\d{4})-(\d{4})$/.exec(raw);
-    if (!m) return undefined;
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    return [Math.min(a, b), Math.max(a, b)];
-  },
+  parse: parseRange,
   // Never asked for the default (null): it is left out of the URL.
-  serialize: (v) => `${v![0]}-${v![1]}`,
+  serialize: (v) => serializeRange(v!),
 };
 
 /**
@@ -107,7 +100,8 @@ export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? key
 export const $mapView = urlAtom(viewCodec);
 /** A map view as its `view` URL parameter. */
 export const viewParam = (v: MapView): string => viewCodec.serialize(v);
-export const $yearRange = urlAtom(yearsCodec);
+/** The When date range: a rolling preset or fixed dates (see lib/dates.ts). */
+export const $dateRange = urlAtom(dateRangeCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'global' }));
 /** Only records filed at exactly the chosen taxa (e.g. gray wolf without domestic dogs). */
 export const $exactTaxon = urlAtom(codecs.bool('exact', { scope: 'global' }));
@@ -288,12 +282,7 @@ export const FILTERS: readonly Filter[] = [
   list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
   flag($exactTaxon, 'what', { exactTaxon: true }, 'Exact taxon only'),
   list($iucn, 'what', (iucn) => ({ iucn }), { each: (c) => IUCN_LABELS[c]! }),
-  nullable(
-    $yearRange,
-    'when',
-    (year) => ({ year }),
-    ([a, b]) => (a === b ? `${a}` : `${a}–${b}`),
-  ),
+  nullable($dateRange, 'when', (r) => rangeFilter(r), rangeLabel),
   list($months, 'when', (months) => ({ months }), { each: (m) => MONTHS[m - 1]! }),
   list(
     $continents,

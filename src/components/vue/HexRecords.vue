@@ -4,11 +4,12 @@
  * as a table with a short record type code (FOS, SPE…; the full type on hover).
  * A row expands to its photo and details. No column sorts: GBIF's occurrence
  * search has no sort parameter. A species search (ARIA 1.2 combobox over the cell's species table) narrows the list.
+ * Pass `filter` to list another area's records (near me) instead of the selected cell's.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, full } from '~/lib/format';
-import { searchOccurrences, usableImages, type Occurrence } from '~/lib/gbif';
+import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import { commonNames as lookupCommonNames, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
@@ -33,11 +34,14 @@ const TYPE_CODES: Record<string, string> = {
   OBSERVATION: 'OBS',
 };
 
-const props = defineProps<{ species: readonly SpeciesRow[] }>();
+const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceFilter | null }>();
 
 const geometry = useStore($hexGeometry);
-const filter = useStore($occurrenceFilter);
+const storeFilter = useStore($occurrenceFilter);
 const { loading, error, run } = useLatestLoad();
+const base = computed(
+  () => props.filter ?? (geometry.value ? { ...storeFilter.value, geometry: geometry.value.wkt } : null),
+);
 
 /** Chosen speciesKey, or '' for all species. */
 const speciesKey = ref<number | ''>('');
@@ -117,11 +121,11 @@ async function nameSpecies(page: readonly Occurrence[], signal: AbortSignal) {
 }
 
 async function load(more = false) {
-  const g = geometry.value;
+  const b = base.value;
   if (!more) records.value = [];
-  if (!g) return;
+  if (!b) return;
   await run(async (signal) => {
-    const f = { ...filter.value, geometry: g.wkt, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
+    const f = { ...b, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
     const r = await searchOccurrences(f, { limit: PAGE, offset: more ? records.value.length : 0 }, signal);
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...r.results] : r.results;
@@ -131,9 +135,9 @@ async function load(more = false) {
   });
 }
 
-// Another cell or filter: the picked species may not be there any more.
+// Another cell, area or filter: the picked species may not be there any more.
 watch(
-  [geometry, () => JSON.stringify(filter.value)],
+  () => JSON.stringify(base.value),
   () => {
     query.value = '';
     if (speciesKey.value === '') void load();
@@ -359,7 +363,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
                       <template v-if="image(o) && !broken.has(o.key)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
                         <ThumbImage :image="image(o)!" size="200x" class="absolute inset-0 size-full object-cover" />
-                        <ThumbImage :image="image(o)!" size="400x" class="relative size-full object-cover" />
+                        <ThumbImage :image="image(o)!" size="400x" class="absolute inset-0 size-full object-cover" />
                         <LicenceBadge
                           class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
                           :licence="image(o)!.licence"

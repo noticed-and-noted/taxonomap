@@ -10,6 +10,7 @@ import { arc } from 'd3-shape';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import type { TreeNode } from '~/lib/tree/model';
+import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{
   root: TreeNode;
@@ -243,14 +244,10 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
         <text text-anchor="middle" class="pointer-events-none fill-[var(--text-subtle)] text-[11px]" y="12">
           {{ compact(focusTotal) }} {{ metric }}
         </text>
-        <text
-          v-if="focus.parent"
-          text-anchor="middle"
-          class="pointer-events-none fill-[var(--text-subtle)] text-[10px]"
-          y="28"
-        >
-          ↑ zoom out
-        </text>
+        <g v-if="focus.parent" class="pointer-events-none text-[var(--text-subtle)]">
+          <UiIcon name="arrow-up" :size="10" x="-27" y="20" />
+          <text text-anchor="middle" class="fill-current text-[10px]" x="6" y="28">zoom out</text>
+        </g>
       </g>
     </svg>
 
@@ -264,8 +261,9 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
     >
       <g v-if="narrow" class="cursor-pointer" @click="emit('up')">
         <rect :width="width - 2" :height="HEAD - 4" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
-        <text :x="10" :y="25" class="fill-[var(--text)] font-display text-sm">
-          {{ focus.parent ? '← ' : '' }}{{ centreLabel.length > 22 ? `${centreLabel.slice(0, 21)}…` : centreLabel }}
+        <UiIcon v-if="focus.parent" name="arrow-left" :size="12" x="10" y="15" class="text-[var(--text)]" />
+        <text :x="focus.parent ? 26 : 10" :y="25" class="fill-[var(--text)] font-display text-sm">
+          {{ centreLabel.length > 22 ? `${centreLabel.slice(0, 21)}…` : centreLabel }}
         </text>
         <text :x="width - 10" :y="25" text-anchor="end" class="fill-[var(--text-subtle)] text-[11px]">
           {{ compact(focusTotal) }} {{ metric }}
@@ -277,7 +275,10 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
         <text :x="10" :y="38" class="fill-[var(--text-subtle)] text-[11px]">
           {{ compact(focusTotal) }} {{ metric }}
         </text>
-        <text v-if="focus.parent" :x="10" :y="56" class="fill-[var(--text-subtle)] text-[10px]">← zoom out</text>
+        <g v-if="focus.parent" class="text-[var(--text-subtle)]">
+          <UiIcon name="arrow-left" :size="10" x="10" y="48" />
+          <text :x="23" :y="56" class="fill-current text-[10px]">zoom out</text>
+        </g>
       </g>
       <g
         v-for="s in shapes"

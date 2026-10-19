@@ -45,6 +45,17 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Disclosure markers differ per browser; summaries carry a <UiIcon name="chevron-right" class="chevron" /> instead. */
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  details[open] > summary .chevron {
+    transform: rotate(90deg);
+  }
+
   body {
     min-height: 100dvh;
     background: var(--bg);

@@ -70,7 +70,7 @@ describe('explorer filter stores', () => {
     e.clearFilters();
     e.$taxonKeys.set([212]);
     e.$iucn.set(['VU', 'EN']);
-    e.$yearRange.set([1990, 2000]);
+    e.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
     e.$hasPhoto.set(true);
     e.$hasSound.set(true);
     expect(e.$groupCounts.get()).toEqual({ what: 3, when: 1, where: 0, how: 2 });
@@ -83,7 +83,7 @@ describe('explorer filter stores', () => {
     e.clearFilters();
     e.$taxonKeys.set([212]);
     e.$iucn.set(['CR', 'VU']);
-    e.$yearRange.set([1990, 2000]);
+    e.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
     e.$months.set([4, 5]);
     e.$maxUncertainty.set(1000);
     e.$hasPhoto.set(true);
@@ -101,7 +101,7 @@ describe('explorer filter stores', () => {
       .get()
       .find((p) => p.text === '1990–2000')
       ?.clear();
-    expect(e.$yearRange.get()).toBeNull();
+    expect(e.$dateRange.get()).toBeNull();
     e.clearFilters();
     expect(e.$filterPills.get()).toEqual([]);
   });
@@ -109,7 +109,7 @@ describe('explorer filter stores', () => {
   it('label one year, continents and record types', async () => {
     const e = await import('~/stores/explorer');
     e.clearFilters();
-    e.$yearRange.set([2001, 2001]);
+    e.$dateRange.set({ unit: 'y', from: '2001-01-01', to: '2001-12-31' });
     e.$continents.set(['EUROPE', 'ASIA']);
     e.$basisOfRecord.set(['HUMAN_OBSERVATION', 'FOSSIL_SPECIMEN']);
     expect(e.$filterPills.get().map((p) => p.text)).toEqual([

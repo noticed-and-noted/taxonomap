@@ -65,14 +65,15 @@ function closePanel() {
   </div>
 
   <div v-else class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen }">
-    <!-- Centred in the top row of pills; below it on phones, where the taxon chip can fill the row. -->
-    <MapProgress class="absolute left-1/2 top-12 -translate-x-1/2 sm:top-3" />
-
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
-      <div class="min-w-0"><TaxonChip /></div>
-      <div class="ml-auto hidden shrink-0 items-start gap-2 sm:flex">
+      <div class="min-w-0 sm:flex-1"><TaxonChip /></div>
+      <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
+      <MapProgress
+        class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0"
+      />
+      <div class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1">
         <button type="button" class="near-btn" aria-pressed="false" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"
@@ -215,6 +216,7 @@ function closePanel() {
   color: var(--text-muted);
   font-size: 0.8125rem;
   box-shadow: var(--shadow);
+  cursor: pointer;
 }
 .near-btn:hover {
   color: var(--text);

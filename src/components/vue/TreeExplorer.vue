@@ -28,6 +28,7 @@ import { $treeFocus, $treeLayout, $treeMetric } from '~/stores/tree';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import TreeChart from './TreeChart.vue';
+import UiIcon from './UiIcon.vue';
 
 const focusKey = useStore($treeFocus);
 const layoutPref = useStore($treeLayout);
@@ -341,7 +342,7 @@ const share = (n: TreeNode) => {
             target="_blank"
             rel="noopener"
             class="rounded-md border border-border px-2.5 py-1.5 hover:border-accent"
-            >GBIF ↗</a
+            >GBIF <UiIcon name="external" /></a
           >
         </div>
 

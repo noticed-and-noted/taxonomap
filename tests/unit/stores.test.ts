@@ -13,18 +13,18 @@ async function stores(search = '') {
 const flush = () => new Promise<void>((r) => queueMicrotask(r));
 
 describe('explorer URL state', () => {
-  it('reads and clamps the map view, years and selected cell', async () => {
-    const s = await stores('?view=200,-90,30&years=2020-1990&hex=1.5,2.25&uncert=100');
+  it('reads and clamps the map view, dates and selected cell', async () => {
+    const s = await stores('?view=200,-90,30&when=y:2020..1990&hex=1.5,2.25&uncert=100');
     expect(s.$mapView.get()).toEqual({ lng: 180, lat: -85, zoom: 22 });
-    expect(s.$yearRange.get()).toEqual([1990, 2020]);
+    expect(s.$dateRange.get()).toEqual({ unit: 'y', from: '1990-01-01', to: '2020-12-31' });
     expect(s.$selectedHex.get()).toEqual([1.5, 2.25]);
     expect(s.$maxUncertainty.get()).toBe(100);
   });
 
   it('falls back to defaults for malformed values', async () => {
-    const s = await stores('?view=a,b,c&years=1990&hex=0,95&uncert=50&panel=nope');
+    const s = await stores('?view=a,b,c&when=d:2021-02-30..&hex=0,95&uncert=50&panel=nope');
     expect(s.$mapView.get()).toEqual(s.DEFAULT_VIEW);
-    expect(s.$yearRange.get()).toBeNull();
+    expect(s.$dateRange.get()).toBeNull();
     expect(s.$selectedHex.get()).toBeNull();
     expect(s.$maxUncertainty.get()).toBeNull();
     expect(s.$panel.get()).toBe('none');
@@ -32,10 +32,10 @@ describe('explorer URL state', () => {
 
   it('writes compact values back to the URL', async () => {
     const s = await stores();
-    s.$yearRange.set([1990, 2000]);
+    s.$dateRange.set({ unit: 'm', from: '1990-03-01', to: '2000-06-30' });
     s.$selectedHex.set([1.23456, -2]);
     await flush();
-    expect(new URLSearchParams(location.search).get('years')).toBe('1990-2000');
+    expect(new URLSearchParams(location.search).get('when')).toBe('m:1990-03..2000-06');
     expect(new URLSearchParams(location.search).get('hex')).toBe('1.2346,-2.0000');
   });
 

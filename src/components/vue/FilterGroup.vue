@@ -18,7 +18,7 @@ import {
   $maxUncertainty,
   $months,
   $taxonKeys,
-  $yearRange,
+  $dateRange,
   BASIS_OF_RECORD,
   CONTINENTS,
   IUCN_CATEGORIES,
@@ -29,6 +29,7 @@ import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
 import type { FilterGroupId } from './filterGroups';
 import TaxaPicker from './TaxaPicker.vue';
 import TimeSlider from './TimeSlider.vue';
+import WhenMenu from './WhenMenu.vue';
 
 defineProps<{ group: FilterGroupId }>();
 
@@ -37,7 +38,7 @@ const uid = useId();
 
 const iucn = useStore($iucn);
 const exact = useStore($exactTaxon);
-const years = useStore($yearRange);
+const dateRange = useStore($dateRange);
 const months = useStore($months);
 const continents = useStore($continents);
 const uncert = useStore($maxUncertainty);
@@ -71,37 +72,7 @@ const togglePhoto = () => $hasPhoto.set(!photo.value);
 const toggleSound = () => $hasSound.set(!sound.value);
 const clearMonths = () => $months.set([]);
 
-/* Year inputs: edit freely, commit on change (blur / Enter), like the slider. */
-const MIN_YEAR = 1500;
-const MAX_YEAR = new Date().getFullYear();
-const fromYear = ref<number | ''>(years.value?.[0] ?? '');
-const toYear = ref<number | ''>(years.value?.[1] ?? '');
-watch(years, (r) => {
-  fromYear.value = r?.[0] ?? '';
-  toYear.value = r?.[1] ?? '';
-});
-
-function clampYear(v: number | ''): number | null {
-  if (v === '' || !Number.isFinite(v)) return null;
-  return Math.max(MIN_YEAR, Math.min(MAX_YEAR, Math.round(v)));
-}
-
-function commitYears() {
-  const a = clampYear(fromYear.value);
-  const b = clampYear(toYear.value);
-  if (a === null && b === null) {
-    $yearRange.set(null);
-    return;
-  }
-  const lo = a ?? MIN_YEAR;
-  const hi = b ?? MAX_YEAR;
-  $yearRange.set([Math.min(lo, hi), Math.max(lo, hi)]);
-  // Reflect the clamped / swapped values even when the store did not change.
-  fromYear.value = Math.min(lo, hi);
-  toYear.value = Math.max(lo, hi);
-}
-
-const clearYears = () => $yearRange.set(null);
+const clearDates = () => $dateRange.set(null);
 </script>
 
 <template>
@@ -164,37 +135,12 @@ const clearYears = () => $yearRange.set(null);
     <template v-else-if="group === 'when'">
       <fieldset>
         <legend class="group-label flex w-full justify-between">
-          Years
-          <button v-if="years" type="button" class="link-btn" @click="clearYears">Clear</button>
+          Dates
+          <button v-if="dateRange" type="button" class="link-btn" @click="clearDates">Clear</button>
         </legend>
-        <div class="flex items-center gap-2">
-          <label class="sr-only" :for="`${uid}-from`">Earliest year</label>
-          <input
-            :id="`${uid}-from`"
-            v-model.number="fromYear"
-            type="number"
-            inputmode="numeric"
-            class="year-input"
-            :min="MIN_YEAR"
-            :max="MAX_YEAR"
-            placeholder="Earliest"
-            @change="commitYears"
-          />
-          <span class="text-muted" aria-hidden="true">–</span>
-          <label class="sr-only" :for="`${uid}-to`">Latest year</label>
-          <input
-            :id="`${uid}-to`"
-            v-model.number="toYear"
-            type="number"
-            inputmode="numeric"
-            class="year-input"
-            :min="MIN_YEAR"
-            :max="MAX_YEAR"
-            placeholder="Latest"
-            @change="commitYears"
-          />
-        </div>
-        <TimeSlider class="mt-3" />
+        <TimeSlider>
+          <template #label="{ live }"><WhenMenu :live="live" /></template>
+        </TimeSlider>
       </fieldset>
 
       <fieldset>
@@ -322,21 +268,6 @@ const clearYears = () => $yearRange.set(null);
 .link-btn:hover {
   color: var(--text);
   text-decoration: underline;
-}
-
-.year-input {
-  width: 100%;
-  min-width: 0;
-  height: 2rem;
-  padding: 0 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.year-input:hover {
-  border-color: var(--border-strong);
 }
 
 .toggle {

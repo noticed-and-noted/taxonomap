@@ -18,6 +18,8 @@ export interface Refinements {
   /** Keep records whose stated coordinate uncertainty is at most this; drops records without one. */
   maxUncertaintyM?: number | undefined;
   iucn?: readonly IucnCategory[] | undefined;
+  /** GBIF date range "YYYY-MM-DD,YYYY-MM-DD" ("*" for an open end). */
+  eventDate?: string | undefined;
 }
 
 export function refinementParams(r: Refinements): Params {
@@ -28,6 +30,7 @@ export function refinementParams(r: Refinements): Params {
     continent: r.continents,
     coordinateUncertaintyInMeters: r.maxUncertaintyM ? `0,${r.maxUncertaintyM}` : undefined,
     iucnRedListCategory: r.iucn,
+    eventDate: r.eventDate,
   };
 }
 
@@ -56,8 +59,6 @@ export interface OccurrenceFilter extends Refinements {
   datasetKey?: string | undefined;
   /** Restrict to records with usable coordinates (matches what the map shows). */
   georeferenced?: boolean | undefined;
-  /** GBIF date range "YYYY-MM-DD,YYYY-MM-DD". */
-  eventDate?: string | undefined;
 }
 
 /** The taxa as taxonKey (taxon and everything under it) or, when exact, acceptedTaxonKey. */
@@ -79,7 +80,6 @@ export function filterToParams(f: OccurrenceFilter): Params {
     country: f.country,
     geometry: f.geometry,
     datasetKey: f.datasetKey,
-    eventDate: f.eventDate,
     hasCoordinate: f.georeferenced ? true : undefined,
     hasGeospatialIssue: f.georeferenced ? false : undefined,
   };

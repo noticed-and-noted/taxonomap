@@ -1,7 +1,7 @@
 /**
  * Records-per-year for the time slider. With no filters the baked global
  * snapshot is used; once taxon/basis/photo filters apply, one live
- * facet request (limit=0) replaces it. The year filter itself is excluded so
+ * facet request (limit=0) replaces it. The date filter itself is excluded so
  * the histogram always shows the full range.
  */
 import { useStore } from '@nanostores/vue';
@@ -20,7 +20,7 @@ export function useYearHistogram() {
   const { loading, error, run } = useLatestLoad();
 
   function load() {
-    const { year: _year, ...rest } = filter.value;
+    const { year: _year, eventDate: _date, ...rest } = filter.value;
     const filtered = Object.values(rest).some((v) => v !== undefined);
     return run(async (signal) => {
       const snap = filtered ? null : await loadSnapshot('years');
@@ -36,10 +36,10 @@ export function useYearHistogram() {
     return (r.facets['year'] ?? []).map((c): [number, number] => [Number(c.name), c.count]);
   }
 
-  // Only re-fetch when a non-year filter changes.
+  // Only re-fetch when a non-date filter changes.
   watch(
     () => {
-      const { year: _y, ...rest } = filter.value;
+      const { year: _y, eventDate: _d, ...rest } = filter.value;
       return JSON.stringify(rest);
     },
     () => void load(),
