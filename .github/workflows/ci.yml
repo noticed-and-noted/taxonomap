@@ -166,6 +166,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The checkout has package.json, so the action would otherwise look for pnpm to install wrangler.
+          packageManager: npm
           command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT || 'taxonomap' }} --branch=main
 
   contract:
