@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-/** Live GBIF contract tests. Excluded from default CI; run with `npm run test:contract`. */
+/** Live GBIF contract tests. Excluded from default CI; run with `pnpm test:contract`. */
 export default defineConfig({
   resolve: { alias: { '~': fileURLToPath(new URL('./src', import.meta.url)) } },
   test: {

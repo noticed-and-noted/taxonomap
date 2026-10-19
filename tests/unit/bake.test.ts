@@ -2,6 +2,9 @@
  * Build-time baking. The Node transport (disk cache, User-Agent) is swapped
  * for the plain client so these tests never touch .cache/.
  */
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { facets, json, stubNetwork } from './helpers/network';
 
 vi.mock('~/lib/gbif/server', () => import('~/lib/gbif'));
@@ -349,5 +352,25 @@ describe('build sizes', () => {
     const calls = gbif();
     await prod.bakeNames();
     expect(globalFacetLimit(calls)).toBe('2520');
+  });
+});
+
+describe('bake to disk', () => {
+  it('saves every snapshot, and later builds read them without asking GBIF', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baked-'));
+    try {
+      gbif();
+      const first = await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '3' });
+      const saved = await first.bakeToDisk();
+      const list = await first.bakeSpeciesList();
+      expect(saved).toEqual(['years', 'names', 'tree', 'species-list']);
+      const calls = gbif();
+      const b = await bake({ BAKE_DIR: dir });
+      expect((await b.bakeYears()).total).toBe(30);
+      expect(await b.bakeSpeciesList()).toEqual(list);
+      expect(calls).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 });

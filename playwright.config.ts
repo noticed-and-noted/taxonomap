@@ -9,7 +9,7 @@ const browser = { ...(channel && { channel }), ...(executablePath && { launchOpt
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  // The site must be built against the fake world first: `npm run build:e2e`.
+  // The site must be built against the fake world first: `pnpm build:e2e`.
   globalSetup: './tests/e2e/global-setup.ts',
   // Journeys are CPU-bound (software WebGL), not network-bound: the default of half the cores as workers is the fastest.
   fullyParallel: true,
@@ -31,7 +31,7 @@ export default defineConfig({
   ],
   webServer: {
     // --ignore-lock keeps the server in the foreground; Astro backgrounds it when it detects a coding agent.
-    command: `npm run preview -- --port ${PORT} --ignore-lock`,
+    command: `pnpm preview --port ${PORT} --ignore-lock`,
     port: PORT,
     reuseExistingServer: !process.env['CI'],
   },

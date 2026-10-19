@@ -1,5 +1,5 @@
 /**
- * Build the site against the fake world, for the journeys: `npm run build:e2e`.
+ * Build the site against the fake world, for the journeys: `pnpm build:e2e`.
  * Every base URL points at the fake server, so the baked data, the species
  * pages and the browser's requests all come from world.ts.
  */
@@ -22,6 +22,8 @@ const env = {
   SPECIES_PRERENDER_COUNT: '1',
   NAME_INDEX_SIZE: '20',
   GBIF_CACHE_REFRESH: '1',
+  // Never the data a local `pnpm bake` left behind.
+  BAKE_DIR: '.cache/e2e-bake-nothing',
   ASTRO_TELEMETRY_DISABLED: '1',
 };
 const code = await new Promise<number>((resolve) => {

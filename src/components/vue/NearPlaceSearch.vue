@@ -102,7 +102,9 @@ function onInput() {
     </form>
     <ul
       v-if="open && results?.length"
-      class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-surface text-sm shadow-panel" aria-label="Places">
+      class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-surface text-sm shadow-panel"
+      aria-label="Places"
+    >
       <li v-for="(p, i) in results" :key="i">
         <button type="button" class="block w-full px-3 py-2 text-left hover:bg-surface-2" @click="pick(p)">
           <span class="block truncate text-text">{{ p.name }}</span>
@@ -110,7 +112,19 @@ function onInput() {
         </button>
       </li>
     </ul>
-    <p v-else-if="open && results" class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel" role="status">No places found.</p>
-    <p v-if="open && state === 'failed'" class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel" role="status">Place search is unavailable right now.</p>
+    <p
+      v-else-if="open && results"
+      class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
+      role="status"
+    >
+      No places found.
+    </p>
+    <p
+      v-if="open && state === 'failed'"
+      class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
+      role="status"
+    >
+      Place search is unavailable right now.
+    </p>
   </div>
 </template>
