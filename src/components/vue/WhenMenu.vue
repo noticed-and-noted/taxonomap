@@ -445,7 +445,7 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 .custom-body {
-  display: flex; 
+  display: flex;
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.25rem 0.375rem 0.125rem;

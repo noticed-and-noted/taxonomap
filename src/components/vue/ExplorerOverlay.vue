@@ -70,9 +70,7 @@ function closePanel() {
     >
       <div class="min-w-0 sm:flex-1"><TaxonChip /></div>
       <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
-      <MapProgress
-        class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0"
-      />
+      <MapProgress class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0" />
       <div class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1">
         <button type="button" class="near-btn" aria-pressed="false" @click="toggleNear">
           <svg

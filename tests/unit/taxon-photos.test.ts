@@ -233,7 +233,9 @@ describe('iNaturalist photo URLs', () => {
       url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/square.jpeg',
     };
     expect(thumbnailUrl(img, '200x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg?x-cors');
-    expect(thumbnailUrl(img, '400x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpeg?x-cors');
+    expect(thumbnailUrl(img, '400x')).toBe(
+      'https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpeg?x-cors',
+    );
     expect(thumbnailUrl(img, '800x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg?x-cors');
   });
 

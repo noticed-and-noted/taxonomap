@@ -35,7 +35,10 @@ describe('near data', () => {
 
   it('gives the circle as an occurrence filter for the records list', async () => {
     const { nearFilter } = await load();
-    expect(nearFilter({ ...AREA, month: 5 })).toMatchObject({ geometry: expect.stringMatching(/^POLYGON\(\(/), month: 5 });
+    expect(nearFilter({ ...AREA, month: 5 })).toMatchObject({
+      geometry: expect.stringMatching(/^POLYGON\(\(/),
+      month: 5,
+    });
   });
 
   it('tallies distinct species overall and for the six leading classes', async () => {

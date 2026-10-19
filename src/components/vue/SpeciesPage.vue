@@ -63,9 +63,7 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
         <a :href="`/?taxon=${d.key}`" class="rounded-md bg-accent px-3 py-2 font-medium text-accent-contrast"
           >View on map</a
         >
-        <a
-          :href="`/tree?focus=${d.key}`"
-          class="rounded-md border border-border px-3 py-2 hover:border-accent"
+        <a :href="`/tree?focus=${d.key}`" class="rounded-md border border-border px-3 py-2 hover:border-accent"
           >Tree of life</a
         >
       </div>
@@ -142,8 +140,8 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
       }}
       records, top datasets listed above). Photos are shown under their stated licences. Snapshot {{ generated }} ·
       <a :href="`https://www.gbif.org/species/${d.key}`" class="underline" target="_blank" rel="noopener"
-        >GBIF species page <UiIcon name="external" /></a
-      >
+        >GBIF species page <UiIcon name="external"
+      /></a>
     </footer>
   </article>
 </template>

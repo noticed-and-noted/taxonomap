@@ -317,12 +317,18 @@ watch([query, group, sortKey, sortDesc], () => {
               <tr>
                 <th class="py-1.5 pl-4 text-left font-normal">
                   <button type="button" class="sort" :class="{ on: sortKey === 'name' }" @click="sortBy('name')">
-                    Species<UiIcon :name="sortKey === 'name' ? (sortDesc ? 'sort-desc' : 'sort-asc') : 'sort'" class="ml-0.5" />
+                    Species<UiIcon
+                      :name="sortKey === 'name' ? (sortDesc ? 'sort-desc' : 'sort-asc') : 'sort'"
+                      class="ml-0.5"
+                    />
                   </button>
                 </th>
                 <th class="py-1.5 pr-4 text-right font-normal">
                   <button type="button" class="sort" :class="{ on: sortKey === 'records' }" @click="sortBy('records')">
-                    Records<UiIcon :name="sortKey === 'records' ? (sortDesc ? 'sort-desc' : 'sort-asc') : 'sort'" class="ml-0.5" />
+                    Records<UiIcon
+                      :name="sortKey === 'records' ? (sortDesc ? 'sort-desc' : 'sort-asc') : 'sort'"
+                      class="ml-0.5"
+                    />
                   </button>
                 </th>
               </tr>

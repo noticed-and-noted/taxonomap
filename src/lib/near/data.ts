@@ -4,10 +4,7 @@
  *   species in the area      → 1 facet request per leading class, then 1 batched name search (see species/groups.ts)
  */
 import { nameIndexWithin } from '~/lib/data/name-index';
-import {
-  circleToWkt,
-  occurrenceFacets,
-} from '~/lib/gbif';
+import { circleToWkt, occurrenceFacets } from '~/lib/gbif';
 import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 
 export type { ClassGroup, SpeciesRow };
@@ -53,7 +50,9 @@ export async function speciesTallies(
   const LIMIT = 3000;
   const idx = await nameIndexWithin(800);
   const tally = async (taxonKey?: number) => {
-    const r = await occurrenceFacets(nearFilter(a, taxonKey ? { taxonKey } : {}), ['speciesKey'], { facetLimit: LIMIT });
+    const r = await occurrenceFacets(nearFilter(a, taxonKey ? { taxonKey } : {}), ['speciesKey'], {
+      facetLimit: LIMIT,
+    });
     const rows = r.facets['speciesKey'] ?? [];
     const topNames = rows
       .slice(0, 6)

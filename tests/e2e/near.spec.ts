@@ -54,7 +54,7 @@ test('lists species in a sortable table that one group can narrow', async ({ pag
   await expect(page.getByRole('link', { name: /Common Blackbird/ })).toHaveCount(0);
 });
 
-test('the records tab lists the circle\'s records as a map cell does', async ({ page }) => {
+test("the records tab lists the circle's records as a map cell does", async ({ page }) => {
   await page.goto(LONDON);
   await page.getByRole('tab', { name: 'Records' }).click();
   await expect(page).toHaveURL(/tab=recent/);

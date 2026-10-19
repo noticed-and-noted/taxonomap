@@ -342,8 +342,8 @@ const share = (n: TreeNode) => {
             target="_blank"
             rel="noopener"
             class="rounded-md border border-border px-2.5 py-1.5 hover:border-accent"
-            >GBIF <UiIcon name="external" /></a
-          >
+            >GBIF <UiIcon name="external"
+          /></a>
         </div>
 
         <div class="flex flex-col md:min-h-0 md:flex-1">
