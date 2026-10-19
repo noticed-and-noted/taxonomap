@@ -6,10 +6,10 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # Nightly rebuild and deploy, using the data from the last weekly bake.
+    # Nightly rebuild and deploy, using the data from the last bake.
     - cron: '0 3 * * *'
-    # Weekly bake: fetch the GBIF data the build uses (Monday 02:00 UTC).
-    - cron: '0 2 * * 1'
+    # Daily bake: fetch the GBIF data the build uses (02:00 UTC, an hour before the nightly deploy).
+    - cron: '0 2 * * *'
     # Weekly live contract tests (Monday 04:00 UTC).
     - cron: '0 4 * * 1'
   workflow_dispatch:
@@ -37,7 +37,7 @@ env:
 jobs:
   verify:
     name: Lint, typecheck, unit tests
-    if: github.event.schedule != '0 4 * * 1' && github.event.schedule != '0 2 * * 1'
+    if: github.event.schedule != '0 4 * * 1' && github.event.schedule != '0 2 * * *'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -53,7 +53,7 @@ jobs:
 
   bake:
     name: Bake GBIF data
-    if: github.event.schedule == '0 2 * * 1' || inputs.bake
+    if: github.event.schedule == '0 2 * * *' || inputs.bake
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -104,7 +104,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # Data from the latest weekly bake. Without one, the build fetches it from GBIF itself.
+      # Data from the latest bake. Without one, the build fetches it from GBIF itself.
       - uses: actions/cache/restore@v4
         with:
           path: .cache/baked
