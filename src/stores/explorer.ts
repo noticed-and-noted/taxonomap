@@ -51,11 +51,11 @@ export interface MapView {
 export const DEFAULT_VIEW: MapView = { lng: 10, lat: 25, zoom: 1.6 };
 
 /** Whether two views are the same once rounded for the URL (2/2/1 dp). */
-export function sameView(a: MapView, b: MapView): boolean {
+export function sameView(left: MapView, right: MapView): boolean {
   return (
-    a.lng.toFixed(2) === b.lng.toFixed(2) &&
-    a.lat.toFixed(2) === b.lat.toFixed(2) &&
-    a.zoom.toFixed(1) === b.zoom.toFixed(1)
+    left.lng.toFixed(2) === right.lng.toFixed(2) &&
+    left.lat.toFixed(2) === right.lat.toFixed(2) &&
+    left.zoom.toFixed(1) === right.zoom.toFixed(1)
   );
 }
 
@@ -67,14 +67,14 @@ const viewCodec: UrlCodec<MapView> = {
   scope: 'map',
   parse(raw) {
     const [lng, lat, zoom] = raw.split(',').map(Number);
-    if (![lng, lat, zoom].every((n) => Number.isFinite(n))) return undefined;
+    if (![lng, lat, zoom].every((value) => Number.isFinite(value))) return undefined;
     return {
       lng: Math.max(-180, Math.min(180, lng as number)),
       lat: Math.max(-85, Math.min(85, lat as number)),
       zoom: Math.max(0, Math.min(22, zoom as number)),
     };
   },
-  serialize: (v) => `${v.lng.toFixed(2)},${v.lat.toFixed(2)},${v.zoom.toFixed(1)}`,
+  serialize: (view) => `${view.lng.toFixed(2)},${view.lat.toFixed(2)},${view.zoom.toFixed(1)}`,
   equals: sameView,
 };
 
@@ -86,7 +86,7 @@ const dateRangeCodec: UrlCodec<DateRange | null> = {
   history: 'push',
   parse: parseRange,
   // Never asked for the default (null): it is left out of the URL.
-  serialize: (v) => serializeRange(v!),
+  serialize: (range) => serializeRange(range!),
 };
 
 /**
@@ -98,7 +98,7 @@ export const $taxonKeys = urlAtom(codecs.intSet('taxon', { min: 0, limit: MAX_TA
 export const $taxonKey = computed($taxonKeys, (keys) => (keys.length === 1 ? keys[0]! : null));
 export const $mapView = urlAtom(viewCodec);
 /** A map view as its `view` URL parameter. */
-export const viewParam = (v: MapView): string => viewCodec.serialize(v);
+export const viewParam = (view: MapView): string => viewCodec.serialize(view);
 /** The When date range: a rolling preset or fixed dates (see lib/dates.ts). */
 export const $dateRange = urlAtom(dateRangeCodec);
 export const $basisOfRecord = urlAtom(codecs.setOf('basis', BASIS_OF_RECORD, { scope: 'map' }));
@@ -108,16 +108,16 @@ export const $hasPhoto = urlAtom(codecs.bool('photo', { scope: 'map' }));
 export const $hasSound = urlAtom(codecs.bool('sound', { scope: 'map' }));
 export const $months = urlAtom(codecs.intSet('months', { min: 1, max: 12 }, { scope: 'map' }));
 /** Months only combine with a range in whole years: Any time, "Last N years" or a years range. */
-export const monthsAllowed = (r: DateRange | null): boolean =>
-  !r || ('preset' in r ? r.preset.endsWith('y') : r.unit === 'y');
+export const monthsAllowed = (range: DateRange | null): boolean =>
+  !range || ('preset' in range ? range.preset.endsWith('y') : range.unit === 'y');
 // Drop months the moment the range stops being in years, so no hidden filter stays applied.
-$dateRange.subscribe((r) => {
-  if (!monthsAllowed(r) && $months.get().length) $months.set([]);
+$dateRange.subscribe((range) => {
+  if (!monthsAllowed(range) && $months.get().length) $months.set([]);
 });
 export const $continents = urlAtom(codecs.setOf('continent', CONTINENTS, { scope: 'map' }));
 export const $maxUncertainty = urlAtom({
   ...codecs.int('uncert', null, { scope: 'map' }),
-  parse: (raw) => (UNCERTAINTY_STEPS_M as readonly number[]).find((m) => String(m) === raw),
+  parse: (raw) => (UNCERTAINTY_STEPS_M as readonly number[]).find((metres) => String(metres) === raw),
 });
 export const $iucn = urlAtom(codecs.setOf('iucn', IUCN_CATEGORIES, { scope: 'map' }));
 export type HexPoint = readonly [lng: number, lat: number] | null;
@@ -136,7 +136,7 @@ const hexCodec: UrlCodec<HexPoint> = {
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat as number) > 90) return undefined;
     return [lng as number, lat as number];
   },
-  serialize: (v) => `${v![0].toFixed(4)},${v![1].toFixed(4)}`,
+  serialize: (position) => `${position![0].toFixed(4)},${position![1].toFixed(4)}`,
 };
 
 export const $selectedHex = urlAtom(hexCodec);
@@ -218,43 +218,43 @@ export interface Filter {
   clear: () => void;
 }
 
-function filter<T>(d: FilterDef<T>): Filter {
+function filter<T>(definition: FilterDef<T>): Filter {
   return {
-    store: d.store,
-    group: d.group,
-    isSet: (v) => d.isSet(v as T),
-    apply: (v) => d.apply(v as T),
-    pills: d.pills && ((v) => d.pills!(v as T)),
-    clear: () => d.store.set(d.cleared),
+    store: definition.store,
+    group: definition.group,
+    isSet: (value) => definition.isSet(value as T),
+    apply: (value) => definition.apply(value as T),
+    pills: definition.pills && ((value) => definition.pills!(value as T)),
+    clear: () => definition.store.set(definition.cleared),
   };
 }
 
 /** One pill for the whole filter: removing it clears the filter. */
 const whole =
-  <T>(store: WritableAtom<T>, cleared: T, label: (v: T) => string) =>
-  (v: T): FilterPill[] => [{ text: label(v), clear: () => store.set(cleared) }];
+  <T>(store: WritableAtom<T>, cleared: T, label: (value: T) => string) =>
+  (value: T): FilterPill[] => [{ text: label(value), clear: () => store.set(cleared) }];
 
 /** A list filter shows one pill (`label`) or, with `{ each }`, one per item that removes just that item. */
 const list = <T>(
   store: WritableAtom<T[]>,
   group: FilterGroupId,
-  apply: (v: T[]) => OccurrenceFilter,
-  label?: ((v: T[]) => string) | { each: (item: T) => string },
+  apply: (values: T[]) => OccurrenceFilter,
+  label?: ((values: T[]) => string) | { each: (item: T) => string },
 ) =>
   filter({
     store,
     group,
     cleared: [],
-    isSet: (v) => v.length > 0,
+    isSet: (value) => value.length > 0,
     apply,
     pills:
       label &&
       (typeof label === 'function'
         ? whole(store, [], label)
-        : (v) =>
-            v.map((item) => ({
+        : (value) =>
+            value.map((item) => ({
               text: label.each(item),
-              clear: () => store.set(store.get().filter((x) => x !== item)),
+              clear: () => store.set(store.get().filter((existing) => existing !== item)),
             }))),
   });
 const flag = (store: WritableAtom<boolean>, group: FilterGroupId, fields: OccurrenceFilter, label: string) =>
@@ -262,23 +262,23 @@ const flag = (store: WritableAtom<boolean>, group: FilterGroupId, fields: Occurr
     store,
     group,
     cleared: false,
-    isSet: (v) => v,
+    isSet: (value) => value,
     apply: () => fields,
     pills: whole(store, false, () => label),
   });
 const nullable = <T>(
   store: WritableAtom<T | null>,
   group: FilterGroupId,
-  apply: (v: T) => OccurrenceFilter,
-  label: (v: T) => string,
+  apply: (value: T) => OccurrenceFilter,
+  label: (value: T) => string,
 ) =>
   filter({
     store,
     group,
     cleared: null,
-    isSet: (v) => v !== null,
-    apply: (v) => apply(v as T),
-    pills: whole(store, null, (v) => label(v as T)),
+    isSet: (value) => value !== null,
+    apply: (value) => apply(value as T),
+    pills: whole(store, null, (value) => label(value as T)),
   });
 
 /**
@@ -288,57 +288,62 @@ const nullable = <T>(
 export const FILTERS: readonly Filter[] = [
   list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
   flag($exactTaxon, 'what', { exactTaxon: true }, 'Exact taxon only'),
-  list($iucn, 'what', (iucn) => ({ iucn }), { each: (c) => IUCN_LABELS[c]! }),
-  nullable($dateRange, 'when', (r) => rangeFilter(r), rangeLabel),
-  list($months, 'when', (months) => ({ months }), { each: (m) => MONTHS[m - 1]! }),
+  list($iucn, 'what', (iucn) => ({ iucn }), { each: (code) => IUCN_LABELS[code]! }),
+  nullable($dateRange, 'when', (range) => rangeFilter(range), rangeLabel),
+  list($months, 'when', (months) => ({ months }), { each: (month) => MONTHS[month - 1]! }),
   list(
     $continents,
     'where',
     (continents) => ({ continents }),
-    (v) => v.map((c) => CONTINENT_LABELS[c]).join(', '),
+    (values) => values.map((continent) => CONTINENT_LABELS[continent]).join(', '),
   ),
   nullable(
     $maxUncertainty,
     'where',
     (maxUncertaintyM) => ({ maxUncertaintyM }),
-    (m) => `Accuracy ≤ ${distance(m)}`,
+    (metres) => `Accuracy ≤ ${distance(metres)}`,
   ),
   list(
     $basisOfRecord,
     'how',
     (basisOfRecord) => ({ basisOfRecord }),
-    (v) => v.map((b) => BASIS_LABELS[b]).join(', '),
+    (values) => values.map((basis) => BASIS_LABELS[basis]).join(', '),
   ),
   flag($hasPhoto, 'how', { hasImage: true }, 'Has photo'),
   flag($hasSound, 'how', { hasSound: true }, 'Has sound'),
 ];
 
 const filterValues = computed(
-  FILTERS.map((f) => f.store),
+  FILTERS.map((filterDef) => filterDef.store),
   (...values: unknown[]) => values,
 );
 
 /** The URL filters as one OccurrenceFilter (only the ones that are set). */
 export const $occurrenceFilter = computed(filterValues, (values): OccurrenceFilter => {
   const out: OccurrenceFilter = {};
-  FILTERS.forEach((f, i) => {
-    if (f.isSet(values[i])) Object.assign(out, f.apply(values[i]));
+  FILTERS.forEach((filterDef, index) => {
+    if (filterDef.isSet(values[index])) Object.assign(out, filterDef.apply(values[index]));
   });
   return out;
 });
 
 /** The set filters (other than taxa) as pills, with the rail group each sits in. */
 export const $filterPills = computed(filterValues, (values) =>
-  FILTERS.flatMap((f, i) =>
-    f.pills && f.isSet(values[i]) ? f.pills(values[i]).map((p, j) => ({ ...p, id: `${i}-${j}`, group: f.group })) : [],
+  FILTERS.flatMap((filterDef, index) =>
+    filterDef.pills && filterDef.isSet(values[index])
+      ? filterDef
+          .pills(values[index])
+          .map((pill, pillIndex) => ({ ...pill, id: `${index}-${pillIndex}`, group: filterDef.group }))
+      : [],
   ),
 );
 
 /** Filters set per rail group: one per pill (so each IUCN category), or one for taxa. */
 export const $groupCounts = computed(filterValues, (values) => {
   const counts: Record<FilterGroupId, number> = { what: 0, when: 0, where: 0, how: 0 };
-  FILTERS.forEach((f, i) => {
-    if (f.isSet(values[i])) counts[f.group] += f.pills ? f.pills(values[i]).length : 1;
+  FILTERS.forEach((filterDef, index) => {
+    if (filterDef.isSet(values[index]))
+      counts[filterDef.group] += filterDef.pills ? filterDef.pills(values[index]).length : 1;
   });
   return counts;
 });
@@ -346,5 +351,5 @@ export const $groupCounts = computed(filterValues, (values) => {
 /** Reset every filter, taxa included (one history step). */
 export function clearFilters(): void {
   clearHexSelection();
-  for (const f of FILTERS) f.clear();
+  for (const filterDef of FILTERS) filterDef.clear();
 }

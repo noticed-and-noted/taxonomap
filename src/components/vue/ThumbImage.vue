@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<{ image: UsableImage; size?: ThumbSize; a
 });
 const emit = defineEmits<{ broken: []; loaded: [] }>();
 
-const el = ref<HTMLImageElement>();
+const element = ref<HTMLImageElement>();
 const mounted = ref(false);
 /** Bumped to remount the <img> for a retry without crossorigin. */
 const attempt = ref(0);
@@ -36,9 +36,9 @@ function handleError() {
 }
 
 onMounted(() => {
-  const img = el.value;
-  if (img?.complete) {
-    if (img.naturalWidth > 0) handleLoad();
+  const image = element.value;
+  if (image?.complete) {
+    if (image.naturalWidth > 0) handleLoad();
     else handleError();
   }
   mounted.value = true;

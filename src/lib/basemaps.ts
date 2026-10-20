@@ -34,11 +34,11 @@ export const BASEMAPS: Record<BasemapId, BasemapDef> = {
   plain: {
     id: 'plain',
     label: 'Plain',
-    source: (t) => ({
+    source: (theme) => ({
       kind: 'vector',
       styleUrl:
-        (t === 'dark' ? env['PUBLIC_BASEMAP_PLAIN_DARK'] : env['PUBLIC_BASEMAP_PLAIN_LIGHT']) ||
-        `https://tiles.openfreemap.org/styles/${t === 'dark' ? 'dark' : 'positron'}`,
+        (theme === 'dark' ? env['PUBLIC_BASEMAP_PLAIN_DARK'] : env['PUBLIC_BASEMAP_PLAIN_LIGHT']) ||
+        `https://tiles.openfreemap.org/styles/${theme === 'dark' ? 'dark' : 'positron'}`,
     }),
   },
   terrain: {

@@ -18,7 +18,7 @@ test(
     const map = page.getByTestId('map');
     await expect(map).toBeVisible();
     // Tag the live DOM node; a remount would replace it.
-    await map.evaluate((el) => ((el as HTMLElement).dataset['marker'] = 'first'));
+    await map.evaluate((element) => ((element as HTMLElement).dataset['marker'] = 'first'));
 
     await page.getByRole('link', { name: 'Tree of life' }).click();
     await expect(page).toHaveURL(/\/tree$/);

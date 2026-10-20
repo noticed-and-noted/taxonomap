@@ -61,18 +61,18 @@ const { commonName, sciName, pendingName, photoOf, pendingPhoto } = useRowDetail
   inView,
   needAllNames: () => sortKey.value === 'name' || !!query.value.trim(),
 });
-const displayName = (r: SpeciesRow) => commonName(r) ?? sciName(r);
-const initials = (r: SpeciesRow) =>
-  displayName(r)
+const displayName = (row: SpeciesRow) => commonName(row) ?? sciName(row);
+const initials = (row: SpeciesRow) =>
+  displayName(row)
     .split(/\s+/)
     .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
+    .map((word) => word[0]?.toUpperCase())
     .join('');
 
 /** Groups with their share of the largest group's records. */
 const groupOptions = computed(() => {
-  const max = Math.max(1, ...props.groups.map((g) => g.records));
-  return props.groups.map((g) => ({ ...g, bar: g.records / max }));
+  const max = Math.max(1, ...props.groups.map((classGroup) => classGroup.records));
+  return props.groups.map((classGroup) => ({ ...classGroup, bar: classGroup.records / max }));
 });
 const canFilter = computed(() => props.groups.length > 1);
 /** First load: nothing to search or filter yet. */
@@ -81,18 +81,18 @@ const pending = computed(() => props.loading && !props.rows.length);
 const activeFilters = computed(() => (group.value === null ? 0 : 1));
 
 const filtered = computed(() => {
-  const q = normalise(query.value);
-  return props.rows.filter((r) => !q || normalise(`${commonName(r) ?? ''} ${sciName(r)}`).includes(q));
+  const needle = normalise(query.value);
+  return props.rows.filter((row) => !needle || normalise(`${commonName(row) ?? ''} ${sciName(row)}`).includes(needle));
 });
 
 const sorted = computed(() => {
   const dir = sortDesc.value ? -1 : 1;
-  const byName = (a: SpeciesRow, b: SpeciesRow) => displayName(a).localeCompare(displayName(b));
-  const cmp: Record<SortKey, (a: SpeciesRow, b: SpeciesRow) => number> = {
-    name: (a, b) => dir * byName(a, b),
-    records: (a, b) => dir * (a.records - b.records) || byName(a, b),
+  const byName = (left: SpeciesRow, right: SpeciesRow) => displayName(left).localeCompare(displayName(right));
+  const comparators: Record<SortKey, (left: SpeciesRow, right: SpeciesRow) => number> = {
+    name: (left, right) => dir * byName(left, right),
+    records: (left, right) => dir * (left.records - right.records) || byName(left, right),
   };
-  return [...filtered.value].sort(cmp[sortKey.value]);
+  return [...filtered.value].sort(comparators[sortKey.value]);
 });
 
 const visible = computed(() => sorted.value.slice(0, limit.value));
@@ -102,35 +102,35 @@ const { fadeBottom: resultsFade, update: updateResultsFade } = useScrollFade(scr
 watch([visible, scroller], () => void nextTick(updateResultsFade), { immediate: true });
 
 // Settles after scrolling pauses, so rows flicked past aren't looked up.
-let io: IntersectionObserver | undefined;
+let intersectionObserver: IntersectionObserver | undefined;
 let intersecting = new Set<number>();
 const settle = debounce((keys: Set<number>) => (inView.value = keys), 150);
 function observeRows() {
-  io?.disconnect();
+  intersectionObserver?.disconnect();
   intersecting = new Set();
   const root = scroller.value;
   if (!root) return;
-  io = new IntersectionObserver(
+  intersectionObserver = new IntersectionObserver(
     (entries) => {
-      for (const e of entries) {
-        const key = Number((e.target as HTMLElement).dataset['key']);
-        if (e.isIntersecting) intersecting.add(key);
+      for (const entry of entries) {
+        const key = Number((entry.target as HTMLElement).dataset['key']);
+        if (entry.isIntersecting) intersecting.add(key);
         else intersecting.delete(key);
       }
       settle(new Set(intersecting));
     },
     { root, rootMargin: '0px 0px 120px 0px' },
   );
-  for (const tr of root.querySelectorAll<HTMLElement>('tr[data-key]')) io.observe(tr);
+  for (const tableRow of root.querySelectorAll<HTMLElement>('tr[data-key]')) intersectionObserver.observe(tableRow);
 }
 watch([visible, scroller], () => void nextTick(observeRows), { immediate: true });
 
-const maxRecords = computed(() => Math.max(1, ...props.rows.map((r) => r.records)));
+const maxRecords = computed(() => Math.max(1, ...props.rows.map((row) => row.records)));
 
 /** A click anywhere on a row follows its species link (the link itself stays for keyboard and middle-click). */
-function openRow(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('a')) return;
-  (e.currentTarget as HTMLElement).querySelector('a')?.click();
+function openRow(event: MouseEvent) {
+  if ((event.target as HTMLElement).closest('a')) return;
+  (event.currentTarget as HTMLElement).querySelector('a')?.click();
 }
 
 function sortBy(key: SortKey) {
@@ -155,12 +155,12 @@ function closeFilter(refocus = false) {
   filterOpen.value = false;
   if (refocus) filterBtn.value?.focus();
 }
-function onDocPointer(e: PointerEvent) {
-  const t = e.target as Node;
-  if (!popover.value?.contains(t) && !filterBtn.value?.contains(t)) closeFilter();
+function onDocPointer(event: PointerEvent) {
+  const target = event.target as Node;
+  if (!popover.value?.contains(target) && !filterBtn.value?.contains(target)) closeFilter();
 }
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') closeFilter(true);
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeFilter(true);
 }
 watch(filterOpen, (open) => {
   if (open) {
@@ -174,7 +174,7 @@ watch(filterOpen, (open) => {
 });
 onBeforeUnmount(() => {
   filterOpen.value = false;
-  io?.disconnect();
+  intersectionObserver?.disconnect();
   settle.cancel();
 });
 
@@ -265,23 +265,25 @@ watch([query, group, sortKey, sortDesc], () => {
               />
               <span class="min-w-0 flex-1 truncate">All groups</span>
             </label>
-            <label v-for="g in groupOptions" :key="g.key" class="group-opt">
+            <label v-for="groupOption in groupOptions" :key="groupOption.key" class="group-opt">
               <input
                 type="radio"
                 :name="`${id}-group`"
-                :checked="group === g.key"
+                :checked="group === groupOption.key"
                 class="sr-only"
-                @change="group = g.key"
+                @change="group = groupOption.key"
               />
-              <span class="min-w-0 flex-1 truncate">{{ g.common ?? g.name }}</span>
+              <span class="min-w-0 flex-1 truncate">{{ groupOption.common ?? groupOption.name }}</span>
               <span class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
                 <span
                   class="block h-full rounded-full"
-                  :class="group === g.key ? 'bg-accent' : 'bg-border-strong'"
-                  :style="{ width: `${Math.max(4, g.bar * 100)}%` }"
+                  :class="group === groupOption.key ? 'bg-accent' : 'bg-border-strong'"
+                  :style="{ width: `${Math.max(4, groupOption.bar * 100)}%` }"
                 ></span>
               </span>
-              <span class="w-11 shrink-0 text-right text-xs tabular-nums text-muted">{{ compact(g.records) }}</span>
+              <span class="w-11 shrink-0 text-right text-xs tabular-nums text-muted">{{
+                compact(groupOption.records)
+              }}</span>
             </label>
           </div>
         </fieldset>
@@ -358,38 +360,38 @@ watch([query, group, sortKey, sortDesc], () => {
             </thead>
             <tbody>
               <tr
-                v-for="r in visible"
-                :key="r.key"
-                :data-key="r.key"
+                v-for="row in visible"
+                :key="row.key"
+                :data-key="row.key"
                 class="cursor-pointer border-b border-border hover:bg-surface-2"
-                :class="{ 'bg-accent-soft': selected?.includes(r.key) }"
+                :class="{ 'bg-accent-soft': selected?.includes(row.key) }"
                 @click="openRow"
               >
                 <td class="py-1.5 pl-4 pr-2">
-                  <a :href="speciesPath(r.key, manifest)" class="group flex min-w-0 items-center gap-2">
+                  <a :href="speciesPath(row.key, manifest)" class="group flex min-w-0 items-center gap-2">
                     <span class="size-8 shrink-0 overflow-hidden rounded bg-photo">
-                      <SkeletonBlock v-if="pendingPhoto(r)" height="100%" rounded="sm" aria-hidden="true" />
+                      <SkeletonBlock v-if="pendingPhoto(row)" height="100%" rounded="sm" aria-hidden="true" />
                       <ThumbImage
-                        v-else-if="photoOf(r) && !broken.has(r.key)"
-                        :image="photoOf(r)!"
+                        v-else-if="photoOf(row) && !broken.has(row.key)"
+                        :image="photoOf(row)!"
                         size="200x"
                         alt=""
                         class="size-full object-cover"
-                        @broken="broken = new Set(broken).add(r.key)"
+                        @broken="broken = new Set(broken).add(row.key)"
                       />
                       <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
-                        {{ initials(r) }}
+                        {{ initials(row) }}
                       </span>
                     </span>
-                    <span v-if="pendingName(r)" class="min-w-0 flex-1 space-y-1" aria-hidden="true">
+                    <span v-if="pendingName(row)" class="min-w-0 flex-1 space-y-1" aria-hidden="true">
                       <SkeletonBlock height="0.8rem" width="70%" />
                       <SkeletonBlock height="0.6rem" width="45%" />
                     </span>
-                    <span v-if="pendingName(r)" class="sr-only">Loading name</span>
+                    <span v-if="pendingName(row)" class="sr-only">Loading name</span>
                     <span v-else class="min-w-0">
-                      <span class="block truncate group-hover:underline">{{ displayName(r) }}</span>
-                      <span v-if="commonName(r)" class="sci-name block truncate text-xs text-muted">{{
-                        sciName(r)
+                      <span class="block truncate group-hover:underline">{{ displayName(row) }}</span>
+                      <span v-if="commonName(row)" class="sci-name block truncate text-xs text-muted">{{
+                        sciName(row)
                       }}</span>
                     </span>
                   </a>
@@ -399,11 +401,11 @@ watch([query, group, sortKey, sortDesc], () => {
                     <span class="h-1 w-6 shrink-0 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
                       <span
                         class="block h-full rounded-full bg-accent"
-                        :style="{ width: `${Math.max(4, (r.records / maxRecords) * 100)}%` }"
+                        :style="{ width: `${Math.max(4, (row.records / maxRecords) * 100)}%` }"
                       ></span>
                     </span>
                     <!-- Fixed width so bars line up whether or not the count has a decimal. -->
-                    <span class="w-[2.75rem] shrink-0">{{ compact(r.records) }}</span>
+                    <span class="w-[2.75rem] shrink-0">{{ compact(row.records) }}</span>
                   </span>
                 </td>
               </tr>

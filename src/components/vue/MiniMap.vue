@@ -16,7 +16,7 @@ import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ taxonKey: number; label: string }>();
 
-const Z = 1;
+const ZOOM = 1;
 const tiles = [
   [0, 0],
   [1, 0],
@@ -39,27 +39,27 @@ interface Tile {
   hexes: Hex[];
 }
 
-async function fetchTile(x: number, y: number): Promise<Tile | null> {
+async function fetchTile(tileX: number, tileY: number): Promise<Tile | null> {
   const url = occurrenceTileTemplate({ taxonKey: props.taxonKey }, { hexPerTile: 45 }, 'mvt')
-    .replace('{z}', String(Z))
-    .replace('{x}', String(x))
-    .replace('{y}', String(y));
-  let res: Response;
+    .replace('{z}', String(ZOOM))
+    .replace('{x}', String(tileX))
+    .replace('{y}', String(tileY));
+  let response: Response;
   try {
-    res = await fetch(url);
-    if (!res.ok && res.status !== 204) throw new Error(String(res.status));
+    response = await fetch(url);
+    if (!response.ok && response.status !== 204) throw new Error(String(response.status));
   } catch {
     return null;
   }
-  const buf = await res.arrayBuffer();
-  if (!buf.byteLength) return null;
-  const layer = new VectorTile(new PbfReader(buf)).layers.occurrence;
+  const buffer = await response.arrayBuffer();
+  if (!buffer.byteLength) return null;
+  const layer = new VectorTile(new PbfReader(buffer)).layers.occurrence;
   if (!layer) return null;
   const hexes: Hex[] = [];
-  for (let i = 0; i < layer.length; i++) {
-    const f = layer.feature(i);
-    const rings = f.loadGeometry();
-    hexes.push({ rings, total: hexRecords(f.properties.total), home: homeOffset(rings[0] ?? [], layer.extent) });
+  for (let index = 0; index < layer.length; index++) {
+    const feature = layer.feature(index);
+    const rings = feature.loadGeometry();
+    hexes.push({ rings, total: hexRecords(feature.properties.total), home: homeOffset(rings[0] ?? [], layer.extent) });
   }
   return { extent: layer.extent, hexes };
 }
@@ -68,36 +68,40 @@ let loaded: (Tile | null)[] = [];
 
 /** Same bins as the explorer's legend at this zoom. */
 function paint() {
-  const ctx = canvas.value?.getContext('2d');
-  if (!ctx) return;
+  const context = canvas.value?.getContext('2d');
+  if (!context) return;
   const colors = rampColors();
-  const bins = thresholdsAt(Z);
-  const colorOf = (n: number) => {
-    const bin = bins.findIndex((t) => n < t);
+  const bins = thresholdsAt(ZOOM);
+  const colorOf = (count: number) => {
+    const bin = bins.findIndex((threshold) => count < threshold);
     return colors[bin === -1 ? colors.length - 1 : bin]!;
   };
-  ctx.clearRect(0, 0, TILE_PX * 2, TILE_PX * 2);
-  loaded.forEach((tile, i) => {
+  context.clearRect(0, 0, TILE_PX * 2, TILE_PX * 2);
+  loaded.forEach((tile, index) => {
     if (!tile) return;
-    const [tx, ty] = tiles[i]!;
-    const k = TILE_PX / tile.extent;
+    const [tileX, tileY] = tiles[index]!;
+    const scale = TILE_PX / tile.extent;
     for (const hex of tile.hexes) {
       // An edge cell comes in each tile it touches; draw the copy from the tile holding its centre (see mergeHexes).
       const [dx, dy] = hex.home;
-      const homeX = (((tx + dx) % 2 ** Z) + 2 ** Z) % 2 ** Z;
-      if ((dx || dy) && loaded[tiles.findIndex(([x, y]) => x === homeX && y === ty + dy)]) continue;
-      ctx.beginPath();
+      const homeX = (((tileX + dx) % 2 ** ZOOM) + 2 ** ZOOM) % 2 ** ZOOM;
+      if (
+        (dx || dy) &&
+        loaded[tiles.findIndex(([candidateX, candidateY]) => candidateX === homeX && candidateY === tileY + dy)]
+      )
+        continue;
+      context.beginPath();
       for (const ring of hex.rings) {
-        ring.forEach((p, j) => {
-          const px = tx * TILE_PX + p.x * k;
-          const py = ty * TILE_PX + p.y * k;
-          if (j) ctx.lineTo(px, py);
-          else ctx.moveTo(px, py);
+        ring.forEach((point, pointIndex) => {
+          const px = tileX * TILE_PX + point.x * scale;
+          const py = tileY * TILE_PX + point.y * scale;
+          if (pointIndex) context.lineTo(px, py);
+          else context.moveTo(px, py);
         });
-        ctx.closePath();
+        context.closePath();
       }
-      ctx.fillStyle = colorOf(hex.total);
-      ctx.fill('evenodd');
+      context.fillStyle = colorOf(hex.total);
+      context.fill('evenodd');
     }
   });
 }
@@ -105,7 +109,7 @@ function paint() {
 let unlisten: (() => void) | undefined;
 onMounted(async () => {
   unlisten = $ramp.listen(paint);
-  loaded = await Promise.all(tiles.map(([x, y]) => fetchTile(x, y)));
+  loaded = await Promise.all(tiles.map(([tileX, tileY]) => fetchTile(tileX, tileY)));
   paint();
 });
 onBeforeUnmount(() => unlisten?.());
@@ -119,16 +123,16 @@ onBeforeUnmount(() => unlisten?.());
       :aria-label="`Open the map of ${label} records`"
     >
       <span class="grid size-full grid-cols-2 grid-rows-2">
-        <span v-for="([x, y], i) in tiles" :key="i" class="relative block">
+        <span v-for="([tileX, tileY], index) in tiles" :key="index" class="relative block">
           <img
-            :src="gbifBasemapTile(Z, x, y, 'dark')"
+            :src="gbifBasemapTile(ZOOM, tileX, tileY, 'dark')"
             crossorigin="anonymous"
             alt=""
             loading="lazy"
             class="base-dark absolute inset-0 size-full"
           />
           <img
-            :src="gbifBasemapTile(Z, x, y, 'light')"
+            :src="gbifBasemapTile(ZOOM, tileX, tileY, 'light')"
             crossorigin="anonymous"
             alt=""
             loading="lazy"

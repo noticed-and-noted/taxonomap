@@ -13,57 +13,63 @@ import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ data: SpeciesData }>();
 
-const d = computed(() => props.data);
-const displayName = computed(() => d.value.commonName ?? d.value.canonicalName);
-const generated = computed(() => d.value.generated.slice(0, 10));
-const otherNames = computed(() => d.value.vernacular.filter((g) => g.code !== 'eng' && g.code !== 'en'));
-const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'eng' || g.code === 'en')?.names ?? []);
+const speciesData = computed(() => props.data);
+const displayName = computed(() => speciesData.value.commonName ?? speciesData.value.canonicalName);
+const generated = computed(() => speciesData.value.generated.slice(0, 10));
+const otherNames = computed(() =>
+  speciesData.value.vernacular.filter((group) => group.code !== 'eng' && group.code !== 'en'),
+);
+const englishNames = computed(
+  () => speciesData.value.vernacular.find((group) => group.code === 'eng' || group.code === 'en')?.names ?? [],
+);
 </script>
 
 <template>
   <article class="species-page mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6">
     <nav aria-label="Classification" class="mb-3 text-xs text-subtle">
       <ol class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-        <li v-for="(t, i) in d.classification" :key="t.key" class="flex items-center gap-1.5">
+        <li v-for="(taxon, index) in speciesData.classification" :key="taxon.key" class="flex items-center gap-1.5">
           <a
-            :href="`/tree?focus=${t.key}`"
+            :href="`/tree?focus=${taxon.key}`"
             class="hover:text-text hover:underline"
-            :title="RANK_LABELS[t.rank] ?? t.rank"
+            :title="RANK_LABELS[taxon.rank] ?? taxon.rank"
           >
-            <span :class="t.rank === 'GENUS' ? 'sci-name' : ''">{{ t.name }}</span>
+            <span :class="taxon.rank === 'GENUS' ? 'sci-name' : ''">{{ taxon.name }}</span>
           </a>
-          <span v-if="i < d.classification.length - 1" aria-hidden="true">›</span>
+          <span v-if="index < speciesData.classification.length - 1" aria-hidden="true">›</span>
         </li>
       </ol>
     </nav>
 
     <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div class="min-w-0">
-        <h1 class="font-display text-4xl leading-tight sm:text-5xl" :class="{ 'sci-name': !d.commonName }">
+        <h1 class="font-display text-4xl leading-tight sm:text-5xl" :class="{ 'sci-name': !speciesData.commonName }">
           {{ displayName }}
         </h1>
         <p class="mt-1 text-lg text-muted">
-          <span class="sci-name text-text">{{ d.canonicalName }}</span>
-          <span v-if="d.authorship" class="ml-1.5 text-sm">{{ d.authorship }}</span>
+          <span class="sci-name text-text">{{ speciesData.canonicalName }}</span>
+          <span v-if="speciesData.authorship" class="ml-1.5 text-sm">{{ speciesData.authorship }}</span>
         </p>
         <p class="mt-2 flex flex-wrap gap-2 text-xs">
           <span class="rounded-full border border-border px-2.5 py-0.5 text-muted">{{
-            RANK_LABELS[d.rank] ?? d.rank
+            RANK_LABELS[speciesData.rank] ?? speciesData.rank
           }}</span>
           <span
-            v-if="d.status && d.status !== 'ACCEPTED'"
+            v-if="speciesData.status && speciesData.status !== 'ACCEPTED'"
             class="rounded-full border border-border px-2.5 py-0.5 text-muted"
           >
-            {{ d.status.toLowerCase() }}
+            {{ speciesData.status.toLowerCase() }}
           </span>
-          <span class="rounded-full bg-accent-soft px-2.5 py-0.5 text-text">{{ full(d.count) }} records</span>
+          <span class="rounded-full bg-accent-soft px-2.5 py-0.5 text-text">{{ full(speciesData.count) }} records</span>
         </p>
       </div>
       <div class="flex gap-2 text-sm">
-        <a :href="`/?taxon=${d.key}`" class="rounded-md bg-accent px-3 py-2 font-medium text-accent-contrast"
+        <a :href="`/?taxon=${speciesData.key}`" class="rounded-md bg-accent px-3 py-2 font-medium text-accent-contrast"
           >View on map</a
         >
-        <a :href="`/tree?focus=${d.key}`" class="rounded-md border border-border px-3 py-2 hover:border-accent"
+        <a
+          :href="`/tree?focus=${speciesData.key}`"
+          class="rounded-md border border-border px-3 py-2 hover:border-accent"
           >Tree of life</a
         >
       </div>
@@ -79,7 +85,7 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
       </div>
       <div class="space-y-4">
         <slot name="map" />
-        <section v-if="englishNames.length || d.vernacular.length" aria-labelledby="names-h">
+        <section v-if="englishNames.length || speciesData.vernacular.length" aria-labelledby="names-h">
           <h2 id="names-h" class="mb-2 font-display text-xl">Common names</h2>
           <p v-if="englishNames.length" class="text-sm">{{ englishNames.join(' · ') }}</p>
           <details v-if="otherNames.length" class="mt-2 text-sm">
@@ -87,9 +93,9 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
               <UiIcon name="chevron-right" class="chevron" /> {{ otherNames.length }} other languages
             </summary>
             <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <template v-for="g in otherNames" :key="g.code">
-                <dt class="text-subtle">{{ g.language }}</dt>
-                <dd>{{ g.names.join(' · ') }}</dd>
+              <template v-for="group in otherNames" :key="group.code">
+                <dt class="text-subtle">{{ group.language }}</dt>
+                <dd>{{ group.names.join(' · ') }}</dd>
               </template>
             </dl>
           </details>
@@ -97,12 +103,12 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
       </div>
     </div>
 
-    <section v-if="d.count > 0" class="mt-10" aria-labelledby="records-h">
+    <section v-if="speciesData.count > 0" class="mt-10" aria-labelledby="records-h">
       <h2 id="records-h" class="mb-4 font-display text-2xl">Records</h2>
       <div class="grid gap-8 md:grid-cols-2">
         <!-- Plot charts hydrate as islands (client:visible); see PlotChart.vue. -->
         <slot name="years" />
-        <RadialSeasonality :counts="d.months" :size="240" title="Records by month" />
+        <RadialSeasonality :counts="speciesData.months" :size="240" title="Records by month" />
         <slot name="countries" />
         <slot name="datasets" />
       </div>
@@ -111,35 +117,35 @@ const englishNames = computed(() => d.value.vernacular.find((g) => g.code === 'e
       GBIF has no occurrence records for this taxon yet.
     </p>
 
-    <section v-if="d.siblings.length" class="mt-10" aria-labelledby="similar-h">
+    <section v-if="speciesData.siblings.length" class="mt-10" aria-labelledby="similar-h">
       <h2 id="similar-h" class="mb-1 font-display text-2xl">Similar species</h2>
       <p class="mb-4 text-sm text-muted">
         Other species in the genus
-        <span class="sci-name">{{ d.classification.find((c) => c.rank === 'GENUS')?.name }}</span
+        <span class="sci-name">{{ speciesData.classification.find((taxon) => taxon.rank === 'GENUS')?.name }}</span
         >, by records.
       </p>
       <!-- Cards hydrate as an island (SimilarSpecies), which looks up their photos. -->
       <slot name="similar" />
     </section>
 
-    <section v-if="d.synonyms.length" class="mt-10" aria-labelledby="syn-h">
+    <section v-if="speciesData.synonyms.length" class="mt-10" aria-labelledby="syn-h">
       <h2 id="syn-h" class="mb-2 font-display text-xl">Synonyms</h2>
       <details class="text-sm">
         <summary class="cursor-pointer text-muted hover:text-text">
-          <UiIcon name="chevron-right" class="chevron" /> {{ d.synonyms.length }} names
+          <UiIcon name="chevron-right" class="chevron" /> {{ speciesData.synonyms.length }} names
         </summary>
         <ul class="mt-2 columns-1 gap-6 sm:columns-2">
-          <li v-for="s in d.synonyms" :key="s" class="sci-name py-0.5">{{ s }}</li>
+          <li v-for="synonym in speciesData.synonyms" :key="synonym" class="sci-name py-0.5">{{ synonym }}</li>
         </ul>
       </details>
     </section>
 
     <footer class="mt-12 border-t border-border pt-4 text-xs text-subtle">
       Occurrence data from <a href="https://www.gbif.org" class="underline">GBIF.org</a> and its data publishers ({{
-        compact(d.count)
+        compact(speciesData.count)
       }}
       records, top datasets listed above). Photos are shown under their stated licences. Snapshot {{ generated }} ·
-      <a :href="`https://www.gbif.org/species/${d.key}`" class="underline" target="_blank" rel="noopener"
+      <a :href="`https://www.gbif.org/species/${speciesData.key}`" class="underline" target="_blank" rel="noopener"
         >GBIF species page <UiIcon name="external"
       /></a>
     </footer>

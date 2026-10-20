@@ -17,85 +17,92 @@ const { counts, loading, error, live } = useYearHistogram();
 
 const MIN = MIN_YEAR;
 const MAX = new Date().getFullYear();
-const W = 600;
-const H = 56;
+const WIDTH = 600;
+const HEIGHT = 56;
 
 // The years the date range touches; dragging sets a whole-years range.
 const dateRange = useStore($dateRange);
 const range = computed(() => rangeYears(dateRange.value));
-const lo = ref(range.value?.[0] ?? MIN);
-const hi = ref(range.value?.[1] ?? MAX);
+const low = ref(range.value?.[0] ?? MIN);
+const high = ref(range.value?.[1] ?? MAX);
 
 /** The visible span: zoomed to the selected range, with a little room either side to widen it. */
 type Span = readonly [number, number];
-function zoomTo(r: Span | null): Span {
-  if (!r) return [MIN, MAX];
-  const pad = Math.max(2, Math.round((r[1] - r[0]) * 0.1));
-  return [Math.max(MIN, r[0] - pad), Math.min(MAX, r[1] + pad)];
+function zoomTo(span: Span | null): Span {
+  if (!span) return [MIN, MAX];
+  const pad = Math.max(2, Math.round((span[1] - span[0]) * 0.1));
+  return [Math.max(MIN, span[0] - pad), Math.min(MAX, span[1] + pad)];
 }
 const view = ref<Span>(zoomTo(range.value));
 const zoomed = computed(() => view.value[0] > MIN || view.value[1] < MAX);
 const zoomOut = () => (view.value = [MIN, MAX]);
 
-watch(range, (r) => {
-  lo.value = r?.[0] ?? MIN;
-  hi.value = r?.[1] ?? MAX;
-  view.value = zoomTo(r);
+watch(range, (span) => {
+  low.value = span?.[0] ?? MIN;
+  high.value = span?.[1] ?? MAX;
+  view.value = zoomTo(span);
 });
 
 const years = computed(() => {
-  const [a, b] = view.value;
-  return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const [firstYear, lastYear] = view.value;
+  return Array.from({ length: lastYear - firstYear + 1 }, (_unused, index) => firstYear + index);
 });
-const max = computed(() => Math.max(1, ...years.value.map((y) => counts.value.get(y) ?? 0)));
+const max = computed(() => Math.max(1, ...years.value.map((year) => counts.value.get(year) ?? 0)));
 const bars = computed(() => {
-  const bw = W / years.value.length;
-  return years.value.map((y, i) => {
-    const c = counts.value.get(y) ?? 0;
+  const barWidth = WIDTH / years.value.length;
+  return years.value.map((year, index) => {
+    const count = counts.value.get(year) ?? 0;
     // sqrt scale keeps early decades visible next to the recent boom.
-    const h = c ? Math.max(1, Math.sqrt(c / max.value) * (H - 2)) : 0;
-    return { y, c, x: i * bw, w: Math.max(bw - 0.6, 0.6), h, inRange: y >= lo.value && y <= hi.value };
+    const barHeight = count ? Math.max(1, Math.sqrt(count / max.value) * (HEIGHT - 2)) : 0;
+    return {
+      y: year,
+      c: count,
+      x: index * barWidth,
+      w: Math.max(barWidth - 0.6, 0.6),
+      h: barHeight,
+      inRange: year >= low.value && year <= high.value,
+    };
   });
 });
-const inRangeTotal = computed(() => bars.value.reduce((s, b) => s + (b.inRange ? b.c : 0), 0));
+const inRangeTotal = computed(() => bars.value.reduce((total, bar) => total + (bar.inRange ? bar.c : 0), 0));
 /** True while a handle is dragged (the store only updates on release). */
 const dragging = ref(false);
 function commit() {
   dragging.value = false;
-  if (lo.value > hi.value) [lo.value, hi.value] = [hi.value, lo.value];
-  $dateRange.set(lo.value === MIN && hi.value === MAX ? null : yearsRange(lo.value, hi.value));
+  if (low.value > high.value) [low.value, high.value] = [high.value, low.value];
+  $dateRange.set(low.value === MIN && high.value === MAX ? null : yearsRange(low.value, high.value));
 }
 
-function onLo(e: Event) {
+function onLowInput(event: Event) {
   dragging.value = true;
-  lo.value = Math.min(Number((e.target as HTMLInputElement).value), hi.value);
+  low.value = Math.min(Number((event.target as HTMLInputElement).value), high.value);
 }
-function onHi(e: Event) {
+function onHighInput(event: Event) {
   dragging.value = true;
-  hi.value = Math.max(Number((e.target as HTMLInputElement).value), lo.value);
+  high.value = Math.max(Number((event.target as HTMLInputElement).value), low.value);
 }
 
 /** A click on the chart moves the nearer handle to the clicked year's edge. */
-function onTrack(e: PointerEvent) {
-  if (e.button !== 0 || e.target instanceof HTMLInputElement) return;
-  const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const n = years.value.length;
-  const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - box.left) / box.width) * n)));
-  const y = years.value[i]!;
+function onTrack(event: PointerEvent) {
+  if (event.button !== 0 || event.target instanceof HTMLInputElement) return;
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const count = years.value.length;
+  const index = Math.min(count - 1, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * count)));
+  const year = years.value[index]!;
   // Edge distances in bars: From marks a bar's left edge, To its right edge.
-  const toLo = Math.abs(y - lo.value);
-  const toHi = Math.abs(y - hi.value);
-  if (y < lo.value || (y <= hi.value && toLo <= toHi)) lo.value = y;
-  else hi.value = y;
+  const distanceToLow = Math.abs(year - low.value);
+  const distanceToHigh = Math.abs(year - high.value);
+  if (year < low.value || (year <= high.value && distanceToLow <= distanceToHigh)) low.value = year;
+  else high.value = year;
   commit();
 }
 
 const label = computed(() =>
-  lo.value === MIN && hi.value === MAX
+  low.value === MIN && high.value === MAX
     ? 'All years'
-    : lo.value === hi.value
-      ? `${lo.value}`
-      : `${lo.value}–${hi.value}`,
+    : low.value === high.value
+      ? `${low.value}`
+      : `${low.value}–${high.value}`,
 );
 </script>
 
@@ -110,21 +117,21 @@ const label = computed(() =>
         </p>
         <svg
           v-else
-          :viewBox="`0 0 ${W} ${H}`"
+          :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
           preserveAspectRatio="none"
           class="block h-14 w-full"
           role="img"
           :aria-label="`Histogram of records per year from ${view[0]} to ${view[1]}`"
         >
           <rect
-            v-for="b in bars"
-            :key="b.y"
-            :x="b.x"
-            :y="H - b.h"
-            :width="b.w"
-            :height="b.h"
-            :fill="b.inRange ? 'var(--accent)' : 'var(--border-strong)'"
-            :fill-opacity="b.inRange ? 0.9 : 0.6"
+            v-for="bar in bars"
+            :key="bar.y"
+            :x="bar.x"
+            :y="HEIGHT - bar.h"
+            :width="bar.w"
+            :height="bar.h"
+            :fill="bar.inRange ? 'var(--accent)' : 'var(--border-strong)'"
+            :fill-opacity="bar.inRange ? 0.9 : 0.6"
           />
         </svg>
         <div class="range-wrap" :class="{ 'opacity-50': loading }" :style="{ '--n': years.length }">
@@ -132,20 +139,20 @@ const label = computed(() =>
             type="range"
             :min="view[0]"
             :max="view[1]"
-            :value="lo"
+            :value="low"
             aria-label="From year"
-            :aria-valuetext="String(lo)"
-            @input="onLo"
+            :aria-valuetext="String(low)"
+            @input="onLowInput"
             @change="commit"
           />
           <input
             type="range"
             :min="view[0]"
             :max="view[1]"
-            :value="hi"
+            :value="high"
             aria-label="To year"
-            :aria-valuetext="String(hi)"
-            @input="onHi"
+            :aria-valuetext="String(high)"
+            @input="onHighInput"
             @change="commit"
           />
         </div>

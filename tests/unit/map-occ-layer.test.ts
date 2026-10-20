@@ -9,50 +9,51 @@ import { $gbifStale, type TileFilter } from '~/lib/gbif';
 import { createOccLayer as create, type OccLayer } from '~/lib/map/occLayer';
 import { hexAt, mvt } from './helpers/tiles';
 
-const W = 1024;
-const H = 768;
+const WIDTH = 1024;
+const HEIGHT = 768;
 const LAT_LIMIT = 85.0511;
 
 /** A map W × H px, centred on `center` at `zoom`, that fires its events on demand. */
-function fakeMap(opts: { zoom?: number; center?: [number, number]; loaded?: boolean } = {}) {
-  let zoom = opts.zoom ?? 4;
-  let center = opts.center ?? [0, 0];
+function fakeMap(options: { zoom?: number; center?: [number, number]; loaded?: boolean } = {}) {
+  let zoom = options.zoom ?? 4;
+  let center = options.center ?? [0, 0];
   const handlers = new Map<string, Set<() => void>>();
   const size = () => 512 * 2 ** zoom;
   const world = ([lng, lat]: [number, number]) => {
     const phi = (Math.max(-LAT_LIMIT, Math.min(LAT_LIMIT, lat)) * Math.PI) / 180;
     return [((lng + 180) / 360) * size(), ((1 - Math.log(Math.tan(Math.PI / 4 + phi / 2)) / Math.PI) / 2) * size()];
   };
-  const lngLat = (c: unknown): [number, number] =>
-    Array.isArray(c) ? [c[0], c[1]] : [(c as { lng: number }).lng, (c as { lat: number }).lat];
+  const lngLat = (coord: unknown): [number, number] =>
+    Array.isArray(coord) ? [coord[0], coord[1]] : [(coord as { lng: number }).lng, (coord as { lat: number }).lat];
   const easeTo = vi.fn();
   const flyTo = vi.fn();
   const map = {
-    getCanvas: () => ({ clientWidth: W, clientHeight: H }),
+    getCanvas: () => ({ clientWidth: WIDTH, clientHeight: HEIGHT }),
     getZoom: () => zoom,
     getCenter: () => ({ lng: center[0], lat: center[1] }),
-    project(c: unknown) {
-      const [x, y] = world(lngLat(c));
-      const [cx, cy] = world(center);
-      return { x: x! - cx! + W / 2, y: y! - cy! + H / 2 };
+    project(coord: unknown) {
+      const [worldX, worldY] = world(lngLat(coord));
+      const [centreX, centreY] = world(center);
+      return { x: worldX! - centreX! + WIDTH / 2, y: worldY! - centreY! + HEIGHT / 2 };
     },
     // Off the world, the point snaps to its edge (as MapLibre's globe snaps to the horizon).
-    unproject([x, y]: [number, number]) {
-      const [cx, cy] = world(center);
-      const wx = x - W / 2 + cx!;
-      const wy = Math.max(0, Math.min(size(), y - H / 2 + cy!));
+    unproject([worldX, worldY]: [number, number]) {
+      const [centreX, centreY] = world(center);
+      const viewX = worldX - WIDTH / 2 + centreX!;
+      const viewY = Math.max(0, Math.min(size(), worldY - HEIGHT / 2 + centreY!));
       return {
-        lng: (wx / size()) * 360 - 180,
-        lat: (Math.atan(Math.sinh(Math.PI * (1 - (2 * wy) / size()))) * 180) / Math.PI,
+        lng: (viewX / size()) * 360 - 180,
+        lat: (Math.atan(Math.sinh(Math.PI * (1 - (2 * viewY) / size()))) * 180) / Math.PI,
       };
     },
-    on: (e: string, f: () => void) => void (handlers.get(e) ?? handlers.set(e, new Set()).get(e)!).add(f),
-    off: (e: string, f: () => void) => void handlers.get(e)?.delete(f),
-    once(e: string, f: () => void) {
-      const g = () => (map.off(e, g), f());
-      map.on(e, g);
+    on: (eventName: string, handler: () => void) =>
+      void (handlers.get(eventName) ?? handlers.set(eventName, new Set()).get(eventName)!).add(handler),
+    off: (eventName: string, handler: () => void) => void handlers.get(eventName)?.delete(handler),
+    once(eventName: string, handler: () => void) {
+      const onceHandler = () => (map.off(eventName, onceHandler), handler());
+      map.on(eventName, onceHandler);
     },
-    loaded: () => opts.loaded ?? true,
+    loaded: () => options.loaded ?? true,
     easeTo,
     flyTo,
   };
@@ -60,12 +61,12 @@ function fakeMap(opts: { zoom?: number; center?: [number, number]; loaded?: bool
     map: map as unknown as MlMap,
     easeTo,
     flyTo,
-    moveTo(c: [number, number], z = zoom) {
-      center = c;
-      zoom = z;
+    moveTo(target: [number, number], nextZoom = zoom) {
+      center = target;
+      zoom = nextZoom;
     },
-    fire: (e: string) => [...(handlers.get(e) ?? [])].forEach((f) => f()),
-    listening: (e: string) => handlers.get(e)?.size ?? 0,
+    fire: (eventName: string) => [...(handlers.get(eventName) ?? [])].forEach((handler) => handler()),
+    listening: (eventName: string) => handlers.get(eventName)?.size ?? 0,
   };
 }
 
@@ -76,16 +77,16 @@ function callbacks(initial: TileFilter = {}) {
   return {
     o: {
       filter: () => filter,
-      onCells: vi.fn<(fc: GeoJSON.FeatureCollection) => void>(),
+      onCells: vi.fn<(collection: GeoJSON.FeatureCollection) => void>(),
       onChanges: vi.fn<(add: { properties: { id: string } }[], remove: string[]) => void>(),
       onLevel: vi.fn(),
       onProgress: vi.fn(),
       onFailed: vi.fn(),
-      listenFilter: (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn)),
+      listenFilter: (callback: () => void) => (listeners.add(callback), () => void listeners.delete(callback)),
     },
     setFilter(next: TileFilter) {
       filter = next;
-      listeners.forEach((fn) => fn());
+      listeners.forEach((callback) => callback());
     },
     listeners,
   };
@@ -101,14 +102,20 @@ interface Asked {
 
 /** Tile requests, answered by `answer`; a tile with no answer gets one hex at its centre. */
 function network(
-  answer: (t: Asked) => Response | ArrayBuffer | Promise<Response | ArrayBuffer> | undefined = () => undefined,
+  answer: (asked: Asked) => Response | ArrayBuffer | Promise<Response | ArrayBuffer> | undefined = () => undefined,
 ) {
   const asked: Asked[] = [];
-  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
-    const [, kind, z, x, y] = /\/(density|adhoc)\/(\d+)\/(\d+)\/(\d+)\.mvt/.exec(url)!;
-    const t = { z: Number(z), x: Number(x), y: Number(y), adhoc: kind === 'adhoc', signal: init.signal! };
-    asked.push(t);
-    const out = (await answer(t)) ?? mvt([{ ring: hexAt(2048, 2048), total: 2 * (t.x + 1) }]);
+  vi.stubGlobal('fetch', async (url: string, requestInit: RequestInit) => {
+    const [, kind, zoom, tileX, tileY] = /\/(density|adhoc)\/(\d+)\/(\d+)\/(\d+)\.mvt/.exec(url)!;
+    const request = {
+      z: Number(zoom),
+      x: Number(tileX),
+      y: Number(tileY),
+      adhoc: kind === 'adhoc',
+      signal: requestInit.signal!,
+    };
+    asked.push(request);
+    const out = (await answer(request)) ?? mvt([{ ring: hexAt(2048, 2048), total: 2 * (request.x + 1) }]);
     return out instanceof Response ? out : new Response(out);
   });
   return asked;
@@ -118,22 +125,24 @@ function network(
 function gate() {
   const held: (() => void)[] = [];
   return {
-    hold(t: Asked, { ignoreAbort = false } = {}) {
+    hold(asked: Asked, { ignoreAbort = false } = {}) {
       return new Promise<ArrayBuffer>((resolve, reject) => {
         held.push(() => resolve(mvt([{ ring: hexAt(2048, 2048), total: 4 }])));
-        if (!ignoreAbort) t.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        if (!ignoreAbort)
+          asked.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
       });
     },
-    release: () => held.splice(0).forEach((r) => r()),
+    release: () => held.splice(0).forEach((resolve) => resolve()),
   };
 }
 
 /** Let fetches, decoding and the frame-batched draws run (setImmediate, unlike setTimeout, has no 1 ms floor). */
 const settle = async () => {
-  for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r));
+  for (let attempt = 0; attempt < 30; attempt++) await new Promise((resolve) => setImmediate(resolve));
 };
-const key = (t: { x: number; y: number }) => `${t.x}/${t.y}`;
-const ids = (fc: GeoJSON.FeatureCollection) => fc.features.map((f) => (f.properties as { id: string }).id).sort();
+const key = (tile: { x: number; y: number }) => `${tile.x}/${tile.y}`;
+const ids = (collection: GeoJSON.FeatureCollection) =>
+  collection.features.map((feature) => (feature.properties as { id: string }).id).sort();
 
 /** Every layer a test makes, destroyed after it so none keeps loading into the next. */
 const layers: OccLayer[] = [];
@@ -148,11 +157,11 @@ beforeAll(async () => {
   await Promise.all([import('@mapbox/vector-tile'), import('pbf')]);
 });
 beforeEach(() => {
-  vi.stubGlobal('requestAnimationFrame', (cb: () => void) => setImmediate(cb));
+  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => setImmediate(callback));
   $gbifStale.set(false);
 });
 afterEach(() => {
-  layers.splice(0).forEach((l) => l.destroy());
+  layers.splice(0).forEach((layer) => layer.destroy());
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -160,9 +169,9 @@ afterEach(() => {
 describe('occurrence layer', () => {
   it('loads the view’s tiles centre first, then the ring around them, and draws them as one set', async () => {
     const asked = network();
-    const m = fakeMap();
+    const map = fakeMap();
     const { o } = callbacks();
-    const layer = createOccLayer(m.map, o);
+    const layer = createOccLayer(map.map, o);
     await settle();
     expect(o.onLevel).toHaveBeenCalledWith(4);
     expect(key(asked[0]!)).toBe('8/8');
@@ -177,8 +186,8 @@ describe('occurrence layer', () => {
     const cell = layer.collection().features[0]!;
     const ring = cell.geometry.coordinates[0]!;
     const middle: [number, number] = [
-      ring.reduce((s, p) => s + p[0]!, 0) / ring.length,
-      ring.reduce((s, p) => s + p[1]!, 0) / ring.length,
+      ring.reduce((sum, vertex) => sum + vertex[0]!, 0) / ring.length,
+      ring.reduce((sum, vertex) => sum + vertex[1]!, 0) / ring.length,
     ];
     expect(layer.cellAt(middle)).toBe(cell);
     expect(layer.cellAt([170, 0])).toBeUndefined();
@@ -187,117 +196,120 @@ describe('occurrence layer', () => {
 
   it('leaves out cells known to be empty, and drops them on redraw', async () => {
     network();
-    const m = fakeMap();
+    const map = fakeMap();
     const empty = new Set<string>();
-    const o = { ...callbacks().o, isEmpty: (h: { properties: { id: string } }) => empty.has(h.properties.id) };
-    const layer = createOccLayer(m.map, o);
+    const options = {
+      ...callbacks().o,
+      isEmpty: (hex: { properties: { id: string } }) => empty.has(hex.properties.id),
+    };
+    const layer = createOccLayer(map.map, options);
     await settle();
     const cell = layer.collection().features[0]!;
     const id = (cell.properties as { id: string }).id;
     empty.add(id);
     layer.redraw();
     await settle();
-    expect(o.onChanges).toHaveBeenLastCalledWith([], [id]);
+    expect(options.onChanges).toHaveBeenLastCalledWith([], [id]);
     expect(ids(layer.collection())).not.toContain(id);
     const ring = cell.geometry.coordinates[0]!;
     expect(
       layer.cellAt([
-        ring.reduce((s, p) => s + p[0]! / ring.length, 0),
-        ring.reduce((s, p) => s + p[1]! / ring.length, 0),
+        ring.reduce((sum, vertex) => sum + vertex[0]! / ring.length, 0),
+        ring.reduce((sum, vertex) => sum + vertex[1]! / ring.length, 0),
       ]),
     ).toBeUndefined();
   });
 
   it('skips points off the globe when the whole world is in view', async () => {
     const asked = network();
-    const m = fakeMap({ zoom: 0 });
-    createOccLayer(m.map, callbacks().o);
+    const map = fakeMap({ zoom: 0 });
+    createOccLayer(map.map, callbacks().o);
     await settle();
-    expect(asked.map((t) => `${t.z}:${key(t)}`)).toEqual(['0:0/0']);
+    expect(asked.map((tile) => `${tile.z}:${key(tile)}`)).toEqual(['0:0/0']);
   });
 
   it('keeps the old cells up until the new view has loaded, then passes on only the changes', async () => {
-    const g = gate();
-    const asked = network((t) => (key(t) === '8/8' ? g.hold(t) : undefined));
-    const m = fakeMap();
+    const held = gate();
+    const asked = network((request) => (key(request) === '8/8' ? held.hold(request) : undefined));
+    const map = fakeMap();
     const { o } = callbacks();
-    createOccLayer(m.map, o);
+    createOccLayer(map.map, o);
     await settle();
     expect(o.onCells).not.toHaveBeenCalled();
-    g.release();
+    held.release();
     await settle();
     expect(o.onCells).toHaveBeenCalledOnce();
     const before = new Set(ids(o.onCells.mock.calls[0]![0]));
 
     // Pan east by a tile: new tiles' cells come in, the far west's go.
-    m.moveTo([22.5, 0]);
-    m.fire('moveend');
+    map.moveTo([22.5, 0]);
+    map.fire('moveend');
     await settle();
     expect(o.onCells).toHaveBeenCalledOnce();
-    const added = o.onChanges.mock.calls.flatMap(([add]) => add.map((h) => h.properties.id));
+    const added = o.onChanges.mock.calls.flatMap(([add]) => add.map((hex) => hex.properties.id));
     const removed = o.onChanges.mock.calls.flatMap(([, remove]) => remove);
     expect(added.length).toBeGreaterThan(0);
     expect(removed.length).toBeGreaterThan(0);
     expect(removed.every((id) => before.has(id))).toBe(true);
     expect(added.some((id) => before.has(id))).toBe(false);
-    expect(asked.filter((t) => key(t) === '8/8')).toHaveLength(1);
+    expect(asked.filter((tile) => key(tile) === '8/8')).toHaveLength(1);
   });
 
   it('updates a cell whose count changes when a better copy arrives', async () => {
-    const g = gate();
+    const held = gate();
     // Centred on tile 8/8: the view is tiles 7–9 each way, the ring 6 and 10.
     // A hex centred in ring tile 10/8 is also in the padding of view tile 9/8, over-counted there.
-    network((t) => {
-      if (key(t) === '9/8') return mvt([{ ring: hexAt(4196, 2048), total: 60 }]);
-      if (key(t) === '10/8') return g.hold(t).then(() => mvt([{ ring: hexAt(100, 2048), total: 20 }]));
+    network((request) => {
+      if (key(request) === '9/8') return mvt([{ ring: hexAt(4196, 2048), total: 60 }]);
+      if (key(request) === '10/8') return held.hold(request).then(() => mvt([{ ring: hexAt(100, 2048), total: 20 }]));
       return new ArrayBuffer(0);
     });
-    const m = fakeMap({ center: [11.25, -11.18] });
+    const map = fakeMap({ center: [11.25, -11.18] });
     const { o } = callbacks();
-    const layer = createOccLayer(m.map, o);
+    const layer = createOccLayer(map.map, o);
     await settle();
     expect(o.onCells).toHaveBeenCalledOnce();
     const padded = layer.collection().features[0]!.properties as { id: string; total: number; home: boolean };
     expect(padded).toMatchObject({ total: 30, home: false });
-    g.release();
+    held.release();
     await settle();
     expect(o.onChanges).toHaveBeenCalledWith(
       [expect.objectContaining({ properties: expect.objectContaining({ total: 10 }) })],
       [padded.id],
     );
-    expect(layer.collection().features.map((f) => (f.properties as { total: number }).total)).toEqual([10]);
+    expect(layer.collection().features.map((feature) => (feature.properties as { total: number }).total)).toEqual([10]);
   });
 
   it('copes with failures: unreachable, throttled, rejected and empty tiles', async () => {
-    const asked = network((t) => {
-      if (key(t) === '8/8') throw new TypeError('offline');
-      if (key(t) === '7/8') return new Response(null, { status: 503 });
-      if (key(t) === '8/7') return new Response(null, { status: 400 });
-      if (key(t) === '7/7') return new Response(null, { status: 404 });
+    const asked = network((request) => {
+      if (key(request) === '8/8') throw new TypeError('offline');
+      if (key(request) === '7/8') return new Response(null, { status: 503 });
+      if (key(request) === '8/7') return new Response(null, { status: 400 });
+      if (key(request) === '7/7') return new Response(null, { status: 404 });
       return new ArrayBuffer(0);
     });
-    const m = fakeMap();
+    const map = fakeMap();
     const { o } = callbacks();
-    createOccLayer(m.map, o);
+    createOccLayer(map.map, o);
     await settle();
     expect(o.onFailed).toHaveBeenCalledOnce();
     expect($gbifStale.get()).toBe(true);
     // The view is not whole while tiles keep failing, so nothing is drawn.
     expect(o.onCells).not.toHaveBeenCalled();
     // Failed tiles are asked for again next time; the empty and missing ones are kept.
-    m.fire('moveend');
+    map.fire('moveend');
     await settle();
-    const times = (k: string) => asked.filter((t) => key(t) === k).length;
+    const times = (tileId: string) => asked.filter((tile) => key(tile) === tileId).length;
     expect([times('8/8'), times('7/8'), times('8/7'), times('7/7'), times('9/9')]).toEqual([2, 2, 2, 1, 1]);
   });
 
   it('waits for the map to load', async () => {
     const asked = network();
-    const m = fakeMap({ loaded: false });
-    createOccLayer(m.map, callbacks().o);
+    const map = fakeMap({ loaded: false });
+    createOccLayer(map.map, callbacks().o);
     await settle();
     expect(asked).toHaveLength(0);
-    m.fire('load');
+    map.fire('load');
     await settle();
     expect(asked.length).toBeGreaterThan(0);
   });
@@ -305,75 +317,75 @@ describe('occurrence layer', () => {
   it('re-plans now and then during a drag, at the level shown', async () => {
     const asked = network(() => new ArrayBuffer(0));
     const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
-    const m = fakeMap();
+    const map = fakeMap();
     const { o } = callbacks();
-    createOccLayer(m.map, o);
+    createOccLayer(map.map, o);
     await settle();
     const count = () => asked.length;
     const start = count();
 
-    m.moveTo([60, 0]);
-    m.fire('move');
+    map.moveTo([60, 0]);
+    map.fire('move');
     await settle();
     const afterFirst = count();
     expect(afterFirst).toBeGreaterThan(start);
 
     // Too soon after the last re-plan.
     now.mockReturnValue(1100);
-    m.moveTo([120, 0]);
-    m.fire('move');
+    map.moveTo([120, 0]);
+    map.fire('move');
     await settle();
     expect(count()).toBe(afterFirst);
 
     // Zoomed to another level mid-drag: wait for the move to end.
     now.mockReturnValue(1400);
-    m.moveTo([120, 0], 6);
-    m.fire('move');
+    map.moveTo([120, 0], 6);
+    map.fire('move');
     await settle();
     expect(count()).toBe(afterFirst);
 
-    m.fire('moveend');
+    map.fire('moveend');
     await settle();
     expect(o.onLevel).toHaveBeenLastCalledWith(6);
     expect(asked.at(-1)!.z).toBe(6);
   });
 
   it('drops tiles of the old filters, at the level the new ones need', async () => {
-    const g = gate();
+    const held = gate();
     let holdAll = true;
-    const asked = network((t) => {
+    const asked = network((request) => {
       if (!holdAll) return undefined;
       // One response arrives after its request was cancelled.
-      return g.hold(t, { ignoreAbort: key(t) === '4/4' });
+      return held.hold(request, { ignoreAbort: key(request) === '4/4' });
     });
-    const m = fakeMap({ zoom: 3 });
-    const c = callbacks();
-    createOccLayer(m.map, c.o);
+    const map = fakeMap({ zoom: 3 });
+    const callbackSet = callbacks();
+    createOccLayer(map.map, callbackSet.o);
     await settle();
     const first = [...asked];
-    expect(first.every((t) => t.z === 3 && !t.adhoc)).toBe(true);
+    expect(first.every((tile) => tile.z === 3 && !tile.adhoc)).toBe(true);
 
     holdAll = false;
     // Adhoc tiles at level 3 beat with GBIF's geohash cells: level 2 is used instead.
-    c.setFilter({ hasImage: true });
+    callbackSet.setFilter({ hasImage: true });
     await settle();
-    expect(first.every((t) => t.signal.aborted)).toBe(true);
-    expect(c.o.onLevel).toHaveBeenLastCalledWith(2);
+    expect(first.every((tile) => tile.signal.aborted)).toBe(true);
+    expect(callbackSet.o.onLevel).toHaveBeenLastCalledWith(2);
     const next = asked.slice(first.length);
-    expect(next.every((t) => t.z === 2 && t.adhoc)).toBe(true);
-    g.release();
+    expect(next.every((tile) => tile.z === 2 && tile.adhoc)).toBe(true);
+    held.release();
     await settle();
-    expect(c.o.onCells).toHaveBeenCalledOnce();
-    expect(ids(c.o.onCells.mock.calls[0]![0]).every((id) => id.startsWith('2:'))).toBe(true);
+    expect(callbackSet.o.onCells).toHaveBeenCalledOnce();
+    expect(ids(callbackSet.o.onCells.mock.calls[0]![0]).every((id) => id.startsWith('2:'))).toBe(true);
   });
 
   it('asks for each tile once, however often it is queued', async () => {
     const asked = network(() => new ArrayBuffer(0));
     // Nine tiles in view: eight load at once, the ninth waits its turn.
-    const m = fakeMap({ center: [11.25, -11.18] });
-    createOccLayer(m.map, callbacks().o);
+    const map = fakeMap({ center: [11.25, -11.18] });
+    createOccLayer(map.map, callbacks().o);
     // A glide that ends where it starts queues the view's tiles again while they load.
-    m.map.easeTo({ center: [11.25, -11.18] });
+    map.map.easeTo({ center: [11.25, -11.18] });
     await settle();
     const keys = asked.map(key);
     expect(new Set(keys).size).toBe(keys.length);
@@ -381,34 +393,34 @@ describe('occurrence layer', () => {
 
   it('starts loading where a glide or flight will end', async () => {
     const asked = network(() => new ArrayBuffer(0));
-    const m = fakeMap();
+    const map = fakeMap();
     const { o } = callbacks();
-    const layer = createOccLayer(m.map, o);
+    const layer = createOccLayer(map.map, o);
     await settle();
-    const seen = () => new Set(asked.map((t) => `${t.z}:${key(t)}`));
+    const seen = () => new Set(asked.map((tile) => `${tile.z}:${key(tile)}`));
 
     // A glide at the same level: the view's tiles shifted by the pan.
-    m.map.easeTo({ center: [90, 0] });
+    map.map.easeTo({ center: [90, 0] });
     await settle();
     expect(seen()).toContain('4:12/8');
-    expect(m.easeTo).toHaveBeenCalledWith({ center: [90, 0] }, undefined);
+    expect(map.easeTo).toHaveBeenCalledWith({ center: [90, 0] }, undefined);
 
     // An offset puts the target that far from the middle; a centre can be {lng, lat} or {lon, lat}.
-    m.map.easeTo({ center: { lng: -90, lat: 0 }, offset: [256, 0] });
-    m.map.easeTo({ offset: { x: 0, y: -256 } } as never);
-    m.map.flyTo({ center: { lon: -150, lat: 0 } } as never);
+    map.map.easeTo({ center: { lng: -90, lat: 0 }, offset: [256, 0] });
+    map.map.easeTo({ offset: { x: 0, y: -256 } } as never);
+    map.map.flyTo({ center: { lon: -150, lat: 0 } } as never);
     await settle();
     expect(seen()).toContain('4:1/8');
 
     // A flight to another level: the tiles around its destination, after the view's.
-    m.map.flyTo({ center: [10, 50], zoom: 8 });
+    map.map.flyTo({ center: [10, 50], zoom: 8 });
     await settle();
     expect(asked.at(-1)!.z).toBe(8);
-    expect(m.flyTo).toHaveBeenCalledTimes(2);
+    expect(map.flyTo).toHaveBeenCalledTimes(2);
 
     // Once the move ends, those are forgotten.
-    m.moveTo([10, 50], 8);
-    m.fire('moveend');
+    map.moveTo([10, 50], 8);
+    map.fire('moveend');
     await settle();
     expect(o.onLevel).toHaveBeenLastCalledWith(8);
     layer.destroy();
@@ -416,30 +428,32 @@ describe('occurrence layer', () => {
 
   it('forgets the oldest tiles past its cache', async () => {
     const asked = network(() => new ArrayBuffer(0));
-    const m = fakeMap({ zoom: 8, center: [0, 0] });
-    createOccLayer(m.map, callbacks().o);
+    const map = fakeMap({ zoom: 8, center: [0, 0] });
+    createOccLayer(map.map, callbacks().o);
     await settle();
     const firstTile = key(asked[0]!);
     // Around 25 tiles a view: 30 views well apart pass the 512 kept.
-    for (let i = 1; i <= 30; i++) {
-      m.moveTo([i * 10 - 180, 0]);
-      m.fire('moveend');
+    for (let attempt = 1; attempt <= 30; attempt++) {
+      map.moveTo([attempt * 10 - 180, 0]);
+      map.fire('moveend');
       await settle();
     }
-    m.moveTo([0, 0]);
-    m.fire('moveend');
+    map.moveTo([0, 0]);
+    map.fire('moveend');
     await settle();
-    expect(asked.filter((t) => t.z === 8 && key(t) === firstTile)).toHaveLength(2);
+    expect(asked.filter((tile) => tile.z === 8 && key(tile) === firstTile)).toHaveLength(2);
   });
 
   it('finds cells across the antimeridian, whose vertices run past ±180°', async () => {
     const cellNear = async (tileX: number, px: number, at: number) => {
-      network((t) => (t.x === tileX && t.y === 8 ? mvt([{ ring: hexAt(px, 1000), total: 2 }]) : new ArrayBuffer(0)));
-      const m = fakeMap({ center: [179.9, -5] });
-      const layer = createOccLayer(m.map, callbacks().o);
+      network((request) =>
+        request.x === tileX && request.y === 8 ? mvt([{ ring: hexAt(px, 1000), total: 2 }]) : new ArrayBuffer(0),
+      );
+      const map = fakeMap({ center: [179.9, -5] });
+      const layer = createOccLayer(map.map, callbacks().o);
       await settle();
       const [cell] = layer.collection().features;
-      const lat = cell!.geometry.coordinates[0]!.reduce((s, p) => s + p[1]!, 0) / 7;
+      const lat = cell!.geometry.coordinates[0]!.reduce((sum, vertex) => sum + vertex[1]!, 0) / 7;
       const hit = layer.cellAt([at, lat]);
       layer.destroy();
       return hit === cell;
@@ -451,19 +465,19 @@ describe('occurrence layer', () => {
 
   it('lets go of the map when destroyed', async () => {
     const asked = network(() => new ArrayBuffer(0));
-    const m = fakeMap();
-    const c = callbacks();
-    const layer = createOccLayer(m.map, c.o);
+    const map = fakeMap();
+    const callbackSet = callbacks();
+    const layer = createOccLayer(map.map, callbackSet.o);
     await settle();
-    const wrapped = m.map.easeTo;
+    const wrapped = map.map.easeTo;
     layer.destroy();
-    expect(m.map.easeTo).not.toBe(wrapped);
+    expect(map.map.easeTo).not.toBe(wrapped);
     const before = asked.length;
-    m.map.easeTo({ center: [90, 0] });
-    m.map.flyTo({ center: [90, 0] });
+    map.map.easeTo({ center: [90, 0] });
+    map.map.flyTo({ center: [90, 0] });
     await settle();
     expect(asked).toHaveLength(before);
-    expect([m.easeTo, m.flyTo].map((f) => f.mock.calls.length)).toEqual([1, 1]);
-    expect([m.listening('move'), m.listening('moveend'), c.listeners.size]).toEqual([0, 0, 0]);
+    expect([map.easeTo, map.flyTo].map((spy) => spy.mock.calls.length)).toEqual([1, 1]);
+    expect([map.listening('move'), map.listening('moveend'), callbackSet.listeners.size]).toEqual([0, 0, 0]);
   });
 });

@@ -12,22 +12,28 @@ import type { OccurrenceSearch } from './types';
  */
 export async function findImages(
   filter: OccurrenceFilter,
-  opts: { limit?: number; offset?: number; signal?: AbortSignal } = {},
+  options: { limit?: number; offset?: number; signal?: AbortSignal } = {},
 ): Promise<{ images: GbifImage[]; count: number; endOfRecords: boolean; names: Map<number, string> }> {
-  const res = await http().getJson<OccurrenceSearch>(
+  const response = await http().getJson<OccurrenceSearch>(
     '/v1/occurrence/search',
     {
       ...filterToParams({ ...filter, hasImage: true }),
       license: ALLOWED_LICENCE_ENUMS,
-      limit: opts.limit ?? 24,
-      offset: opts.offset,
+      limit: options.limit ?? 24,
+      offset: options.offset,
     },
-    { ttlMs: 6 * HOUR, ...(opts.signal && { signal: opts.signal }) },
+    { ttlMs: 6 * HOUR, ...(options.signal && { signal: options.signal }) },
   );
   // Species names come free with the records (useful when batching species).
   const names = new Map<number, string>();
-  for (const r of res.results) if (r.speciesKey !== undefined && r.species) names.set(r.speciesKey, r.species);
-  return { images: res.results.flatMap(usableImages), count: res.count, endOfRecords: res.endOfRecords, names };
+  for (const occurrence of response.results)
+    if (occurrence.speciesKey !== undefined && occurrence.species) names.set(occurrence.speciesKey, occurrence.species);
+  return {
+    images: response.results.flatMap(usableImages),
+    count: response.count,
+    endOfRecords: response.endOfRecords,
+    names,
+  };
 }
 
 /** Photo hosts that send CORS headers. GBIF's image cache does not, so its photos must load without `crossorigin`. */
@@ -71,14 +77,14 @@ const INAT_SIZES = [
  * the MD5 of the media identifier. iNaturalist photos use iNaturalist's own
  * sizes: the smallest at least as wide as the requested width.
  */
-export function thumbnailUrl(img: UsableImage, size: ThumbSize = '400x'): string {
-  if (img.source === 'inat') {
+export function thumbnailUrl(image: UsableImage, size: ThumbSize = '400x'): string {
+  if (image.source === 'inat') {
     const want = parseInt(size, 10);
     const name = INAT_SIZES.find(([, px]) => px >= want)?.[0] ?? 'large';
-    const url = img.url.replace(/\/(square|thumb|small|medium|large|original)\.(\w+)(\?.*)?$/, `/${name}.$2`);
+    const url = image.url.replace(/\/(square|thumb|small|medium|large|original)\.(\w+)(\?.*)?$/, `/${name}.$2`);
     // S3 doesn't vary on Origin, so a cached plain copy would answer a CORS load and be blocked: keep them apart.
     // Not `?cors`: S3 reads that as its CORS-config subresource and returns no image.
     return CORS_PHOTO_HOST.test(url) ? `${url}?x-cors` : url;
   }
-  return `${GBIF_API_BASE}/v1/image/cache/${size}/occurrence/${img.occurrenceKey}/media/${md5(img.url)}`;
+  return `${GBIF_API_BASE}/v1/image/cache/${size}/occurrence/${image.occurrenceKey}/media/${md5(image.url)}`;
 }

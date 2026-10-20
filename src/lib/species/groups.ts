@@ -50,9 +50,11 @@ const CONCURRENCY = 2;
 let classNames: Promise<Map<number, { name: string; common?: string }>> | undefined;
 function classNameMap() {
   classNames ??= loadSnapshot('tree').then(
-    (t) =>
+    (snapshot) =>
       new Map(
-        (t?.nodes ?? []).filter((n) => n.r === 'C').map((n) => [n.k, { name: n.n, ...(n.c && { common: n.c }) }]),
+        (snapshot?.nodes ?? [])
+          .filter((node) => node.r === 'C')
+          .map((node) => [node.k, { name: node.n, ...(node.c && { common: node.c }) }]),
       ),
   );
   return classNames;
@@ -62,14 +64,14 @@ function classNameMap() {
 export async function namedClasses(counts: readonly FacetCount[]): Promise<ClassGroup[]> {
   const names = await classNameMap();
   return Promise.all(
-    counts.map(async (c): Promise<ClassGroup> => {
-      const key = Number(c.name);
-      let n = names.get(key);
-      if (!n) {
-        const u = await getSpecies(key).catch(() => null);
-        n = { name: u?.canonicalName ?? u?.scientificName ?? `Class ${key}` };
+    counts.map(async (facet): Promise<ClassGroup> => {
+      const key = Number(facet.name);
+      let name = names.get(key);
+      if (!name) {
+        const usage = await getSpecies(key).catch(() => null);
+        name = { name: usage?.canonicalName ?? usage?.scientificName ?? `Class ${key}` };
       }
-      return { key, name: n.name, ...(n.common && { common: n.common }), records: c.count };
+      return { key, name: name.name, ...(name.common && { common: name.common }), records: facet.count };
     }),
   );
 }
@@ -81,9 +83,9 @@ export async function namedClasses(counts: readonly FacetCount[]): Promise<Class
  */
 export async function topSpecies(
   filter: OccurrenceFilter,
-  opts: { limit?: number; signal?: AbortSignal; known?: readonly FacetCount[] } = {},
+  options: { limit?: number; signal?: AbortSignal; known?: readonly FacetCount[] } = {},
 ): Promise<SpeciesRow[]> {
-  const { limit = 200, signal, known } = opts;
+  const { limit = 200, signal, known } = options;
   signal?.throwIfAborted();
   const counts =
     known ??
@@ -91,25 +93,25 @@ export async function topSpecies(
       'speciesKey'
     ] ??
     [];
-  const rows = counts.map((f) => ({ key: Number(f.name), records: f.count }));
+  const rows = counts.map((facet) => ({ key: Number(facet.name), records: facet.count }));
   if (!rows.length) return [];
 
   // Wait for the whole index: without it nearly every row misses.
-  const idx = await loadNameIndex();
+  const nameIndex = await loadNameIndex();
   signal?.throwIfAborted();
-  const sci = new Map<number, string>();
+  const scientificNames = new Map<number, string>();
   const common = new Map<number, string>();
-  for (const r of rows) {
-    const n = idx?.get(r.key);
-    if (n) sci.set(r.key, n.scientificName);
-    if (n?.commonName) common.set(r.key, n.commonName);
+  for (const row of rows) {
+    const name = nameIndex?.get(row.key);
+    if (name) scientificNames.set(row.key, name.scientificName);
+    if (name?.commonName) common.set(row.key, name.commonName);
   }
-  return rows.map((r) => {
-    const commonName = common.get(r.key);
-    const name = sci.get(r.key);
+  return rows.map((row) => {
+    const commonName = common.get(row.key);
+    const name = scientificNames.get(row.key);
     return {
-      ...r,
-      scientificName: name ?? `Species ${r.key}`,
+      ...row,
+      scientificName: name ?? `Species ${row.key}`,
       ...(commonName && { commonName }),
       ...(!name && { unnamed: true as const }),
     };
@@ -121,16 +123,20 @@ export async function topSpecies(
  * carry their species name). Returns `rows` itself when it names none.
  */
 export async function nameFromRecords(rows: SpeciesRow[], signal?: AbortSignal): Promise<SpeciesRow[]> {
-  const misses = rows.filter((r) => r.unnamed).map((r) => r.key);
+  const misses = rows.filter((row) => row.unnamed).map((row) => row.key);
   if (!misses.length) return rows;
-  const res = await searchOccurrences({ speciesKeys: misses.slice(0, 150) }, { limit: 300 }, signal).catch(() => null);
-  const sci = new Map<number, string>();
-  for (const o of res?.results ?? []) if (o.speciesKey !== undefined && o.species) sci.set(o.speciesKey, o.species);
-  if (!sci.size) return rows;
-  return rows.map((r) => {
-    const name = r.unnamed && sci.get(r.key);
-    if (!name) return r;
-    const { unnamed: _, ...named } = r;
+  const response = await searchOccurrences({ speciesKeys: misses.slice(0, 150) }, { limit: 300 }, signal).catch(
+    () => null,
+  );
+  const scientificNames = new Map<number, string>();
+  for (const occurrence of response?.results ?? [])
+    if (occurrence.speciesKey !== undefined && occurrence.species)
+      scientificNames.set(occurrence.speciesKey, occurrence.species);
+  if (!scientificNames.size) return rows;
+  return rows.map((row) => {
+    const name = row.unnamed && scientificNames.get(row.key);
+    if (!name) return row;
+    const { unnamed: _unused, ...named } = row;
     return { ...named, scientificName: name };
   });
 }
@@ -140,13 +146,13 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
   const limit = pLimit(CONCURRENCY);
   const names = new Map<number, string>();
   await Promise.all(
-    keys.map((k) =>
+    keys.map((key) =>
       limit(async () => {
         // Skip the rest once superseded.
         if (signal?.aborted) return;
         try {
-          const u = await getSpecies(k, signal);
-          names.set(k, u.canonicalName ?? u.scientificName);
+          const usage = await getSpecies(key, signal);
+          names.set(key, usage.canonicalName ?? usage.scientificName);
         } catch {
           /* unnamed */
         }
@@ -164,12 +170,12 @@ export async function commonNames(keys: readonly number[], signal?: AbortSignal)
   const limit = pLimit(CONCURRENCY);
   const names = new Map<number, string>();
   await Promise.all(
-    keys.map((k) =>
+    keys.map((key) =>
       limit(async () => {
         if (signal?.aborted) return;
-        const v = await getVernacularNames(k, 300, signal).catch(() => null);
-        const name = v && englishName(v.results);
-        if (name) names.set(k, name);
+        const vernaculars = await getVernacularNames(key, 300, signal).catch(() => null);
+        const name = vernaculars && englishName(vernaculars.results);
+        if (name) names.set(key, name);
       }),
     ),
   );

@@ -8,7 +8,7 @@ const props = defineProps<{
   rightsHolder?: string | undefined;
 }>();
 
-const who = computed(() => props.creator ?? props.rightsHolder);
+const credit = computed(() => props.creator ?? props.rightsHolder);
 </script>
 
 <template>
@@ -22,6 +22,6 @@ const who = computed(() => props.creator ?? props.rightsHolder);
       class="whitespace-nowrap font-semibold tracking-wide hover:underline"
       >{{ licence }}</a
     >
-    <span v-if="who" class="truncate">© {{ who }}</span>
+    <span v-if="credit" class="truncate">© {{ credit }}</span>
   </span>
 </template>

@@ -34,9 +34,9 @@ describe('http client', () => {
 
   it('dedupes concurrent identical requests', async () => {
     const { client, calls } = setup([json({ n: 1 })]);
-    const [a, b] = await Promise.all([client.getJson('/v1/x', { a: 1 }), client.getJson('/v1/x', { a: 1 })]);
-    expect(a).toEqual({ n: 1 });
-    expect(b).toBe(a);
+    const [first, second] = await Promise.all([client.getJson('/v1/x', { a: 1 }), client.getJson('/v1/x', { a: 1 })]);
+    expect(first).toEqual({ n: 1 });
+    expect(second).toBe(first);
     expect(calls).toHaveLength(1);
   });
 
@@ -79,11 +79,11 @@ describe('http client', () => {
       now: () => 0,
     });
     // /a is throttled and sleeps its Retry-After; /b, started meanwhile, waits too.
-    const a = client.getJson('/v1/a');
+    const requestA = client.getJson('/v1/a');
     await Promise.resolve();
     await Promise.resolve();
-    const b = client.getJson('/v1/b');
-    await expect(Promise.all([a, b])).resolves.toEqual([{ a: 1 }, { b: 1 }]);
+    const requestB = client.getJson('/v1/b');
+    await expect(Promise.all([requestA, requestB])).resolves.toEqual([{ a: 1 }, { b: 1 }]);
     expect(sleeps).toEqual([3000, 3000]);
     expect(calls).toHaveLength(3);
   });
@@ -139,13 +139,13 @@ describe('http client', () => {
     function gated() {
       const signals: AbortSignal[] = [];
       let release!: () => void;
-      const gate = new Promise<void>((r) => (release = r));
+      const gate = new Promise<void>((resolve) => (release = resolve));
       const client = createHttp({
         base: 'https://api.test',
-        transport: async (_url, init) => {
-          if (init?.signal) signals.push(init.signal);
+        transport: async (_url, requestInit) => {
+          if (requestInit?.signal) signals.push(requestInit.signal);
           await gate;
-          init?.signal?.throwIfAborted();
+          requestInit?.signal?.throwIfAborted();
           return json({ n: 1 });
         },
       });
@@ -154,10 +154,10 @@ describe('http client', () => {
 
     it('rejects only the caller that aborted', async () => {
       const { client, signals, release } = gated();
-      const ctrl = new AbortController();
-      const first = client.getJson('/v1/x', undefined, { signal: ctrl.signal });
+      const controller = new AbortController();
+      const first = client.getJson('/v1/x', undefined, { signal: controller.signal });
       const second = client.getJson('/v1/x');
-      ctrl.abort();
+      controller.abort();
       release();
       await expect(first).rejects.toThrow();
       await expect(second).resolves.toEqual({ n: 1 });
@@ -166,24 +166,24 @@ describe('http client', () => {
 
     it('cancels the request once every caller has aborted', async () => {
       const { client, signals, release } = gated();
-      const a = new AbortController();
-      const b = new AbortController();
-      const pa = client.getJson('/v1/x', undefined, { signal: a.signal });
-      const pb = client.getJson('/v1/x', undefined, { signal: b.signal });
-      a.abort();
+      const controllerA = new AbortController();
+      const controllerB = new AbortController();
+      const firstRequest = client.getJson('/v1/x', undefined, { signal: controllerA.signal });
+      const secondRequest = client.getJson('/v1/x', undefined, { signal: controllerB.signal });
+      controllerA.abort();
       expect(signals[0]?.aborted).toBe(false);
-      b.abort();
+      controllerB.abort();
       expect(signals[0]?.aborted).toBe(true);
       release();
-      await expect(pa).rejects.toThrow();
-      await expect(pb).rejects.toThrow();
+      await expect(firstRequest).rejects.toThrow();
+      await expect(secondRequest).rejects.toThrow();
     });
 
     it('starts afresh after a cancelled request', async () => {
       const { client, release } = gated();
-      const ctrl = new AbortController();
-      const first = client.getJson('/v1/x', undefined, { signal: ctrl.signal });
-      ctrl.abort();
+      const controller = new AbortController();
+      const first = client.getJson('/v1/x', undefined, { signal: controller.signal });
+      controller.abort();
       await expect(first).rejects.toThrow();
       const again = client.getJson('/v1/x');
       release();
@@ -205,13 +205,13 @@ describe('http client', () => {
   });
 
   it('throws GbifRequestError for other 4xx, even when the body cannot be read', async () => {
-    const res = new Response('bad', { status: 400 });
-    vi.spyOn(res, 'text').mockRejectedValue(new Error('stream'));
-    const { client } = setup([res]);
-    const err = await client.getJson('/v1/x').catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(GbifRequestError);
-    expect(err).not.toBeInstanceOf(GbifNotFoundError);
-    expect(err).toMatchObject({ status: 400 });
+    const response = new Response('bad', { status: 400 });
+    vi.spyOn(response, 'text').mockRejectedValue(new Error('stream'));
+    const { client } = setup([response]);
+    const error = await client.getJson('/v1/x').catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(GbifRequestError);
+    expect(error).not.toBeInstanceOf(GbifNotFoundError);
+    expect(error).toMatchObject({ status: 400 });
   });
 
   it('builds URLs, exposes its options and can drop its cache', async () => {
@@ -233,9 +233,9 @@ describe('http client', () => {
         transport: async () => responses.shift()!,
         random: () => 0,
       });
-      const p = client.getJson('/v1/x');
+      const pending = client.getJson('/v1/x');
       await vi.advanceTimersByTimeAsync(250);
-      await expect(p).resolves.toEqual({ ok: true });
+      await expect(pending).resolves.toEqual({ ok: true });
     } finally {
       vi.useRealTimers();
     }

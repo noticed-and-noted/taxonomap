@@ -11,11 +11,11 @@ defineProps<{ label: string; rows?: number; fill?: boolean }>();
 
 <template>
   <div v-if="rows" role="status" :aria-label="label">
-    <div v-for="i in rows" :key="i" class="skeleton-row" aria-hidden="true">
+    <div v-for="row in rows" :key="row" class="skeleton-row" aria-hidden="true">
       <SkeletonBlock width="2rem" height="2rem" rounded="sm" class="mr-2 shrink-0" />
       <span class="flex h-9 min-w-0 flex-1 flex-col justify-center gap-1 pr-2">
-        <SkeletonBlock :width="`${45 + ((i * 23) % 40)}%`" height="0.8rem" />
-        <SkeletonBlock :width="`${30 + ((i * 17) % 25)}%`" height="0.65rem" />
+        <SkeletonBlock :width="`${45 + ((row * 23) % 40)}%`" height="0.8rem" />
+        <SkeletonBlock :width="`${30 + ((row * 17) % 25)}%`" height="0.65rem" />
       </span>
       <slot />
     </div>
@@ -28,11 +28,11 @@ defineProps<{ label: string; rows?: number; fill?: boolean }>();
         class="-mx-4 overflow-hidden [scrollbar-gutter:stable]"
         :class="fill ? 'min-h-48 flex-1' : 'h-[min(23rem,65dvh)]'"
       >
-        <div v-for="i in 12" :key="i" class="skeleton-row">
+        <div v-for="row in 12" :key="row" class="skeleton-row">
           <SkeletonBlock width="2rem" height="2rem" rounded="sm" class="mr-2 shrink-0" />
           <span class="flex h-9 min-w-0 flex-1 flex-col justify-center gap-1 pr-2">
-            <SkeletonBlock :width="`${45 + ((i * 23) % 40)}%`" height="0.8rem" />
-            <SkeletonBlock :width="`${30 + ((i * 17) % 25)}%`" height="0.65rem" />
+            <SkeletonBlock :width="`${45 + ((row * 23) % 40)}%`" height="0.8rem" />
+            <SkeletonBlock :width="`${30 + ((row * 17) % 25)}%`" height="0.65rem" />
           </span>
           <slot />
         </div>

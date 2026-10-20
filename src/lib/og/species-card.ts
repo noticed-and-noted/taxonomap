@@ -12,8 +12,8 @@ import { compact } from '~/lib/format';
 import { thumbnailUrl, type UsableImage } from '~/lib/gbif';
 import { userAgent } from '~/lib/gbif/node-transport';
 
-const W = 1200;
-const H = 630;
+const WIDTH = 1200;
+const HEIGHT = 630;
 const VERSION = 1; // bump to re-render every card
 const CACHE = join(process.cwd(), '.cache');
 
@@ -25,7 +25,7 @@ export interface SpeciesCardInput {
 }
 
 type El = { type: string; props: Record<string, unknown> };
-const h = (
+const element = (
   type: string,
   style: Record<string, unknown>,
   children?: unknown,
@@ -35,29 +35,31 @@ const h = (
   props: { style, children, ...extra },
 });
 
+/** Fonts for satori, read from the installed @fontsource packages once. */
 let fonts: Promise<{ name: string; data: Buffer; weight: 400 | 600; style: 'normal' | 'italic' }[]> | undefined;
 function loadFonts() {
-  const f = (pkg: string, file: string) => readFile(join(process.cwd(), 'node_modules', pkg, 'files', file));
+  const fontFile = (packageName: string, file: string) =>
+    readFile(join(process.cwd(), 'node_modules', packageName, 'files', file));
   fonts ??= Promise.all([
-    f('@fontsource/lexend', 'lexend-latin-400-normal.woff').then((data) => ({
+    fontFile('@fontsource/lexend', 'lexend-latin-400-normal.woff').then((data) => ({
       name: 'Lexend',
       data,
       weight: 400 as const,
       style: 'normal' as const,
     })),
-    f('@fontsource/lexend', 'lexend-latin-600-normal.woff').then((data) => ({
+    fontFile('@fontsource/lexend', 'lexend-latin-600-normal.woff').then((data) => ({
       name: 'Lexend',
       data,
       weight: 600 as const,
       style: 'normal' as const,
     })),
-    f('@fontsource/source-serif-4', 'source-serif-4-latin-600-normal.woff').then((data) => ({
+    fontFile('@fontsource/source-serif-4', 'source-serif-4-latin-600-normal.woff').then((data) => ({
       name: 'Serif',
       data,
       weight: 600 as const,
       style: 'normal' as const,
     })),
-    f('@fontsource/source-serif-4', 'source-serif-4-latin-400-italic.woff').then((data) => ({
+    fontFile('@fontsource/source-serif-4', 'source-serif-4-latin-400-italic.woff').then((data) => ({
       name: 'Serif',
       data,
       weight: 400 as const,
@@ -67,93 +69,138 @@ function loadFonts() {
   return fonts;
 }
 
-const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
+const sha1 = (text: string) => createHash('sha1').update(text).digest('hex');
 
 /** Download (once) a photo as a data URI; null if unavailable. */
-async function photoDataUri(img: UsableImage): Promise<string | null> {
-  const url = thumbnailUrl(img, '800x');
+async function photoDataUri(image: UsableImage): Promise<string | null> {
+  const url = thumbnailUrl(image, '800x');
   const file = join(CACHE, 'og-photos', `${sha1(url)}.bin`);
   try {
-    const buf = await readFile(file);
-    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    const buffer = await readFile(file);
+    return `data:image/jpeg;base64,${buffer.toString('base64')}`;
   } catch {
     /* not cached */
   }
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': userAgent() } });
-    const type = res.headers.get('content-type') ?? '';
-    if (!res.ok || !/image\/(jpeg|png)/.test(type)) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
+    const response = await fetch(url, { headers: { 'User-Agent': userAgent() } });
+    const type = response.headers.get('content-type') ?? '';
+    if (!response.ok || !/image\/(jpeg|png)/.test(type)) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
     await mkdir(join(CACHE, 'og-photos'), { recursive: true });
-    await writeFile(file, buf);
-    return `data:${type.split(';')[0]};base64,${buf.toString('base64')}`;
+    await writeFile(file, buffer);
+    return `data:${type.split(';')[0]};base64,${buffer.toString('base64')}`;
   } catch {
     return null;
   }
 }
 
-function card(input: SpeciesCardInput, photo: string | null): El {
-  const title = input.commonName ?? input.scientificName;
+/** Satori cannot read CSS variables, so these mirror the dark theme in src/styles/tokens.css. */
+const COLOURS = { bg: '#0e1813', text: '#f2ede2', accent: '#f0b443', muted: '#a8b8ae', subtle: '#84998c' };
+const PHOTO_SIZE = 630;
+const TEXT_PANEL_WIDTH = WIDTH - PHOTO_SIZE;
+const LONG_TITLE_LENGTH = 24;
+const INITIALS_COUNT = 2;
+
+/** The card's left half: the photo, or the name's initials on a ramp-coloured tile when there is none. */
+function photoPanel(title: string, photo: string | null): El {
+  if (photo) {
+    return element('img', { width: PHOTO_SIZE, height: PHOTO_SIZE, objectFit: 'cover' }, undefined, {
+      src: photo,
+      width: PHOTO_SIZE,
+      height: PHOTO_SIZE,
+    });
+  }
+  const initials = title
+    .split(/\s+/)
+    .slice(0, INITIALS_COUNT)
+    .map((word) => word[0]?.toUpperCase())
+    .join('');
+  return element(
+    'div',
+    {
+      width: PHOTO_SIZE,
+      height: PHOTO_SIZE,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(135deg, #277f8e, #1fa187 50%, #a0da39)',
+      fontFamily: 'Serif',
+      fontSize: 160,
+      color: COLOURS.bg,
+    },
+    initials,
+  );
+}
+
+/** The names block: title, with the scientific name beneath when the title is a common name. */
+function namesBlock(input: SpeciesCardInput, title: string): El {
+  const scientificName = input.commonName
+    ? element(
+        'div',
+        { fontFamily: 'Serif', fontStyle: 'italic', fontSize: 34, color: COLOURS.muted, marginTop: 14 },
+        input.scientificName,
+      )
+    : element('div', {}, '');
+  return element('div', { display: 'flex', flexDirection: 'column' }, [
+    element('div', { fontSize: 22, color: COLOURS.accent, letterSpacing: 1, marginBottom: 28 }, 'TAXONOMAP'),
+    element(
+      'div',
+      { fontFamily: 'Serif', fontWeight: 600, fontSize: title.length > LONG_TITLE_LENGTH ? 54 : 66, lineHeight: 1.05 },
+      title,
+    ),
+    scientificName,
+  ]);
+}
+
+/** The card's right half: wordmark and names above, record count and photo credit below. */
+function textPanel(input: SpeciesCardInput, title: string): El {
   const credit = input.image
     ? `Photo © ${input.image.creator ?? input.image.rightsHolder ?? 'unknown'} · ${input.image.licence}`
     : '';
-  return h(
+  return element(
     'div',
-    { width: W, height: H, display: 'flex', background: '#0e1813', color: '#f2ede2', fontFamily: 'Lexend' },
+    {
+      display: 'flex',
+      flexDirection: 'column',
+      width: TEXT_PANEL_WIDTH,
+      padding: '56px 52px',
+      justifyContent: 'space-between',
+    },
     [
-      photo
-        ? h('img', { width: 630, height: 630, objectFit: 'cover' }, undefined, { src: photo, width: 630, height: 630 })
-        : h(
-            'div',
-            {
-              width: 630,
-              height: 630,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'linear-gradient(135deg, #277f8e, #1fa187 50%, #a0da39)',
-              fontFamily: 'Serif',
-              fontSize: 160,
-              color: '#0e1813',
-            },
-            title
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((w) => w[0]?.toUpperCase())
-              .join(''),
-          ),
-      h(
-        'div',
-        { display: 'flex', flexDirection: 'column', width: 570, padding: '56px 52px', justifyContent: 'space-between' },
-        [
-          h('div', { display: 'flex', flexDirection: 'column' }, [
-            h('div', { fontSize: 22, color: '#f0b443', letterSpacing: 1, marginBottom: 28 }, 'TAXONOMAP'),
-            h(
-              'div',
-              { fontFamily: 'Serif', fontWeight: 600, fontSize: title.length > 24 ? 54 : 66, lineHeight: 1.05 },
-              title,
-            ),
-            input.commonName
-              ? h(
-                  'div',
-                  { fontFamily: 'Serif', fontStyle: 'italic', fontSize: 34, color: '#a8b8ae', marginTop: 14 },
-                  input.scientificName,
-                )
-              : h('div', {}, ''),
-          ]),
-          h('div', { display: 'flex', flexDirection: 'column' }, [
-            h('div', { display: 'flex', alignItems: 'baseline' }, [
-              h('div', { fontSize: 64, fontWeight: 600 }, compact(input.count)),
-              h('div', { fontSize: 26, color: '#a8b8ae', marginLeft: 14 }, 'records on GBIF'),
-            ]),
-            h('div', { fontSize: 17, color: '#84998c', marginTop: 18 }, credit),
-          ]),
-        ],
-      ),
+      namesBlock(input, title),
+      element('div', { display: 'flex', flexDirection: 'column' }, [
+        element('div', { display: 'flex', alignItems: 'baseline' }, [
+          element('div', { fontSize: 64, fontWeight: 600 }, compact(input.count)),
+          element('div', { fontSize: 26, color: COLOURS.muted, marginLeft: 14 }, 'records on GBIF'),
+        ]),
+        element('div', { fontSize: 17, color: COLOURS.subtle, marginTop: 18 }, credit),
+      ]),
     ],
   );
 }
 
+/** The card's element tree: photo on the left, text on the right. */
+function card(input: SpeciesCardInput, photo: string | null): El {
+  const title = input.commonName ?? input.scientificName;
+  return element(
+    'div',
+    {
+      width: WIDTH,
+      height: HEIGHT,
+      display: 'flex',
+      background: COLOURS.bg,
+      color: COLOURS.text,
+      fontFamily: 'Lexend',
+    },
+    [photoPanel(title, photo), textPanel(input, title)],
+  );
+}
+
+/**
+ * The species' Open Graph card as PNG bytes, from the disk cache when the content is unchanged.
+ * @param input Names, record count and optional lead photo to draw.
+ * @returns The 1200×630 PNG.
+ */
 export async function renderSpeciesCard(input: SpeciesCardInput): Promise<Buffer> {
   const cacheKey = sha1(
     JSON.stringify({
@@ -172,11 +219,11 @@ export async function renderSpeciesCard(input: SpeciesCardInput): Promise<Buffer
   }
   const photo = input.image ? await photoDataUri(input.image) : null;
   const svg = await satori(card(input, photo) as unknown as Parameters<typeof satori>[0], {
-    width: W,
-    height: H,
+    width: WIDTH,
+    height: HEIGHT,
     fonts: await loadFonts(),
   });
-  const png = new Resvg(svg, { fitTo: { mode: 'width', value: W } }).render().asPng();
+  const png = new Resvg(svg, { fitTo: { mode: 'width', value: WIDTH } }).render().asPng();
   await mkdir(join(CACHE, 'og'), { recursive: true });
   await writeFile(file, png);
   return png;

@@ -36,7 +36,7 @@ test('a missing species key shows a friendly message', async ({ page }) => {
 });
 
 test('unknown routes show the 404 page', async ({ page }) => {
-  const res = await page.goto('/no-such-page');
-  expect(res?.status()).toBe(404);
+  const response = await page.goto('/no-such-page');
+  expect(response?.status()).toBe(404);
   await expect(page.getByRole('heading', { name: 'This page isn’t here' })).toBeVisible();
 });

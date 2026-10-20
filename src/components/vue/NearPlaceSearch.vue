@@ -19,11 +19,11 @@ const open = ref(true);
 function close() {
   open.value = false;
 }
-function onOutside(e: Event) {
-  if (!root.value?.contains(e.target as Node)) close();
+function onOutside(event: Event) {
+  if (!root.value?.contains(event.target as Node)) close();
 }
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') close();
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'Escape') close();
 }
 onMounted(() => {
   document.addEventListener('pointerdown', onOutside);
@@ -35,26 +35,26 @@ onBeforeUnmount(() => {
 });
 
 async function submit() {
-  const q = query.value.trim();
-  if (!q) return;
+  const trimmed = query.value.trim();
+  if (!trimmed) return;
   abort?.abort();
   abort = new AbortController();
   state.value = 'searching';
   open.value = true;
   try {
-    const found = await searchPlaces(q, abort.signal);
+    const found = await searchPlaces(trimmed, abort.signal);
     state.value = 'idle';
     if (found.length === 1) pick(found[0]!);
     else results.value = found;
-  } catch (e) {
-    if ((e as Error).name !== 'AbortError') state.value = 'failed';
+  } catch (error) {
+    if ((error as Error).name !== 'AbortError') state.value = 'failed';
   }
 }
 
-function pick(p: Place) {
-  setNearLocation(p.lat, p.lng);
+function pick(place: Place) {
+  setNearLocation(place.lat, place.lng);
   results.value = null;
-  query.value = p.name;
+  query.value = place.name;
 }
 
 function onInput() {
@@ -105,10 +105,10 @@ function onInput() {
       class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-surface text-sm shadow-panel"
       aria-label="Places"
     >
-      <li v-for="(p, i) in results" :key="i">
-        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-surface-2" @click="pick(p)">
-          <span class="block truncate text-text">{{ p.name }}</span>
-          <span v-if="p.detail" class="block truncate text-xs text-muted">{{ p.detail }}</span>
+      <li v-for="(place, index) in results" :key="index">
+        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-surface-2" @click="pick(place)">
+          <span class="block truncate text-text">{{ place.name }}</span>
+          <span v-if="place.detail" class="block truncate text-xs text-muted">{{ place.detail }}</span>
         </button>
       </li>
     </ul>

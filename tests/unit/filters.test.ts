@@ -2,7 +2,7 @@ import { filterToParams, hasRefinements, needsAdhoc, refinementParams, toQuerySt
 
 describe('refinements', () => {
   it('maps every refinement to its GBIF search parameter', () => {
-    const qs = toQueryString(
+    const queryString = toQueryString(
       refinementParams({
         hasImage: true,
         hasSound: true,
@@ -12,7 +12,7 @@ describe('refinements', () => {
         iucn: ['VU'],
       }),
     );
-    expect(qs).toBe(
+    expect(queryString).toBe(
       'continent=EUROPE&coordinateUncertaintyInMeters=0%2C1000&iucnRedListCategory=VU' +
         '&mediaType=Sound&mediaType=StillImage&month=4&month=5',
     );
@@ -45,14 +45,14 @@ describe('refinements', () => {
 
 describe('explorer filter stores', () => {
   it('feed every URL filter into the occurrence filter, and clear them all', async () => {
-    const e = await import('~/stores/explorer');
-    e.$taxonKeys.set([212, 2492462]);
-    e.$months.set([4]);
-    e.$continents.set(['EUROPE']);
-    e.$maxUncertainty.set(100);
-    e.$iucn.set(['VU']);
-    e.$hasSound.set(true);
-    expect(e.$occurrenceFilter.get()).toMatchObject({
+    const explorer = await import('~/stores/explorer');
+    explorer.$taxonKeys.set([212, 2492462]);
+    explorer.$months.set([4]);
+    explorer.$continents.set(['EUROPE']);
+    explorer.$maxUncertainty.set(100);
+    explorer.$iucn.set(['VU']);
+    explorer.$hasSound.set(true);
+    expect(explorer.$occurrenceFilter.get()).toMatchObject({
       taxonKeys: [212, 2492462],
       months: [4],
       continents: ['EUROPE'],
@@ -60,34 +60,34 @@ describe('explorer filter stores', () => {
       iucn: ['VU'],
       hasSound: true,
     });
-    expect(e.$taxonKey.get()).toBeNull();
-    e.clearFilters();
-    expect(e.$occurrenceFilter.get()).toEqual({});
+    expect(explorer.$taxonKey.get()).toBeNull();
+    explorer.clearFilters();
+    expect(explorer.$occurrenceFilter.get()).toEqual({});
   });
 
   it('count set filters per rail group', async () => {
-    const e = await import('~/stores/explorer');
-    e.clearFilters();
-    e.$taxonKeys.set([212]);
-    e.$iucn.set(['VU', 'EN']);
-    e.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
-    e.$hasPhoto.set(true);
-    e.$hasSound.set(true);
-    expect(e.$groupCounts.get()).toEqual({ what: 3, when: 1, where: 0, how: 2 });
-    e.clearFilters();
-    expect(Object.values(e.$groupCounts.get()).every((n) => n === 0)).toBe(true);
+    const explorer = await import('~/stores/explorer');
+    explorer.clearFilters();
+    explorer.$taxonKeys.set([212]);
+    explorer.$iucn.set(['VU', 'EN']);
+    explorer.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
+    explorer.$hasPhoto.set(true);
+    explorer.$hasSound.set(true);
+    expect(explorer.$groupCounts.get()).toEqual({ what: 3, when: 1, where: 0, how: 2 });
+    explorer.clearFilters();
+    expect(Object.values(explorer.$groupCounts.get()).every((count) => count === 0)).toBe(true);
   });
 
   it('give each set filter but taxa a pill (one per IUCN category or month) that clears it', async () => {
-    const e = await import('~/stores/explorer');
-    e.clearFilters();
-    e.$taxonKeys.set([212]);
-    e.$iucn.set(['CR', 'VU']);
-    e.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
-    e.$months.set([4, 5]);
-    e.$maxUncertainty.set(1000);
-    e.$hasPhoto.set(true);
-    expect(e.$filterPills.get().map((p) => [p.group, p.text])).toEqual([
+    const explorer = await import('~/stores/explorer');
+    explorer.clearFilters();
+    explorer.$taxonKeys.set([212]);
+    explorer.$iucn.set(['CR', 'VU']);
+    explorer.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
+    explorer.$months.set([4, 5]);
+    explorer.$maxUncertainty.set(1000);
+    explorer.$hasPhoto.set(true);
+    expect(explorer.$filterPills.get().map((pill) => [pill.group, pill.text])).toEqual([
       ['what', 'Critically endangered'],
       ['what', 'Vulnerable'],
       ['when', '1990–2000'],
@@ -96,34 +96,34 @@ describe('explorer filter stores', () => {
       ['where', 'Accuracy ≤ 1 km'],
       ['how', 'Has photo'],
     ]);
-    e.$filterPills.get()[0]?.clear();
-    expect(e.$iucn.get()).toEqual(['VU']);
-    e.$filterPills
+    explorer.$filterPills.get()[0]?.clear();
+    expect(explorer.$iucn.get()).toEqual(['VU']);
+    explorer.$filterPills
       .get()
-      .find((p) => p.text === '1990–2000')
+      .find((pill) => pill.text === '1990–2000')
       ?.clear();
-    expect(e.$dateRange.get()).toBeNull();
-    e.clearFilters();
-    expect(e.$filterPills.get()).toEqual([]);
+    expect(explorer.$dateRange.get()).toBeNull();
+    explorer.clearFilters();
+    expect(explorer.$filterPills.get()).toEqual([]);
   });
 
   it('label one year, continents and record types', async () => {
-    const e = await import('~/stores/explorer');
-    e.clearFilters();
-    e.$dateRange.set({ unit: 'y', from: '2001-01-01', to: '2001-12-31' });
-    e.$continents.set(['EUROPE', 'ASIA']);
-    e.$basisOfRecord.set(['HUMAN_OBSERVATION', 'FOSSIL_SPECIMEN']);
-    expect(e.$filterPills.get().map((p) => p.text)).toEqual([
+    const explorer = await import('~/stores/explorer');
+    explorer.clearFilters();
+    explorer.$dateRange.set({ unit: 'y', from: '2001-01-01', to: '2001-12-31' });
+    explorer.$continents.set(['EUROPE', 'ASIA']);
+    explorer.$basisOfRecord.set(['HUMAN_OBSERVATION', 'FOSSIL_SPECIMEN']);
+    expect(explorer.$filterPills.get().map((pill) => pill.text)).toEqual([
       '2001',
       'Europe, Asia',
       'Human observation, Fossil specimen',
     ]);
-    e.clearFilters();
+    explorer.clearFilters();
   });
 
   it('read a pre-multi-select taxon link as a one-item list', async () => {
     const { codecs } = await import('~/stores/url-sync');
-    const c = codecs.intSet('taxon', { min: 0, limit: 10 });
-    expect(c.parse('2492462')).toEqual([2492462]);
+    const codec = codecs.intSet('taxon', { min: 0, limit: 10 });
+    expect(codec.parse('2492462')).toEqual([2492462]);
   });
 });

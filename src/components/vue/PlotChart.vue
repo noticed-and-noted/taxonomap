@@ -22,106 +22,131 @@ const props = defineProps<{
 }>();
 
 const FROM = 1900;
+const BAR_ROW_HEIGHT = 26;
+const BAR_CHART_PADDING = 34;
 const box = ref<HTMLDivElement>();
 const drawn = ref(false);
 const failed = ref(false);
-let ro: ResizeObserver | undefined;
-let mo: MutationObserver | undefined;
+let resizeObserver: ResizeObserver | undefined;
+let themeObserver: MutationObserver | undefined;
 let lastWidth = 0;
 
 const series = computed(() => {
   const ys = props.years ?? [];
-  const first = ys.find(([y, c]) => y >= FROM && c > 0)?.[0] ?? FROM;
+  const first = ys.find(([year, count]) => year >= FROM && count > 0)?.[0] ?? FROM;
   const start = Math.max(FROM, Math.floor(first / 10) * 10);
   const end = new Date().getFullYear();
-  const m = new Map(ys);
-  return Array.from({ length: end - start + 1 }, (_, i) => ({ year: start + i, count: m.get(start + i) ?? 0 }));
+  const countByYear = new Map(ys);
+  return Array.from({ length: end - start + 1 }, (_unused, offset) => ({
+    year: start + offset,
+    count: countByYear.get(start + offset) ?? 0,
+  }));
 });
 const earlier = computed(() =>
-  (props.years ?? []).reduce((s, [y, c]) => (y < (series.value[0]?.year ?? FROM) ? s + c : s), 0),
+  (props.years ?? []).reduce(
+    (total, [year, count]) => (year < (series.value[0]?.year ?? FROM) ? total + count : total),
+    0,
+  ),
 );
 const decades = computed(() => {
   const out: [string, number][] = [];
   for (const { year, count } of series.value) {
-    const d = `${Math.floor(year / 10) * 10}s`;
+    const decade = `${Math.floor(year / 10) * 10}s`;
     const last = out[out.length - 1];
-    if (last && last[0] === d) last[1] += count;
-    else out.push([d, count]);
+    if (last && last[0] === decade) last[1] += count;
+    else out.push([decade, count]);
   }
   return out;
 });
-const peak = computed(() => series.value.reduce((p, s) => (s.count > p.count ? s : p), { year: 0, count: 0 }));
+const peak = computed(() =>
+  series.value.reduce((best, bar) => (bar.count > best.count ? bar : best), { year: 0, count: 0 }),
+);
 const caption = computed(
   () => props.caption ?? (props.kind === 'years' && peak.value.count ? `peak ${peak.value.year}` : undefined),
 );
 // Undated records only: an all-zero series breaks the y scale (NaN ticks).
 const empty = computed(() => props.kind === 'years' && !peak.value.count);
-const height = computed(() => (props.kind === 'years' ? 170 : (props.bars?.length ?? 0) * 26 + 34));
+const height = computed(() =>
+  props.kind === 'years' ? 170 : (props.bars?.length ?? 0) * BAR_ROW_HEIGHT + BAR_CHART_PADDING,
+);
+
+type PlotModule = typeof import('~/lib/plot');
+
+const MIN_YEAR_TICKS = 3;
+const PX_PER_YEAR_TICK = 70;
+const MAX_BAR_LABEL_CHARS = 28;
+const BAR_LABEL_PX_PER_CHAR = 6.4;
+const PLOT_STYLE = { background: 'transparent', color: 'var(--text-muted)', fontSize: '11px', overflow: 'visible' };
+
+/** Records-per-year histogram. */
+function yearsChart(Plot: PlotModule, width: number): Element {
+  return Plot.plot({
+    width,
+    height: height.value,
+    style: PLOT_STYLE,
+    marginLeft: 44,
+    x: { label: null, tickFormat: 'd', ticks: Math.max(MIN_YEAR_TICKS, Math.floor(width / PX_PER_YEAR_TICK)) },
+    y: { label: 'Records', grid: true, tickFormat: '~s' },
+    marks: [
+      Plot.rectY(series.value, {
+        x: 'year',
+        y: 'count',
+        interval: 1,
+        fill: 'var(--ramp-4)',
+        tip: { format: { x: 'd', y: (value: number) => full(value) } },
+      }),
+      Plot.ruleY([0], { stroke: 'var(--border)' }),
+    ],
+    ariaLabel: `${props.title}, peaking in ${peak.value.year}`,
+  });
+}
+
+/** Horizontal bars with the count after each; labels link out where the data has an href. */
+function barsChart(Plot: PlotModule, width: number): Element {
+  const bars = [...(props.bars ?? [])];
+  const longest = Math.max(...bars.map((bar) => bar.label.length), 4);
+  const truncate = (label: string) =>
+    label.length > MAX_BAR_LABEL_CHARS ? `${label.slice(0, MAX_BAR_LABEL_CHARS - 1)}…` : label;
+  return Plot.plot({
+    width,
+    height: height.value,
+    style: PLOT_STYLE,
+    marginLeft: Math.min(180, Math.max(70, longest * BAR_LABEL_PX_PER_CHAR)),
+    marginRight: 48,
+    x: { axis: null },
+    y: { label: null, tickFormat: truncate },
+    marks: [
+      Plot.barX(bars, {
+        x: 'value',
+        y: 'label',
+        sort: { y: '-x' },
+        fill: 'var(--ramp-4)',
+        href: 'href',
+        target: '_blank',
+        tip: { format: { x: (value: number) => full(value), y: true } },
+      }),
+      Plot.text(bars, {
+        x: 'value',
+        y: 'label',
+        text: (bar: PlotBar) => compact(bar.value),
+        dx: 6,
+        textAnchor: 'start',
+        fill: 'var(--text-muted)',
+      }),
+    ],
+    ariaLabel: props.title,
+  });
+}
 
 async function draw() {
-  const el = box.value;
-  if (!el || empty.value) return;
-  const width = Math.round(el.clientWidth);
+  const element = box.value;
+  if (!element || empty.value) return;
+  const width = Math.round(element.clientWidth);
   if (!width || (drawn.value && width === lastWidth)) return;
   lastWidth = width;
   try {
     const Plot = await import('~/lib/plot');
-    const style = { background: 'transparent', color: 'var(--text-muted)', fontSize: '11px', overflow: 'visible' };
-    let chart: Element;
-    if (props.kind === 'years') {
-      chart = Plot.plot({
-        width,
-        height: height.value,
-        style,
-        marginLeft: 44,
-        x: { label: null, tickFormat: 'd', ticks: Math.max(3, Math.floor(width / 70)) },
-        y: { label: 'Records', grid: true, tickFormat: '~s' },
-        marks: [
-          Plot.rectY(series.value, {
-            x: 'year',
-            y: 'count',
-            interval: 1,
-            fill: 'var(--ramp-4)',
-            tip: { format: { x: 'd', y: (v: number) => full(v) } },
-          }),
-          Plot.ruleY([0], { stroke: 'var(--border)' }),
-        ],
-        ariaLabel: `${props.title}, peaking in ${peak.value.year}`,
-      });
-    } else {
-      const bars = [...(props.bars ?? [])];
-      const longest = Math.max(...bars.map((b) => b.label.length), 4);
-      chart = Plot.plot({
-        width,
-        height: height.value,
-        style,
-        marginLeft: Math.min(180, Math.max(70, longest * 6.4)),
-        marginRight: 48,
-        x: { axis: null },
-        y: { label: null, tickFormat: (l: string) => (l.length > 28 ? `${l.slice(0, 27)}…` : l) },
-        marks: [
-          Plot.barX(bars, {
-            x: 'value',
-            y: 'label',
-            sort: { y: '-x' },
-            fill: 'var(--ramp-4)',
-            href: 'href',
-            target: '_blank',
-            tip: { format: { x: (v: number) => full(v), y: true } },
-          }),
-          Plot.text(bars, {
-            x: 'value',
-            y: 'label',
-            text: (b: PlotBar) => compact(b.value),
-            dx: 6,
-            textAnchor: 'start',
-            fill: 'var(--text-muted)',
-          }),
-        ],
-        ariaLabel: props.title,
-      });
-    }
-    el.replaceChildren(chart);
+    element.replaceChildren(props.kind === 'years' ? yearsChart(Plot, width) : barsChart(Plot, width));
     drawn.value = true;
   } catch {
     failed.value = true;
@@ -130,19 +155,19 @@ async function draw() {
 
 onMounted(() => {
   void draw();
-  ro = new ResizeObserver(() => void draw());
-  if (box.value) ro.observe(box.value);
+  resizeObserver = new ResizeObserver(() => void draw());
+  if (box.value) resizeObserver.observe(box.value);
   // Theme switch: CSS variables update by themselves, but redraw to be safe.
-  mo = new MutationObserver(() => {
+  themeObserver = new MutationObserver(() => {
     lastWidth = 0;
     void draw();
   });
-  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 });
 
 onBeforeUnmount(() => {
-  ro?.disconnect();
-  mo?.disconnect();
+  resizeObserver?.disconnect();
+  themeObserver?.disconnect();
 });
 </script>
 
@@ -171,25 +196,25 @@ onBeforeUnmount(() => {
           </tr>
         </thead>
         <tbody v-if="kind === 'years'">
-          <tr v-for="[d, c] in decades" :key="d">
-            <td>{{ d }}</td>
-            <td>{{ full(c) }}</td>
+          <tr v-for="[decade, count] in decades" :key="decade">
+            <td>{{ decade }}</td>
+            <td>{{ full(count) }}</td>
           </tr>
         </tbody>
         <tbody v-else>
-          <tr v-for="b in bars" :key="b.label">
+          <tr v-for="bar in bars" :key="bar.label">
             <td>
               <a
-                v-if="b.href"
-                :href="b.href"
+                v-if="bar.href"
+                :href="bar.href"
                 target="_blank"
                 rel="noopener"
                 class="underline-offset-2 hover:underline"
-                >{{ b.label }}</a
+                >{{ bar.label }}</a
               >
-              <template v-else>{{ b.label }}</template>
+              <template v-else>{{ bar.label }}</template>
             </td>
-            <td>{{ full(b.value) }}</td>
+            <td>{{ full(bar.value) }}</td>
           </tr>
           <tr v-if="total !== undefined">
             <td>All</td>

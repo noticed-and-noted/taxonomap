@@ -23,10 +23,10 @@ export class LruCache<V> {
 
   /** Fresh value only; refreshes recency. */
   get(key: string): V | undefined {
-    const e = this.#map.get(key);
-    if (!e) return undefined;
-    this.#touch(key, e);
-    return e.expires > this.#now() ? e.value : undefined;
+    const entry = this.#map.get(key);
+    if (!entry) return undefined;
+    this.#touch(key, entry);
+    return entry.expires > this.#now() ? entry.value : undefined;
   }
 
   /** Any value, fresh or expired; does not refresh recency. */
@@ -34,6 +34,7 @@ export class LruCache<V> {
     return this.#map.get(key)?.value;
   }
 
+  /** Stores a value for `ttlMs`, evicting the oldest entries beyond the capacity. */
   set(key: string, value: V, ttlMs: number): void {
     this.#map.delete(key);
     this.#map.set(key, { value, expires: this.#now() + ttlMs });
@@ -44,12 +45,13 @@ export class LruCache<V> {
     }
   }
 
+  /** Removes every entry. */
   clear(): void {
     this.#map.clear();
   }
 
-  #touch(key: string, e: Entry<V>): void {
+  #touch(key: string, entry: Entry<V>): void {
     this.#map.delete(key);
-    this.#map.set(key, e);
+    this.#map.set(key, entry);
   }
 }

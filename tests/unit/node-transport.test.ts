@@ -15,42 +15,47 @@ function fakeFetch(status = 200) {
   const seen: { url: string; ua: string | null }[] = [];
   let active = 0;
   let peak = 0;
-  const impl = (async (url: string, init?: RequestInit) => {
+  const fetchImpl = (async (url: string, requestInit?: RequestInit) => {
     active++;
     peak = Math.max(peak, active);
-    seen.push({ url, ua: new Headers(init?.headers).get('user-agent') });
-    await new Promise((r) => setTimeout(r, 5));
+    seen.push({ url, ua: new Headers(requestInit?.headers).get('user-agent') });
+    await new Promise((resolve) => setTimeout(resolve, 5));
     active--;
     return new Response(JSON.stringify({ url }), { status, headers: { 'content-type': 'application/json' } });
   }) as typeof fetch;
-  return { impl, seen, peak: () => peak };
+  return { impl: fetchImpl, seen, peak: () => peak };
 }
 
 describe('node transport', () => {
   it('sends the User-Agent and caches responses on disk', async () => {
-    const f = fakeFetch();
-    const t = createNodeTransport({ cacheDir: dir, fetchImpl: f.impl, contact: 'me@example.org', refresh: false });
-    const a = await t('https://api.test/v1/a');
-    expect(await a.json()).toEqual({ url: 'https://api.test/v1/a' });
-    const b = await t('https://api.test/v1/a');
-    expect(b.headers.get('x-cache')).toBe('disk');
-    expect(f.seen).toHaveLength(1);
-    expect(f.seen[0]?.ua).toMatch(/^Taxonomap\/[\d.]+ \(contact: me@example\.org\)$/);
+    const fetcher = fakeFetch();
+    const transport = createNodeTransport({
+      cacheDir: dir,
+      fetchImpl: fetcher.impl,
+      contact: 'me@example.org',
+      refresh: false,
+    });
+    const first = await transport('https://api.test/v1/a');
+    expect(await first.json()).toEqual({ url: 'https://api.test/v1/a' });
+    const second = await transport('https://api.test/v1/a');
+    expect(second.headers.get('x-cache')).toBe('disk');
+    expect(fetcher.seen).toHaveLength(1);
+    expect(fetcher.seen[0]?.ua).toMatch(/^Taxonomap\/[\d.]+ \(contact: me@example\.org\)$/);
   });
 
   it('caps concurrency at 5', async () => {
-    const f = fakeFetch();
-    const t = createNodeTransport({ cacheDir: dir, fetchImpl: f.impl, refresh: true });
-    await Promise.all(Array.from({ length: 20 }, (_, i) => t(`https://api.test/v1/${i}`)));
-    expect(f.peak()).toBe(5);
+    const fetcher = fakeFetch();
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl: fetcher.impl, refresh: true });
+    await Promise.all(Array.from({ length: 20 }, (_unused, index) => transport(`https://api.test/v1/${index}`)));
+    expect(fetcher.peak()).toBe(5);
   });
 
   it('does not cache throttled responses', async () => {
-    const f = fakeFetch(429);
-    const t = createNodeTransport({ cacheDir: dir, fetchImpl: f.impl, refresh: false });
-    await t('https://api.test/v1/x');
-    await t('https://api.test/v1/x');
-    expect(f.seen).toHaveLength(2);
+    const fetcher = fakeFetch(429);
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl: fetcher.impl, refresh: false });
+    await transport('https://api.test/v1/x');
+    await transport('https://api.test/v1/x');
+    expect(fetcher.seen).toHaveLength(2);
   });
 
   it('builds a user agent string', () => {
@@ -81,29 +86,29 @@ describe('node transport options', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(dir);
     vi.stubEnv('GBIF_CACHE_TTL_HOURS', '0');
     vi.stubEnv('GBIF_CACHE_REFRESH', '');
-    const f = fakeFetch();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(f.impl);
-    const t = createNodeTransport();
-    await t('https://api.test/v1/a');
+    const fetcher = fakeFetch();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(fetcher.impl);
+    const transport = createNodeTransport();
+    await transport('https://api.test/v1/a');
     // A zero TTL makes the disk copy stale at once.
-    await t('https://api.test/v1/a');
+    await transport('https://api.test/v1/a');
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it('passes the signal on, and keeps a content type the response leaves out', async () => {
     const seen: (AbortSignal | undefined)[] = [];
-    const fetchImpl = (async (_url: string, init?: RequestInit) => {
-      seen.push(init?.signal ?? undefined);
-      const res = new Response('{"a":1}', { status: 200 });
-      res.headers.delete('content-type');
-      return res;
+    const fetchImpl = (async (_url: string, requestInit?: RequestInit) => {
+      seen.push(requestInit?.signal ?? undefined);
+      const response = new Response('{"a":1}', { status: 200 });
+      response.headers.delete('content-type');
+      return response;
     }) as typeof fetch;
-    const t = createNodeTransport({ cacheDir: dir, fetchImpl, refresh: true });
-    const ctrl = new AbortController();
-    const res = await t('https://api.test/v1/a', { signal: ctrl.signal });
-    expect(res.headers.get('content-type')).toBe('application/json');
-    await t('https://api.test/v1/b');
-    expect(seen).toEqual([ctrl.signal, undefined]);
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl, refresh: true });
+    const controller = new AbortController();
+    const response = await transport('https://api.test/v1/a', { signal: controller.signal });
+    expect(response.headers.get('content-type')).toBe('application/json');
+    await transport('https://api.test/v1/b');
+    expect(seen).toEqual([controller.signal, undefined]);
   });
 
   it('pauses every queued request after a Retry-After', async () => {
@@ -113,9 +118,9 @@ describe('node transport options', () => {
       times.push(Date.now());
       return new Response('{}', { status: times.length === 1 ? 429 : 200, headers: { 'retry-after': '1' } });
     }) as typeof fetch;
-    const t = createNodeTransport({ cacheDir: dir, fetchImpl, refresh: true, concurrency: 1 });
-    await t('https://api.test/v1/a');
-    const second = t('https://api.test/v1/b');
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl, refresh: true, concurrency: 1 });
+    await transport('https://api.test/v1/a');
+    const second = transport('https://api.test/v1/b');
     await vi.advanceTimersByTimeAsync(1000);
     await second;
     expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(1000);

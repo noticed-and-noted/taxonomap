@@ -14,17 +14,17 @@ vi.mock('~/lib/species/groups', () => ({
     lookups.photos.push(keys);
     // Key 1 has a photo (whose record names it); the others have none.
     return {
-      images: new Map(keys.filter((k) => k === 1).map((k) => [k, { url: `p${k}`, licence: 'CC0' }])),
-      names: new Map(keys.filter((k) => k === 1).map((k) => [k, 'Named by photo'])),
+      images: new Map(keys.filter((key) => key === 1).map((key) => [key, { url: `p${key}`, licence: 'CC0' }])),
+      names: new Map(keys.filter((key) => key === 1).map((key) => [key, 'Named by photo'])),
     };
   },
   resolveNames: async (keys: number[]) => {
     lookups.names.push(keys);
-    return new Map(keys.filter((k) => k === 2).map((k) => [k, 'Named by lookup']));
+    return new Map(keys.filter((key) => key === 2).map((key) => [key, 'Named by lookup']));
   },
   commonNames: async (keys: number[]) => {
     lookups.common.push(keys);
-    return new Map(keys.filter((k) => k === 3).map((k) => [k, 'Common three']));
+    return new Map(keys.filter((key) => key === 3).map((key) => [key, 'Common three']));
   },
 }));
 
@@ -42,10 +42,10 @@ async function setup(rows: SpeciesRow[]) {
   const all = ref(false);
   const data = ref<object>({});
   const scope = effectScope();
-  const d = scope.run(() =>
+  const details = scope.run(() =>
     useRowDetails({ rows: () => rows, dataset: () => data.value, inView, needAllNames: () => all.value }),
   )!;
-  return { d, inView, all, data, stop: () => scope.stop() };
+  return { d: details, inView, all, data, stop: () => scope.stop() };
 }
 
 beforeEach(() => {
@@ -56,7 +56,7 @@ beforeEach(() => {
 
 describe('useRowDetails', () => {
   it('looks up rows only once they are in view, photos first', async () => {
-    const { unnamed: _, ...named } = row(4);
+    const { unnamed: _unnamed, ...named } = row(4);
     const rows: SpeciesRow[] = [row(1), row(2), row(3), named];
     const { d, inView, stop } = await setup(rows);
     expect(lookups.photos).toEqual([]);
@@ -67,14 +67,19 @@ describe('useRowDetails', () => {
     expect(lookups.photos).toEqual([[1, 2, 3]]);
     // Row 1 was named by its photo's record, so only 2 and 3 needed a lookup.
     expect(lookups.names).toEqual([[2, 3]]);
-    expect(rows.map((r) => d.sciName(r))).toEqual(['Named by photo', 'Named by lookup', 'Species 3', 'Species 4']);
+    expect(rows.map((tableRow) => d.sciName(tableRow))).toEqual([
+      'Named by photo',
+      'Named by lookup',
+      'Species 3',
+      'Species 4',
+    ]);
     expect(d.photoOf(rows[0]!)).toMatchObject({ url: 'p1' });
     expect([d.pendingPhoto(rows[1]!), d.pendingPhoto(rows[3]!)]).toEqual([false, true]);
     stop();
   });
 
   it('looks up common names for rows in view that have none', async () => {
-    const { unnamed: _, ...five } = row(5, { commonName: 'Indexed five' });
+    const { unnamed: _unnamed, ...five } = row(5, { commonName: 'Indexed five' });
     const rows = [row(3), five];
     const { d, inView, stop } = await setup(rows);
     expect(d.commonName(rows[0]!)).toBeUndefined();

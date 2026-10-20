@@ -53,23 +53,28 @@ const scroller = ref<HTMLElement>();
 const { fadeBottom, update: updateFade } = useScrollFade(scroller);
 watch(records, () => void nextTick(updateFade));
 
-const uid = useId();
+const uniqueId = useId();
 const query = ref('');
 const open = ref(false);
 const active = ref(-1);
-const label = (s: SpeciesRow) => s.commonName ?? s.scientificName;
+const label = (species: SpeciesRow) => species.commonName ?? species.scientificName;
 const options = computed(() => {
-  const q = query.value.trim().toLowerCase();
+  const needle = query.value.trim().toLowerCase();
   return [...props.species]
-    .filter((s) => !q || label(s).toLowerCase().includes(q) || s.scientificName.toLowerCase().includes(q))
-    .sort((a, b) => b.records - a.records)
+    .filter(
+      (species) =>
+        !needle ||
+        label(species).toLowerCase().includes(needle) ||
+        species.scientificName.toLowerCase().includes(needle),
+    )
+    .sort((left, right) => right.records - left.records)
     .slice(0, MAX_OPTIONS);
 });
-const activeId = computed(() => (active.value >= 0 ? `${uid}-opt-${active.value}` : undefined));
+const activeId = computed(() => (active.value >= 0 ? `${uniqueId}-opt-${active.value}` : undefined));
 
-function pick(s: SpeciesRow | undefined) {
-  speciesKey.value = s?.key ?? '';
-  query.value = s ? label(s) : '';
+function pick(species: SpeciesRow | undefined) {
+  speciesKey.value = species?.key ?? '';
+  query.value = species ? label(species) : '';
   open.value = false;
   active.value = -1;
 }
@@ -81,39 +86,42 @@ function onInput() {
   if (!query.value.trim() && speciesKey.value !== '') speciesKey.value = '';
 }
 
-function onKey(e: KeyboardEvent) {
-  const n = options.value.length;
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault();
+function onKey(event: KeyboardEvent) {
+  const count = options.value.length;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
     open.value = true;
-    if (n) active.value = (active.value + (e.key === 'ArrowDown' ? 1 : -1) + n) % n;
-  } else if (e.key === 'Enter' && open.value) {
-    const s = options.value[active.value] ?? (n === 1 ? options.value[0] : undefined);
-    if (s) {
-      e.preventDefault();
-      pick(s);
+    if (count) active.value = (active.value + (event.key === 'ArrowDown' ? 1 : -1) + count) % count;
+  } else if (event.key === 'Enter' && open.value) {
+    const option = options.value[active.value] ?? (count === 1 ? options.value[0] : undefined);
+    if (option) {
+      event.preventDefault();
+      pick(option);
     }
-  } else if (e.key === 'Escape' && open.value) {
-    e.stopPropagation();
+  } else if (event.key === 'Escape' && open.value) {
+    event.stopPropagation();
     open.value = false;
   }
 }
 
 // Records rarely carry a common name: take the cell's species table's, else look it up (see load).
 const commonNames = computed(
-  () => new Map(props.species.filter((s) => s.commonName).map((s) => [s.key, s.commonName!])),
+  () =>
+    new Map(props.species.filter((species) => species.commonName).map((species) => [species.key, species.commonName!])),
 );
 const lateNames = shallowRef(new Map<number, string>());
-const common = (o: Occurrence) =>
-  o.vernacularName ??
-  (o.speciesKey ? (commonNames.value.get(o.speciesKey) ?? lateNames.value.get(o.speciesKey)) : undefined);
-const sci = (o: Occurrence) => o.species ?? o.scientificName;
-const name = (o: Occurrence) => common(o) ?? sci(o) ?? 'Unnamed record';
+const common = (occurrence: Occurrence) =>
+  occurrence.vernacularName ??
+  (occurrence.speciesKey
+    ? (commonNames.value.get(occurrence.speciesKey) ?? lateNames.value.get(occurrence.speciesKey))
+    : undefined);
+const scientificName = (occurrence: Occurrence) => occurrence.species ?? occurrence.scientificName;
+const name = (occurrence: Occurrence) => common(occurrence) ?? scientificName(occurrence) ?? 'Unnamed record';
 
 /** Names for a page's species the table hasn't named (cached, as on species pages); rows show meanwhile. */
 async function nameSpecies(page: readonly Occurrence[], signal: AbortSignal) {
-  const missing = [...new Set(page.map((o) => o.speciesKey))].filter(
-    (k): k is number => k !== undefined && !commonNames.value.has(k) && !lateNames.value.has(k),
+  const missing = [...new Set(page.map((occurrence) => occurrence.speciesKey))].filter(
+    (key): key is number => key !== undefined && !commonNames.value.has(key) && !lateNames.value.has(key),
   );
   if (!missing.length) return;
   const found = await lookupCommonNames(missing, signal);
@@ -121,17 +129,21 @@ async function nameSpecies(page: readonly Occurrence[], signal: AbortSignal) {
 }
 
 async function load(more = false) {
-  const b = base.value;
+  const baseFilter = base.value;
   if (!more) records.value = [];
-  if (!b) return;
+  if (!baseFilter) return;
   await run(async (signal) => {
-    const f = { ...b, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
-    const r = await searchOccurrences(f, { limit: PAGE, offset: more ? records.value.length : 0 }, signal);
+    const pageFilter = { ...baseFilter, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
+    const response = await searchOccurrences(
+      pageFilter,
+      { limit: PAGE, offset: more ? records.value.length : 0 },
+      signal,
+    );
     if (signal.aborted) return;
-    records.value = more ? [...records.value, ...r.results] : r.results;
+    records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
-    void nameSpecies(r.results, signal);
-    total.value = r.count;
+    void nameSpecies(response.results, signal);
+    total.value = response.count;
   });
 }
 
@@ -147,64 +159,66 @@ watch(
 );
 watch(speciesKey, () => void load());
 
-const date = (o: Occurrence) => o.eventDate?.slice(0, 10) ?? (o.year ? String(o.year) : undefined);
-const typeLabel = (o: Occurrence) =>
-  (o.basisOfRecord && (BASIS_LABELS[o.basisOfRecord] ?? o.basisOfRecord)) || 'Unknown';
-const image = (o: Occurrence) => usableImages(o)[0];
+const date = (occurrence: Occurrence) =>
+  occurrence.eventDate?.slice(0, 10) ?? (occurrence.year ? String(occurrence.year) : undefined);
+const typeLabel = (occurrence: Occurrence) =>
+  (occurrence.basisOfRecord && (BASIS_LABELS[occurrence.basisOfRecord] ?? occurrence.basisOfRecord)) || 'Unknown';
+const image = (occurrence: Occurrence) => usableImages(occurrence)[0];
 const broken = ref(new Set<number>());
-const initials = (o: Occurrence) =>
-  name(o)
+const initials = (occurrence: Occurrence) =>
+  name(occurrence)
     .split(/\s+/)
     .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
+    .map((word) => word[0]?.toUpperCase())
     .join('');
 
 /**
  * Scroll only the list (not the panel) so `el` is in view: the animation draws above the
  * list, unclipped, so its end point must be inside the list for it to stay inside.
  */
-function revealInList(el: HTMLElement | null) {
+function revealInList(element: HTMLElement | null) {
   const box = scroller.value;
-  if (!el || !box) return;
-  const b = box.getBoundingClientRect();
+  if (!element || !box) return;
+  const boxRect = box.getBoundingClientRect();
   // The panel body may hide the list's lower edge; use whichever bottom is higher.
   const panel = box.parentElement?.closest<HTMLElement>('.overflow-y-auto');
-  const bottom = Math.min(b.bottom, panel?.getBoundingClientRect().bottom ?? Infinity);
-  const r = el.getBoundingClientRect();
-  if (r.bottom > bottom) box.scrollTop += Math.min(r.bottom - bottom, r.top - b.top);
+  const bottom = Math.min(boxRect.bottom, panel?.getBoundingClientRect().bottom ?? Infinity);
+  const rowRect = element.getBoundingClientRect();
+  if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, rowRect.top - boxRect.top);
 }
 
 /** Row whose photo and name carry view-transition names while it opens or closes (one row, so others don't animate). */
 const animating = ref<number | null>(null);
-const vt = (o: Occurrence, part: 'photo' | 'name') =>
-  animating.value === o.key ? { viewTransitionName: `rec-${part}-${o.key}` } : undefined;
+const transitionName = (occurrence: Occurrence, part: 'photo' | 'name') =>
+  animating.value === occurrence.key ? { viewTransitionName: `rec-${part}-${occurrence.key}` } : undefined;
 /** Expand or collapse a row; where supported the photo moves into the details and the name slides into its place. */
-function toggle(o: Occurrence) {
-  const next = expanded.value === o.key ? null : o.key;
+function toggle(occurrence: Occurrence) {
+  const next = expanded.value === occurrence.key ? null : occurrence.key;
   if (!document.startViewTransition) {
     expanded.value = next;
     return;
   }
-  animating.value = o.key;
+  animating.value = occurrence.key;
   void nextTick(() => {
-    const t = document.startViewTransition(async () => {
+    const transition = document.startViewTransition(async () => {
       expanded.value = next;
       await nextTick();
-      if (next !== null) revealInList(document.getElementById(`${uid}-rec-${next}`));
+      if (next !== null) revealInList(document.getElementById(`${uniqueId}-rec-${next}`));
     });
-    void t.finished.finally(() => {
-      if (animating.value === o.key) animating.value = null;
+    void transition.finished.finally(() => {
+      if (animating.value === occurrence.key) animating.value = null;
     });
   });
 }
 
-const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filter(Boolean).join(' ');
+const institution = (occurrence: Occurrence) =>
+  [occurrence.institutionCode, occurrence.catalogNumber].filter(Boolean).join(' ');
 </script>
 
 <template>
   <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
     <div class="relative text-sm">
-      <label :for="`${uid}-input`" class="sr-only">Filter records by species</label>
+      <label :for="`${uniqueId}-input`" class="sr-only">Filter records by species</label>
       <svg
         class="pointer-events-none absolute left-2.5 top-[1.0625rem] size-3.5 -translate-y-1/2 text-subtle"
         viewBox="0 0 24 24"
@@ -217,7 +231,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
         <path d="m20 20-3.5-3.5" />
       </svg>
       <input
-        :id="`${uid}-input`"
+        :id="`${uniqueId}-input`"
         v-model="query"
         type="search"
         class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
@@ -226,7 +240,7 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
         placeholder="Filter by species"
         :disabled="!species.length"
         :aria-expanded="open && options.length > 0"
-        :aria-controls="`${uid}-list`"
+        :aria-controls="`${uniqueId}-list`"
         aria-autocomplete="list"
         :aria-activedescendant="activeId"
         @focus="open = true"
@@ -236,23 +250,23 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
       />
       <ul
         v-show="open && options.length"
-        :id="`${uid}-list`"
+        :id="`${uniqueId}-list`"
         role="listbox"
         class="options absolute inset-x-0 z-10 shadow"
         aria-label="Species in this cell"
       >
         <li
-          v-for="(s, i) in options"
-          :id="`${uid}-opt-${i}`"
-          :key="s.key"
+          v-for="(option, index) in options"
+          :id="`${uniqueId}-opt-${index}`"
+          :key="option.key"
           role="option"
           class="option"
-          :class="{ active: i === active }"
-          :aria-selected="s.key === speciesKey"
-          @mousedown.prevent="pick(s)"
+          :class="{ active: index === active }"
+          :aria-selected="option.key === speciesKey"
+          @mousedown.prevent="pick(option)"
         >
-          <span class="min-w-0 truncate" :class="{ 'sci-name': !s.commonName }">{{ label(s) }}</span>
-          <span class="shrink-0 text-[11px] text-subtle tabular-nums">{{ full(s.records) }}</span>
+          <span class="min-w-0 truncate" :class="{ 'sci-name': !option.commonName }">{{ label(option) }}</span>
+          <span class="shrink-0 text-[11px] text-subtle tabular-nums">{{ full(option.records) }}</span>
         </li>
       </ul>
     </div>
@@ -312,85 +326,115 @@ const institution = (o: Occurrence) => [o.institutionCode, o.catalogNumber].filt
             </tr>
           </thead>
           <tbody>
-            <template v-for="o in records" :key="o.key">
+            <template v-for="occurrence in records" :key="occurrence.key">
               <tr
                 class="record cursor-pointer border-b border-border hover:bg-surface-2"
-                :data-type="o.basisOfRecord"
-                @click="toggle(o)"
+                :data-type="occurrence.basisOfRecord"
+                @click="toggle(occurrence)"
               >
-                <td v-if="expanded !== o.key" class="py-1.5 pl-4 pr-2">
-                  <span class="block size-8 overflow-hidden rounded bg-photo" :style="vt(o, 'photo')">
+                <td v-if="expanded !== occurrence.key" class="py-1.5 pl-4 pr-2">
+                  <span
+                    class="block size-8 overflow-hidden rounded bg-photo"
+                    :style="transitionName(occurrence, 'photo')"
+                  >
                     <ThumbImage
-                      v-if="image(o) && !broken.has(o.key)"
-                      :image="image(o)!"
+                      v-if="image(occurrence) && !broken.has(occurrence.key)"
+                      :image="image(occurrence)!"
                       size="200x"
                       class="size-full object-cover"
-                      @broken="broken = new Set(broken).add(o.key)"
+                      @broken="broken = new Set(broken).add(occurrence.key)"
                     />
                     <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
-                      {{ initials(o) }}
+                      {{ initials(occurrence) }}
                     </span>
                   </span>
                 </td>
                 <!-- Expanded, the photo is in the details below and the name takes its column. -->
-                <td :colspan="expanded === o.key ? 2 : 1" class="py-1.5 pr-2" :class="{ 'pl-4': expanded === o.key }">
+                <td
+                  :colspan="expanded === occurrence.key ? 2 : 1"
+                  class="py-1.5 pr-2"
+                  :class="{ 'pl-4': expanded === occurrence.key }"
+                >
                   <button
                     type="button"
                     class="block w-full min-w-0 cursor-pointer text-left"
-                    :aria-expanded="expanded === o.key"
-                    :aria-controls="`${uid}-rec-${o.key}`"
-                    @click.stop="toggle(o)"
+                    :aria-expanded="expanded === occurrence.key"
+                    :aria-controls="`${uniqueId}-rec-${occurrence.key}`"
+                    @click.stop="toggle(occurrence)"
                   >
-                    <span class="inline-block max-w-full align-top" :style="vt(o, 'name')">
-                      <span class="block truncate" :class="{ 'sci-name': !common(o) }">{{ name(o) }}</span>
-                      <span v-if="common(o) && sci(o)" class="sci-name block truncate text-xs text-muted">{{
-                        sci(o)
+                    <span class="inline-block max-w-full align-top" :style="transitionName(occurrence, 'name')">
+                      <span class="block truncate" :class="{ 'sci-name': !common(occurrence) }">{{
+                        name(occurrence)
                       }}</span>
+                      <span
+                        v-if="common(occurrence) && scientificName(occurrence)"
+                        class="sci-name block truncate text-xs text-muted"
+                        >{{ scientificName(occurrence) }}</span
+                      >
                     </span>
                   </button>
                 </td>
                 <td class="py-1.5">
-                  <span class="type-code" tabindex="0" :data-tip="typeLabel(o)" :aria-label="typeLabel(o)">{{
-                    TYPE_CODES[o.basisOfRecord ?? ''] ?? '—'
-                  }}</span>
+                  <span
+                    class="type-code"
+                    tabindex="0"
+                    :data-tip="typeLabel(occurrence)"
+                    :aria-label="typeLabel(occurrence)"
+                    >{{ TYPE_CODES[occurrence.basisOfRecord ?? ''] ?? '—' }}</span
+                  >
                 </td>
-                <td class="truncate py-1.5 pr-4 text-xs tabular-nums">{{ date(o) ?? '—' }}</td>
+                <td class="truncate py-1.5 pr-4 text-xs tabular-nums">{{ date(occurrence) ?? '—' }}</td>
               </tr>
-              <tr v-if="expanded === o.key" :id="`${uid}-rec-${o.key}`" class="border-b border-border">
+              <tr
+                v-if="expanded === occurrence.key"
+                :id="`${uniqueId}-rec-${occurrence.key}`"
+                class="border-b border-border"
+              >
                 <td colspan="4" class="bg-surface-2 px-4 py-3">
                   <div class="grid grid-cols-2 items-start gap-3">
-                    <div class="relative aspect-square overflow-hidden rounded bg-photo" :style="vt(o, 'photo')">
-                      <template v-if="image(o) && !broken.has(o.key)">
+                    <div
+                      class="relative aspect-square overflow-hidden rounded bg-photo"
+                      :style="transitionName(occurrence, 'photo')"
+                    >
+                      <template v-if="image(occurrence) && !broken.has(occurrence.key)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
-                        <ThumbImage :image="image(o)!" size="200x" class="absolute inset-0 size-full object-cover" />
-                        <ThumbImage :image="image(o)!" size="400x" class="absolute inset-0 size-full object-cover" />
+                        <ThumbImage
+                          :image="image(occurrence)!"
+                          size="200x"
+                          class="absolute inset-0 size-full object-cover"
+                        />
+                        <ThumbImage
+                          :image="image(occurrence)!"
+                          size="400x"
+                          class="absolute inset-0 size-full object-cover"
+                        />
                         <LicenceBadge
                           class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
-                          :licence="image(o)!.licence"
-                          :creator="image(o)!.creator"
-                          :rights-holder="image(o)!.rightsHolder"
+                          :licence="image(occurrence)!.licence"
+                          :creator="image(occurrence)!.creator"
+                          :rights-holder="image(occurrence)!.rightsHolder"
                         />
                       </template>
                       <span v-else class="grid size-full place-items-center font-display text-xl text-subtle">
-                        {{ initials(o) }}
+                        {{ initials(occurrence) }}
                       </span>
                     </div>
                     <dl class="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]">
-                      <div v-if="o.recordedBy">
+                      <div v-if="occurrence.recordedBy">
                         <dt class="text-subtle">Recorded by</dt>
-                        <dd>{{ o.recordedBy }}</dd>
+                        <dd>{{ occurrence.recordedBy }}</dd>
                       </div>
-                      <div v-if="institution(o)">
+                      <div v-if="institution(occurrence)">
                         <dt class="text-subtle">Institution</dt>
-                        <dd>{{ institution(o) }}</dd>
+                        <dd>{{ institution(occurrence) }}</dd>
                       </div>
-                      <div v-if="o.datasetName ?? o.publisher">
+                      <div v-if="occurrence.datasetName ?? occurrence.publisher">
                         <dt class="text-subtle">Source</dt>
-                        <dd>{{ o.datasetName ?? o.publisher }}</dd>
+                        <dd>{{ occurrence.datasetName ?? occurrence.publisher }}</dd>
                       </div>
                       <dd>
                         <a
-                          :href="`https://www.gbif.org/occurrence/${o.key}`"
+                          :href="`https://www.gbif.org/occurrence/${occurrence.key}`"
                           target="_blank"
                           rel="noopener"
                           class="underline"

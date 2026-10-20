@@ -10,16 +10,17 @@ import { renderSpeciesCard } from '~/lib/og/species-card';
  */
 export async function getStaticPaths() {
   const list = await bakeSpeciesList();
-  return list.map((s) => ({ params: { key: String(s.key) } }));
+  return list.map((species) => ({ params: { key: String(species.key) } }));
 }
 
+/** Open Graph card PNG for a pre-rendered species. */
 export const GET: APIRoute = async ({ params }) => {
   const names = await bakedCommonNames();
-  const d = await loadSpeciesData(Number(params['key']), names);
+  const speciesData = await loadSpeciesData(Number(params['key']), names);
   const png = await renderSpeciesCard({
-    commonName: d.commonName,
-    scientificName: d.canonicalName,
-    count: d.count,
+    commonName: speciesData.commonName,
+    scientificName: speciesData.canonicalName,
+    count: speciesData.count,
   });
   return new Response(new Uint8Array(png), { headers: { 'Content-Type': 'image/png' } });
 };

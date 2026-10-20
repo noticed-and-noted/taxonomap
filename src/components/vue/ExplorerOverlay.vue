@@ -144,14 +144,16 @@ function closePanel() {
         <template v-if="filtersOpen" #top>
           <div role="tablist" aria-label="Filter groups" class="flex border-b border-border">
             <button
-              v-for="t in [...FILTER_GROUPS, { ...SETTINGS, label: 'Map' }]"
-              :key="t.id"
+              v-for="tab in [...FILTER_GROUPS, { ...SETTINGS, label: 'Map' }]"
+              :key="tab.id"
               role="tab"
               type="button"
-              :aria-selected="filterTab === t.id"
+              :aria-selected="filterTab === tab.id"
               class="-mb-px flex flex-1 flex-col items-center gap-0.5 border-b-2 px-1 py-1.5 text-xs"
-              :class="filterTab === t.id ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
-              @click="filterTab = t.id"
+              :class="
+                filterTab === tab.id ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'
+              "
+              @click="filterTab = tab.id"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -161,12 +163,12 @@ function closePanel() {
                 stroke-width="1.7"
                 aria-hidden="true"
               >
-                <path :d="t.icon" stroke-linecap="round" stroke-linejoin="round" />
+                <path :d="tab.icon" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <span>
-                {{ t.label
-                }}<span v-if="t.id !== 'settings' && groupCounts[t.id]" class="tabular-nums">
-                  ({{ groupCounts[t.id] }})</span
+                {{ tab.label
+                }}<span v-if="tab.id !== 'settings' && groupCounts[tab.id]" class="tabular-nums">
+                  ({{ groupCounts[tab.id] }})</span
                 >
               </span>
             </button>

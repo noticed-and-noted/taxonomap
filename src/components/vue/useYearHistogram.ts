@@ -13,6 +13,7 @@ import { useLatestLoad } from './useLatestLoad';
 
 export type YearCounts = Map<number, number>;
 
+/** Records per year for the current filters: the baked snapshot when unfiltered, a live facet request otherwise. */
 export function useYearHistogram() {
   const filter = useStore($occurrenceFilter);
   const counts = ref<YearCounts>(new Map());
@@ -21,25 +22,25 @@ export function useYearHistogram() {
 
   function load() {
     const { year: _year, eventDate: _date, ...rest } = filter.value;
-    const filtered = Object.values(rest).some((v) => v !== undefined);
+    const filtered = Object.values(rest).some((value) => value !== undefined);
     return run(async (signal) => {
-      const snap = filtered ? null : await loadSnapshot('years');
-      const rows = snap ? snap.years : await fetchLive(rest, signal);
+      const snapshot = filtered ? null : await loadSnapshot('years');
+      const rows = snapshot ? snapshot.years : await fetchLive(rest, signal);
       if (signal.aborted) return;
       counts.value = new Map(rows);
       live.value = filtered;
     });
   }
 
-  async function fetchLive(f: Parameters<typeof occurrenceFacets>[0], signal: AbortSignal) {
-    const r = await occurrenceFacets(f, ['year'], { facetLimit: 1000, signal });
-    return (r.facets['year'] ?? []).map((c): [number, number] => [Number(c.name), c.count]);
+  async function fetchLive(facetFilter: Parameters<typeof occurrenceFacets>[0], signal: AbortSignal) {
+    const result = await occurrenceFacets(facetFilter, ['year'], { facetLimit: 1000, signal });
+    return (result.facets['year'] ?? []).map((facet): [number, number] => [Number(facet.name), facet.count]);
   }
 
   // Only re-fetch when a non-date filter changes.
   watch(
     () => {
-      const { year: _y, eventDate: _d, ...rest } = filter.value;
+      const { year: _unusedYear, eventDate: _unusedDate, ...rest } = filter.value;
       return JSON.stringify(rest);
     },
     () => void load(),

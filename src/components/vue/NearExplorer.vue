@@ -74,9 +74,9 @@ const tableNote = computed(() =>
   species.value.length >= NEAR_SPECIES ? `the ${NEAR_SPECIES} most recorded` : undefined,
 );
 
-function onRadius(e: Event) {
-  const i = Number((e.target as HTMLInputElement).value);
-  $nearRadius.set(RADIUS_STEPS_KM[i] ?? 2);
+function onRadius(event: Event) {
+  const radiusStep = Number((event.target as HTMLInputElement).value);
+  $nearRadius.set(RADIUS_STEPS_KM[radiusStep] ?? 2);
 }
 
 function locate() {
@@ -91,8 +91,8 @@ function locate() {
       // Rounded to 3 dp (~100 m) before it is used anywhere.
       setNearLocation(pos.coords.latitude, pos.coords.longitude);
     },
-    (err) => {
-      geoState.value = err.code === err.PERMISSION_DENIED ? 'denied' : 'unavailable';
+    (positionError) => {
+      geoState.value = positionError.code === positionError.PERMISSION_DENIED ? 'denied' : 'unavailable';
     },
     { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
   );
@@ -100,21 +100,21 @@ function locate() {
 
 /** Load the area's groups and species; a new pin or radius aborts the last area's requests. */
 async function loadArea() {
-  const a = area.value;
+  const searchArea = area.value;
   classes.value = [];
   species.value = [];
   group.value = null;
-  if (!a) {
+  if (!searchArea) {
     cancelArea();
     error.value = null;
     return;
   }
-  $flyTo.set({ kind: 'point', lng: a.lng, lat: a.lat, zoom: zoomForRadius(a.radiusKm) });
+  $flyTo.set({ kind: 'point', lng: searchArea.lng, lat: searchArea.lat, zoom: zoomForRadius(searchArea.radiusKm) });
   await runArea(async (signal) => {
-    const [r, rows] = await Promise.all([classesNear(a, signal), speciesNear(a, null, signal)]);
+    const [summary, rows] = await Promise.all([classesNear(searchArea, signal), speciesNear(searchArea, null, signal)]);
     if (signal.aborted) return;
-    total.value = r.records;
-    classes.value = r.classes;
+    total.value = summary.records;
+    classes.value = summary.classes;
     await showSpecies(rows, signal);
   });
 }
@@ -127,17 +127,17 @@ async function showSpecies(rows: SpeciesRow[], signal: AbortSignal) {
 
 /** Narrow the species list to one group (null for all); one request each time. */
 async function pickGroup(key: number | null) {
-  const a = area.value;
-  if (!a || key === group.value) return;
+  const searchArea = area.value;
+  if (!searchArea || key === group.value) return;
   group.value = key;
   species.value = [];
   await runArea(async (signal) => {
-    const rows = await speciesNear(a, key, signal);
+    const rows = await speciesNear(searchArea, key, signal);
     if (!signal.aborted) await showSpecies(rows, signal);
   });
 }
 
-const setTab = (t: 'species' | 'recent') => $nearTab.set(t);
+const setTab = (nextTab: 'species' | 'recent') => $nearTab.set(nextTab);
 
 watch(area, () => void loadArea(), { deep: true });
 
@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
                 @change="onRadius"
               />
               <span class="flex justify-between text-[10px] text-subtle" aria-hidden="true">
-                <span v-for="r in RADIUS_STEPS_KM" :key="r">{{ r }}</span>
+                <span v-for="radiusKm in RADIUS_STEPS_KM" :key="radiusKm">{{ radiusKm }}</span>
               </span>
             </label>
             <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -251,16 +251,16 @@ onBeforeUnmount(() => {
 
           <div role="tablist" aria-label="Lists" class="flex gap-1 border-b border-border text-sm">
             <button
-              v-for="t in ['species', 'recent'] as const"
-              :key="t"
+              v-for="tabName in ['species', 'recent'] as const"
+              :key="tabName"
               role="tab"
               type="button"
-              :aria-selected="tab === t"
+              :aria-selected="tab === tabName"
               class="-mb-px border-b-2 px-3 py-1.5"
-              :class="tab === t ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
-              @click="setTab(t)"
+              :class="tab === tabName ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
+              @click="setTab(tabName)"
             >
-              {{ t === 'species' ? 'Species' : 'Records' }}
+              {{ tabName === 'species' ? 'Species' : 'Records' }}
             </button>
           </div>
 

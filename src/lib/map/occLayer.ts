@@ -44,20 +44,23 @@ const MOVE_EVERY_MS = 200;
  */
 const SAMPLES = 17;
 
+/** Handle on the occurrence hexes the layer keeps loaded for a map. */
 export interface OccLayer {
   /** The cells on the map now, for the `occ` source. */
   collection(): GeoJSON.FeatureCollection<GeoJSON.Polygon>;
   /** The cell containing a point, if any. */
-  cellAt(p: LngLat): Hex | undefined;
+  cellAt(point: LngLat): Hex | undefined;
   /** Draw again, e.g. after `isEmpty` learns of more empty cells. */
   redraw(): void;
+  /** Stop loading and restore the map's methods the layer wrapped. */
   destroy(): void;
 }
 
+/** What the layer reads from the app and how it reports back. */
 export interface OccLayerOptions {
   filter: () => TileFilter;
   /** A whole new set of cells to draw (new level or filters). */
-  onCells: (fc: GeoJSON.FeatureCollection<GeoJSON.Polygon>) => void;
+  onCells: (cells: GeoJSON.FeatureCollection<GeoJSON.Polygon>) => void;
   /** Cells to add to the drawn set, and ids to take out (a changed cell is in both). */
   onChanges: (add: Hex[], remove: string[]) => void;
   /** The grid level changed (zooming). */
@@ -65,175 +68,245 @@ export interface OccLayerOptions {
   /** Tiles being loaded (view, ring and look-ahead): done of total. */
   onProgress: (done: number, total: number) => void;
   /** Cells to leave out, e.g. ones whose exact count is known to be 0. */
-  isEmpty?: (h: Hex) => boolean;
+  isEmpty?: (hex: Hex) => boolean;
   /** GBIF could not be reached at all. */
   onFailed: () => void;
   /** Subscribe to filter changes; returns an unsubscribe. */
-  listenFilter: (fn: () => void) => () => void;
+  listenFilter: (onChange: () => void) => () => void;
 }
 
+/** Latitude in Mercator y (clamped short of the poles, where it diverges). */
 const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (Math.max(-85, Math.min(85, lat)) * Math.PI) / 360));
 
 /** Point in polygon, in Mercator (the map draws cell edges straight there). */
-function inside([x, y]: LngLat, ring: GeoJSON.Position[]): boolean {
-  const py = mercY(y);
+function inside([lng, lat]: LngLat, ring: GeoJSON.Position[]): boolean {
+  const py = mercY(lat);
   let hit = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i] as [number, number];
-    const [xj, yj] = ring[j] as [number, number];
-    const myi = mercY(yi);
-    const myj = mercY(yj);
-    if (myi > py !== myj > py && x < ((xj - xi) * (py - myi)) / (myj - myi) + xi) hit = !hit;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [currentLng, currentLat] = ring[index] as [number, number];
+    const [previousLng, previousLat] = ring[previous] as [number, number];
+    const currentMercY = mercY(currentLat);
+    const previousMercY = mercY(previousLat);
+    if (
+      currentMercY > py !== previousMercY > py &&
+      lng < ((previousLng - currentLng) * (py - currentMercY)) / (previousMercY - currentMercY) + currentLng
+    )
+      hit = !hit;
   }
   return hit;
 }
 
-function toLngLat(c: LngLatLike): LngLat {
-  if (Array.isArray(c)) return [c[0], c[1]];
-  return 'lng' in c ? [c.lng, c.lat] : [c.lon, c.lat];
+/** Normalises MapLibre's accepted coordinate shapes to [lng, lat]. */
+function toLngLat(coord: LngLatLike): LngLat {
+  if (Array.isArray(coord)) return [coord[0], coord[1]];
+  return 'lng' in coord ? [coord.lng, coord.lat] : [coord.lon, coord.lat];
 }
 
+/** One tile to fetch: which filter and grid level it belongs to, and its cache key. */
 interface Job {
   key: string;
-  t: TileId;
+  tile: TileId;
   level: number;
 }
 
-export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
-  const size = () => [map.getCanvas().clientWidth, map.getCanvas().clientHeight] as const;
-  const levelAt = (zoom: number, lat: number) => {
-    const l = gridLevel(zoom, lat, ...size());
-    return needsAdhoc(o.filter()) ? adhocLevel(l) : l;
-  };
-  let level = levelAt(map.getZoom(), map.getCenter().lat);
-  o.onLevel(level);
+/** Cache key of a tile for a filter and grid level. */
+const tileKey = (filterId: string, level: number, tile: TileId) => `${filterId}|${level}|${tile.x}/${tile.y}`;
 
-  /** Which hexes: the filters (the tile path and query, whichever host serves it). */
-  const filterKey = () => occurrenceTileTemplate(o.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt').split('/v2/map/')[1]!;
-  const tileKey = (f: string, l: number, t: TileId) => `${f}|${l}|${t.x}/${t.y}`;
+const jobFor = (filterId: string, level: number, tile: TileId): Job => ({
+  key: tileKey(filterId, level, tile),
+  tile,
+  level,
+});
 
-  const cache = new Map<string, Hex[]>();
-  const inflight = new Set<string>();
-  let abort = new AbortController();
-  let filterShown = '';
+/** The pixel offset of an easeTo/flyTo `offset` option, which MapLibre accepts as a point or a pair. */
+function offsetPixels(offset: PointLike): [number, number] {
+  return Array.isArray(offset) ? [offset[0], offset[1]] : [(offset as { x: number }).x, (offset as { y: number }).y];
+}
+
+/** Loads GBIF hex tiles for a map and keeps the drawn cells in step with the view; see the file comment. */
+class OccLayerController {
+  readonly #map: MlMap;
+  readonly #options: OccLayerOptions;
+  #level: number;
+  readonly #cache = new Map<string, Hex[]>();
+  readonly #inflight = new Set<string>();
+  #abort = new AbortController();
+  #filterShown = '';
   /** What the view wants: its tiles, the ring around them, at a filter and level. */
-  let want = { filter: '', level, view: [] as TileId[], ring: [] as TileId[] };
+  #want: { filter: string; level: number; view: TileId[]; ring: TileId[] };
   /** What is drawn: cells from tiles of this filter and level. */
-  let shown = { filter: '', level: -1 };
-  let cells = new Map<string, Hex>();
-  let high: Job[] = [];
-  let low: Job[] = [];
+  #shown = { filter: '', level: -1 };
+  #cells = new Map<string, Hex>();
+  #high: Job[] = [];
+  #low: Job[] = [];
   /** Tiles where the current glide or flight ends: loaded with the view (same level) or after it, until the move ends. */
-  let ahead: Job[] = [];
-  let later: Job[] = [];
-  let running = 0;
-  let progress = { done: 0, total: 0, keys: new Set<string>() };
+  #ahead: Job[] = [];
+  #later: Job[] = [];
+  #running = 0;
+  #progress = { done: 0, total: 0, keys: new Set<string>() };
+  #isDrawQueued = false;
+  #lastMoveAt = 0;
+  readonly #easeTo: MlMap['easeTo'];
+  readonly #flyTo: MlMap['flyTo'];
+  readonly #stopListeningToFilter: () => void;
 
-  /** Points across the view, centre first, skipping any off the globe. */
-  function viewPoints(): LngLat[] {
-    const [w, h] = size();
-    const pts: LngLat[] = [[map.getCenter().lng, map.getCenter().lat]];
-    for (let i = 0; i < SAMPLES; i++) {
-      for (let j = 0; j < SAMPLES; j++) {
-        const x = (w * i) / (SAMPLES - 1);
-        const y = (h * j) / (SAMPLES - 1);
-        const ll = map.unproject([x, y]);
-        // Off the globe, unproject snaps to the horizon, so the point does not round-trip.
-        const back = map.project(ll);
-        if (Math.hypot(back.x - x, back.y - y) <= 1) pts.push([ll.lng, ll.lat]);
-      }
-    }
-    return pts;
+  constructor(map: MlMap, options: OccLayerOptions) {
+    this.#map = map;
+    this.#options = options;
+    this.#level = this.#levelAt(map.getZoom(), map.getCenter().lat);
+    this.#want = { filter: '', level: this.#level, view: [], ring: [] };
+    options.onLevel(this.#level);
+
+    this.#easeTo = map.easeTo.bind(map);
+    this.#flyTo = map.flyTo.bind(map);
+    map.easeTo = ((easeOptions: EaseToOptions & { offset?: PointLike }, data?: unknown) => {
+      this.#lookAhead(easeOptions);
+      return this.#easeTo(easeOptions, data);
+    }) as MlMap['easeTo'];
+    map.flyTo = ((flyOptions: FlyToOptions, data?: unknown) => {
+      this.#lookAhead(flyOptions);
+      return this.#flyTo(flyOptions, data);
+    }) as MlMap['flyTo'];
+
+    map.on('move', this.#onMove);
+    map.on('moveend', this.#onMoveEnd);
+    // A filter can switch between density and adhoc tiles, which can change the level.
+    this.#stopListeningToFilter = options.listenFilter(this.#onMoveEnd);
+    if (map.loaded()) this.#planView();
+    else map.once('load', () => this.#planView());
   }
 
-  async function fetchTile(t: TileId, l: number, signal: AbortSignal): Promise<Hex[] | undefined> {
-    const url = occurrenceTileTemplate(o.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt')
-      .replace('{z}', String(l))
-      .replace('{x}', String(t.x))
-      .replace('{y}', String(t.y));
+  #size() {
+    const canvas = this.#map.getCanvas();
+    return [canvas.clientWidth, canvas.clientHeight] as const;
+  }
+
+  #levelAt(zoom: number, lat: number) {
+    const hexLevel = gridLevel(zoom, lat, ...this.#size());
+    return needsAdhoc(this.#options.filter()) ? adhocLevel(hexLevel) : hexLevel;
+  }
+
+  /** Which hexes: the filters (the tile path and query, whichever host serves it). */
+  #filterKey() {
+    return occurrenceTileTemplate(this.#options.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt').split('/v2/map/')[1]!;
+  }
+
+  /** Points across the view, centre first, skipping any off the globe. */
+  #viewPoints(): LngLat[] {
+    const map = this.#map;
+    const [width, height] = this.#size();
+    const points: LngLat[] = [[map.getCenter().lng, map.getCenter().lat]];
+    for (let column = 0; column < SAMPLES; column++) {
+      for (let row = 0; row < SAMPLES; row++) {
+        const pixelX = (width * column) / (SAMPLES - 1);
+        const pixelY = (height * row) / (SAMPLES - 1);
+        const position = map.unproject([pixelX, pixelY]);
+        // Off the globe, unproject snaps to the horizon, so the point does not round-trip.
+        const back = map.project(position);
+        if (Math.hypot(back.x - pixelX, back.y - pixelY) <= 1) points.push([position.lng, position.lat]);
+      }
+    }
+    return points;
+  }
+
+  async #fetchTile(tile: TileId, level: number, signal: AbortSignal): Promise<Hex[] | undefined> {
+    const url = occurrenceTileTemplate(this.#options.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt')
+      .replace('{z}', String(level))
+      .replace('{x}', String(tile.x))
+      .replace('{y}', String(tile.y));
     countRequest('tile');
-    let res: Response;
+    let response: Response;
     try {
-      res = await fetch(url, { signal });
+      response = await fetch(url, { signal });
     } catch {
       if (signal.aborted) return undefined;
-      o.onFailed();
+      this.#options.onFailed();
       return undefined;
     }
-    if (res.status === 404) return [];
-    if (!res.ok) {
-      if (res.status === 429 || res.status >= 500) $gbifStale.set(true);
+    if (response.status === 404) return [];
+    if (!response.ok) {
+      if (response.status === 429 || response.status >= 500) $gbifStale.set(true);
       return undefined;
     }
-    return decodeHexes(await res.arrayBuffer(), t, l);
+    return decodeHexes(await response.arrayBuffer(), tile, level);
   }
 
   /** The cells of the wanted tiles that are loaded. */
-  function wantedCells(): Map<string, Hex> {
-    const tiles = [...want.view, ...want.ring];
-    const merged = mergeHexes(tiles.map((t) => cache.get(tileKey(want.filter, want.level, t)) ?? []));
-    if (o.isEmpty) for (const [id, h] of merged) if (o.isEmpty(h)) merged.delete(id);
+  #wantedCells(): Map<string, Hex> {
+    const { filter, level, view, ring } = this.#want;
+    const tiles = [...view, ...ring];
+    const merged = mergeHexes(tiles.map((tile) => this.#cache.get(tileKey(filter, level, tile)) ?? []));
+    const { isEmpty } = this.#options;
+    if (isEmpty) for (const [id, hex] of merged) if (isEmpty(hex)) merged.delete(id);
     return merged;
   }
 
   /** Draw what is loaded for the view: a whole new set, or the changes since last time. */
-  function draw() {
-    const next = wantedCells();
-    if (shown.filter !== want.filter || shown.level !== want.level) {
+  #draw() {
+    const next = this.#wantedCells();
+    const { filter, level, view } = this.#want;
+    if (this.#shown.filter !== filter || this.#shown.level !== level) {
       // A new set waits until its view is whole, so the old hexes stay up until then.
-      if (!want.view.every((t) => cache.has(tileKey(want.filter, want.level, t)))) return;
-      shown = { filter: want.filter, level: want.level };
-      cells = next;
-      o.onCells(collection());
+      if (!view.every((tile) => this.#cache.has(tileKey(filter, level, tile)))) return;
+      this.#shown = { filter, level };
+      this.#cells = next;
+      this.#options.onCells(this.collection());
       return;
     }
     const add: Hex[] = [];
     const remove: string[] = [];
-    for (const [id, h] of next) {
-      const had = cells.get(id);
-      if (had?.properties.total === h.properties.total) continue;
+    for (const [id, hex] of next) {
+      const had = this.#cells.get(id);
+      if (had?.properties.total === hex.properties.total) continue;
       if (had) remove.push(id);
-      add.push(h);
+      add.push(hex);
     }
-    for (const id of cells.keys()) if (!next.has(id)) remove.push(id);
-    cells = next;
-    if (add.length || remove.length) o.onChanges(add, remove);
+    for (const id of this.#cells.keys()) if (!next.has(id)) remove.push(id);
+    this.#cells = next;
+    if (add.length || remove.length) this.#options.onChanges(add, remove);
   }
 
-  // Arrivals are drawn once a frame, so a burst becomes one change.
-  let drawQueued = false;
-  function drawSoon() {
-    if (drawQueued) return;
-    drawQueued = true;
+  /** Arrivals are drawn once a frame, so a burst becomes one change. */
+  #drawSoon() {
+    if (this.#isDrawQueued) return;
+    this.#isDrawQueued = true;
     requestAnimationFrame(() => {
-      drawQueued = false;
-      draw();
+      this.#isDrawQueued = false;
+      this.#draw();
     });
   }
 
-  function pump() {
-    while (running < CONCURRENCY) {
-      const job = high.shift() ?? low.shift();
+  /** Starts queued fetches, view tiles first, up to the concurrency limit. */
+  #pump() {
+    while (this.#running < CONCURRENCY) {
+      const job = this.#high.shift() ?? this.#low.shift();
       if (!job) return;
-      if (cache.has(job.key) || inflight.has(job.key)) continue;
-      running++;
-      inflight.add(job.key);
-      const signal = abort.signal;
-      void fetchTile(job.t, job.level, signal).then((hexes) => {
-        running--;
-        inflight.delete(job.key);
-        if (hexes && !signal.aborted) {
-          cache.set(job.key, hexes);
-          if (cache.size > CACHE_TILES) cache.delete(cache.keys().next().value!);
-        }
-        if (progress.keys.has(job.key)) {
-          progress.done++;
-          o.onProgress(progress.done, progress.total);
-        }
-        drawSoon();
-        pump();
-      });
+      if (this.#cache.has(job.key) || this.#inflight.has(job.key)) continue;
+      this.#startJob(job);
     }
+  }
+
+  #startJob(job: Job) {
+    this.#running++;
+    this.#inflight.add(job.key);
+    const signal = this.#abort.signal;
+    void this.#fetchTile(job.tile, job.level, signal).then((hexes) => {
+      this.#running--;
+      this.#inflight.delete(job.key);
+      if (hexes && !signal.aborted) this.#remember(job.key, hexes);
+      if (this.#progress.keys.has(job.key)) {
+        this.#progress.done++;
+        this.#options.onProgress(this.#progress.done, this.#progress.total);
+      }
+      this.#drawSoon();
+      this.#pump();
+    });
+  }
+
+  /** Keeps a decoded tile, dropping the oldest beyond the cache size. */
+  #remember(key: string, hexes: Hex[]) {
+    this.#cache.set(key, hexes);
+    if (this.#cache.size > CACHE_TILES) this.#cache.delete(this.#cache.keys().next().value!);
   }
 
   /**
@@ -241,120 +314,129 @@ export function createOccLayer(map: MlMap, o: OccLayerOptions): OccLayer {
    * they go first, then the ring around the view. Queued jobs not started yet
    * are replaced, so a fast drag does not wait behind tiles it has left.
    */
-  function plan(view: TileId[]) {
-    const f = filterKey();
-    if (f !== filterShown) {
+  #plan(view: TileId[]) {
+    const filterId = this.#filterKey();
+    if (filterId !== this.#filterShown) {
       // New filters: nothing in flight is wanted any more.
-      abort.abort();
-      abort = new AbortController();
-      filterShown = f;
+      this.#abort.abort();
+      this.#abort = new AbortController();
+      this.#filterShown = filterId;
     }
+    const level = this.#level;
     const ring = ringAround(view, level);
-    want = { filter: f, level, view, ring };
-    const jobs = (tiles: TileId[]) => tiles.map((t) => ({ key: tileKey(f, level, t), t, level }));
-    const missing = (js: Job[]) => js.filter((j) => !cache.has(j.key) && !inflight.has(j.key));
-    const first = [...jobs(view), ...ahead];
-    const second = [...jobs(ring), ...later];
-    high = missing(first);
-    low = missing(second);
+    this.#want = { filter: filterId, level, view, ring };
+    const jobs = (tiles: TileId[]) => tiles.map((tile) => jobFor(filterId, level, tile));
+    const missing = (queue: Job[]) => queue.filter((job) => !this.#cache.has(job.key) && !this.#inflight.has(job.key));
+    const first = [...jobs(view), ...this.#ahead];
+    const second = [...jobs(ring), ...this.#later];
+    this.#high = missing(first);
+    this.#low = missing(second);
     // Every tile this plan fetches (or is still fetching), so the count matches what is loading.
-    const keys = new Set([...first, ...second].filter((j) => !cache.has(j.key)).map((j) => j.key));
-    progress = { done: 0, total: keys.size, keys };
-    o.onProgress(0, progress.total);
-    drawSoon();
-    pump();
+    const keys = new Set([...first, ...second].filter((job) => !this.#cache.has(job.key)).map((job) => job.key));
+    this.#progress = { done: 0, total: keys.size, keys };
+    this.#options.onProgress(0, this.#progress.total);
+    this.#drawSoon();
+    this.#pump();
   }
 
-  const planView = () => plan(tilesFor(viewPoints(), level));
+  #planView() {
+    this.#plan(tilesFor(this.#viewPoints(), this.#level));
+  }
 
-  // While dragging: re-plan now and then, at the level shown (zooming changes it at moveend).
-  let lastMove = 0;
-  const onMove = () => {
+  /** While dragging: re-plan now and then, at the level shown (zooming changes it at moveend). */
+  readonly #onMove = () => {
     const now = performance.now();
-    if (now - lastMove < MOVE_EVERY_MS) return;
-    lastMove = now;
-    if (levelAt(map.getZoom(), map.getCenter().lat) === level) planView();
+    if (now - this.#lastMoveAt < MOVE_EVERY_MS) return;
+    this.#lastMoveAt = now;
+    const map = this.#map;
+    if (this.#levelAt(map.getZoom(), map.getCenter().lat) === this.#level) this.#planView();
   };
-  const onMoveEnd = () => {
-    ahead = [];
-    later = [];
-    const next = levelAt(map.getZoom(), map.getCenter().lat);
-    if (next !== level) {
-      level = next;
-      o.onLevel(level);
+
+  readonly #onMoveEnd = () => {
+    this.#ahead = [];
+    this.#later = [];
+    const map = this.#map;
+    const next = this.#levelAt(map.getZoom(), map.getCenter().lat);
+    if (next !== this.#level) {
+      this.#level = next;
+      this.#options.onLevel(next);
     }
-    planView();
+    this.#planView();
   };
+
+  /** Where an easeTo/flyTo ends up, as [lng, lat]. */
+  #destinationOf(moveOptions: EaseToOptions | FlyToOptions): LngLat {
+    const map = this.#map;
+    const centre = toLngLat(moveOptions.center ?? map.getCenter());
+    if (!moveOptions.offset) return centre;
+    // Offset: the target centre ends up that far from the middle of the view.
+    const [offsetX, offsetY] = offsetPixels(moveOptions.offset);
+    const point = map.project(centre);
+    const position = map.unproject([point.x - offsetX, point.y - offsetY]);
+    return [position.lng, position.lat];
+  }
 
   /**
    * An inertia glide or flight is starting: load where it will end. At the
    * same level that is the view's tiles moved by the pan; at another level,
    * the tiles around the destination.
    */
-  function lookAhead(opts: EaseToOptions | FlyToOptions) {
-    let target = toLngLat(opts.center ?? map.getCenter());
-    if (opts.offset) {
-      // Offset: the target centre ends up that far from the middle of the view.
-      const [ox, oy] = Array.isArray(opts.offset)
-        ? opts.offset
-        : [(opts.offset as { x: number }).x, (opts.offset as { y: number }).y];
-      const p = map.project(target);
-      const ll = map.unproject([p.x - ox, p.y - oy]);
-      target = [ll.lng, ll.lat];
-    }
-    const l = levelAt(opts.zoom ?? map.getZoom(), target[1]);
-    const f = filterKey();
-    if (l === level) {
-      const from = tileAt([map.getCenter().lng, map.getCenter().lat], l);
-      const to = tileAt(target, l);
-      const moved = shiftTiles(want.view, to.x - from.x, to.y - from.y, l);
-      ahead = moved.map((t) => ({ key: tileKey(f, l, t), t, level: l }));
+  #lookAhead(moveOptions: EaseToOptions | FlyToOptions) {
+    const map = this.#map;
+    const target = this.#destinationOf(moveOptions);
+    const level = this.#levelAt(moveOptions.zoom ?? map.getZoom(), target[1]);
+    const filterId = this.#filterKey();
+    if (level === this.#level) {
+      const from = tileAt([map.getCenter().lng, map.getCenter().lat], level);
+      const to = tileAt(target, level);
+      const moved = shiftTiles(this.#want.view, to.x - from.x, to.y - from.y, level);
+      this.#ahead = moved.map((tile) => jobFor(filterId, level, tile));
     } else {
-      const around = [tileAt(target, l)];
-      later = [...around, ...ringAround(around, l)].map((t) => ({ key: tileKey(f, l, t), t, level: l }));
+      const around = [tileAt(target, level)];
+      this.#later = [...around, ...ringAround(around, level)].map((tile) => jobFor(filterId, level, tile));
     }
-    plan(want.view);
-  }
-  const easeTo = map.easeTo.bind(map);
-  const flyTo = map.flyTo.bind(map);
-  map.easeTo = ((opts: EaseToOptions & { offset?: PointLike }, data?: unknown) => {
-    lookAhead(opts);
-    return easeTo(opts, data);
-  }) as MlMap['easeTo'];
-  map.flyTo = ((opts: FlyToOptions, data?: unknown) => {
-    lookAhead(opts);
-    return flyTo(opts, data);
-  }) as MlMap['flyTo'];
-
-  map.on('move', onMove);
-  map.on('moveend', onMoveEnd);
-  // A filter can switch between density and adhoc tiles, which can change the level.
-  const offFilter = o.listenFilter(onMoveEnd);
-  if (map.loaded()) planView();
-  else map.once('load', planView);
-
-  function collection(): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
-    return { type: 'FeatureCollection', features: [...cells.values()] };
+    this.#plan(this.#want.view);
   }
 
+  collection(): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
+    return { type: 'FeatureCollection', features: [...this.#cells.values()] };
+  }
+
+  cellAt([lng, lat]: LngLat): Hex | undefined {
+    for (const cell of this.#cells.values()) {
+      const ring = cell.geometry.coordinates[0]!;
+      // Cells by the antimeridian keep their vertices unwrapped (past ±180).
+      if (inside([lng, lat], ring) || inside([lng + 360, lat], ring) || inside([lng - 360, lat], ring)) return cell;
+    }
+    return undefined;
+  }
+
+  redraw() {
+    this.#drawSoon();
+  }
+
+  destroy() {
+    this.#abort.abort();
+    this.#map.easeTo = this.#easeTo;
+    this.#map.flyTo = this.#flyTo;
+    this.#map.off('move', this.#onMove);
+    this.#map.off('moveend', this.#onMoveEnd);
+    this.#stopListeningToFilter();
+  }
+}
+
+/**
+ * Starts keeping the map's occurrence hexes loaded for its view.
+ * @param map The MapLibre map; its easeTo and flyTo are wrapped until `destroy()`.
+ * @param options Filter, callbacks for drawing and progress.
+ * @returns A handle for reading and redrawing the cells and for stopping.
+ */
+export function createOccLayer(map: MlMap, options: OccLayerOptions): OccLayer {
+  const layer = new OccLayerController(map, options);
   return {
-    collection,
-    cellAt([lng, lat]) {
-      for (const c of cells.values()) {
-        const ring = c.geometry.coordinates[0]!;
-        // Cells by the antimeridian keep their vertices unwrapped (past ±180).
-        if (inside([lng, lat], ring) || inside([lng + 360, lat], ring) || inside([lng - 360, lat], ring)) return c;
-      }
-      return undefined;
-    },
-    redraw: drawSoon,
-    destroy() {
-      abort.abort();
-      map.easeTo = easeTo;
-      map.flyTo = flyTo;
-      map.off('move', onMove);
-      map.off('moveend', onMoveEnd);
-      offFilter();
-    },
+    collection: () => layer.collection(),
+    cellAt: (point) => layer.cellAt(point),
+    redraw: () => layer.redraw(),
+    destroy: () => layer.destroy(),
   };
 }

@@ -16,15 +16,15 @@ const emit = defineEmits<{ close: []; open: []; dismiss: [] }>();
 const closeSheet = () => (props.dismissible ? emit('dismiss') : emit('close'));
 
 const desktop = ref(true);
-let mq: MediaQueryList | undefined;
-const update = () => (desktop.value = !!mq?.matches);
+let mediaQuery: MediaQueryList | undefined;
+const update = () => (desktop.value = !!mediaQuery?.matches);
 
 onMounted(() => {
-  mq = window.matchMedia('(min-width: 768px)');
+  mediaQuery = window.matchMedia('(min-width: 768px)');
   update();
-  mq.addEventListener('change', update);
+  mediaQuery.addEventListener('change', update);
 });
-onBeforeUnmount(() => mq?.removeEventListener('change', update));
+onBeforeUnmount(() => mediaQuery?.removeEventListener('change', update));
 </script>
 
 <template>

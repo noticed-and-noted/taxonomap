@@ -16,7 +16,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { searchPlaces, type Place } from '~/lib/geocode';
-import { mapCapabilities, type NameHit } from '~/lib/gbif';
+import { mapCapabilities, sortByRank, type NameHit } from '~/lib/gbif';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, MAX_TAXA, viewParam } from '~/stores/explorer';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
@@ -36,7 +36,7 @@ type Option =
   | { kind: 'place'; id: string; place: Place };
 
 /** Species and group results shown at once. */
-const MAX_RESULTS = 8;
+const MAX_RESULTS = 20;
 // The omnibox hydrates on idle, and hydrating v-model empties the input, so
 // read anything typed before then from the server-rendered box first.
 const query = ref(
@@ -77,11 +77,16 @@ const searching = computed(() =>
 const placeholderRows = computed(() => (searching.value === 'species' ? Math.max(0, 3 - taxa.value.length) : 0));
 
 const options = computed<Option[]>(() => {
-  if (places.value) return places.value.map((place, i) => ({ kind: 'place', id: `omni-place-${i}`, place }));
-  const opts: Option[] = taxa.value.map((hit) => ({ kind: 'taxon', id: `omni-taxon-${hit.key}`, hit }));
+  if (places.value) return places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }));
+  const suggestions: Option[] = sortByRank(taxa.value).map((hit) => ({
+    kind: 'taxon',
+    id: `omni-taxon-${hit.key}`,
+    hit,
+  }));
   // Not while results are loading: they would push it down as they arrive.
-  if (query.value.trim().length >= 2 && !searching.value) opts.push({ kind: 'place-search', id: 'omni-place-search' });
-  return opts;
+  if (query.value.trim().length >= 2 && !searching.value)
+    suggestions.push({ kind: 'place-search', id: 'omni-place-search' });
+  return suggestions;
 });
 
 const activeId = computed(() => options.value[active.value]?.id);
@@ -89,8 +94,8 @@ const activeId = computed(() => options.value[active.value]?.id);
 /** The result to preview: the highlighted species/group (the first, if the highlight's row has gone). */
 const previewHit = computed<NameHit | null>(() => {
   if (places.value) return null;
-  const o = options.value[active.value] ?? options.value[0];
-  return o?.kind === 'taxon' ? o.hit : null;
+  const option = options.value[active.value] ?? options.value[0];
+  return option?.kind === 'taxon' ? option.hit : null;
 });
 
 const manifest = useStore($speciesManifest);
@@ -104,9 +109,9 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 const modKey = isMac ? '⌘' : 'Ctrl';
 /** What Enter does right now, for the hint bar. */
 const enterLabel = computed(() => {
-  const o = options.value[active.value];
-  if (o?.kind === 'taxon') return selectLabel() ?? 'About';
-  if (o?.kind === 'place') return 'Go to place';
+  const option = options.value[active.value];
+  if (option?.kind === 'taxon') return selectLabel() ?? 'About';
+  if (option?.kind === 'place') return 'Go to place';
   return 'Search places';
 });
 
@@ -145,12 +150,12 @@ function close() {
 }
 
 async function runPlaceSearch() {
-  const q = query.value.trim();
-  if (!q) return;
+  const trimmed = query.value.trim();
+  if (!trimmed) return;
   placeLoading.value = true;
   placeFailed.value = false;
   try {
-    places.value = await searchPlaces(q);
+    places.value = await searchPlaces(trimmed);
     open.value = true;
     active.value = 0;
   } catch {
@@ -185,58 +190,64 @@ async function pickTaxon(hit: NameHit) {
     return;
   }
   try {
-    const cap = await mapCapabilities({ taxonKey: hit.key });
-    if (cap.total > 0) {
-      $flyTo.set({ kind: 'bounds', bbox: [cap.minLng, cap.minLat, cap.maxLng, cap.maxLat], maxZoom: 6 });
+    const capabilities = await mapCapabilities({ taxonKey: hit.key });
+    if (capabilities.total > 0) {
+      $flyTo.set({
+        kind: 'bounds',
+        bbox: [capabilities.minLng, capabilities.minLat, capabilities.maxLng, capabilities.maxLat],
+        maxZoom: 6,
+      });
     }
   } catch {
     /* stay where we are */
   }
 }
 
-function pickPlace(p: Place) {
+function pickPlace(place: Place) {
   finishPick();
   if (props.mode !== 'map') {
-    void navigate(hrefWith('/', { view: viewParam({ lng: p.lng, lat: p.lat, zoom: p.bbox ? 8 : 10 }) }));
+    void navigate(hrefWith('/', { view: viewParam({ lng: place.lng, lat: place.lat, zoom: place.bbox ? 8 : 10 }) }));
     return;
   }
   $flyTo.set(
-    p.bbox ? { kind: 'bounds', bbox: p.bbox, maxZoom: 12 } : { kind: 'point', lng: p.lng, lat: p.lat, zoom: 10 },
+    place.bbox
+      ? { kind: 'bounds', bbox: place.bbox, maxZoom: 12 }
+      : { kind: 'point', lng: place.lng, lat: place.lat, zoom: 10 },
   );
 }
 
-function choose(o: Option | undefined) {
-  if (!o) return;
-  if (o.kind === 'taxon') void pickTaxon(o.hit);
-  else if (o.kind === 'place') pickPlace(o.place);
+function choose(option: Option | undefined) {
+  if (!option) return;
+  if (option.kind === 'taxon') void pickTaxon(option.hit);
+  else if (option.kind === 'place') pickPlace(option.place);
   else void runPlaceSearch();
 }
 
-function onKeydown(e: KeyboardEvent) {
-  const n = options.value.length;
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
+function onKeydown(event: KeyboardEvent) {
+  const count = options.value.length;
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
     open.value = true;
-    active.value = n ? (active.value + 1) % n : 0;
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    active.value = n ? (active.value - 1 + n) % n : 0;
-  } else if (e.key === 'Enter') {
-    e.preventDefault();
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey) void runPlaceSearch();
-    else if ((e.metaKey || e.ctrlKey) && previewHit.value) openAbout(previewHit.value);
+    active.value = count ? (active.value + 1) % count : 0;
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    active.value = count ? (active.value - 1 + count) % count : 0;
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey) void runPlaceSearch();
+    else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
     else if (options.value[active.value]) choose(options.value[active.value]);
     // Nothing to pick yet (still loading, or no matches): look for a place.
     else void runPlaceSearch();
-  } else if (e.key === 'Escape') {
+  } else if (event.key === 'Escape') {
     if (open.value) close();
     else query.value = '';
   }
 }
 
-function onBlur(e: FocusEvent) {
-  const next = e.relatedTarget as Node | null;
-  if (!next || !(e.currentTarget as HTMLElement).parentElement?.contains(next)) close();
+function onBlur(event: FocusEvent) {
+  const next = event.relatedTarget as Node | null;
+  if (!next || !(event.currentTarget as HTMLElement).parentElement?.contains(next)) close();
 }
 
 /* Keep the dropdown inside the visible area: on-screen keyboards shrink the
@@ -245,11 +256,11 @@ const dropdown = ref<HTMLDivElement>();
 const fitHeight = ref<number | null>(null);
 function fit() {
   if (!open.value || !dropdown.value) return;
-  const vv = window.visualViewport;
-  const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const viewport = window.visualViewport;
+  const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
   fitHeight.value = Math.max(160, Math.floor(bottom - dropdown.value.getBoundingClientRect().top - 8));
 }
-watch(open, (o) => (o ? void nextTick(fit) : undefined));
+watch(open, (isOpen) => (isOpen ? void nextTick(fit) : undefined));
 
 // Search for anything typed before hydration (see query).
 onMounted(() => {
@@ -323,30 +334,34 @@ onBeforeUnmount(() => {
           class="max-h-[60vh] min-h-0 min-w-0 overflow-auto overscroll-contain py-1"
         >
           <li
-            v-for="(o, i) in options"
-            :id="o.id"
-            :key="o.id"
+            v-for="(option, index) in options"
+            :id="option.id"
+            :key="option.id"
             role="option"
-            :aria-selected="i === active"
-            :class="{ 'place-row': o.kind === 'place-search' }"
+            :aria-selected="index === active"
+            :class="{ 'place-row': option.kind === 'place-search' }"
             class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
             @mousedown.prevent
-            @click="choose(o)"
-            @mousemove="active = i"
+            @click="choose(option)"
+            @mousemove="active = index"
           >
-            <template v-if="o.kind === 'taxon'">
+            <template v-if="option.kind === 'taxon'">
               <span class="min-w-0 flex-1">
-                <span v-if="o.hit.commonName" class="block truncate font-medium text-text">{{ o.hit.commonName }}</span>
-                <span class="sci-name block truncate" :class="o.hit.commonName ? 'text-xs text-muted' : 'text-text'">{{
-                  o.hit.scientificName
+                <span v-if="option.hit.commonName" class="block truncate font-medium text-text">{{
+                  option.hit.commonName
                 }}</span>
+                <span
+                  class="sci-name block truncate"
+                  :class="option.hit.commonName ? 'text-xs text-muted' : 'text-text'"
+                  >{{ option.hit.scientificName }}</span
+                >
               </span>
               <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
-                <span class="block">{{ RANK_LABELS[o.hit.rank] ?? o.hit.rank }}</span>
-                <span v-if="o.hit.count" class="block">{{ compact(o.hit.count) }}</span>
+                <span class="block">{{ RANK_LABELS[option.hit.rank] ?? option.hit.rank }}</span>
+                <span v-if="option.hit.count" class="block">{{ compact(option.hit.count) }}</span>
               </span>
             </template>
-            <template v-else-if="o.kind === 'place-search'">
+            <template v-else-if="option.kind === 'place-search'">
               <svg
                 viewBox="0 0 24 24"
                 class="size-4 text-subtle"
@@ -362,23 +377,25 @@ onBeforeUnmount(() => {
             </template>
             <template v-else>
               <span class="min-w-0 flex-1">
-                <span class="block truncate text-text">{{ o.place.name }}</span>
-                <span v-if="o.place.detail" class="block truncate text-xs text-muted">{{ o.place.detail }}</span>
+                <span class="block truncate text-text">{{ option.place.name }}</span>
+                <span v-if="option.place.detail" class="block truncate text-xs text-muted">{{
+                  option.place.detail
+                }}</span>
               </span>
             </template>
           </li>
           <!-- Placeholder rows where results will land, so nothing jumps when they arrive. -->
           <template v-if="searching">
             <li
-              v-for="n in placeholderRows"
-              :key="`skel-${n}`"
+              v-for="row in placeholderRows"
+              :key="`skel-${row}`"
               role="none"
               class="flex items-center gap-3 px-3 py-2"
               aria-hidden="true"
             >
               <span class="min-w-0 flex-1 space-y-1.5">
-                <SkeletonBlock :width="`${[55, 70, 45][n % 3]}%`" height="0.8rem" />
-                <SkeletonBlock :width="`${[32, 40, 36][n % 3]}%`" height="0.6rem" />
+                <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
+                <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
               </span>
               <SkeletonBlock width="2.25rem" height="0.7rem" />
             </li>

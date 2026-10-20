@@ -72,8 +72,8 @@ describe('searchPlaces', () => {
 
   it('passes a signal to either provider, and falls back to the query for a nameless hit', async () => {
     const seen: (AbortSignal | undefined)[] = [];
-    stubNetwork((url, init) => {
-      seen.push(init?.signal ?? undefined);
+    stubNetwork((url, requestInit) => {
+      seen.push(requestInit?.signal ?? undefined);
       return url.host === 'photon.komoot.io' ? { features: [] } : [{ display_name: '', lat: '1', lon: '2' }];
     });
     const { signal } = new AbortController();

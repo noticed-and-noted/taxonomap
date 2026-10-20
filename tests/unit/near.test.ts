@@ -24,7 +24,7 @@ describe('near me', () => {
   it('builds a closed circle ring around the rounded centre', () => {
     const ring = circleRing(51.5073509, -0.1277583, 2);
     expect(ring[0]).toEqual(ring[ring.length - 1]);
-    const lats = ring.map((p) => p[1]);
+    const lats = ring.map((point) => point[1]);
     expect(Math.max(...lats) - 51.507).toBeCloseTo(2 / 110.574, 3);
   });
 });

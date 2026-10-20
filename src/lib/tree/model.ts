@@ -8,6 +8,7 @@ import { loadSnapshot } from '~/lib/data/load';
 import { nameIndexWithin } from '~/lib/data/name-index';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import type { TreeRank, TreeNodeRow } from '~/lib/data/types';
+import { capitalise } from '~/lib/format';
 import { getChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField } from '~/lib/gbif';
 
 export interface TreeNode {
@@ -47,8 +48,30 @@ const FACET_FOR: Record<TreeRank, FacetField> = {
   S: 'speciesKey',
 };
 
-export function isExpandable(n: TreeNode): boolean {
-  return !!NEXT_RANK[n.rank];
+/** Whether the node's rank has children below it. */
+export function isExpandable(node: TreeNode): boolean {
+  return !!NEXT_RANK[node.rank];
+}
+
+/** A tree node for a baked row, not yet linked to its parent. */
+function nodeFromRow(row: TreeNodeRow): TreeNode {
+  return {
+    key: row.k,
+    name: row.n,
+    ...(row.c && { common: row.c }),
+    rank: row.r,
+    records: row.o,
+    species: row.s,
+    // Orders are the deepest baked level: their children load on demand.
+    loaded: row.r !== 'O',
+    kingdom: '',
+  };
+}
+
+/** Propagates a kingdom's name down its subtree, for colouring. */
+function assignKingdom(node: TreeNode, kingdom: string) {
+  node.kingdom = kingdom;
+  node.children?.forEach((child) => assignKingdom(child, kingdom));
 }
 
 /** Build the hierarchy from baked rows. */
@@ -63,58 +86,42 @@ export function buildTree(rows: readonly TreeNodeRow[]): TreeNode {
     children: [],
     kingdom: '',
   };
-  const byKey = new Map<number, TreeNode>();
-  for (const r of rows) {
-    byKey.set(r.k, {
-      key: r.k,
-      name: r.n,
-      ...(r.c && { common: r.c }),
-      rank: r.r,
-      records: r.o,
-      species: r.s,
-      // Orders are the deepest baked level: their children load on demand.
-      loaded: r.r !== 'O',
-      kingdom: '',
-    });
-  }
-  for (const r of rows) {
-    const node = byKey.get(r.k) as TreeNode;
+  const byKey = new Map(rows.map((row) => [row.k, nodeFromRow(row)]));
+  for (const row of rows) {
+    const node = byKey.get(row.k) as TreeNode;
     // Only kingdoms hang off the root; unplaced taxa without a parent are skipped.
-    const parent = r.p !== undefined ? byKey.get(r.p) : r.r === 'K' ? root : undefined;
+    const parent = row.p !== undefined ? byKey.get(row.p) : row.r === 'K' ? root : undefined;
     if (!parent) continue;
     node.parent = parent;
     (parent.children ??= []).push(node);
   }
-  const assignKingdom = (n: TreeNode, k: string) => {
-    n.kingdom = k;
-    n.children?.forEach((c) => assignKingdom(c, k));
-  };
-  root.children?.forEach((k) => assignKingdom(k, k.name));
+  root.children?.forEach((kingdomNode) => assignKingdom(kingdomNode, kingdomNode.name));
   root.records = sum(root.children!, 'records');
   root.species = sum(root.children!, 'species');
   sortChildren(root);
   return root;
 }
 
-function sum(nodes: TreeNode[], f: 'records' | 'species'): number {
-  return nodes.reduce((s, n) => s + n[f], 0);
+function sum(nodes: TreeNode[], metric: 'records' | 'species'): number {
+  return nodes.reduce((total, node) => total + node[metric], 0);
 }
 
-function sortChildren(n: TreeNode) {
-  n.children?.sort((a, b) => b.records - a.records);
-  n.children?.forEach(sortChildren);
+function sortChildren(node: TreeNode) {
+  node.children?.sort((left, right) => right.records - left.records);
+  node.children?.forEach(sortChildren);
 }
 
+/** The tree built from the baked snapshot; null if the snapshot cannot be loaded. */
 export async function loadBakedTree(): Promise<TreeNode | null> {
-  const snap = await loadSnapshot('tree');
-  return snap ? buildTree(snap.nodes) : null;
+  const snapshot = await loadSnapshot('tree');
+  return snapshot ? buildTree(snapshot.nodes) : null;
 }
 
 /** Fetch and attach the children of `node` (optionally scoped to a WKT area). */
 export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortSignal): Promise<TreeNode[]> {
   const childRank = NEXT_RANK[node.rank];
   if (!childRank || node.rank === 'ROOT') return node.children ?? [];
-  const [kids, occ, species, idx] = await Promise.all([
+  const [childUsages, occ, species, nameIndex] = await Promise.all([
     getChildren(node.key, { limit: 1000 }, signal),
     occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [FACET_FOR[childRank]], {
       facetLimit: 5000,
@@ -123,46 +130,48 @@ export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortS
     childRank === 'S' ? Promise.resolve(null) : speciesCountsUnder(node.key, 5000, signal),
     nameIndexWithin(800),
   ]);
-  const records = new Map((occ.facets[FACET_FOR[childRank]] ?? []).map((c) => [Number(c.name), c.count]));
+  const records = new Map((occ.facets[FACET_FOR[childRank]] ?? []).map((facet) => [Number(facet.name), facet.count]));
   const children: TreeNode[] = [];
-  for (const k of kids.results) {
-    if (CODE_BY_RANK[k.rank] !== childRank) continue;
-    if (k.taxonomicStatus && k.taxonomicStatus !== 'ACCEPTED') continue;
-    const r = records.get(k.key) ?? 0;
-    const s = childRank === 'S' ? 1 : (species?.get(k.key) ?? 0);
-    if (r === 0 && s === 0) continue;
-    const raw = idx?.get(k.key)?.commonName ?? k.vernacularName;
-    const common = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : undefined;
+  for (const child of childUsages.results) {
+    if (CODE_BY_RANK[child.rank] !== childRank) continue;
+    if (child.taxonomicStatus && child.taxonomicStatus !== 'ACCEPTED') continue;
+    const recordCount = records.get(child.key) ?? 0;
+    const speciesCount = childRank === 'S' ? 1 : (species?.get(child.key) ?? 0);
+    if (recordCount === 0 && speciesCount === 0) continue;
+    const raw = nameIndex?.get(child.key)?.commonName ?? child.vernacularName;
+    const common = raw ? capitalise(raw) : undefined;
     children.push({
-      key: k.key,
-      name: k.canonicalName ?? k.scientificName,
+      key: child.key,
+      name: child.canonicalName ?? child.scientificName,
       ...(common && { common }),
       rank: childRank,
-      records: r,
-      species: s,
+      records: recordCount,
+      species: speciesCount,
       parent: node,
       loaded: childRank === 'S',
       kingdom: node.kingdom,
     });
   }
-  children.sort((a, b) => b.records - a.records || b.species - a.species);
+  children.sort((left, right) => right.records - left.records || right.species - left.species);
   node.children = children;
   node.loaded = true;
   return children;
 }
 
+/** The node with this key in the loaded subtree, if any. */
 export function findNode(root: TreeNode, key: number): TreeNode | undefined {
   if (root.key === key) return root;
-  for (const c of root.children ?? []) {
-    const hit = findNode(c, key);
+  for (const child of root.children ?? []) {
+    const hit = findNode(child, key);
     if (hit) return hit;
   }
   return undefined;
 }
 
+/** The nodes from the root down to `node`. */
 export function pathTo(node: TreeNode): TreeNode[] {
   const out: TreeNode[] = [];
-  for (let n: TreeNode | undefined = node; n; n = n.parent) out.unshift(n);
+  for (let cursor: TreeNode | undefined = node; cursor; cursor = cursor.parent) out.unshift(cursor);
   return out;
 }
 
@@ -175,15 +184,15 @@ export async function resolve(root: TreeNode, key: number, wkt?: string): Promis
   if (known) return known;
   const parents = await getParents(key);
   let current: TreeNode | undefined;
-  for (const p of [...parents.map((x) => x.key), key]) {
-    const next: TreeNode | undefined = findNode(current ?? root, p);
+  for (const ancestorKey of [...parents.map((ancestor) => ancestor.key), key]) {
+    const next: TreeNode | undefined = findNode(current ?? root, ancestorKey);
     if (next) {
       current = next;
       continue;
     }
     if (current && !current.loaded) {
       await loadChildren(current, wkt);
-      const loaded = current.children?.find((c) => c.key === p);
+      const loaded = current.children?.find((child) => child.key === ancestorKey);
       if (loaded) current = loaded;
     }
   }

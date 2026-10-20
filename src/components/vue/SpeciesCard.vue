@@ -32,7 +32,7 @@ const initials = computed(() =>
   (props.commonName ?? props.scientificName)
     .split(/\s+/)
     .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
+    .map((word) => word[0]?.toUpperCase())
     .join(''),
 );
 </script>

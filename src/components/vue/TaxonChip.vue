@@ -12,10 +12,10 @@ import { FILTER_GROUPS } from './filterGroups';
 const SHOWN = 3;
 const taxa = useStore($taxa);
 const pills = useStore($filterPills);
-const iconOf = (group: FilterGroupId) => FILTER_GROUPS.find((g) => g.id === group)?.icon;
+const iconOf = (group: FilterGroupId) => FILTER_GROUPS.find((filterGroup) => filterGroup.id === group)?.icon;
 const shown = computed(() => taxa.value.slice(0, SHOWN));
 const rest = computed(() => taxa.value.slice(SHOWN));
-const nameOf = (t: { commonName?: string; scientificName: string }) => t.commonName ?? t.scientificName;
+const nameOf = (taxon: { commonName?: string; scientificName: string }) => taxon.commonName ?? taxon.scientificName;
 </script>
 
 <template>
@@ -25,21 +25,28 @@ const nameOf = (t: { commonName?: string; scientificName: string }) => t.commonN
     role="group"
     aria-label="Active filters"
   >
-    <span v-for="t in shown" :key="t.key" class="chip max-w-[18rem]">
+    <span v-for="taxon in shown" :key="taxon.key" class="chip max-w-[18rem]">
       <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf('what')" /></svg>
       <span class="min-w-0 truncate">
-        <span v-if="t.commonName" class="font-medium">{{ t.commonName }}</span>
-        <span class="sci-name" :class="t.commonName ? 'ml-1 text-xs opacity-80' : ''">{{ t.scientificName }}</span>
+        <span v-if="taxon.commonName" class="font-medium">{{ taxon.commonName }}</span>
+        <span class="sci-name" :class="taxon.commonName ? 'ml-1 text-xs opacity-80' : ''">{{
+          taxon.scientificName
+        }}</span>
       </span>
-      <button type="button" class="chip-x" :aria-label="`Remove taxon filter ${nameOf(t)}`" @click="removeTaxon(t.key)">
+      <button
+        type="button"
+        class="chip-x"
+        :aria-label="`Remove taxon filter ${nameOf(taxon)}`"
+        @click="removeTaxon(taxon.key)"
+      >
         ×
       </button>
     </span>
     <span v-if="rest.length" class="chip more" :title="rest.map(nameOf).join(', ')">+{{ rest.length }} more</span>
-    <span v-for="p in pills" :key="p.id" class="chip max-w-[18rem]" :title="p.text">
-      <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf(p.group)" /></svg>
-      <span class="min-w-0 truncate">{{ p.text }}</span>
-      <button type="button" class="chip-x" :aria-label="`Remove filter ${p.text}`" @click="p.clear()">×</button>
+    <span v-for="pill in pills" :key="pill.id" class="chip max-w-[18rem]" :title="pill.text">
+      <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf(pill.group)" /></svg>
+      <span class="min-w-0 truncate">{{ pill.text }}</span>
+      <button type="button" class="chip-x" :aria-label="`Remove filter ${pill.text}`" @click="pill.clear()">×</button>
     </span>
   </span>
 </template>

@@ -15,7 +15,7 @@ describe('tree model', () => {
   const root = buildTree(rows);
 
   it('builds kingdoms under the root, sorted by records', () => {
-    expect(root.children?.map((c) => c.name)).toEqual(['Animalia', 'Plantae']);
+    expect(root.children?.map((child) => child.name)).toEqual(['Animalia', 'Plantae']);
     expect(root.records).toBe(150);
     expect(root.species).toBe(15);
   });
@@ -23,7 +23,7 @@ describe('tree model', () => {
   it('propagates the kingdom for colouring and links parents', () => {
     const order = findNode(root, 729)!;
     expect(order.kingdom).toBe('Animalia');
-    expect(pathTo(order).map((n) => n.name)).toEqual(['Life', 'Animalia', 'Chordata', 'Aves', 'Passeriformes']);
+    expect(pathTo(order).map((node) => node.name)).toEqual(['Life', 'Animalia', 'Chordata', 'Aves', 'Passeriformes']);
   });
 
   it('marks orders as lazily expandable', () => {
@@ -46,8 +46,8 @@ describe('tree lazy levels', () => {
 
   function gbif() {
     return stubNetwork((url) => {
-      const p = url.pathname;
-      if (p === '/v1/species/729/children')
+      const path = url.pathname;
+      if (path === '/v1/species/729/children')
         return {
           results: [
             kid(5264, 'Paridae'),
@@ -57,8 +57,8 @@ describe('tree lazy levels', () => {
             kid(3, 'Wrong rank', 'GENUS'),
           ],
         };
-      if (p === '/v1/species/9327/children') return { results: [kid(2490, 'Turdus', 'GENUS')] };
-      if (p === '/v1/species/search') {
+      if (path === '/v1/species/9327/children') return { results: [kid(2490, 'Turdus', 'GENUS')] };
+      if (path === '/v1/species/search') {
         const under = url.searchParams.get('highertaxonKey');
         return under === '729'
           ? facets(0, 'HIGHER_TAXON_KEY', [
@@ -67,7 +67,7 @@ describe('tree lazy levels', () => {
             ])
           : facets(0, 'HIGHER_TAXON_KEY', [[2490, 70]]);
       }
-      if (p === '/v1/occurrence/search') {
+      if (path === '/v1/occurrence/search') {
         const field = url.searchParams.get('facet');
         return field === 'familyKey'
           ? facets(0, 'FAMILY_KEY', [
@@ -76,7 +76,8 @@ describe('tree lazy levels', () => {
             ])
           : facets(0, 'GENUS_KEY', [[2490, 800]]);
       }
-      if (p === '/v1/species/2490/parents') return [{ key: 1 }, { key: 44 }, { key: 212 }, { key: 729 }, { key: 9327 }];
+      if (path === '/v1/species/2490/parents')
+        return [{ key: 1 }, { key: 44 }, { key: 212 }, { key: 729 }, { key: 9327 }];
       return snapshots({ names: [] })(url);
     });
   }
@@ -87,20 +88,20 @@ describe('tree lazy levels', () => {
     gbif();
     const tree = buildTree(rows);
     const order = findNode(tree, 729)!;
-    const kids = await loadChildren(order);
-    expect(kids.map((k) => [k.name, k.common, k.records, k.species, k.kingdom])).toEqual([
+    const loaded = await loadChildren(order);
+    expect(loaded.map((child) => [child.name, child.common, child.records, child.species, child.kingdom])).toEqual([
       ['Turdidae', 'Thrushes', 900, 180, 'Animalia'],
       ['Paridae', undefined, 500, 60, 'Animalia'],
     ]);
     expect(order.loaded).toBe(true);
-    expect(kids[0]?.parent).toBe(order);
+    expect(loaded[0]?.parent).toBe(order);
   });
 
   it('resolves a taxon below the baked levels by loading the levels between', async () => {
     gbif();
     const tree = buildTree(rows);
     const genus = await resolve(tree, 2490);
-    expect(genus && pathTo(genus).map((n) => n.name)).toEqual([
+    expect(genus && pathTo(genus).map((node) => node.name)).toEqual([
       'Life',
       'Animalia',
       'Chordata',
@@ -139,8 +140,8 @@ describe('tree lazy levels', () => {
       loaded: false,
       kingdom: 'Animalia',
     };
-    const kids = await model.loadChildren(genus, undefined, new AbortController().signal);
-    expect(kids.map((k) => [k.name, k.common, k.records, k.species, k.loaded])).toEqual([
+    const loaded = await model.loadChildren(genus, undefined, new AbortController().signal);
+    expect(loaded.map((child) => [child.name, child.common, child.records, child.species, child.loaded])).toEqual([
       ['Turdus merula L.', undefined, 0, 1, true],
       ['Turdus pilaris', 'Fieldfare', 0, 1, true],
       ['Turdus iliacus', undefined, 0, 1, true],
@@ -176,7 +177,7 @@ describe('baked tree', () => {
     stubNetwork(snapshots({ tree: rows }));
     vi.resetModules();
     const withTree = await import('~/lib/tree/model');
-    expect((await withTree.loadBakedTree())?.children?.map((c) => c.key)).toEqual([1, 6]);
+    expect((await withTree.loadBakedTree())?.children?.map((child) => child.key)).toEqual([1, 6]);
     stubNetwork(snapshots({}));
     vi.resetModules();
     const without = await import('~/lib/tree/model');

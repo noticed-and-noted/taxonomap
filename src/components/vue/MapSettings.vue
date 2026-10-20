@@ -46,24 +46,29 @@ onBeforeUnmount(() => resize?.disconnect());
       "
       @scroll.passive="update"
     >
-      <label v-for="r in RAMPS" :key="r.id" class="ramp-option">
+      <label v-for="ramp in RAMPS" :key="ramp.id" class="ramp-option">
         <input
           type="radio"
           :name="group"
           class="sr-only"
-          :aria-label="`${r.name}: ${r.note}`"
-          :value="r.id"
-          :checked="current === r.id"
-          @change="setRamp(r.id as RampId)"
+          :aria-label="`${ramp.name}: ${ramp.note}`"
+          :value="ramp.id"
+          :checked="current === ramp.id"
+          @change="setRamp(ramp.id as RampId)"
         />
         <span class="flex h-3 w-full overflow-hidden rounded-sm" aria-hidden="true">
-          <span v-for="c in r.colors.slice(1)" :key="c" class="flex-1" :style="{ background: c }"></span>
+          <span
+            v-for="colour in ramp.colors.slice(1)"
+            :key="colour"
+            class="flex-1"
+            :style="{ background: colour }"
+          ></span>
         </span>
         <span class="flex items-baseline justify-between gap-2">
-          <span class="text-sm text-text">{{ r.name }}</span>
-          <span v-if="current === r.id" class="text-xs text-accent">Selected</span>
+          <span class="text-sm text-text">{{ ramp.name }}</span>
+          <span v-if="current === ramp.id" class="text-xs text-accent">Selected</span>
         </span>
-        <span class="text-xs text-muted">{{ r.note }}</span>
+        <span class="text-xs text-muted">{{ ramp.note }}</span>
       </label>
     </div>
   </div>

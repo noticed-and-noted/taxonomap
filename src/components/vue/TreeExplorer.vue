@@ -44,7 +44,7 @@ const loadingKey = ref<number | null>(null);
 const error = ref<UiErrorKind | 'no-data' | null>(null);
 const photo = shallowRef<UsableImage | null>(null);
 const narrow = ref(false);
-let mq: MediaQueryList | undefined;
+let mediaQuery: MediaQueryList | undefined;
 
 const layout = computed(() =>
   layoutPref.value === 'auto' ? (narrow.value ? 'icicle' : 'sunburst') : layoutPref.value,
@@ -53,9 +53,9 @@ const crumbs = computed(() => (focus.value ? pathTo(focus.value) : []));
 const detail = computed(() => selected.value ?? focus.value);
 const children = computed(() => {
   void version.value;
-  return [...(focus.value?.children ?? [])].sort((a, b) => metricOf(b) - metricOf(a));
+  return [...(focus.value?.children ?? [])].sort((left, right) => metricOf(right) - metricOf(left));
 });
-const metricOf = (n: TreeNode) => (metric.value === 'records' ? n.records : n.species);
+const metricOf = (node: TreeNode) => (metric.value === 'records' ? node.records : node.species);
 
 async function build() {
   error.value = null;
@@ -71,31 +71,31 @@ async function build() {
 
 /** Bring the view in line with ?focus= (and ?taxon= on first load). */
 async function syncFocus() {
-  const r = root.value;
-  if (!r) return;
+  const rootNode = root.value;
+  if (!rootNode) return;
   const wanted = focusKey.value ?? (taxonKey.value && !focus.value ? taxonKey.value : null);
   if (wanted === null || wanted === ROOT_KEY) {
-    focus.value = r;
+    focus.value = rootNode;
     return;
   }
   loadingKey.value = wanted;
   try {
-    const node = await resolve(r, wanted);
+    const node = await resolve(rootNode, wanted);
     version.value++;
     if (!node) {
-      focus.value = r;
+      focus.value = rootNode;
       return;
     }
     if (isExpandable(node)) {
       if (!node.loaded) await loadChildren(node);
       version.value++;
-      focus.value = node.children?.length ? node : (node.parent ?? r);
+      focus.value = node.children?.length ? node : (node.parent ?? rootNode);
     } else {
-      focus.value = node.parent ?? r;
+      focus.value = node.parent ?? rootNode;
     }
     if (node.key === taxonKey.value || node.key === focusKey.value) selected.value = node;
-  } catch (e) {
-    error.value = classifyError(e);
+  } catch (failure) {
+    error.value = classifyError(failure);
   } finally {
     loadingKey.value = null;
   }
@@ -109,8 +109,8 @@ async function pick(node: TreeNode) {
     try {
       await loadChildren(node);
       version.value++;
-    } catch (e) {
-      error.value = classifyError(e);
+    } catch (failure) {
+      error.value = classifyError(failure);
       return;
     } finally {
       loadingKey.value = null;
@@ -123,10 +123,10 @@ async function pick(node: TreeNode) {
 }
 
 function up() {
-  const p = focus.value?.parent;
-  if (!p) return;
-  focus.value = p;
-  $treeFocus.set(p.key === ROOT_KEY ? null : p.key);
+  const parentNode = focus.value?.parent;
+  if (!parentNode) return;
+  focus.value = parentNode;
+  $treeFocus.set(parentNode.key === ROOT_KEY ? null : parentNode.key);
 }
 
 function goTo(node: TreeNode) {
@@ -136,45 +136,47 @@ function goTo(node: TreeNode) {
 }
 
 // Photo for the selected node: fetched on click, never on hover.
-watch(selected, async (n) => {
+watch(selected, async (node) => {
   photo.value = null;
-  if (!n || n.rank === 'ROOT') return;
+  if (!node || node.rank === 'ROOT') return;
   try {
-    const img = await leadPhoto({ key: n.key, rank: RANK_BY_CODE[n.rank] });
-    if (selected.value === n) photo.value = img ?? null;
+    const image = await leadPhoto({ key: node.key, rank: RANK_BY_CODE[node.rank] });
+    if (selected.value === node) photo.value = image ?? null;
   } catch {
     /* optional */
   }
 });
 
 // Back/forward, and header-search picks (which move the tree, not the filter).
-watch(focusKey, (k) => {
+watch(focusKey, (key) => {
   if (!root.value) return;
-  if ((k ?? ROOT_KEY) === focus.value?.key) return;
-  const known = k === null ? root.value : findNode(root.value, k);
+  if ((key ?? ROOT_KEY) === focus.value?.key) return;
+  const known = key === null ? root.value : findNode(root.value, key);
   if (known && (known === root.value || known.children?.length)) focus.value = known;
   else void syncFocus();
 });
 
-const setMetric = (m: 'records' | 'species') => $treeMetric.set(m);
-const setLayout = (l: 'sunburst' | 'icicle') => $treeLayout.set(l);
+const setMetric = (nextMetric: 'records' | 'species') => $treeMetric.set(nextMetric);
+const setLayout = (nextLayout: 'sunburst' | 'icicle') => $treeLayout.set(nextLayout);
 
 onMounted(() => {
-  mq = window.matchMedia('(max-width: 639.98px)');
-  narrow.value = mq.matches;
-  mq.addEventListener('change', onMq);
+  mediaQuery = window.matchMedia('(max-width: 639.98px)');
+  narrow.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', onMq);
   void loadSpeciesManifest();
   void build();
 });
-onBeforeUnmount(() => mq?.removeEventListener('change', onMq));
+onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMq));
 function onMq() {
-  narrow.value = !!mq?.matches;
+  narrow.value = !!mediaQuery?.matches;
 }
 
-const share = (n: TreeNode) => {
-  const p = n.parent;
-  const total = p ? metricOf(p) || (p.children ?? []).reduce((s, c) => s + metricOf(c), 0) : 0;
-  return total ? metricOf(n) / total : 0;
+const share = (node: TreeNode) => {
+  const parent = node.parent;
+  const total = parent
+    ? metricOf(parent) || (parent.children ?? []).reduce((subtotal, child) => subtotal + metricOf(child), 0)
+    : 0;
+  return total ? metricOf(node) / total : 0;
 };
 </script>
 
@@ -229,16 +231,16 @@ const share = (n: TreeNode) => {
 
     <nav aria-label="Tree position" class="text-xs">
       <ol class="flex flex-wrap items-center gap-1">
-        <li v-for="(c, i) in crumbs" :key="c.key" class="flex items-center gap-1">
+        <li v-for="(crumb, index) in crumbs" :key="crumb.key" class="flex items-center gap-1">
           <button
             type="button"
             class="rounded px-1 py-0.5 text-muted hover:bg-surface-2 hover:text-text"
-            :aria-current="i === crumbs.length - 1 ? 'location' : undefined"
-            @click="goTo(c)"
+            :aria-current="index === crumbs.length - 1 ? 'location' : undefined"
+            @click="goTo(crumb)"
           >
-            {{ c.common ?? c.name }}
+            {{ crumb.common ?? crumb.name }}
           </button>
-          <span v-if="i < crumbs.length - 1" class="text-subtle" aria-hidden="true">›</span>
+          <span v-if="index < crumbs.length - 1" class="text-subtle" aria-hidden="true">›</span>
         </li>
       </ol>
     </nav>
@@ -353,20 +355,20 @@ const share = (n: TreeNode) => {
           <ol
             class="max-h-[50dvh] space-y-0.5 overflow-y-auto overscroll-contain pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1"
           >
-            <li v-for="c in children" :key="c.key">
+            <li v-for="child in children" :key="child.key">
               <button
                 type="button"
                 class="grid min-h-11 w-full grid-cols-[1fr_auto] items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-2 md:min-h-0"
-                :aria-current="selected?.key === c.key ? 'true' : undefined"
-                :class="{ 'bg-accent-soft': selected?.key === c.key }"
-                @click="pick(c)"
+                :aria-current="selected?.key === child.key ? 'true' : undefined"
+                :class="{ 'bg-accent-soft': selected?.key === child.key }"
+                @click="pick(child)"
               >
                 <span class="min-w-0 truncate">
-                  {{ c.common ?? c.name }}
-                  <span v-if="c.common" class="sci-name text-xs text-subtle">{{ c.name }}</span>
-                  <span v-if="loadingKey === c.key" class="text-xs text-subtle"> · loading…</span>
+                  {{ child.common ?? child.name }}
+                  <span v-if="child.common" class="sci-name text-xs text-subtle">{{ child.name }}</span>
+                  <span v-if="loadingKey === child.key" class="text-xs text-subtle"> · loading…</span>
                 </span>
-                <span class="text-xs tabular-nums text-muted">{{ compact(metricOf(c)) }}</span>
+                <span class="text-xs tabular-nums text-muted">{{ compact(metricOf(child)) }}</span>
               </button>
             </li>
           </ol>

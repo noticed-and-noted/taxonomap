@@ -13,8 +13,8 @@ export const RAMP_KEY = 'map-colours';
 
 function saved(): RampId {
   try {
-    const v = localStorage.getItem(RAMP_KEY);
-    return isRampId(v) ? v : DEFAULT_RAMP;
+    const stored = localStorage.getItem(RAMP_KEY);
+    return isRampId(stored) ? stored : DEFAULT_RAMP;
   } catch {
     return DEFAULT_RAMP;
   }
@@ -25,9 +25,9 @@ export const $ramp = atom<RampId>(typeof window === 'undefined' ? DEFAULT_RAMP :
 function apply(id: RampId) {
   if (typeof document === 'undefined') return;
   const style = document.documentElement.style;
-  rampById(id).colors.forEach((c, i) => {
-    if (id === DEFAULT_RAMP) style.removeProperty(`--ramp-${i}`);
-    else style.setProperty(`--ramp-${i}`, c);
+  rampById(id).colors.forEach((colour, index) => {
+    if (id === DEFAULT_RAMP) style.removeProperty(`--ramp-${index}`);
+    else style.setProperty(`--ramp-${index}`, colour);
   });
 }
 

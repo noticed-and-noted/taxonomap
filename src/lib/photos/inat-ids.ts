@@ -3,49 +3,60 @@
  * stable and costs a GBIF search (or an iNaturalist one) to find, so each
  * browser finds it once. Held in localStorage, newest last, capped.
  */
-const KEY = 'inat-ids';
-const MAX = 3000;
+const STORAGE_KEY = 'inat-ids';
+const MAX_ENTRIES = 3000;
 
-let ids: Map<number, number> | undefined;
+let cachedIds: Map<number, number> | undefined;
+
+/** Reads the saved pairs, ignoring anything malformed or unreadable (no storage, or not ours). */
+function loadStored(): Map<number, number> {
+  const stored = new Map<number, number>();
+  try {
+    const pairs = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as [number, number][];
+    for (const [taxonKey, inatId] of pairs) {
+      if (Number.isInteger(taxonKey) && Number.isInteger(inatId)) stored.set(taxonKey, inatId);
+    }
+  } catch {
+    /* no storage, or not ours: start empty */
+  }
+  return stored;
+}
 
 function read(): Map<number, number> {
-  if (!ids) {
-    ids = new Map();
-    try {
-      for (const [k, v] of JSON.parse(localStorage.getItem(KEY) ?? '[]') as [number, number][]) {
-        if (Number.isInteger(k) && Number.isInteger(v)) ids.set(k, v);
-      }
-    } catch {
-      /* no storage, or not ours: start empty */
-    }
-  }
-  return ids;
-}
-
-export const knownInatId = (key: number): number | undefined => read().get(key);
-
-export function forgetInatId(key: number): void {
-  if (read().delete(key)) save();
-}
-
-export function rememberInatIds(found: ReadonlyMap<number, number>): void {
-  const m = read();
-  let changed = false;
-  for (const [k, v] of found) {
-    if (m.get(k) === v) continue;
-    m.delete(k);
-    m.set(k, v);
-    changed = true;
-  }
-  if (!changed) return;
-  while (m.size > MAX) m.delete(m.keys().next().value!);
-  save();
+  cachedIds ??= loadStored();
+  return cachedIds;
 }
 
 function save() {
   try {
-    localStorage.setItem(KEY, JSON.stringify([...read()]));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...read()]));
   } catch {
     /* storage full or blocked: remembered for this visit only */
   }
+}
+
+/** The remembered iNaturalist taxon ID for a GBIF taxon key, if any. */
+export const knownInatId = (key: number): number | undefined => read().get(key);
+
+/** Drops a remembered match, e.g. one iNaturalist no longer recognises. */
+export function forgetInatId(key: number): void {
+  if (read().delete(key)) save();
+}
+
+/**
+ * Remembers newly found matches, evicting the oldest beyond the cap.
+ * @param found GBIF taxon key → iNaturalist taxon ID.
+ */
+export function rememberInatIds(found: ReadonlyMap<number, number>): void {
+  const current = read();
+  let hasChanged = false;
+  for (const [taxonKey, inatId] of found) {
+    if (current.get(taxonKey) === inatId) continue;
+    current.delete(taxonKey);
+    current.set(taxonKey, inatId);
+    hasChanged = true;
+  }
+  if (!hasChanged) return;
+  while (current.size > MAX_ENTRIES) current.delete(current.keys().next().value!);
+  save();
 }

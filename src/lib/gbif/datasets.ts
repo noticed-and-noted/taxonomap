@@ -3,6 +3,7 @@ import type { Dataset, Organization } from './types';
 
 import { WEEK } from '~/lib/util/time';
 
+/** A dataset's metadata. @throws GbifNotFoundError when GBIF has no such dataset. */
 export function getDataset(key: string): Promise<Dataset> {
   return http().getJson(`/v1/dataset/${key}`, undefined, { ttlMs: WEEK });
 }

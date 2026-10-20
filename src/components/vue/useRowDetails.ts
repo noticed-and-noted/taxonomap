@@ -11,6 +11,7 @@ import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import type { UsableImage } from '~/lib/gbif';
 import { commonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 
+/** Options for `useRowDetails`. */
 export interface RowDetailsOptions {
   rows: () => readonly SpeciesRow[];
   /** Identity of the data set (a new value means new rows). */
@@ -20,7 +21,13 @@ export interface RowDetailsOptions {
   needAllNames: () => boolean;
 }
 
-export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetailsOptions) {
+/** Merges `additions` into a ref'd map, replacing it so Vue sees the change. */
+function mergeInto<Value>(target: Ref<Map<number, Value>>, additions: ReadonlyMap<number, Value>) {
+  if (additions.size) target.value = new Map([...target.value, ...additions]);
+}
+
+/** What has been looked up for the current data set, what was already asked, and the controller to cancel it. */
+function useLookupState(dataset: () => unknown) {
   /** Names looked up after load, for rows the index and batch search missed. */
   const lateNames = ref(new Map<number, string>());
   /** Lookups that came back empty: show the "Species N" fallback, not a skeleton. */
@@ -30,23 +37,20 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
   const photoDone = ref(new Set<number>());
   /** Common names looked up after load, for rows in view the index had none for. */
   const lateCommon = ref(new Map<number, string>());
-
-  let photoAsked = new Set<number>();
-  let nameAsked = new Set<number>();
-  let commonAsked = new Set<number>();
-  let ctrl: AbortController | undefined;
+  const asked = { photo: new Set<number>(), name: new Set<number>(), common: new Set<number>() };
+  let controller: AbortController | undefined;
   let current: unknown;
 
   function forget() {
-    ctrl?.abort();
-    ctrl = new AbortController();
-    photoAsked = new Set();
-    nameAsked = new Set();
+    controller?.abort();
+    controller = new AbortController();
+    asked.photo = new Set();
+    asked.name = new Set();
+    asked.common = new Set();
     lateNames.value = new Map();
     noName.value = new Set();
     latePhotos.value = new Map();
     photoDone.value = new Set();
-    commonAsked = new Set();
     lateCommon.value = new Map();
   }
 
@@ -56,72 +60,112 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
       current = dataset();
       forget();
     }
-    return ctrl;
+    return controller;
   }
 
-  const inViewRows = computed(() => rows().filter((r) => inView.value.has(r.key)));
-  const needPhotos = computed(() => inViewRows.value.filter((r) => !r.image).map((r) => r.key));
-  const needNames = computed(() =>
-    (needAllNames() ? rows() : inViewRows.value).filter((r) => r.unnamed).map((r) => r.key),
-  );
-  const needCommon = computed(() => inViewRows.value.filter((r) => !r.commonName).map((r) => r.key));
-
-  // Common names run alongside photos: neither needs the other.
-  watch(
-    needCommon,
-    async (keys) => {
-      const mine = sync();
-      const ask = keys.filter((k) => !commonAsked.has(k));
-      if (!ask.length) return;
-      for (const k of ask) commonAsked.add(k);
-      const found = await commonNames(ask, mine?.signal);
-      if (mine === ctrl && found.size) lateCommon.value = new Map([...lateCommon.value, ...found]);
-    },
-    { immediate: true },
-  );
-
-  watch(
-    [needPhotos, needNames],
-    async ([photoKeys, nameKeys]) => {
-      const mine = sync();
-      const photos = photoKeys.filter((k) => !photoAsked.has(k));
-      let names = nameKeys.filter((k) => !nameAsked.has(k));
-      for (const k of photos) photoAsked.add(k);
-      for (const k of names) nameAsked.add(k);
-
-      if (photos.length) {
-        const named = new Map(rows().flatMap((r) => (r.unnamed ? [] : [[r.key, r.scientificName] as const])));
-        const found = await photosForKeys(photos, mine?.signal, named);
-        if (mine !== ctrl) return;
-        if (found.images.size) latePhotos.value = new Map([...latePhotos.value, ...found.images]);
-        photoDone.value = new Set([...photoDone.value, ...photos]);
-        if (found.names.size) lateNames.value = new Map([...lateNames.value, ...found.names]);
-        // The batched record search may have named rows while photos loaded.
-        const unnamed = new Set(rows().flatMap((r) => (r.unnamed ? [r.key] : [])));
-        names = names.filter((k) => !found.names.has(k) && unnamed.has(k));
-      }
-      if (names.length) {
-        const found = await resolveNames(names, mine?.signal);
-        if (mine !== ctrl) return;
-        if (found.size) lateNames.value = new Map([...lateNames.value, ...found]);
-        const missed = names.filter((k) => !found.has(k));
-        if (missed.length) noName.value = new Set([...noName.value, ...missed]);
-      }
-    },
-    { immediate: true },
-  );
-
-  onScopeDispose(() => ctrl?.abort());
+  onScopeDispose(() => controller?.abort());
 
   return {
+    lateNames,
+    noName,
+    latePhotos,
+    photoDone,
+    lateCommon,
+    asked,
+    sync,
+    isCurrent: (mine: AbortController | undefined) => mine === controller,
+  };
+}
+
+type LookupState = ReturnType<typeof useLookupState>;
+
+/** Looks up common names for rows in view that the index had none for. */
+async function lookUpCommonNames(keys: number[], state: LookupState) {
+  const mine = state.sync();
+  const ask = keys.filter((key) => !state.asked.common.has(key));
+  if (!ask.length) return;
+  for (const key of ask) state.asked.common.add(key);
+  const found = await commonNames(ask, mine?.signal);
+  if (state.isCurrent(mine)) mergeInto(state.lateCommon, found);
+}
+
+/** Looks up lead photos (whose records also name species) for rows in view. */
+async function lookUpPhotos(
+  photos: number[],
+  rows: () => readonly SpeciesRow[],
+  mine: AbortController | undefined,
+  state: LookupState,
+) {
+  const named = new Map(rows().flatMap((row) => (row.unnamed ? [] : [[row.key, row.scientificName] as const])));
+  const found = await photosForKeys(photos, mine?.signal, named);
+  if (!state.isCurrent(mine)) return undefined;
+  mergeInto(state.latePhotos, found.images);
+  state.photoDone.value = new Set([...state.photoDone.value, ...photos]);
+  mergeInto(state.lateNames, found.names);
+  return found.names;
+}
+
+/** Looks up scientific names the baked index and batch search missed; keys with no answer show a fallback. */
+async function lookUpNames(names: number[], mine: AbortController | undefined, state: LookupState) {
+  const found = await resolveNames(names, mine?.signal);
+  if (!state.isCurrent(mine)) return;
+  mergeInto(state.lateNames, found);
+  const missed = names.filter((key) => !found.has(key));
+  if (missed.length) state.noName.value = new Set([...state.noName.value, ...missed]);
+}
+
+/** Photos first (their records carry names too), then whichever names are still missing. */
+async function lookUpPhotosAndNames(
+  photoKeys: number[],
+  nameKeys: number[],
+  rows: () => readonly SpeciesRow[],
+  state: LookupState,
+) {
+  const mine = state.sync();
+  const photos = photoKeys.filter((key) => !state.asked.photo.has(key));
+  let names = nameKeys.filter((key) => !state.asked.name.has(key));
+  for (const key of photos) state.asked.photo.add(key);
+  for (const key of names) state.asked.name.add(key);
+
+  if (photos.length) {
+    const namedByPhotos = await lookUpPhotos(photos, rows, mine, state);
+    if (!namedByPhotos) return;
+    // The batched record search may have named rows while photos loaded.
+    const unnamed = new Set(rows().flatMap((row) => (row.unnamed ? [row.key] : [])));
+    names = names.filter((key) => !namedByPhotos.has(key) && unnamed.has(key));
+  }
+  if (names.length) await lookUpNames(names, mine, state);
+}
+
+/**
+ * Lazy photo and name lookups for the rows in view.
+ * @returns Accessors that give a row's common name, scientific name and photo, and whether each is still loading.
+ */
+export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetailsOptions) {
+  const state = useLookupState(dataset);
+  const inViewRows = computed(() => rows().filter((row) => inView.value.has(row.key)));
+  const needPhotos = computed(() => inViewRows.value.filter((row) => !row.image).map((row) => row.key));
+  const needNames = computed(() =>
+    (needAllNames() ? rows() : inViewRows.value).filter((row) => row.unnamed).map((row) => row.key),
+  );
+  const needCommon = computed(() => inViewRows.value.filter((row) => !row.commonName).map((row) => row.key));
+
+  // Common names run alongside photos: neither needs the other.
+  watch(needCommon, (keys) => lookUpCommonNames(keys, state), { immediate: true });
+  watch([needPhotos, needNames], ([photoKeys, nameKeys]) => lookUpPhotosAndNames(photoKeys, nameKeys, rows, state), {
+    immediate: true,
+  });
+
+  const { lateCommon, lateNames, noName, latePhotos, photoDone } = state;
+  return {
     /** The common name, from the index or looked up once in view. */
-    commonName: (r: SpeciesRow) => r.commonName ?? lateCommon.value.get(r.key),
+    commonName: (row: SpeciesRow) => row.commonName ?? lateCommon.value.get(row.key),
     /** The scientific name, once known. */
-    sciName: (r: SpeciesRow) => (r.unnamed ? lateNames.value.get(r.key) : undefined) ?? r.scientificName,
+    sciName: (row: SpeciesRow) => (row.unnamed ? lateNames.value.get(row.key) : undefined) ?? row.scientificName,
     /** Still looking the name up (show a skeleton). */
-    pendingName: (r: SpeciesRow) => !!r.unnamed && !lateNames.value.has(r.key) && !noName.value.has(r.key),
-    photoOf: (r: SpeciesRow) => r.image ?? latePhotos.value.get(r.key),
+    pendingName: (row: SpeciesRow) => !!row.unnamed && !lateNames.value.has(row.key) && !noName.value.has(row.key),
+    photoOf: (row: SpeciesRow) => row.image ?? latePhotos.value.get(row.key),
     /** Still looking the photo up. */
-    pendingPhoto: (r: SpeciesRow) => !r.image && !latePhotos.value.has(r.key) && !photoDone.value.has(r.key),
+    pendingPhoto: (row: SpeciesRow) => !row.image && !latePhotos.value.has(row.key) && !photoDone.value.has(row.key),
   };
 }

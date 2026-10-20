@@ -19,23 +19,27 @@ export interface Area {
 }
 
 /** The circle (and month) as an occurrence filter; the Records tab searches with it. */
-export const nearFilter = (a: Area, extra: { taxonKey?: number; classKey?: number } = {}): OccurrenceFilter => ({
-  ...a.filter,
-  geometry: circleToWkt(a.lat, a.lng, a.radiusKm),
-  month: a.month,
+export const nearFilter = (area: Area, extra: { taxonKey?: number; classKey?: number } = {}): OccurrenceFilter => ({
+  ...area.filter,
+  geometry: circleToWkt(area.lat, area.lng, area.radiusKm),
+  month: area.month,
   ...extra,
 });
 
 /** Total records and the classes present, most-recorded first. */
-export async function classesNear(a: Area, signal?: AbortSignal): Promise<{ records: number; classes: ClassGroup[] }> {
-  const r = await occurrenceFacets(nearFilter(a), ['classKey'], { facetLimit: 50, ...(signal && { signal }) });
-  return { records: r.count, classes: await namedClasses(r.facets['classKey'] ?? []) };
+export async function classesNear(
+  area: Area,
+  signal?: AbortSignal,
+): Promise<{ records: number; classes: ClassGroup[] }> {
+  const result = await occurrenceFacets(nearFilter(area), ['classKey'], { facetLimit: 50, ...(signal && { signal }) });
+  return { records: result.count, classes: await namedClasses(result.facets['classKey'] ?? []) };
 }
 
 /** The area's top species, or one class's (photos are added separately). */
 export const NEAR_SPECIES = 200;
-export function speciesNear(a: Area, classKey: number | null, signal?: AbortSignal): Promise<SpeciesRow[]> {
-  return topSpecies(nearFilter(a, classKey === null ? {} : { classKey }), {
+/** Top species around a point, optionally within one class. */
+export function speciesNear(area: Area, classKey: number | null, signal?: AbortSignal): Promise<SpeciesRow[]> {
+  return topSpecies(nearFilter(area, classKey === null ? {} : { classKey }), {
     limit: NEAR_SPECIES,
     ...(signal && { signal }),
   });

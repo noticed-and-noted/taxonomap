@@ -16,12 +16,19 @@ import {
   getSpecies,
   getSynonyms,
   getVernacularNames,
+  MONTHS_IN_YEAR,
+  monthCounts,
   occurrenceFacets,
   type NameUsage,
   type Rank,
 } from '~/lib/gbif';
 import { englishName, groupByLanguage, slugify, type NamesByLanguage } from './names';
 
+const VERNACULAR_LIMIT = 300;
+const SYNONYM_LIMIT = 30;
+const SIBLING_LIMIT = 8;
+
+/** A taxon on a species' lineage. */
 export interface TaxonRef {
   key: number;
   name: string;
@@ -57,6 +64,7 @@ export interface SpeciesData {
 }
 
 /** Optional common-name lookup (build: baked index; browser: loaded index). */
+/** Finds a common name by taxon key (e.g. from the baked name index). */
 export type CommonNameLookup = (key: number) => string | null | undefined;
 
 const HIGHER: [keyof NameUsage, keyof NameUsage, Rank][] = [
@@ -68,89 +76,98 @@ const HIGHER: [keyof NameUsage, keyof NameUsage, Rank][] = [
   ['genusKey', 'genus', 'GENUS'],
 ];
 
-export function classificationOf(u: NameUsage): TaxonRef[] {
+/** The lineage from kingdom to genus, skipping ranks GBIF has no name for. */
+export function classificationOf(usage: NameUsage): TaxonRef[] {
   const out: TaxonRef[] = [];
-  for (const [k, n, rank] of HIGHER) {
-    const key = u[k];
-    const name = u[n];
+  for (const [groupKey, groupName, rank] of HIGHER) {
+    const key = usage[groupKey];
+    const name = usage[groupName];
     if (typeof key === 'number' && typeof name === 'string') out.push({ key, name, rank });
   }
   return out;
 }
 
-export function speciesSlug(u: Pick<NameUsage, 'canonicalName' | 'scientificName'>): string {
-  return slugify(u.canonicalName ?? u.scientificName);
+/** URL slug for a species page, from its canonical name. */
+export function speciesSlug(usage: Pick<NameUsage, 'canonicalName' | 'scientificName'>): string {
+  return slugify(usage.canonicalName ?? usage.scientificName);
 }
 
-async function siblingsOf(u: NameUsage, commonName: CommonNameLookup): Promise<SiblingSpecies[]> {
-  if (!u.genusKey) return [];
+/** The most-recorded other species of the same genus, with common names where known. */
+async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promise<SiblingSpecies[]> {
+  if (!usage.genusKey) return [];
   const [facets, children] = await Promise.all([
-    occurrenceFacets({ taxonKey: u.genusKey }, ['speciesKey'], { facetLimit: 12 }),
-    getChildren(u.genusKey, { limit: 200 }),
+    occurrenceFacets({ taxonKey: usage.genusKey }, ['speciesKey'], { facetLimit: 12 }),
+    getChildren(usage.genusKey, { limit: 200 }),
   ]);
-  const names = new Map(children.results.map((c) => [c.key, c.canonicalName ?? c.scientificName]));
+  const names = new Map(children.results.map((child) => [child.key, child.canonicalName ?? child.scientificName]));
   const top = (facets.facets['speciesKey'] ?? [])
-    .map((c) => ({ key: Number(c.name), count: c.count }))
-    .filter((s) => s.key !== u.key && names.has(s.key))
-    .slice(0, 8);
+    .map((facet) => ({ key: Number(facet.name), count: facet.count }))
+    .filter((sibling) => sibling.key !== usage.key && names.has(sibling.key))
+    .slice(0, SIBLING_LIMIT);
   if (!top.length) return [];
   // The baked index misses many species, so fall back to their GBIF vernacular names.
   return Promise.all(
-    top.map(async (s) => {
-      const cn =
-        commonName(s.key) ??
-        englishName((await getVernacularNames(s.key, 300).catch(() => ({ results: [] }))).results);
+    top.map(async (sibling) => {
+      const siblingCommonName =
+        commonName(sibling.key) ??
+        englishName((await getVernacularNames(sibling.key, VERNACULAR_LIMIT).catch(() => ({ results: [] }))).results);
       return {
-        key: s.key,
-        scientificName: names.get(s.key) as string,
-        count: s.count,
-        ...(cn && { commonName: cn }),
+        key: sibling.key,
+        scientificName: names.get(sibling.key) as string,
+        count: sibling.count,
+        ...(siblingCommonName && { commonName: siblingCommonName }),
       };
     }),
   );
 }
 
-export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
-  const u = await getSpecies(key);
-  const [vern, syn, facets, siblings] = await Promise.all([
-    getVernacularNames(key, 300).catch(() => ({ results: [] })),
-    getSynonyms(key, 30).catch(() => ({ results: [] })),
-    occurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
-      limits: { year: 700, month: 12, country: 10, datasetKey: 5 },
-    }),
-    siblingsOf(u, commonName).catch(() => []),
-  ]);
-
-  const months = Array(12).fill(0) as number[];
-  for (const c of facets.facets['month'] ?? []) months[Number(c.name) - 1] = c.count;
-  const datasetCounts = facets.facets['datasetKey'] ?? [];
-  const datasets = await Promise.all(
-    datasetCounts.map(async (c) => {
-      const d = await getDataset(c.name).catch(() => null);
-      return { key: c.name, title: d?.title ?? 'Unnamed dataset', count: c.count };
+/** The top datasets with their titles (GBIF is asked per dataset; one it can't find is "Unnamed dataset"). */
+function namedDatasets(counts: { name: string; count: number }[]) {
+  return Promise.all(
+    counts.map(async (entry) => {
+      const dataset = await getDataset(entry.name).catch(() => null);
+      return { key: entry.name, title: dataset?.title ?? 'Unnamed dataset', count: entry.count };
     }),
   );
+}
 
-  const common = englishName(vern.results) ?? commonName(key) ?? undefined;
+/**
+ * Everything a species page shows, from GBIF.
+ * @param key GBIF species key.
+ * @param commonName Looks up a common name when GBIF lists none (e.g. from the baked name index).
+ * @throws GbifNotFoundError when GBIF has no such taxon.
+ */
+export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
+  const usage = await getSpecies(key);
+  const [vernaculars, synonyms, facets, siblings] = await Promise.all([
+    getVernacularNames(key, VERNACULAR_LIMIT).catch(() => ({ results: [] })),
+    getSynonyms(key, SYNONYM_LIMIT).catch(() => ({ results: [] })),
+    occurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
+      limits: { year: 700, month: MONTHS_IN_YEAR, country: 10, datasetKey: 5 },
+    }),
+    siblingsOf(usage, commonName).catch(() => []),
+  ]);
+
+  const common = englishName(vernaculars.results) ?? commonName(key) ?? undefined;
   return {
     key,
-    slug: speciesSlug(u),
-    scientificName: u.scientificName,
-    canonicalName: u.canonicalName ?? u.scientificName,
-    ...(u.authorship && { authorship: u.authorship }),
-    rank: u.rank,
-    ...(u.taxonomicStatus && { status: u.taxonomicStatus }),
+    slug: speciesSlug(usage),
+    scientificName: usage.scientificName,
+    canonicalName: usage.canonicalName ?? usage.scientificName,
+    ...(usage.authorship && { authorship: usage.authorship }),
+    rank: usage.rank,
+    ...(usage.taxonomicStatus && { status: usage.taxonomicStatus }),
     ...(common && { commonName: common }),
-    classification: classificationOf(u),
-    vernacular: groupByLanguage(vern.results),
-    synonyms: [...new Set(syn.results.map((s) => s.scientificName))].slice(0, 30),
+    classification: classificationOf(usage),
+    vernacular: groupByLanguage(vernaculars.results),
+    synonyms: [...new Set(synonyms.results.map((synonym) => synonym.scientificName))].slice(0, SYNONYM_LIMIT),
     count: facets.count,
     years: (facets.facets['year'] ?? [])
-      .map((c) => [Number(c.name), c.count] as [number, number])
-      .sort((a, b) => a[0] - b[0]),
-    months,
-    countries: (facets.facets['country'] ?? []).map((c) => [c.name, c.count] as [string, number]),
-    datasets,
+      .map((facet) => [Number(facet.name), facet.count] as [number, number])
+      .sort((left, right) => left[0] - right[0]),
+    months: monthCounts(facets.facets['month']),
+    countries: (facets.facets['country'] ?? []).map((facet) => [facet.name, facet.count] as [string, number]),
+    datasets: await namedDatasets(facets.facets['datasetKey'] ?? []),
     siblings,
     generated: new Date().toISOString(),
   };

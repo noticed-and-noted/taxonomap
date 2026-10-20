@@ -83,7 +83,7 @@ const TAXA: Taxon[] = [
   },
 ];
 
-const byKey = new Map(TAXA.map((t) => [t.key, t]));
+const byKey = new Map(TAXA.map((taxon) => [taxon.key, taxon]));
 const RANK_FIELD: Record<Rank, string> = {
   KINGDOM: 'kingdom',
   PHYLUM: 'phylum',
@@ -94,36 +94,43 @@ const RANK_FIELD: Record<Rank, string> = {
   SPECIES: 'species',
 };
 
-function ancestors(t: Taxon): Taxon[] {
+function ancestors(taxon: Taxon): Taxon[] {
   const out: Taxon[] = [];
-  for (let p = t.parent && byKey.get(t.parent); p; p = p.parent ? byKey.get(p.parent) : undefined) out.unshift(p);
+  for (
+    let ancestor = taxon.parent && byKey.get(taxon.parent);
+    ancestor;
+    ancestor = ancestor.parent ? byKey.get(ancestor.parent) : undefined
+  )
+    out.unshift(ancestor);
   return out;
 }
-const isUnder = (t: Taxon, key: number) => t.key === key || ancestors(t).some((a) => a.key === key);
-const SPECIES = TAXA.filter((t) => t.rank === 'SPECIES');
-const recordsOf = (t: Taxon) => SPECIES.filter((s) => isUnder(s, t.key)).reduce((n, s) => n + s.records!, 0);
+const isUnder = (taxon: Taxon, key: number) =>
+  taxon.key === key || ancestors(taxon).some((ancestor) => ancestor.key === key);
+const SPECIES = TAXA.filter((taxon) => taxon.rank === 'SPECIES');
+const recordsOf = (taxon: Taxon) =>
+  SPECIES.filter((species) => isUnder(species, taxon.key)).reduce((total, species) => total + species.records!, 0);
 
 /** A GBIF name usage, with its higher keys and names. */
-function usage(t: Taxon) {
+function usage(taxon: Taxon) {
   const higher: Record<string, string | number> = {};
-  for (const a of [...ancestors(t), t]) {
-    higher[`${RANK_FIELD[a.rank]}Key`] = a.key;
-    higher[RANK_FIELD[a.rank]] = a.name;
+  for (const ancestor of [...ancestors(taxon), taxon]) {
+    higher[`${RANK_FIELD[ancestor.rank]}Key`] = ancestor.key;
+    higher[RANK_FIELD[ancestor.rank]] = ancestor.name;
   }
   return {
-    key: t.key,
-    scientificName: t.rank === 'SPECIES' ? `${t.name} (Linnaeus, 1758)` : t.name,
-    canonicalName: t.name,
-    rank: t.rank,
+    key: taxon.key,
+    scientificName: taxon.rank === 'SPECIES' ? `${taxon.name} (Linnaeus, 1758)` : taxon.name,
+    canonicalName: taxon.name,
+    rank: taxon.rank,
     taxonomicStatus: 'ACCEPTED',
-    vernacularName: t.common,
-    vernacularNames: [{ vernacularName: t.common, language: 'eng' }],
-    ...(t.parent && { parentKey: t.parent }),
+    vernacularName: taxon.common,
+    vernacularNames: [{ vernacularName: taxon.common, language: 'eng' }],
+    ...(taxon.parent && { parentKey: taxon.parent }),
     ...higher,
   };
 }
 
-const YEARS = Array.from({ length: 126 }, (_, i) => 1900 + i);
+const YEARS = Array.from({ length: 126 }, (_unused, index) => 1900 + index);
 const DATASETS = [
   { key: 'b1047888-ae52-4179-9dd5-5448ea342a24', title: 'Garden bird survey' },
   { key: '50c9509d-22c7-4a22-a47d-8c48425ef4a7', title: 'iNaturalist research-grade observations' },
@@ -131,8 +138,8 @@ const DATASETS = [
 
 /** How every species' records divide among the values of the other facets. */
 const SPLITS: Record<string, [string | number, number][]> = {
-  year: YEARS.map((y) => [y, 1 / YEARS.length]),
-  month: Array.from({ length: 12 }, (_, i) => [i + 1, 1 / 12]),
+  year: YEARS.map((year) => [year, 1 / YEARS.length]),
+  month: Array.from({ length: 12 }, (_unused, index) => [index + 1, 1 / 12]),
   country: [
     ['GB', 0.6],
     ['FR', 0.4],
@@ -145,75 +152,80 @@ const SPLITS: Record<string, [string | number, number][]> = {
 };
 
 /** The species a search's filters select. */
-function speciesFor(q: URLSearchParams): Taxon[] {
-  const taxa = q.getAll('taxonKey').map(Number);
-  const species = q.getAll('speciesKey').map(Number);
-  const classKey = q.get('classKey');
+function speciesFor(params: URLSearchParams): Taxon[] {
+  const taxa = params.getAll('taxonKey').map(Number);
+  const species = params.getAll('speciesKey').map(Number);
+  const classKey = params.get('classKey');
   return SPECIES.filter(
-    (s) =>
-      (!taxa.length || taxa.some((k) => isUnder(s, k))) &&
-      (!species.length || species.includes(s.key)) &&
-      (!classKey || isUnder(s, Number(classKey))),
+    (candidate) =>
+      (!taxa.length || taxa.some((key) => isUnder(candidate, key))) &&
+      (!species.length || species.includes(candidate.key)) &&
+      (!classKey || isUnder(candidate, Number(classKey))),
   );
 }
 
 /** The share of each species' records that a search's filters keep. */
-function shareFor(q: URLSearchParams): number {
+function shareFor(params: URLSearchParams): number {
   let share = 1;
-  const months = q.getAll('month');
+  const months = params.getAll('month');
   if (months.length) share *= months.length / 12;
-  const year = q.get('year');
+  const year = params.get('year');
   if (year) {
-    const [a, b = a] = year.split(',').map(Number);
-    share *= YEARS.filter((y) => y >= a! && y <= b!).length / YEARS.length;
+    const [fromYear, toYear = fromYear] = year.split(',').map(Number);
+    share *=
+      YEARS.filter((candidateYear) => candidateYear >= fromYear! && candidateYear <= toYear!).length / YEARS.length;
   }
-  if (q.get('geometry')) share *= 0.0001;
-  if (q.get('eventDate')) share *= 0.00001;
+  if (params.get('geometry')) share *= 0.0001;
+  if (params.get('eventDate')) share *= 0.00001;
   return share;
 }
 
 function facet(field: string, counts: Map<string, number>, limit: number, offset: number) {
-  const rows = [...counts].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const rows = [...counts].filter(([, count]) => count > 0).sort((left, right) => right[1] - left[1]);
   return {
-    field: field.replace(/[A-Z]/g, (c) => `_${c}`).toUpperCase(),
+    field: field.replace(/[A-Z]/g, (capital) => `_${capital}`).toUpperCase(),
     counts: rows.slice(offset, offset + limit).map(([name, count]) => ({ name, count })),
   };
 }
 
-function occurrenceSearch(q: URLSearchParams) {
-  const species = speciesFor(q);
-  const share = shareFor(q);
-  const n = (s: Taxon) => Math.max(1, Math.round(s.records! * share));
-  const count = species.reduce((t, s) => t + n(s), 0);
-  const limit = Number(q.get('limit') ?? 20);
-  const facetLimit = Number(q.get('facetLimit') ?? 10);
-  const offset = Number(q.get('facetOffset') ?? 0);
-  const facets = q.getAll('facet').map((field) => {
+function occurrenceSearch(params: URLSearchParams) {
+  const species = speciesFor(params);
+  const share = shareFor(params);
+  const scaledRecords = (taxon: Taxon) => Math.max(1, Math.round(taxon.records! * share));
+  const count = species.reduce((sum, taxon) => sum + scaledRecords(taxon), 0);
+  const limit = Number(params.get('limit') ?? 20);
+  const facetLimit = Number(params.get('facetLimit') ?? 10);
+  const offset = Number(params.get('facetOffset') ?? 0);
+  const facets = params.getAll('facet').map((field) => {
     const counts = new Map<string, number>();
-    const add = (k: string | number, v: number) => counts.set(String(k), (counts.get(String(k)) ?? 0) + v);
-    const rank = Object.entries(RANK_FIELD).find(([, f]) => `${f}Key` === field)?.[0] as Rank | undefined;
-    for (const s of species) {
-      if (rank) add([...ancestors(s), s].find((a) => a.rank === rank)!.key, n(s));
-      else for (const [k, part] of SPLITS[field] ?? []) add(k, n(s) * part);
+    const add = (key: string | number, amount: number) =>
+      counts.set(String(key), (counts.get(String(key)) ?? 0) + amount);
+    const rank = Object.entries(RANK_FIELD).find(([, fieldName]) => `${fieldName}Key` === field)?.[0] as
+      Rank | undefined;
+    for (const taxon of species) {
+      if (rank) add([...ancestors(taxon), taxon].find((ancestor) => ancestor.rank === rank)!.key, scaledRecords(taxon));
+      else for (const [key, part] of SPLITS[field] ?? []) add(key, scaledRecords(taxon) * part);
     }
-    for (const [k, v] of counts) counts.set(k, Math.round(v));
-    return facet(field, counts, Number(q.get(`${field}.facetLimit`) ?? facetLimit), offset);
+    for (const [key, rawCount] of counts) counts.set(key, Math.round(rawCount));
+    return facet(field, counts, Number(params.get(`${field}.facetLimit`) ?? facetLimit), offset);
   });
   const today = new Date();
-  const results = Array.from({ length: Math.min(limit, species.length * 3) }, (_, i) => {
-    const s = species[i % species.length]!;
-    const day = new Date(today.getTime() - (i + 1) * 86_400_000).toISOString().slice(0, 10);
+  const results = Array.from({ length: Math.min(limit, species.length * 3) }, (_unused, index) => {
+    const taxon = species[index % species.length]!;
+    const day = new Date(today.getTime() - (index + 1) * 86_400_000).toISOString().slice(0, 10);
     return {
-      key: 4_000_000_000 + s.key * 10 + Math.floor(i / species.length),
+      key: 4_000_000_000 + taxon.key * 10 + Math.floor(index / species.length),
       datasetKey: DATASETS[0]!.key,
       publisher: 'Garden Bird Club',
       license: 'http://creativecommons.org/licenses/by/4.0/legalcode',
       ...Object.fromEntries(
-        Object.entries(usage(s)).filter(([k]) => /Key$|^(kingdom|phylum|class|order|family|genus|species)$/.test(k)),
+        Object.entries(usage(taxon)).filter(([key]) =>
+          /Key$|^(kingdom|phylum|class|order|family|genus|species)$/.test(key),
+        ),
       ),
-      taxonKey: s.key,
-      species: s.name,
-      scientificName: `${s.name} (Linnaeus, 1758)`,
+      taxonKey: taxon.key,
+      species: taxon.name,
+      scientificName: `${taxon.name} (Linnaeus, 1758)`,
       basisOfRecord: 'HUMAN_OBSERVATION',
       decimalLatitude: 51.5,
       decimalLongitude: -0.12,
@@ -223,20 +235,23 @@ function occurrenceSearch(q: URLSearchParams) {
       country: 'United Kingdom of Great Britain and Northern Ireland',
       countryCode: 'GB',
       recordedBy: 'A. Birder',
-      media: [{ type: 'StillImage', identifier: `https://photos.example/${s.key}/${i}.jpg`, creator: 'A. Birder' }],
+      media: [
+        { type: 'StillImage', identifier: `https://photos.example/${taxon.key}/${index}.jpg`, creator: 'A. Birder' },
+      ],
     };
   });
   return { offset: 0, limit, endOfRecords: results.length < limit, count, results, facets };
 }
 
-function speciesSearch(q: URLSearchParams) {
-  const limit = Number(q.get('limit') ?? 20);
-  if (q.get('facet') === 'higherTaxonKey') {
-    const under = q.get('highertaxonKey');
+function speciesSearch(params: URLSearchParams) {
+  const limit = Number(params.get('limit') ?? 20);
+  if (params.get('facet') === 'higherTaxonKey') {
+    const under = params.get('highertaxonKey');
     const counts = new Map<string, number>();
-    for (const t of TAXA) {
-      if (t.rank === 'SPECIES' || (under && !isUnder(t, Number(under)) && t.key !== Number(under))) continue;
-      counts.set(String(t.key), SPECIES.filter((s) => isUnder(s, t.key)).length);
+    for (const taxon of TAXA) {
+      if (taxon.rank === 'SPECIES' || (under && !isUnder(taxon, Number(under)) && taxon.key !== Number(under)))
+        continue;
+      counts.set(String(taxon.key), SPECIES.filter((species) => isUnder(species, taxon.key)).length);
     }
     return {
       offset: 0,
@@ -248,11 +263,14 @@ function speciesSearch(q: URLSearchParams) {
     };
   }
   let found = TAXA;
-  const rank = q.get('rank');
-  if (rank) found = found.filter((t) => t.rank === rank);
-  const text = q.get('q')?.toLowerCase();
-  if (text) found = found.filter((t) => t.common.toLowerCase().includes(text) || t.name.toLowerCase().includes(text));
-  const offset = Number(q.get('offset') ?? 0);
+  const rank = params.get('rank');
+  if (rank) found = found.filter((taxon) => taxon.rank === rank);
+  const text = params.get('q')?.toLowerCase();
+  if (text)
+    found = found.filter(
+      (taxon) => taxon.common.toLowerCase().includes(text) || taxon.name.toLowerCase().includes(text),
+    );
+  const offset = Number(params.get('offset') ?? 0);
   const page = found.slice(offset, offset + limit);
   return { offset, limit, endOfRecords: offset + limit >= found.length, count: found.length, results: page.map(usage) };
 }
@@ -262,7 +280,7 @@ function speciesSearch(q: URLSearchParams) {
 /** A 1 × 1 transparent PNG: every raster tile and photo. */
 const PNG = Uint8Array.from(
   atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='),
-  (c) => c.charCodeAt(0),
+  (character) => character.charCodeAt(0),
 );
 
 /**
@@ -270,13 +288,14 @@ const PNG = Uint8Array.from(
  * records, over Britain only: every journey looks there, and a sparse world
  * keeps MapLibre's software-rendered frames cheap.
  */
-function hexTile(z: number, x: number, y: number): Uint8Array {
-  const E = 4096;
-  const r = E / 28 / 1.5;
-  const h = Math.sqrt(3) * r;
-  const n = 2 ** z;
-  const lngOf = (px: number) => ((x + px / E) / n) * 360 - 180;
-  const latOf = (py: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + py / E)) / n))) * 180) / Math.PI;
+function hexTile(zoom: number, tileX: number, tileY: number): Uint8Array {
+  const EXTENT = 4096;
+  const radius = EXTENT / 28 / 1.5;
+  const hexHeight = Math.sqrt(3) * radius;
+  const tileCount = 2 ** zoom;
+  const lngOf = (px: number) => ((tileX + px / EXTENT) / tileCount) * 360 - 180;
+  const latOf = (py: number) =>
+    (Math.atan(Math.sinh(Math.PI * (1 - (2 * (tileY + py / EXTENT)) / tileCount))) * 180) / Math.PI;
   const features: {
     id: number;
     type: 3;
@@ -284,21 +303,21 @@ function hexTile(z: number, x: number, y: number): Uint8Array {
     properties: { total: number };
     loadGeometry: () => { x: number; y: number }[][];
   }[] = [];
-  for (let col = 0; col * 1.5 * r <= E + r; col++) {
-    for (let row = 0; row * h <= E + h; row++) {
-      const cx = col * 1.5 * r;
-      const cy = row * h + (col % 2 ? h / 2 : 0);
-      const [lng, lat] = [lngOf(cx), latOf(cy)];
+  for (let column = 0; column * 1.5 * radius <= EXTENT + radius; column++) {
+    for (let row = 0; row * hexHeight <= EXTENT + hexHeight; row++) {
+      const centreX = column * 1.5 * radius;
+      const centreY = row * hexHeight + (column % 2 ? hexHeight / 2 : 0);
+      const [lng, lat] = [lngOf(centreX), latOf(centreY)];
       if (lng < -12 || lng > 4 || lat < 48 || lat > 62) continue;
-      const ring = [0, 60, 120, 180, 240, 300, 0].map((a) => ({
-        x: Math.round(cx + r * Math.cos((a * Math.PI) / 180)),
-        y: Math.round(cy + r * Math.sin((a * Math.PI) / 180)),
+      const ring = [0, 60, 120, 180, 240, 300, 0].map((angle) => ({
+        x: Math.round(centreX + radius * Math.cos((angle * Math.PI) / 180)),
+        y: Math.round(centreY + radius * Math.sin((angle * Math.PI) / 180)),
       }));
-      const total = 2 * (40 + ((col * 7 + row * 13) % 400));
+      const total = 2 * (40 + ((column * 7 + row * 13) % 400));
       features.push({
         id: features.length + 1,
         type: 3 as const,
-        extent: E,
+        extent: EXTENT,
         properties: { total },
         loadGeometry: () => [ring],
       });
@@ -309,9 +328,9 @@ function hexTile(z: number, x: number, y: number): Uint8Array {
       occurrence: {
         version: 2,
         name: 'occurrence',
-        extent: E,
+        extent: EXTENT,
         length: features.length,
-        feature: (i) => features[i]! as never,
+        feature: (index) => features[index]! as never,
       },
     },
   });
@@ -341,13 +360,14 @@ const missing = (): FakeResponse => json({ message: 'not found' }, 404);
  * (api.inaturalist.org, tile.gbif.org) are routed here too.
  */
 export function answer(url: URL): FakeResponse | undefined {
-  const p = url.pathname;
-  const q = url.searchParams;
-  if (url.hostname === 'api.inaturalist.org' || p.startsWith('/inat/')) return json({ total_results: 0, results: [] });
+  const path = url.pathname;
+  const params = url.searchParams;
+  if (url.hostname === 'api.inaturalist.org' || path.startsWith('/inat/'))
+    return json({ total_results: 0, results: [] });
   if (url.hostname === 'tile.gbif.org' || url.hostname === 'photos.example') return png();
-  if (p === '/geocode')
+  if (path === '/geocode')
     return json(
-      q.get('q')?.toLowerCase().startsWith('london')
+      params.get('q')?.toLowerCase().startsWith('london')
         ? [
             {
               display_name: 'London, Greater London, England, United Kingdom',
@@ -360,51 +380,55 @@ export function answer(url: URL): FakeResponse | undefined {
         : [],
     );
   // Basemaps: no vector style, so the map draws its plain fallback; raster tiles are blank.
-  if (p.startsWith('/basemap/')) return p.endsWith('.json') ? missing() : png();
+  if (path.startsWith('/basemap/')) return path.endsWith('.json') ? missing() : png();
 
-  if (p === '/v1/occurrence/search') return json(occurrenceSearch(q));
-  if (p === '/v1/species/search') return json(speciesSearch(q));
-  if (p === '/v1/species/suggest') {
-    const text = (q.get('q') ?? '').toLowerCase();
+  if (path === '/v1/occurrence/search') return json(occurrenceSearch(params));
+  if (path === '/v1/species/search') return json(speciesSearch(params));
+  if (path === '/v1/species/suggest') {
+    const text = (params.get('q') ?? '').toLowerCase();
     return json(
-      TAXA.filter((t) => t.name.toLowerCase().startsWith(text))
-        .slice(0, Number(q.get('limit') ?? 8))
+      TAXA.filter((taxon) => taxon.name.toLowerCase().startsWith(text))
+        .slice(0, Number(params.get('limit') ?? 8))
         .map(usage),
     );
   }
-  let m = /^\/v1\/species\/(\d+)(?:\/(\w+))?$/.exec(p);
-  if (m) {
-    const t = byKey.get(Number(m[1]));
-    if (!t) return missing();
+  let match = /^\/v1\/species\/(\d+)(?:\/(\w+))?$/.exec(path);
+  if (match) {
+    const taxon = byKey.get(Number(match[1]));
+    if (!taxon) return missing();
     const page = (results: unknown[]) => json({ offset: 0, limit: results.length, endOfRecords: true, results });
-    switch (m[2]) {
+    switch (match[2]) {
       case undefined:
-        return json(usage(t));
+        return json(usage(taxon));
       case 'vernacularNames':
-        return page([{ vernacularName: t.common, language: 'eng' }]);
+        return page([{ vernacularName: taxon.common, language: 'eng' }]);
       case 'synonyms':
         return page([]);
       case 'children':
-        return page(TAXA.filter((c) => c.parent === t.key).map(usage));
+        return page(TAXA.filter((child) => child.parent === taxon.key).map(usage));
       case 'parents':
-        return json(ancestors(t).map(usage));
+        return json(ancestors(taxon).map(usage));
       default:
         return missing();
     }
   }
-  m = /^\/v1\/(dataset|organization)\/([\w-]+)$/.exec(p);
-  if (m) return json({ key: m[2], title: DATASETS.find((d) => d.key === m![2])?.title ?? 'Garden Bird Club' });
-  if (p === '/v2/map/occurrence/density/capabilities.json') {
-    const total = speciesFor(q).reduce((n, s) => n + s.records!, 0);
+  match = /^\/v1\/(dataset|organization)\/([\w-]+)$/.exec(path);
+  if (match)
+    return json({
+      key: match[2],
+      title: DATASETS.find((dataset) => dataset.key === match![2])?.title ?? 'Garden Bird Club',
+    });
+  if (path === '/v2/map/occurrence/density/capabilities.json') {
+    const total = speciesFor(params).reduce((running, species) => running + species.records!, 0);
     return json({ minLat: 49, maxLat: 59, minLng: -8, maxLng: 2, total });
   }
-  m = /^\/v2\/map\/occurrence\/(?:density|adhoc)\/(\d+)\/(\d+)\/(\d+)\.mvt$/.exec(p);
-  if (m) {
-    if (!tiles.has(p)) tiles.set(p, hexTile(Number(m[1]), Number(m[2]), Number(m[3])));
-    return { status: 200, contentType: 'application/x-protobuf', body: tiles.get(p)! };
+  match = /^\/v2\/map\/occurrence\/(?:density|adhoc)\/(\d+)\/(\d+)\/(\d+)\.mvt$/.exec(path);
+  if (match) {
+    if (!tiles.has(path)) tiles.set(path, hexTile(Number(match[1]), Number(match[2]), Number(match[3])));
+    return { status: 200, contentType: 'application/x-protobuf', body: tiles.get(path)! };
   }
-  if (/^\/v2\/map\/occurrence\/(density|adhoc)\/\d+\/\d+\/\d+@\dx\.png$/.test(p)) return png();
-  if (p.startsWith('/v1/image/')) return png();
+  if (/^\/v2\/map\/occurrence\/(density|adhoc)\/\d+\/\d+\/\d+@\dx\.png$/.test(path)) return png();
+  if (path.startsWith('/v1/image/')) return png();
   return undefined;
 }
 

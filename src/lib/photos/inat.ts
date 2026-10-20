@@ -24,9 +24,9 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
   let last = now();
   let queue: Promise<void> = Promise.resolve();
   const refill = () => {
-    const t = now();
-    tokens = Math.min(burst, tokens + ((t - last) / 1000) * perSecond);
-    last = t;
+    const timestamp = now();
+    tokens = Math.min(burst, tokens + ((timestamp - last) / 1000) * perSecond);
+    last = timestamp;
   };
   // A request cancelled while queued (its panel closed) gives up its turn without spending a token.
   const acquire = (signal?: AbortSignal) => {
@@ -34,9 +34,9 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
       if (signal?.aborted) return;
       refill();
       if (tokens < 1) {
-        await new Promise<void>((r) => {
-          const t = setTimeout(r, ((1 - tokens) / perSecond) * 1000);
-          signal?.addEventListener('abort', () => (clearTimeout(t), r()), { once: true });
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, ((1 - tokens) / perSecond) * 1000);
+          signal?.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true });
         });
         if (signal?.aborted) return;
         refill();
@@ -46,16 +46,16 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
     queue = turn;
     return turn;
   };
-  return async (url, init) => {
-    await acquire(init?.signal);
-    init?.signal?.throwIfAborted();
-    return transport(url, init);
+  return async (url, requestInit) => {
+    await acquire(requestInit?.signal);
+    requestInit?.signal?.throwIfAborted();
+    return transport(url, requestInit);
   };
 }
 
 const inat = createHttp({
   base: INAT_API_BASE,
-  transport: throttle((url, init) => globalThis.fetch(url, init)),
+  transport: throttle((url, requestInit) => globalThis.fetch(url, requestInit)),
   defaultTtlMs: 6 * HOUR,
 });
 
@@ -96,21 +96,21 @@ const taxa = new LruCache<InatTaxon>(2000);
  * already loaded, so the same list always makes the same requests (and cache keys).
  */
 export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Promise<Map<number, InatTaxon>> {
-  const wanted = [...new Set(ids)].sort((a, b) => a - b);
-  for (let i = 0; i < wanted.length; i += TAXA_BATCH) {
-    const chunk = wanted.slice(i, i + TAXA_BATCH);
+  const wanted = [...new Set(ids)].sort((left, right) => left - right);
+  for (let offset = 0; offset < wanted.length; offset += TAXA_BATCH) {
+    const chunk = wanted.slice(offset, offset + TAXA_BATCH);
     if (chunk.every((id) => taxa.get(String(id)) !== undefined)) continue;
-    const res = await inat.getJson<{ results: InatTaxon[] }>(
+    const response = await inat.getJson<{ results: InatTaxon[] }>(
       `/v2/taxa/${chunk.join(',')}`,
       { fields: TAXON_FIELDS },
       { ...(signal && { signal }) },
     );
-    for (const t of res.results) taxa.set(String(t.id), t, Infinity);
+    for (const taxon of response.results) taxa.set(String(taxon.id), taxon, Infinity);
   }
   return new Map(
     ids.flatMap((id): [number, InatTaxon][] => {
-      const t = taxa.get(String(id));
-      return t ? [[id, t]] : [];
+      const cachedTaxon = taxa.get(String(id));
+      return cachedTaxon ? [[id, cachedTaxon]] : [];
     }),
   );
 }
@@ -120,19 +120,19 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
  * only for species GBIF holds no iNaturalist record of. Null when there is none.
  */
 export async function searchTaxon(name: string, signal?: AbortSignal): Promise<InatTaxon | null> {
-  const res = await inat.getJson<{ results: InatTaxon[] }>(
+  const response = await inat.getJson<{ results: InatTaxon[] }>(
     '/v2/taxa',
     { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS },
     { ...(signal && { signal }) },
   );
-  const found = res.results.find((t) => t.name.toLowerCase() === name.toLowerCase());
+  const found = response.results.find((taxon) => taxon.name.toLowerCase() === name.toLowerCase());
   if (found) taxa.set(String(found.id), found, Infinity);
   return found ?? null;
 }
 
 /** Research-grade observations of a taxon with an openly licensed photo, most-voted first. */
 export async function votedObservations(taxonId: number, signal?: AbortSignal): Promise<InatObservation[]> {
-  const res = await inat.getJson<{ results: InatObservation[] }>(
+  const response = await inat.getJson<{ results: InatObservation[] }>(
     '/v2/observations',
     {
       taxon_id: taxonId,
@@ -146,24 +146,24 @@ export async function votedObservations(taxonId: number, signal?: AbortSignal): 
     },
     { ...(signal && { signal }) },
   );
-  return res.results;
+  return response.results;
 }
 
 /** "(c) Ann Smith, some rights reserved (CC BY)" → "Ann Smith". */
-function creatorOf(p: InatPhoto): string | undefined {
-  if (p.attribution_name) return p.attribution_name;
-  return p.attribution?.match(/^\(c\)\s*(.+?),\s*(?:some|all) rights reserved/i)?.[1];
+function creatorOf(photo: InatPhoto): string | undefined {
+  if (photo.attribution_name) return photo.attribution_name;
+  return photo.attribution?.match(/^\(c\)\s*(.+?),\s*(?:some|all) rights reserved/i)?.[1];
 }
 
 /** An openly licensed photo as an image, or null ("all rights reserved" and the like). */
-export function toImage(p: InatPhoto, observationUrl?: string): InatImage | null {
-  const licence = parseLicence(p.license_code);
-  if (!licence || !p.url) return null;
-  const creator = creatorOf(p);
+export function toImage(photo: InatPhoto, observationUrl?: string): InatImage | null {
+  const licence = parseLicence(photo.license_code);
+  if (!licence || !photo.url) return null;
+  const creator = creatorOf(photo);
   return {
     source: 'inat',
-    photoId: p.id,
-    url: p.url,
+    photoId: photo.id,
+    url: photo.url,
     licence,
     publisher: 'iNaturalist',
     ...(creator && { creator }),
@@ -172,16 +172,16 @@ export function toImage(p: InatPhoto, observationUrl?: string): InatImage | null
 }
 
 /** A taxon's curated photos (the ones iNaturalist shows on its taxon page), best first. */
-export function curatedImages(t: InatTaxon): InatImage[] {
-  return (t.taxon_photos ?? []).flatMap((tp) => toImage(tp.photo) ?? []);
+export function curatedImages(taxon: InatTaxon): InatImage[] {
+  return (taxon.taxon_photos ?? []).flatMap((taxonPhoto) => toImage(taxonPhoto.photo) ?? []);
 }
 
 /** The first openly licensed photo of each observation. */
-export function observationImages(obs: readonly InatObservation[]): InatImage[] {
-  return obs.flatMap((o) => {
-    for (const p of o.photos ?? []) {
-      const img = toImage(p, o.uri);
-      if (img) return [img];
+export function observationImages(observations: readonly InatObservation[]): InatImage[] {
+  return observations.flatMap((observation) => {
+    for (const photo of observation.photos ?? []) {
+      const image = toImage(photo, observation.uri);
+      if (image) return [image];
     }
     return [];
   });
@@ -189,6 +189,6 @@ export function observationImages(obs: readonly InatObservation[]): InatImage[] 
 
 /** iNaturalist photo ID in a photo URL (also on GBIF's copies of iNaturalist photos). */
 export function inatPhotoId(url: string): number | undefined {
-  const m = url.match(/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/(\d+)\//);
-  return m ? Number(m[1]) : undefined;
+  const match = url.match(/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/(\d+)\//);
+  return match ? Number(match[1]) : undefined;
 }

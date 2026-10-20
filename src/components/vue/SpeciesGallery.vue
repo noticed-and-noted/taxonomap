@@ -38,14 +38,14 @@ onMounted(async () => {
 });
 
 /** Where a photo came from: its GBIF record, or its iNaturalist observation (or photo page). */
-function sourceOf(img: UsableImage): { href: string; label: string } {
-  if (img.source === 'inat') {
+function sourceOf(image: UsableImage): { href: string; label: string } {
+  if (image.source === 'inat') {
     return {
-      href: img.observationUrl ?? `https://www.inaturalist.org/photos/${img.photoId}`,
-      label: img.observationUrl ? 'Observation' : 'Photo',
+      href: image.observationUrl ?? `https://www.inaturalist.org/photos/${image.photoId}`,
+      label: image.observationUrl ? 'Observation' : 'Photo',
     };
   }
-  return { href: `https://www.gbif.org/occurrence/${img.occurrenceKey}`, label: 'Source record' };
+  return { href: `https://www.gbif.org/occurrence/${image.occurrenceKey}`, label: 'Source record' };
 }
 
 const dialog = ref<HTMLDialogElement>();
@@ -74,52 +74,52 @@ function settle(url: string, ok: boolean) {
   if (!ok) failed.add(url);
 }
 
-function preload(i: number) {
-  const img = images.value[i];
-  if (!img) return;
-  const url = thumbnailUrl(img, '800x');
+function preload(imageIndex: number) {
+  const image = images.value[imageIndex];
+  if (!image) return;
+  const url = thumbnailUrl(image, '800x');
   if (settled.has(url) || preloading.has(url)) return;
   preloading.add(url);
-  const el = new Image();
-  el.decoding = 'async';
+  const element = new Image();
+  element.decoding = 'async';
   // Same mode as the <img> below, so the preloaded copy is the one it uses.
   const cors = photoCrossOrigin(url);
-  if (cors) el.crossOrigin = cors;
-  el.onload = () => settle(url, true);
-  el.onerror = () => {
+  if (cors) element.crossOrigin = cors;
+  element.onload = () => settle(url, true);
+  element.onerror = () => {
     if (!retryWithoutCors(url)) return settle(url, false);
     preloading.delete(url);
-    preload(i);
+    preload(imageIndex);
   };
-  el.src = url;
+  element.src = url;
 }
 
-function preloadAround(i: number) {
-  const n = images.value.length;
-  preload((i + 1) % n);
-  preload((i - 1 + n) % n);
+function preloadAround(imageIndex: number) {
+  const count = images.value.length;
+  preload((imageIndex + 1) % count);
+  preload((imageIndex - 1 + count) % count);
 }
 
-function open(i: number) {
-  index.value = i;
+function open(imageIndex: number) {
+  index.value = imageIndex;
   isOpen.value = true;
   dialog.value?.showModal();
-  preloadAround(i);
+  preloadAround(imageIndex);
 }
 
-function step(d: number) {
-  const n = images.value.length;
-  index.value = (index.value + d + n) % n;
+function step(delta: number) {
+  const count = images.value.length;
+  index.value = (index.value + delta + count) % count;
   preloadAround(index.value);
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'ArrowRight') step(1);
-  else if (e.key === 'ArrowLeft') step(-1);
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'ArrowRight') step(1);
+  else if (event.key === 'ArrowLeft') step(-1);
 }
 
-function onBackdrop(e: MouseEvent) {
-  if (e.target === dialog.value) dialog.value?.close();
+function onBackdrop(event: MouseEvent) {
+  if (event.target === dialog.value) dialog.value?.close();
 }
 </script>
 
@@ -127,7 +127,7 @@ function onBackdrop(e: MouseEvent) {
   <div v-if="loading" class="grid gap-1.5 sm:grid-cols-[2fr_1fr]" role="status" aria-label="Loading photos">
     <SkeletonBlock class="aspect-[4/3]" height="auto" rounded="lg" aria-hidden="true" />
     <div class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
-      <SkeletonBlock v-for="i in 4" :key="i" class="aspect-square" height="auto" aria-hidden="true" />
+      <SkeletonBlock v-for="slot in 4" :key="slot" class="aspect-square" height="auto" aria-hidden="true" />
     </div>
   </div>
   <div v-else-if="!images.length" class="grid aspect-[4/3] place-items-center rounded-lg bg-photo text-sm text-subtle">
@@ -152,16 +152,16 @@ function onBackdrop(e: MouseEvent) {
       </button>
       <div v-if="images.length > 1" class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
         <button
-          v-for="(img, i) in images.slice(1, 5)"
-          :key="img.url"
+          v-for="(image, position) in images.slice(1, 5)"
+          :key="image.url"
           type="button"
           class="relative block aspect-square cursor-pointer overflow-hidden rounded-md bg-photo"
-          :aria-label="`Enlarge photo ${i + 2} of ${images.length}`"
-          @click="open(i + 1)"
+          :aria-label="`Enlarge photo ${position + 2} of ${images.length}`"
+          @click="open(position + 1)"
         >
-          <ThumbImage :image="img" size="200x" :alt="''" class="size-full object-cover" />
+          <ThumbImage :image="image" size="200x" :alt="''" class="size-full object-cover" />
           <span
-            v-if="i === 3 && images.length > 5"
+            v-if="position === 3 && images.length > 5"
             class="absolute inset-0 grid place-items-center bg-black/50 text-sm text-white"
           >
             +{{ images.length - 5 }}

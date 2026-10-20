@@ -41,12 +41,12 @@ describe('params', () => {
   });
 
   it('builds a closed circle polygon from rounded inputs', () => {
-    const a = circleToWkt(51.50735, -0.12776, 1.8);
-    const b = circleToWkt(51.50741, -0.12779, 2.1);
-    expect(a).toBe(b); // same rounded centre + same snapped radius → same cache key
-    const pts = a.slice('POLYGON(('.length, -2).split(',');
-    expect(pts).toHaveLength(25);
-    expect(pts[0]).toBe(pts[24]);
+    const first = circleToWkt(51.50735, -0.12776, 1.8);
+    const second = circleToWkt(51.50741, -0.12779, 2.1);
+    expect(first).toBe(second); // same rounded centre + same snapped radius → same cache key
+    const points = first.slice('POLYGON(('.length, -2).split(',');
+    expect(points).toHaveLength(25);
+    expect(points[0]).toBe(points[24]);
   });
 
   it('formats year ranges', () => {
@@ -58,13 +58,13 @@ describe('params', () => {
 
 describe('polygonToWkt', () => {
   it('rounds, closes and winds counter-clockwise', () => {
-    const cw: [number, number][] = [
+    const clockwise: [number, number][] = [
       [0, 0],
       [0, 1.000049],
       [1, 1],
       [1, 0],
     ];
-    expect(polygonToWkt(cw)).toBe('POLYGON((0 0,1 0,1 1,0 1,0 0))');
+    expect(polygonToWkt(clockwise)).toBe('POLYGON((0 0,1 0,1 1,0 1,0 0))');
   });
 });
 

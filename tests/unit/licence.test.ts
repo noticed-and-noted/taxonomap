@@ -34,7 +34,7 @@ describe('licence', () => {
   });
 
   it('uses a CC media licence, else falls back to the record licence', () => {
-    const imgs = usableImages(
+    const images = usableImages(
       occ('http://creativecommons.org/licenses/by/4.0/legalcode', [
         { type: 'StillImage', identifier: 'a.jpg' }, // empty → record CC-BY
         { type: 'StillImage', identifier: 'b.jpg', license: 'Copyright by the creator, see …' }, // free text → record
@@ -45,13 +45,13 @@ describe('licence', () => {
         { type: 'StillImage' }, // no URL
       ]),
     );
-    expect(imgs.map((i) => [i.url, i.licence])).toEqual([
+    expect(images.map((image) => [image.url, image.licence])).toEqual([
       ['a.jpg', 'CC-BY'],
       ['b.jpg', 'CC-BY'],
       ['c.jpg', 'CC0'],
       ['e.jpg', 'CC-BY-SA'],
     ]);
-    expect(imgs[2]).toMatchObject({ creator: 'Ann', publisher: 'Pub', datasetKey: 'd', occurrenceKey: 1 });
+    expect(images[2]).toMatchObject({ creator: 'Ann', publisher: 'Pub', datasetKey: 'd', occurrenceKey: 1 });
   });
 
   it('drops unlicensed media on records with a disallowed licence', () => {
@@ -59,12 +59,12 @@ describe('licence', () => {
   });
 
   it('lets unlicensed media inherit a ShareAlike record licence', () => {
-    const imgs = usableImages(occ('https://creativecommons.org/licenses/by-sa/4.0/', [{ identifier: 'x.jpg' }]));
-    expect(imgs.map((i) => i.licence)).toEqual(['CC-BY-SA']);
+    const images = usableImages(occ('https://creativecommons.org/licenses/by-sa/4.0/', [{ identifier: 'x.jpg' }]));
+    expect(images.map((image) => image.licence)).toEqual(['CC-BY-SA']);
   });
 
   it('takes the rights holder and publisher from the media, else the record, with any references', () => {
-    const [own, inherited] = usableImages({
+    const [ownImage, inherited] = usableImages({
       ...occ('CC0_1_0', [
         { identifier: 'a.jpg', rightsHolder: 'Media RH', publisher: 'Media Pub', references: 'https://ref.test' },
         { identifier: 'b.jpg' },
@@ -72,7 +72,7 @@ describe('licence', () => {
       speciesKey: 7,
       rightsHolder: 'Record RH',
     });
-    expect(own).toMatchObject({
+    expect(ownImage).toMatchObject({
       rightsHolder: 'Media RH',
       publisher: 'Media Pub',
       references: 'https://ref.test',

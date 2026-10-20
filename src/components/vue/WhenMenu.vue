@@ -29,7 +29,7 @@ import DatePicker from './DatePicker.vue';
 /** A range to show instead of the store's, e.g. while the slider is dragged. */
 const props = defineProps<{ live?: string | null }>();
 
-const uid = useId();
+const uniqueId = useId();
 const range = useStore($dateRange);
 
 const open = ref(false);
@@ -42,19 +42,19 @@ const place = ref<Record<'top' | 'bottom' | 'left' | 'width' | 'maxHeight', stri
 function position() {
   const anchor = (root.value?.offsetParent as HTMLElement | null) ?? root.value;
   if (!anchor) return;
-  const r = anchor.getBoundingClientRect();
-  const px = (n: number) => `${Math.round(n)}px`;
+  const rect = anchor.getBoundingClientRect();
+  const px = (value: number) => `${Math.round(value)}px`;
   // Flipped, the panel ends just above the range label, covering the slider.
-  const t = trigger.value?.getBoundingClientRect() ?? r;
-  const below = innerHeight - r.bottom - 12;
-  const above = t.top - 12;
+  const triggerRect = trigger.value?.getBoundingClientRect() ?? rect;
+  const below = innerHeight - rect.bottom - 12;
+  const above = triggerRect.top - 12;
   // Open below the slider, or over it when a short window leaves more room there.
   const down = below >= 320 || below >= above;
   place.value = {
-    top: down ? px(r.bottom + 4) : 'auto',
-    bottom: down ? 'auto' : px(innerHeight - t.top + 4),
-    left: px(r.left),
-    width: px(r.width),
+    top: down ? px(rect.bottom + 4) : 'auto',
+    bottom: down ? 'auto' : px(innerHeight - triggerRect.top + 4),
+    left: px(rect.left),
+    width: px(rect.width),
     maxHeight: px(down ? below : above),
   };
 }
@@ -101,9 +101,9 @@ function commitText(end: 'from' | 'to') {
   }
   typeError.value = '';
   // A coarser date than the unit covers all of it ("2020" in Days: 1 Jan to 31 Dec).
-  const p = key && keyUnit(key);
-  if (end === 'from') from.value = key ? startOf(startOf(key, p as DateUnit), unit.value) : null;
-  else to.value = key ? endOf(endOf(key, p as DateUnit), unit.value) : null;
+  const parsedUnit = key && keyUnit(key);
+  if (end === 'from') from.value = key ? startOf(startOf(key, parsedUnit as DateUnit), unit.value) : null;
+  else to.value = key ? endOf(endOf(key, parsedUnit as DateUnit), unit.value) : null;
   if (from.value && to.value && from.value > to.value)
     [from.value, to.value] = [startOf(to.value, unit.value), endOf(from.value, unit.value)];
   syncText();
@@ -111,12 +111,12 @@ function commitText(end: 'from' | 'to') {
 }
 
 function loadDraft() {
-  const r = range.value;
-  if (!r) [unit.value, from.value, to.value] = ['y', null, null];
-  else if ('preset' in r) {
-    const d = resolveRange(r);
-    [unit.value, from.value, to.value] = ['d', d.from, d.to];
-  } else [unit.value, from.value, to.value] = [r.unit, r.from, r.to];
+  const current = range.value;
+  if (!current) [unit.value, from.value, to.value] = ['y', null, null];
+  else if ('preset' in current) {
+    const resolved = resolveRange(current);
+    [unit.value, from.value, to.value] = ['d', resolved.from, resolved.to];
+  } else [unit.value, from.value, to.value] = [current.unit, current.from, current.to];
   typeError.value = '';
   syncText();
   edit('from');
@@ -126,7 +126,7 @@ watch(range, () => {
   if (open.value && view.value === 'custom') loadDraft();
 });
 
-const isPreset = (p: Preset) => !!range.value && 'preset' in range.value && range.value.preset === p;
+const isPreset = (preset: Preset) => !!range.value && 'preset' in range.value && range.value.preset === preset;
 const isCustom = computed(() => !!range.value && !('preset' in range.value));
 const label = computed(() => props.live ?? (range.value ? rangeLabel(range.value) : 'Any time'));
 
@@ -139,8 +139,8 @@ function close(refocus = true) {
   open.value = false;
   if (refocus) void nextTick(() => trigger.value?.focus());
 }
-function choose(p: Preset | null) {
-  $dateRange.set(p && { preset: p });
+function choose(preset: Preset | null) {
+  $dateRange.set(preset && { preset: preset });
   close();
 }
 function showCustom() {
@@ -148,11 +148,11 @@ function showCustom() {
   view.value = 'custom';
 }
 
-function setUnit(u: DateUnit) {
-  unit.value = u;
+function setUnit(nextUnit: DateUnit) {
+  unit.value = nextUnit;
   // Round each end out to the new unit.
-  if (from.value) from.value = startOf(from.value, u);
-  if (to.value) to.value = endOf(to.value, u);
+  if (from.value) from.value = startOf(from.value, nextUnit);
+  if (to.value) to.value = endOf(to.value, nextUnit);
 }
 function pick(key: string) {
   typeError.value = '';
@@ -171,20 +171,20 @@ function apply() {
   close();
 }
 
-function onOutside(e: PointerEvent) {
-  const t = e.target as Node;
-  if (!root.value?.contains(t) && !panel.value?.contains(t)) close(false);
+function onOutside(event: PointerEvent) {
+  const target = event.target as Node;
+  if (!root.value?.contains(target) && !panel.value?.contains(target)) close(false);
 }
 function listen(on: boolean) {
-  const fn = on ? addEventListener : removeEventListener;
-  fn('pointerdown', onOutside as EventListener);
+  const callback = on ? addEventListener : removeEventListener;
+  callback('pointerdown', onOutside as EventListener);
   // Follow the slider when the flyout scrolls or the window resizes.
-  fn('scroll', position, true);
-  fn('resize', position);
+  callback('scroll', position, true);
+  callback('resize', position);
 }
-watch(open, (o) => {
-  if (o) position();
-  listen(o);
+watch(open, (isOpen) => {
+  if (isOpen) position();
+  listen(isOpen);
 });
 onBeforeUnmount(() => {
   listen(false);
@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
       type="button"
       class="trigger"
       :aria-expanded="open"
-      :aria-controls="`${uid}-menu`"
+      :aria-controls="`${uniqueId}-menu`"
       aria-haspopup="true"
       :aria-label="`Date range: ${label}`"
       @click="toggle"
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div
         v-if="open && place"
-        :id="`${uid}-menu`"
+        :id="`${uniqueId}-menu`"
         ref="panel"
         class="panel"
         :style="place"
@@ -246,9 +246,9 @@ onBeforeUnmount(() => {
               Any time <span v-if="!range" class="selected">Selected</span>
             </button>
           </li>
-          <li v-for="(text, p) in PRESETS" :key="p">
-            <button type="button" class="item" :aria-pressed="isPreset(p)" @click="choose(p)">
-              {{ text }} <span v-if="isPreset(p)" class="selected">Selected</span>
+          <li v-for="(text, presetKey) in PRESETS" :key="presetKey">
+            <button type="button" class="item" :aria-pressed="isPreset(presetKey)" @click="choose(presetKey)">
+              {{ text }} <span v-if="isPreset(presetKey)" class="selected">Selected</span>
             </button>
           </li>
           <li class="divider">
@@ -292,15 +292,15 @@ onBeforeUnmount(() => {
           <div class="custom-body">
             <fieldset class="units">
               <legend class="sr-only">Pick by</legend>
-              <label v-for="u in UNITS" :key="u.id" class="unit">
+              <label v-for="unitOption in UNITS" :key="unitOption.id" class="unit">
                 <input
                   type="radio"
                   class="sr-only"
-                  :name="`${uid}-unit`"
-                  :checked="unit === u.id"
-                  @change="setUnit(u.id)"
+                  :name="`${uniqueId}-unit`"
+                  :checked="unit === unitOption.id"
+                  @change="setUnit(unitOption.id)"
                 />
-                {{ u.label }}
+                {{ unitOption.label }}
               </label>
             </fieldset>
 
@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
                   aria-label="From"
                   :placeholder="unit === 'y' ? 'Earliest' : 'Any'"
                   autocomplete="off"
-                  :aria-describedby="typeError ? `${uid}-err` : undefined"
+                  :aria-describedby="typeError ? `${uniqueId}-err` : undefined"
                   @focus="edit('from')"
                   @change="commitText('from')"
                   @keydown.enter.prevent="commitText('from')"
@@ -327,13 +327,13 @@ onBeforeUnmount(() => {
                   aria-label="To"
                   placeholder="Today"
                   autocomplete="off"
-                  :aria-describedby="typeError ? `${uid}-err` : undefined"
+                  :aria-describedby="typeError ? `${uniqueId}-err` : undefined"
                   @focus="edit('to')"
                   @change="commitText('to')"
                   @keydown.enter.prevent="commitText('to')"
                 />
               </label>
-              <p v-if="typeError" :id="`${uid}-err`" class="error" role="alert">{{ typeError }}</p>
+              <p v-if="typeError" :id="`${uniqueId}-err`" class="error" role="alert">{{ typeError }}</p>
             </div>
 
             <DatePicker :unit="unit" :from="from" :to="to" :at="at" @pick="pick" />

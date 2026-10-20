@@ -2,6 +2,11 @@
 import { computed, ref, type Ref } from 'vue';
 import { countRequest, thumbnailUrl, type ThumbSize, type UsableImage } from '~/lib/gbif';
 
+/**
+ * Loading state for a thumbnail image, counting its request in the meter.
+ * @param image The image to show, if any.
+ * @param size Thumbnail size to request.
+ */
 export function useThumbnail(image: Ref<UsableImage | undefined>, size: ThumbSize = '400x') {
   const loaded = ref(false);
   const broken = ref(false);

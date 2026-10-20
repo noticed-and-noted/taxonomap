@@ -22,14 +22,14 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
   return stubNetwork((url) => {
     const early = override(url);
     if (early !== undefined) return early;
-    const p = url.pathname;
-    const q = url.searchParams;
-    if (p === '/v1/species/search' && q.get('facet') === 'higherTaxonKey')
+    const path = url.pathname;
+    const params = url.searchParams;
+    if (path === '/v1/species/search' && params.get('facet') === 'higherTaxonKey')
       return facets(0, 'HIGHER_TAXON_KEY', [
         [44, 50],
         [212, 40],
       ]);
-    if (p === '/v1/species/search') {
+    if (path === '/v1/species/search') {
       const byRank: Record<string, object[]> = {
         KINGDOM: [
           usage(1, 'KINGDOM', 'Animalia', { vernacularNames: [{ vernacularName: 'Animals', language: 'eng' }] }),
@@ -41,17 +41,17 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
         ],
         ORDER: [],
       };
-      return { endOfRecords: true, results: byRank[q.get('rank') ?? ''] ?? [] };
+      return { endOfRecords: true, results: byRank[params.get('rank') ?? ''] ?? [] };
     }
-    if (p === '/v1/occurrence/search') {
-      const f = q.getAll('facet');
-      if (f.includes('year'))
+    if (path === '/v1/occurrence/search') {
+      const facetFields = params.getAll('facet');
+      if (facetFields.includes('year'))
         return facets(30, 'YEAR', [
           [2001, 20],
           [2000, 10],
         ]);
-      if (f.includes('speciesKey')) {
-        const taxon = q.get('taxonKey');
+      if (facetFields.includes('speciesKey')) {
+        const taxon = params.get('taxonKey');
         return taxon === '212'
           ? facets(0, 'SPECIES_KEY', [
               [10, 9000],
@@ -78,13 +78,13 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
         ],
       };
     }
-    const species = /^\/v1\/species\/(\d+)$/.exec(p);
+    const species = /^\/v1\/species\/(\d+)$/.exec(path);
     if (species) {
-      const k = Number(species[1]);
-      if (k === 12) return usage(12, 'GENUS', 'Genusonly');
-      return usage(k, 'SPECIES', `Species number${k}`);
+      const key = Number(species[1]);
+      if (key === 12) return usage(12, 'GENUS', 'Genusonly');
+      return usage(key, 'SPECIES', `Species number${key}`);
     }
-    if (/^\/v1\/species\/\d+\/vernacularNames$/.test(p))
+    if (/^\/v1\/species\/\d+\/vernacularNames$/.test(path))
       return { results: [{ vernacularName: 'Some bird', language: 'eng' }] };
     return undefined;
   });
@@ -93,7 +93,7 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
 async function bake(env: Record<string, string> = {}) {
   vi.resetModules();
   vi.unstubAllEnvs();
-  for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+  for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
   return import('~/lib/bake');
 }
 
@@ -105,9 +105,9 @@ afterEach(() => {
 describe('bake', () => {
   it('bakes records per year, ascending, once per build', async () => {
     const calls = gbif();
-    const b = await bake();
-    const [a, again] = [await b.bakeYears(), await b.bakeYears()];
-    expect(a).toMatchObject({
+    const baked = await bake();
+    const [first, again] = [await baked.bakeYears(), await baked.bakeYears()];
+    expect(first).toMatchObject({
       v: 1,
       total: 30,
       years: [
@@ -115,7 +115,7 @@ describe('bake', () => {
         [2001, 20],
       ],
     });
-    expect(again).toBe(a);
+    expect(again).toBe(first);
     expect(calls).toHaveLength(1);
   });
 
@@ -131,19 +131,19 @@ describe('bake', () => {
 
   it('picks species to pre-render by class share, skipping non-species', async () => {
     gbif();
-    const b = await bake({ SPECIES_PRERENDER_COUNT: '3' });
-    expect(b.prerenderCount()).toBe(3);
+    const baked = await bake({ SPECIES_PRERENDER_COUNT: '3' });
+    expect(baked.prerenderCount()).toBe(3);
     // Birds get ceil(3 × 0.3) = 1 slot (key 10); the next class adds 12, a genus, which is dropped.
-    expect(await b.bakeSpeciesList()).toEqual([{ key: 10, slug: 'species-number10', count: 9000 }]);
-    expect(await b.bakeSpeciesManifest()).toEqual({ 10: 'species-number10' });
+    expect(await baked.bakeSpeciesList()).toEqual([{ key: 10, slug: 'species-number10', count: 9000 }]);
+    expect(await baked.bakeSpeciesManifest()).toEqual({ 10: 'species-number10' });
   });
 
   it('fails the build when GBIF errors, rather than dropping the species', async () => {
     gbif((url) => (url.pathname === '/v1/species/10' ? json({}, 400) : undefined));
-    const b = await bake({ SPECIES_PRERENDER_COUNT: '3' });
+    const baked = await bake({ SPECIES_PRERENDER_COUNT: '3' });
     // The mocked server module keeps its client (and its cache) across tests.
     (await import('~/lib/gbif/server')).http().clear();
-    await expect(b.bakeSpeciesList()).rejects.toThrow();
+    await expect(baked.bakeSpeciesList()).rejects.toThrow();
   });
 
   it('pre-renders nothing when the count is 0', async () => {
@@ -154,8 +154,8 @@ describe('bake', () => {
 
   it('bakes the name index from higher ranks and top species, most-recorded first', async () => {
     gbif();
-    const b = await bake({ NAME_INDEX_SIZE: '3' });
-    const { names } = await b.bakeNames();
+    const baked = await bake({ NAME_INDEX_SIZE: '3' });
+    const { names } = await baked.bakeNames();
     expect(names).toEqual([
       [1, 'K', 'Animalia', 'Animals', 100_000],
       [44, 'P', 'Chordata', null, 90_000],
@@ -164,7 +164,7 @@ describe('bake', () => {
       [11, 'S', 'Species number11', 'Some bird', 8000],
       [12, 'S', 'Genusonly', 'Some bird', 7000],
     ]);
-    const common = await b.bakedCommonNames();
+    const common = await baked.bakedCommonNames();
     expect([common(212), common(44)]).toEqual(['Birds', null]);
   });
 });
@@ -175,14 +175,14 @@ describe('bake', () => {
  */
 function messyGbif() {
   return stubNetwork((url) => {
-    const p = url.pathname;
-    const q = url.searchParams;
-    if (p === '/v1/species/search' && q.get('facet') === 'higherTaxonKey')
+    const path = url.pathname;
+    const params = url.searchParams;
+    if (path === '/v1/species/search' && params.get('facet') === 'higherTaxonKey')
       return facets(0, 'HIGHER_TAXON_KEY', [[30, 7]]);
-    if (p === '/v1/species/search') {
-      const rank = q.get('rank');
+    if (path === '/v1/species/search') {
+      const rank = params.get('rank');
       // Every listing pages once, then answers an empty page without saying it is the end.
-      if (q.get('offset') !== '0') return { endOfRecords: false, results: [] };
+      if (params.get('offset') !== '0') return { endOfRecords: false, results: [] };
       const byRank: Record<string, object[]> = {
         KINGDOM: [{ key: 1, rank: 'KINGDOM', scientificName: 'Animalia Linnaeus' }],
         PHYLUM: [
@@ -197,18 +197,18 @@ function messyGbif() {
       };
       return { endOfRecords: false, results: byRank[rank ?? ''] ?? [] };
     }
-    if (p === '/v1/occurrence/search') {
-      const f = q.getAll('facet');
-      if (f.includes('year')) return { count: 0, results: [] };
-      if (f.includes('speciesKey')) {
-        if (q.get('taxonKey') === '212')
+    if (path === '/v1/occurrence/search') {
+      const facetFields = params.getAll('facet');
+      if (facetFields.includes('year')) return { count: 0, results: [] };
+      if (facetFields.includes('speciesKey')) {
+        if (params.get('taxonKey') === '212')
           return facets(0, 'SPECIES_KEY', [
             [10, 9000],
             [11, 8000],
             [13, 5000],
           ]);
-        if (q.get('taxonKey') === '216') return facets(0, 'SPECIES_KEY', [[15, 3000]]);
-        if (q.get('taxonKey')) return { count: 0, results: [] };
+        if (params.get('taxonKey') === '216') return facets(0, 'SPECIES_KEY', [[15, 3000]]);
+        if (params.get('taxonKey')) return { count: 0, results: [] };
         return facets(0, 'SPECIES_KEY', [
           [10, 9000],
           [14, 4000],
@@ -231,13 +231,13 @@ function messyGbif() {
         ],
       };
     }
-    if (p === '/v1/species/40') return { key: 40, rank: 'FAMILY', scientificName: 'Turdidae Rafinesque' };
-    if (p === '/v1/species/14') return { key: 14, rank: 'SPECIES', scientificName: 'Species 14' };
-    if (p === '/v1/species/41' || p === '/v1/species/11' || p === '/v1/species/41/vernacularNames')
+    if (path === '/v1/species/40') return { key: 40, rank: 'FAMILY', scientificName: 'Turdidae Rafinesque' };
+    if (path === '/v1/species/14') return { key: 14, rank: 'SPECIES', scientificName: 'Species 14' };
+    if (path === '/v1/species/41' || path === '/v1/species/11' || path === '/v1/species/41/vernacularNames')
       return json({}, 404);
-    const species = /^\/v1\/species\/(\d+)$/.exec(p);
+    const species = /^\/v1\/species\/(\d+)$/.exec(path);
     if (species) return usage(Number(species[1]), 'SPECIES', `Species ${species[1]}`);
-    if (/^\/v1\/species\/\d+\/vernacularNames$/.test(p)) return { results: [] };
+    if (/^\/v1\/species\/\d+\/vernacularNames$/.test(path)) return { results: [] };
     return undefined;
   });
 }
@@ -262,14 +262,14 @@ describe('bake with iNaturalist IDs', () => {
   it('adds the iNaturalist taxon to each species it can match', async () => {
     gbif(inat);
     const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
-    expect(names.filter((r) => r.length === 6).map((r) => [r[0], r[5]])).toEqual([[10, 777]]);
+    expect(names.filter((row) => row.length === 6).map((row) => [row[0], row[5]])).toEqual([[10, 777]]);
   });
 
   it('leaves a chunk without IDs when iNaturalist fails, rather than failing the build', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     gbif((url) => (url.host === 'api.inaturalist.org' ? json({}, 400) : inat(url)));
     const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
-    expect(names.some((r) => r.length === 6)).toBe(false);
+    expect(names.some((row) => row.length === 6)).toBe(false);
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
@@ -297,8 +297,8 @@ describe('bake against a messier GBIF', () => {
   it('indexes names with families, skipping taxa GBIF no longer knows', async () => {
     // Birds get one new key (11, gone from GBIF); 13 is past their share.
     messyGbif();
-    const b = await bake({ NAME_INDEX_SIZE: '2' });
-    const { names } = await b.bakeNames();
+    const baked = await bake({ NAME_INDEX_SIZE: '2' });
+    const { names } = await baked.bakeNames();
     expect(names).toEqual([
       [10, 'S', 'Species 10', null, 9000],
       [1, 'K', 'Animalia Linnaeus', null, 5000],
@@ -306,14 +306,14 @@ describe('bake against a messier GBIF', () => {
       [14, 'S', 'Species 14', null, 4000],
       [40, 'F', 'Turdidae Rafinesque', null, 2000],
     ]);
-    expect((await b.bakedCommonNames())(10)).toBeNull();
+    expect((await baked.bakedCommonNames())(10)).toBeNull();
   });
 
   it('pre-renders by class, then the global ranking, most-recorded first', async () => {
     messyGbif();
-    const b = await bake({ SPECIES_PRERENDER_COUNT: '4' });
+    const baked = await bake({ SPECIES_PRERENDER_COUNT: '4' });
     // Birds take two (11 is gone from GBIF), insects one, the global ranking fills in 14.
-    expect(await b.bakeSpeciesList()).toEqual([
+    expect(await baked.bakeSpeciesList()).toEqual([
       { key: 10, slug: 'species-10', count: 9000 },
       { key: 14, slug: 'species-14', count: 4000 },
       { key: 15, slug: 'species-15', count: 3000 },
@@ -322,17 +322,17 @@ describe('bake against a messier GBIF', () => {
 
   it('skips the global ranking when the classes fill the list', async () => {
     const calls = messyGbif();
-    const b = await bake({ SPECIES_PRERENDER_COUNT: '2' });
-    expect((await b.bakeSpeciesList()).map((s) => s.key)).toEqual([10, 15]);
-    expect(calls.some((u) => u.searchParams.get('facet') === 'speciesKey' && !u.searchParams.has('taxonKey'))).toBe(
-      false,
-    );
+    const baked = await bake({ SPECIES_PRERENDER_COUNT: '2' });
+    expect((await baked.bakeSpeciesList()).map((species) => species.key)).toEqual([10, 15]);
+    expect(
+      calls.some((url) => url.searchParams.get('facet') === 'speciesKey' && !url.searchParams.has('taxonKey')),
+    ).toBe(false);
   });
 });
 
 const globalFacetLimit = (calls: URL[]) =>
   calls
-    .find((u) => u.searchParams.get('facet') === 'speciesKey' && !u.searchParams.has('taxonKey'))
+    .find((url) => url.searchParams.get('facet') === 'speciesKey' && !url.searchParams.has('taxonKey'))
     ?.searchParams.get('facetLimit');
 
 describe('build sizes', () => {
@@ -345,7 +345,10 @@ describe('build sizes', () => {
     // 42% of the 300-name dev index comes from the global ranking.
     expect(globalFacetLimit(devCalls)).toBe('126');
     vi.resetModules();
-    vi.doMock('~/lib/env', async (orig) => ({ ...(await orig<typeof import('~/lib/env')>()), isDev: () => false }));
+    vi.doMock('~/lib/env', async (original) => ({
+      ...(await original<typeof import('~/lib/env')>()),
+      isDev: () => false,
+    }));
     const prod = await import('~/lib/bake');
     vi.doUnmock('~/lib/env');
     expect(prod.prerenderCount()).toBe(2000);
@@ -365,9 +368,9 @@ describe('bake to disk', () => {
       const list = await first.bakeSpeciesList();
       expect(saved).toEqual(['years', 'names', 'tree', 'species-list']);
       const calls = gbif();
-      const b = await bake({ BAKE_DIR: dir });
-      expect((await b.bakeYears()).total).toBe(30);
-      expect(await b.bakeSpeciesList()).toEqual(list);
+      const baked = await bake({ BAKE_DIR: dir });
+      expect((await baked.bakeYears()).total).toBe(30);
+      expect(await baked.bakeSpeciesList()).toEqual(list);
       expect(calls).toHaveLength(0);
     } finally {
       rmSync(dir, { recursive: true });

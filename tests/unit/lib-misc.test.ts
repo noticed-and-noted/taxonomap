@@ -73,7 +73,7 @@ describe('ramp', () => {
     // A page whose stylesheet sets only the first token.
     vi.stubGlobal('document', { documentElement: {} });
     vi.stubGlobal('getComputedStyle', () => ({
-      getPropertyValue: (p: string) => (p === '--ramp-1' ? ' #123456 ' : ''),
+      getPropertyValue: (property: string) => (property === '--ramp-1' ? ' #123456 ' : ''),
     }));
     const colors = rampColors();
     expect(colors).toHaveLength(7);

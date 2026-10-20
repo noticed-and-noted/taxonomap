@@ -5,7 +5,7 @@ export interface Debounced<A extends unknown[]> {
 }
 
 /** Trailing-edge debounce. Autocomplete uses 250 ms. */
-export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 250): Debounced<A> {
+export function debounce<A extends unknown[]>(callback: (...args: A) => void, ms = 250): Debounced<A> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: A | undefined;
   const run = () => {
@@ -13,28 +13,28 @@ export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 250
     if (pending) {
       const args = pending;
       pending = undefined;
-      fn(...args);
+      callback(...args);
     }
   };
-  const d = ((...args: A) => {
+  const debounced = ((...args: A) => {
     pending = args;
     if (timer) clearTimeout(timer);
     timer = setTimeout(run, ms);
   }) as Debounced<A>;
-  d.cancel = () => {
+  debounced.cancel = () => {
     if (timer) clearTimeout(timer);
     timer = undefined;
     pending = undefined;
   };
-  d.flush = () => {
+  debounced.flush = () => {
     if (timer) clearTimeout(timer);
     run();
   };
-  return d;
+  return debounced;
 }
 
 /** Leading + trailing throttle, used for map-move → URL updates. */
-export function throttle<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
+export function throttle<A extends unknown[]>(callback: (...args: A) => void, ms: number): (...args: A) => void {
   let last = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: A | undefined;
@@ -43,7 +43,7 @@ export function throttle<A extends unknown[]>(fn: (...args: A) => void, ms: numb
     const wait = ms - (now - last);
     if (wait <= 0) {
       last = now;
-      fn(...args);
+      callback(...args);
       return;
     }
     pending = args;
@@ -53,7 +53,7 @@ export function throttle<A extends unknown[]>(fn: (...args: A) => void, ms: numb
       // Set by the call that started this timer, and only cleared here.
       const args = pending as A;
       pending = undefined;
-      fn(...args);
+      callback(...args);
     }, wait);
   };
 }

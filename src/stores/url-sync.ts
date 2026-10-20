@@ -20,7 +20,7 @@ export interface UrlCodec<T> {
   serialize: (value: T) => string;
   history?: 'push' | 'replace';
   scope?: 'map' | 'page';
-  equals?: (a: T, b: T) => boolean;
+  equals?: (left: T, right: T) => boolean;
 }
 
 interface Entry {
@@ -41,22 +41,22 @@ let forcedMode: 'push' | 'replace' | null = null;
  * Run `fn` with every URL write using `mode` (e.g. animations write with
  * 'replace' so they don't flood the back-button history).
  */
-export function withHistoryMode(mode: 'push' | 'replace', fn: () => void): void {
+export function withHistoryMode(mode: 'push' | 'replace', callback: () => void): void {
   const prev = forcedMode;
   forcedMode = mode;
   try {
-    fn();
+    callback();
   } finally {
     forcedMode = prev;
   }
 }
 
 const isBrowser = () => typeof window !== 'undefined' && typeof history !== 'undefined';
-const isMapParam = (c: UrlCodec<unknown>) => c.scope === 'map';
+const isMapParam = (codec: UrlCodec<unknown>) => codec.scope === 'map';
 const onMap = (path: string) => path === '/';
 
-function defaultEquals(a: unknown, b: unknown): boolean {
-  return a === b || JSON.stringify(a) === JSON.stringify(b);
+function defaultEquals(left: unknown, right: unknown): boolean {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
 }
 
 function readValue<T>(codec: UrlCodec<T>, params: URLSearchParams): T {
@@ -67,7 +67,7 @@ function readValue<T>(codec: UrlCodec<T>, params: URLSearchParams): T {
 }
 
 /** Serialise every registered store into `params` (mutates and returns it). */
-export function writeParams(params: URLSearchParams, only?: (c: UrlCodec<unknown>) => boolean): URLSearchParams {
+export function writeParams(params: URLSearchParams, only?: (codec: UrlCodec<unknown>) => boolean): URLSearchParams {
   for (const { codec, store } of registry.values()) {
     if (only && !only(codec)) continue;
     const value = store.get();
@@ -85,7 +85,7 @@ function flush(): void {
   // Only scheduled in a browser (see schedule).
   const url = new URL(window.location.href);
   const before = url.search;
-  writeParams(url.searchParams, onMap(url.pathname) ? undefined : (c) => !isMapParam(c));
+  writeParams(url.searchParams, onMap(url.pathname) ? undefined : (codec) => !isMapParam(codec));
   if (url.search === before) {
     pendingPush = false;
     return;
@@ -135,13 +135,18 @@ function listen(): void {
   window.addEventListener('popstate', () => syncFromUrl());
   document.addEventListener('astro:after-swap', () => syncFromUrl());
   // Put the map's params back on internal navigations to the map.
-  document.addEventListener('astro:before-preparation', (e) => {
-    const ev = e as Event & { to: URL; navigationType?: string };
-    if (ev.navigationType === 'traverse' || ev.to.origin !== window.location.origin || !onMap(ev.to.pathname)) return;
-    const missing = (c: UrlCodec<unknown>) => isMapParam(c) && !ev.to.searchParams.has(c.key);
-    const to = new URL(ev.to);
+  document.addEventListener('astro:before-preparation', (event) => {
+    const navigationEvent = event as Event & { to: URL; navigationType?: string };
+    if (
+      navigationEvent.navigationType === 'traverse' ||
+      navigationEvent.to.origin !== window.location.origin ||
+      !onMap(navigationEvent.to.pathname)
+    )
+      return;
+    const missing = (codec: UrlCodec<unknown>) => isMapParam(codec) && !navigationEvent.to.searchParams.has(codec.key);
+    const to = new URL(navigationEvent.to);
     writeParams(to.searchParams, missing);
-    ev.to = to;
+    navigationEvent.to = to;
   });
 }
 
@@ -159,13 +164,13 @@ export function urlAtom<T>(codec: UrlCodec<T>): WritableAtom<T> {
 /** Build a query string for a link that applies `overrides` on top of current state. */
 export function hrefWith(path: string, overrides: Record<string, string | null> = {}): string {
   const params = writeParams(new URLSearchParams(), isMapParam);
-  for (const [k, v] of Object.entries(overrides)) {
-    if (v === null) params.delete(k);
-    else params.set(k, v);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
   }
   params.sort();
-  const qs = params.toString();
-  return qs ? `${path}?${qs}` : path;
+  const queryString = params.toString();
+  return queryString ? `${path}?${queryString}` : path;
 }
 
 /** Test helper. */
@@ -180,51 +185,60 @@ export function __resetUrlSync(): void {
 /* ---------- Codecs ---------- */
 
 export const codecs = {
-  int(key: string, def: number | null, opts: Partial<UrlCodec<number | null>> = {}): UrlCodec<number | null> {
+  int(
+    key: string,
+    defaultValue: number | null,
+    options: Partial<UrlCodec<number | null>> = {},
+  ): UrlCodec<number | null> {
     return {
       key,
-      default: def,
+      default: defaultValue,
       parse: (raw) => (/^-?\d+$/.test(raw) ? Number(raw) : undefined),
-      serialize: (v) => String(v),
-      ...opts,
+      serialize: (value) => String(value),
+      ...options,
     };
   },
-  bool(key: string, opts: Partial<UrlCodec<boolean>> = {}): UrlCodec<boolean> {
+  bool(key: string, options: Partial<UrlCodec<boolean>> = {}): UrlCodec<boolean> {
     return {
       key,
       default: false,
       parse: (raw) => (raw === '1' ? true : raw === '0' ? false : undefined),
-      serialize: (v) => (v ? '1' : '0'),
-      ...opts,
+      serialize: (value) => (value ? '1' : '0'),
+      ...options,
     };
   },
-  enumOf<T extends string>(key: string, values: readonly T[], def: T, opts: Partial<UrlCodec<T>> = {}): UrlCodec<T> {
+  enumOf<T extends string>(
+    key: string,
+    values: readonly T[],
+    defaultValue: T,
+    options: Partial<UrlCodec<T>> = {},
+  ): UrlCodec<T> {
     return {
       key,
-      default: def,
+      default: defaultValue,
       parse: (raw) => ((values as readonly string[]).includes(raw) ? (raw as T) : undefined),
-      serialize: (v) => v,
-      ...opts,
+      serialize: (value) => value,
+      ...options,
     };
   },
   /** Comma-separated set from an allowed list; sorted for stable URLs. */
-  setOf<T extends string>(key: string, values: readonly T[], opts: Partial<UrlCodec<T[]>> = {}): UrlCodec<T[]> {
+  setOf<T extends string>(key: string, values: readonly T[], options: Partial<UrlCodec<T[]>> = {}): UrlCodec<T[]> {
     return {
       key,
       default: [],
       parse: (raw) => {
-        const items = raw.split(',').filter((v): v is T => (values as readonly string[]).includes(v));
+        const items = raw.split(',').filter((value): value is T => (values as readonly string[]).includes(value));
         return [...new Set(items)].sort();
       },
-      serialize: (v) => [...v].sort().join(','),
-      ...opts,
+      serialize: (value) => [...value].sort().join(','),
+      ...options,
     };
   },
   /** Comma-separated set of integers in [min, max], numeric order, at most `limit` items. */
   intSet(
     key: string,
     { min = -Infinity, max = Infinity, limit = Infinity }: { min?: number; max?: number; limit?: number } = {},
-    opts: Partial<UrlCodec<number[]>> = {},
+    options: Partial<UrlCodec<number[]>> = {},
   ): UrlCodec<number[]> {
     return {
       key,
@@ -232,22 +246,22 @@ export const codecs = {
       parse: (raw) => {
         const items = raw
           .split(',')
-          .filter((v) => /^-?\d+$/.test(v))
+          .filter((value) => /^-?\d+$/.test(value))
           .map(Number)
-          .filter((n) => n >= min && n <= max);
-        return [...new Set(items)].sort((a, b) => a - b).slice(0, limit);
+          .filter((value) => value >= min && value <= max);
+        return [...new Set(items)].sort((left, right) => left - right).slice(0, limit);
       },
-      serialize: (v) => [...v].sort((a, b) => a - b).join(','),
-      ...opts,
+      serialize: (value) => [...value].sort((left, right) => left - right).join(','),
+      ...options,
     };
   },
-  string(key: string, opts: Partial<UrlCodec<string | null>> & { pattern?: RegExp } = {}): UrlCodec<string | null> {
-    const { pattern, ...rest } = opts;
+  string(key: string, options: Partial<UrlCodec<string | null>> & { pattern?: RegExp } = {}): UrlCodec<string | null> {
+    const { pattern, ...rest } = options;
     return {
       key,
       default: null,
       parse: (raw) => (!pattern || pattern.test(raw) ? raw : undefined),
-      serialize: (v) => v ?? '',
+      serialize: (value) => value ?? '',
       ...rest,
     };
   },

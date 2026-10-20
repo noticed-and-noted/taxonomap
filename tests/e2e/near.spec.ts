@@ -27,8 +27,8 @@ test('geolocation is rounded to ~100 m before use', async ({ page, context }) =>
   await context.setGeolocation({ latitude: 51.5073509, longitude: -0.1277583 });
   // No request carries more precise coordinates.
   const precise: string[] = [];
-  page.on('request', (r) => {
-    if (/5073509|1277583/.test(decodeURIComponent(r.url()))) precise.push(r.url());
+  page.on('request', (request) => {
+    if (/5073509|1277583/.test(decodeURIComponent(request.url()))) precise.push(request.url());
   });
   await page.goto('/?near=1');
   await page.getByRole('button', { name: 'Use my location' }).click();

@@ -8,14 +8,16 @@ async function load() {
   return import('~/lib/map/cellCounts');
 }
 
-const A = 'POLYGON((0 0,1 0,1 1,0 0))';
-const B = 'POLYGON((2 2,3 2,3 3,2 2))';
+const CELL_A = 'POLYGON((0 0,1 0,1 1,0 0))';
+const CELL_B = 'POLYGON((2 2,3 2,3 3,2 2))';
 const NONE = {};
 
 beforeEach(() => {
   vi.useFakeTimers();
   occurrenceCount.mockReset();
-  occurrenceCount.mockImplementation((f: { geometry: string }) => Promise.resolve(f.geometry === A ? 11 : 22));
+  occurrenceCount.mockImplementation((filter: { geometry: string }) =>
+    Promise.resolve(filter.geometry === CELL_A ? 11 : 22),
+  );
 });
 afterEach(() => vi.useRealTimers());
 
@@ -23,35 +25,35 @@ describe('createHoverCounter', () => {
   it('fetches only once the pointer has rested on a cell', async () => {
     const { createHoverCounter, HOVER_DELAY_MS, knownCount } = await load();
     const onCount = vi.fn();
-    const c = createHoverCounter(onCount);
-    c.hover(NONE, A);
+    const counter = createHoverCounter(onCount);
+    counter.hover(NONE, CELL_A);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS - 1);
     // Moving within the cell keeps the running wait.
-    c.hover(NONE, A);
+    counter.hover(NONE, CELL_A);
     expect(occurrenceCount).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(occurrenceCount).toHaveBeenCalledOnce();
-    expect(occurrenceCount).toHaveBeenCalledWith({ geometry: A });
-    expect(onCount).toHaveBeenCalledWith(A, 11);
-    expect(knownCount(NONE, A)).toBe(11);
+    expect(occurrenceCount).toHaveBeenCalledWith({ geometry: CELL_A });
+    expect(onCount).toHaveBeenCalledWith(CELL_A, 11);
+    expect(knownCount(NONE, CELL_A)).toBe(11);
   });
 
   it('skips cells passed over, and cells left before their count arrives', async () => {
     const { createHoverCounter, HOVER_DELAY_MS } = await load();
     const onCount = vi.fn();
-    const c = createHoverCounter(onCount);
-    c.hover(NONE, A);
+    const counter = createHoverCounter(onCount);
+    counter.hover(NONE, CELL_A);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS / 2);
-    c.hover(NONE, B);
+    counter.hover(NONE, CELL_B);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
     expect(occurrenceCount).toHaveBeenCalledOnce();
-    expect(onCount).toHaveBeenCalledWith(B, 22);
+    expect(onCount).toHaveBeenCalledWith(CELL_B, 22);
 
-    let resolve!: (n: number) => void;
-    occurrenceCount.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
-    c.hover(NONE, A);
+    let resolve!: (count: number) => void;
+    occurrenceCount.mockImplementationOnce(() => new Promise((release) => (resolve = release)));
+    counter.hover(NONE, CELL_A);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
-    c.cancel();
+    counter.cancel();
     resolve(11);
     await vi.runAllTimersAsync();
     expect(onCount).toHaveBeenCalledTimes(1);
@@ -59,14 +61,14 @@ describe('createHoverCounter', () => {
 
   it('does not fetch a known count, and counts per filter', async () => {
     const { createHoverCounter, rememberCount, HOVER_DELAY_MS } = await load();
-    rememberCount(NONE, A, 5);
-    const c = createHoverCounter(vi.fn());
-    c.hover(NONE, A);
+    rememberCount(NONE, CELL_A, 5);
+    const counter = createHoverCounter(vi.fn());
+    counter.hover(NONE, CELL_A);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
     expect(occurrenceCount).not.toHaveBeenCalled();
-    c.hover({ taxonKey: 212 }, A);
+    counter.hover({ taxonKey: 212 }, CELL_A);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
-    expect(occurrenceCount).toHaveBeenCalledWith({ taxonKey: 212, geometry: A });
+    expect(occurrenceCount).toHaveBeenCalledWith({ taxonKey: 212, geometry: CELL_A });
   });
 });
 
@@ -75,25 +77,25 @@ describe('a failed count', () => {
     const { createHoverCounter, HOVER_DELAY_MS, knownCount } = await load();
     const onCount = vi.fn();
     occurrenceCount.mockRejectedValueOnce(new Error('offline'));
-    const c = createHoverCounter(onCount);
-    c.hover(NONE, A);
+    const counter = createHoverCounter(onCount);
+    counter.hover(NONE, CELL_A);
     await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
     expect(onCount).not.toHaveBeenCalled();
-    expect(knownCount(NONE, A)).toBeUndefined();
+    expect(knownCount(NONE, CELL_A)).toBeUndefined();
   });
 });
 
 describe('fetchCount', () => {
   it('shares one request between callers', async () => {
     const { fetchCount } = await load();
-    expect(await Promise.all([fetchCount(NONE, A), fetchCount(NONE, A)])).toEqual([11, 11]);
-    expect(await fetchCount(NONE, A)).toBe(11);
+    expect(await Promise.all([fetchCount(NONE, CELL_A), fetchCount(NONE, CELL_A)])).toEqual([11, 11]);
+    expect(await fetchCount(NONE, CELL_A)).toBe(11);
     expect(occurrenceCount).toHaveBeenCalledOnce();
   });
 
   it('keeps the most recent 500 cells', async () => {
     const { knownCount, rememberCount } = await load();
-    for (let i = 0; i < 501; i++) rememberCount(NONE, `cell${i}`, i);
+    for (let index = 0; index < 501; index++) rememberCount(NONE, `cell${index}`, index);
     expect(knownCount(NONE, 'cell0')).toBeUndefined();
     expect(knownCount(NONE, 'cell500')).toBe(500);
   });

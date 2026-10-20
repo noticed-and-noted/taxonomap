@@ -39,82 +39,83 @@ const KINGDOM_COLOURS: Record<string, string> = {
   Archaea: '#F0E442',
   Viruses: '#999999',
 };
-const colourOf = (n: TreeNode) => KINGDOM_COLOURS[n.kingdom] ?? '#8a9a90';
+const colourOf = (node: TreeNode) => KINGDOM_COLOURS[node.kingdom] ?? '#8a9a90';
 
 const box = ref<HTMLDivElement>();
 const width = ref(600);
 const height = ref(600);
-let ro: ResizeObserver | undefined;
+let resizeObserver: ResizeObserver | undefined;
 
 onMounted(() => {
-  ro = new ResizeObserver(([e]) => {
-    if (!e) return;
-    width.value = Math.max(240, e.contentRect.width);
-    height.value = Math.max(240, e.contentRect.height);
+  resizeObserver = new ResizeObserver(([entry]) => {
+    if (!entry) return;
+    width.value = Math.max(240, entry.contentRect.width);
+    height.value = Math.max(240, entry.contentRect.height);
   });
-  if (box.value) ro.observe(box.value);
+  if (box.value) resizeObserver.observe(box.value);
 });
 onBeforeUnmount(() => {
-  ro?.disconnect();
-  cancelAnimationFrame(raf);
+  resizeObserver?.disconnect();
+  cancelAnimationFrame(animationFrameId);
 });
 
-const value = (n: TreeNode) => Math.max(0, props.metric === 'records' ? n.records : n.species);
+const value = (node: TreeNode) => Math.max(0, props.metric === 'records' ? node.records : node.species);
 
 /** Partition of the whole loaded tree: x in [0,1], y in depth units. */
 const layoutRoot = computed(() => {
   void props.version;
-  const h = hierarchy<TreeNode>(props.root, (d) => d.children)
-    .sum((d) => (d.children?.length ? 0 : value(d)))
-    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-  return partition<TreeNode>().size([1, h.height + 1])(h);
+  const tree = hierarchy<TreeNode>(props.root, (node) => node.children)
+    .sum((node) => (node.children?.length ? 0 : value(node)))
+    .sort((left, right) => (right.value ?? 0) - (left.value ?? 0));
+  return partition<TreeNode>().size([1, tree.height + 1])(tree);
 });
 
 const byKey = computed(() => {
-  const m = new Map<number, HNode>();
-  layoutRoot.value.each((n) => m.set(n.data.key, n));
-  return m;
+  const lookup = new Map<number, HNode>();
+  layoutRoot.value.each((node) => lookup.set(node.data.key, node));
+  return lookup;
 });
 
 /* ---- focus window, tweened ---- */
-const win = shallowRef({ x0: 0, x1: 1, d: 0 });
-let raf = 0;
+const viewWindow = shallowRef({ x0: 0, x1: 1, depth: 0 });
+let animationFrameId = 0;
 
 function targetFor(focus: TreeNode) {
-  const n = byKey.value.get(focus.key);
-  return n ? { x0: n.x0, x1: n.x1, d: n.depth } : { x0: 0, x1: 1, d: 0 };
+  const node = byKey.value.get(focus.key);
+  return node ? { x0: node.x0, x1: node.x1, depth: node.depth } : { x0: 0, x1: 1, depth: 0 };
 }
 
-function animateTo(t: { x0: number; x1: number; d: number }) {
-  cancelAnimationFrame(raf);
+function animateTo(target: { x0: number; x1: number; depth: number }) {
+  cancelAnimationFrame(animationFrameId);
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const from = win.value;
+  const from = viewWindow.value;
   if (reduce) {
-    win.value = t;
+    viewWindow.value = target;
     return;
   }
   const start = performance.now();
-  const dur = 650;
-  const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+  const durationMs = 650;
+  const ease = (progress: number) =>
+    progress < 0.5 ? 4 * progress * progress * progress : 1 - (-2 * progress + 2) ** 3 / 2;
   const step = (now: number) => {
-    const k = ease(Math.min(1, (now - start) / dur));
-    win.value = {
-      x0: from.x0 + (t.x0 - from.x0) * k,
-      x1: from.x1 + (t.x1 - from.x1) * k,
-      d: from.d + (t.d - from.d) * k,
+    const eased = ease(Math.min(1, (now - start) / durationMs));
+    viewWindow.value = {
+      x0: from.x0 + (target.x0 - from.x0) * eased,
+      x1: from.x1 + (target.x1 - from.x1) * eased,
+      depth: from.depth + (target.depth - from.depth) * eased,
     };
-    if (k < 1) raf = requestAnimationFrame(step);
+    if (eased < 1) animationFrameId = requestAnimationFrame(step);
   };
-  raf = requestAnimationFrame(step);
+  animationFrameId = requestAnimationFrame(step);
 }
 
 watch(
   () => [props.focus.key, props.version, props.metric] as const,
-  (_, old) => {
-    const t = targetFor(props.focus);
+  (_unused, previous) => {
+    const target = targetFor(props.focus);
     // Data changes (not focus changes) snap without animation.
-    if (old && old[0] === props.focus.key) win.value = t;
-    else animateTo(t);
+    if (previous && previous[0] === props.focus.key) viewWindow.value = target;
+    else animateTo(target);
   },
   { immediate: true },
 );
@@ -129,16 +130,16 @@ interface Shape {
 }
 
 const shapes = computed<Shape[]>(() => {
-  const { x0: fx0, x1: fx1, d: fd } = win.value;
-  const span = Math.max(1e-9, fx1 - fx0);
+  const { x0: focusStart, x1: focusEnd, depth: focusDepth } = viewWindow.value;
+  const span = Math.max(1e-9, focusEnd - focusStart);
   const out: Shape[] = [];
-  layoutRoot.value.each((n) => {
-    const rel = n.depth - fd;
-    if (rel < 0.5 || rel > LEVELS + 0.5) return;
-    const x0 = Math.max(0, Math.min(1, (n.x0 - fx0) / span));
-    const x1 = Math.max(0, Math.min(1, (n.x1 - fx0) / span));
+  layoutRoot.value.each((node) => {
+    const relativeDepth = node.depth - focusDepth;
+    if (relativeDepth < 0.5 || relativeDepth > LEVELS + 0.5) return;
+    const x0 = Math.max(0, Math.min(1, (node.x0 - focusStart) / span));
+    const x1 = Math.max(0, Math.min(1, (node.x1 - focusStart) / span));
     if (x1 - x0 < 0.0015) return;
-    out.push({ node: n.data, rel, x0, x1, value: n.value ?? 0 });
+    out.push({ node: node.data, rel: relativeDepth, x0, x1, value: node.value ?? 0 });
   });
   return out;
 });
@@ -147,24 +148,24 @@ const shapes = computed<Shape[]>(() => {
 const size = computed(() => Math.min(width.value, height.value));
 const ring = computed(() => size.value / 2 / (LEVELS + 1));
 const arcGen = arc<Shape>()
-  .startAngle((s) => s.x0 * 2 * Math.PI)
-  .endAngle((s) => s.x1 * 2 * Math.PI)
-  .padAngle((s) => Math.min((s.x1 - s.x0) * Math.PI, 0.004))
+  .startAngle((shape) => shape.x0 * 2 * Math.PI)
+  .endAngle((shape) => shape.x1 * 2 * Math.PI)
+  .padAngle((shape) => Math.min((shape.x1 - shape.x0) * Math.PI, 0.004))
   .padRadius(() => ring.value * 1.5)
-  .innerRadius((s) => s.rel * ring.value)
-  .outerRadius((s) => Math.max(s.rel * ring.value, (s.rel + 1) * ring.value - 1.5));
+  .innerRadius((shape) => shape.rel * ring.value)
+  .outerRadius((shape) => Math.max(shape.rel * ring.value, (shape.rel + 1) * ring.value - 1.5));
 
-function sunLabel(s: Shape) {
-  const mid = ((s.x0 + s.x1) / 2) * 360;
-  const r = (s.rel + 0.5) * ring.value;
-  const arcLen = (s.x1 - s.x0) * 2 * Math.PI * r;
-  if (arcLen < 18 || s.rel > LEVELS) return null;
-  const rot = mid - 90;
-  const flip = mid > 180;
+function sunLabel(shape: Shape) {
+  const midAngle = ((shape.x0 + shape.x1) / 2) * 360;
+  const radius = (shape.rel + 0.5) * ring.value;
+  const arcLen = (shape.x1 - shape.x0) * 2 * Math.PI * radius;
+  if (arcLen < 18 || shape.rel > LEVELS) return null;
+  const rotation = midAngle - 90;
+  const flip = midAngle > 180;
   const maxChars = Math.floor((ring.value - 8) / 6.2);
-  const text = labelText(s.node);
+  const text = labelText(shape.node);
   return {
-    transform: `rotate(${rot}) translate(${r},0) rotate(${flip ? 180 : 0})`,
+    transform: `rotate(${rotation}) translate(${radius},0) rotate(${flip ? 180 : 0})`,
     text: text.length > maxChars ? `${text.slice(0, Math.max(3, maxChars - 1))}…` : text,
   };
 }
@@ -173,30 +174,30 @@ function sunLabel(s: Shape) {
 const narrow = computed(() => width.value < 520);
 const HEAD = 44;
 const top = computed(() => (narrow.value ? HEAD : 0));
-const colW = computed(() => width.value / (narrow.value ? LEVELS : LEVELS + 1));
-function rect(s: Shape) {
-  const h = height.value - top.value;
+const columnWidth = computed(() => width.value / (narrow.value ? LEVELS : LEVELS + 1));
+function rect(shape: Shape) {
+  const availableHeight = height.value - top.value;
   return {
-    x: (narrow.value ? s.rel - 1 : s.rel) * colW.value,
-    y: top.value + s.x0 * h,
-    w: Math.max(0, colW.value - 2),
-    h: Math.max(0, (s.x1 - s.x0) * h - 1),
+    x: (narrow.value ? shape.rel - 1 : shape.rel) * columnWidth.value,
+    y: top.value + shape.x0 * availableHeight,
+    w: Math.max(0, columnWidth.value - 2),
+    h: Math.max(0, (shape.x1 - shape.x0) * availableHeight - 1),
   };
 }
 
-const labelText = (n: TreeNode) => n.common ?? n.name;
+const labelText = (node: TreeNode) => node.common ?? node.name;
 
 /* tooltip */
 const tip = ref<{ x: number; y: number; node: TreeNode; value: number } | null>(null);
-function onMove(e: PointerEvent, s: Shape) {
-  if (e.pointerType === 'touch') return;
-  const b = box.value?.getBoundingClientRect();
-  if (!b) return;
-  tip.value = { x: e.clientX - b.left, y: e.clientY - b.top, node: s.node, value: s.value };
+function onMove(event: PointerEvent, shape: Shape) {
+  if (event.pointerType === 'touch') return;
+  const bounds = box.value?.getBoundingClientRect();
+  if (!bounds) return;
+  tip.value = { x: event.clientX - bounds.left, y: event.clientY - bounds.top, node: shape.node, value: shape.value };
 }
 
 const focusTotal = computed(() => byKey.value.get(props.focus.key)?.value ?? 0);
-const opacity = (s: Shape) => (s.node.key === props.selectedKey ? 1 : 0.95 - (s.rel - 1) * 0.22);
+const opacity = (shape: Shape) => (shape.node.key === props.selectedKey ? 1 : 0.95 - (shape.rel - 1) * 0.22);
 const centreLabel = computed(() => props.focus.common ?? props.focus.name);
 </script>
 
@@ -212,32 +213,39 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
     >
       <g :transform="`translate(${width / 2},${height / 2})`">
         <path
-          v-for="s in shapes"
-          :key="s.node.key"
-          :d="arcGen(s) ?? ''"
-          :fill="colourOf(s.node)"
-          :fill-opacity="opacity(s)"
-          :stroke="s.node.key === selectedKey ? 'var(--accent)' : 'var(--bg)'"
-          :stroke-width="s.node.key === selectedKey ? 2.5 : 0.5"
-          :class="{ 'animate-pulse': s.node.key === loadingKey }"
+          v-for="shape in shapes"
+          :key="shape.node.key"
+          :d="arcGen(shape) ?? ''"
+          :fill="colourOf(shape.node)"
+          :fill-opacity="opacity(shape)"
+          :stroke="shape.node.key === selectedKey ? 'var(--accent)' : 'var(--bg)'"
+          :stroke-width="shape.node.key === selectedKey ? 2.5 : 0.5"
+          :class="{ 'animate-pulse': shape.node.key === loadingKey }"
           class="cursor-pointer"
-          @pointermove="onMove($event, s)"
-          @click="emit('pick', s.node)"
+          @pointermove="onMove($event, shape)"
+          @click="emit('pick', shape.node)"
         />
         <g class="pointer-events-none" fill="var(--bg)">
-          <template v-for="s in shapes" :key="`l-${s.node.key}`">
+          <template v-for="shape in shapes" :key="`l-${shape.node.key}`">
             <text
-              v-if="sunLabel(s)"
-              :transform="sunLabel(s)!.transform"
+              v-if="sunLabel(shape)"
+              :transform="sunLabel(shape)!.transform"
               text-anchor="middle"
               dominant-baseline="middle"
               class="text-[10.5px] font-medium"
             >
-              {{ sunLabel(s)!.text }}
+              {{ sunLabel(shape)!.text }}
             </text>
           </template>
         </g>
-        <circle :r="ring - 2" fill="var(--surface)" stroke="var(--border)" class="cursor-pointer" @pointerenter="tip = null" @click="emit('up')" />
+        <circle
+          :r="ring - 2"
+          fill="var(--surface)"
+          stroke="var(--border)"
+          class="cursor-pointer"
+          @pointerenter="tip = null"
+          @click="emit('up')"
+        />
         <text text-anchor="middle" class="pointer-events-none fill-[var(--text)] font-display text-sm" y="-6">
           {{ centreLabel.length > 18 ? `${centreLabel.slice(0, 17)}…` : centreLabel }}
         </text>
@@ -270,7 +278,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
         </text>
       </g>
       <g v-else class="cursor-pointer" @click="emit('up')">
-        <rect :width="colW - 2" :height="height - 1" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
+        <rect :width="columnWidth - 2" :height="height - 1" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
         <text :x="10" :y="20" class="fill-[var(--text)] font-display text-sm">{{ centreLabel }}</text>
         <text :x="10" :y="38" class="fill-[var(--text-subtle)] text-xs">{{ compact(focusTotal) }} {{ metric }}</text>
         <g v-if="focus.parent" class="text-[var(--text-subtle)]">
@@ -279,35 +287,35 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
         </g>
       </g>
       <g
-        v-for="s in shapes"
-        :key="s.node.key"
+        v-for="shape in shapes"
+        :key="shape.node.key"
         class="cursor-pointer"
-        @pointermove="onMove($event, s)"
-        @click="emit('pick', s.node)"
+        @pointermove="onMove($event, shape)"
+        @click="emit('pick', shape.node)"
       >
         <rect
-          :x="rect(s).x"
-          :y="rect(s).y"
-          :width="rect(s).w"
-          :height="rect(s).h"
+          :x="rect(shape).x"
+          :y="rect(shape).y"
+          :width="rect(shape).w"
+          :height="rect(shape).h"
           rx="2"
-          :fill="colourOf(s.node)"
-          :fill-opacity="opacity(s)"
-          :stroke="s.node.key === selectedKey ? 'var(--accent)' : 'none'"
+          :fill="colourOf(shape.node)"
+          :fill-opacity="opacity(shape)"
+          :stroke="shape.node.key === selectedKey ? 'var(--accent)' : 'none'"
           stroke-width="2.5"
-          :class="{ 'animate-pulse': s.node.key === loadingKey }"
+          :class="{ 'animate-pulse': shape.node.key === loadingKey }"
         />
         <text
-          v-if="rect(s).h > 15 && rect(s).w > 30"
-          :x="rect(s).x + 6"
-          :y="rect(s).y + 13"
+          v-if="rect(shape).h > 15 && rect(shape).w > 30"
+          :x="rect(shape).x + 6"
+          :y="rect(shape).y + 13"
           class="pointer-events-none text-[10.5px] font-medium"
           fill="var(--bg)"
         >
           {{
-            labelText(s.node).length > colW / 6.5
-              ? `${labelText(s.node).slice(0, Math.floor(colW / 6.5) - 1)}…`
-              : labelText(s.node)
+            labelText(shape.node).length > columnWidth / 6.5
+              ? `${labelText(shape.node).slice(0, Math.floor(columnWidth / 6.5) - 1)}…`
+              : labelText(shape.node)
           }}
         </text>
       </g>

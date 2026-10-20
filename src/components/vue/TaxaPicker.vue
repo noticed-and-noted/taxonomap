@@ -18,8 +18,8 @@ import { useNameSearch } from './useNameSearch';
 const MAX_OPTIONS = 8;
 /** Past this many selected taxa, the list scrolls instead of growing. */
 const SCROLL_AFTER = 5;
-const uid = useId();
-const listId = `${uid}-taxa-list`;
+const uniqueId = useId();
+const listId = `${uniqueId}-taxa-list`;
 
 const keys = useStore($taxonKeys);
 const taxa = useStore($taxa);
@@ -28,7 +28,7 @@ const list = ref<HTMLUListElement>();
 // The list is sorted by key, so a newly added taxon (here or from the header
 // search) can land out of view once it scrolls; bring it into view.
 watch(keys, async (next, prev) => {
-  const added = next.find((k) => !prev.includes(k));
+  const added = next.find((addedKey) => !prev.includes(addedKey));
   if (added === undefined) return;
   await nextTick();
   list.value?.querySelector(`[data-key="${added}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -41,7 +41,7 @@ const { hits: options, loading, search } = useNameSearch({ max: MAX_OPTIONS, exc
 const full = computed(() => keys.value.length >= MAX_TAXA);
 
 const open = computed(() => query.value.trim().length >= 2 && !full.value);
-const activeId = computed(() => (active.value >= 0 ? `${uid}-opt-${active.value}` : undefined));
+const activeId = computed(() => (active.value >= 0 ? `${uniqueId}-opt-${active.value}` : undefined));
 const rankLabel = (rank: string) => RANK_LABELS[rank] ?? (rank === 'UNRANKED' ? '' : rank.toLowerCase());
 
 function onInput() {
@@ -49,8 +49,8 @@ function onInput() {
   search(query.value);
 }
 
-function pick(h: NameHit) {
-  addTaxon(taxonFromHit(h));
+function pick(hit: NameHit) {
+  addTaxon(taxonFromHit(hit));
   query.value = '';
   onInput();
 }
@@ -58,27 +58,27 @@ function pick(h: NameHit) {
 const clearAll = () => $taxonKeys.set([]);
 
 function move(delta: number) {
-  const n = options.value.length;
-  if (!n) return;
-  active.value = (active.value + delta + n) % n;
+  const count = options.value.length;
+  if (!count) return;
+  active.value = (active.value + delta + count) % count;
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
     move(1);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault();
     move(-1);
-  } else if (e.key === 'Enter') {
-    const h = options.value[active.value] ?? (options.value.length === 1 ? options.value[0] : undefined);
-    if (h) {
-      e.preventDefault();
-      pick(h);
+  } else if (event.key === 'Enter') {
+    const hit = options.value[active.value] ?? (options.value.length === 1 ? options.value[0] : undefined);
+    if (hit) {
+      event.preventDefault();
+      pick(hit);
     }
-  } else if (e.key === 'Escape' && query.value) {
+  } else if (event.key === 'Escape' && query.value) {
     // Clear the search first; a second Escape closes the flyout.
-    e.stopPropagation();
+    event.stopPropagation();
     query.value = '';
     onInput();
   }
@@ -88,7 +88,7 @@ function onKey(e: KeyboardEvent) {
 <template>
   <div class="taxa-picker">
     <div class="mb-1.5 flex items-baseline justify-between">
-      <label :for="`${uid}-input`" class="group-label">
+      <label :for="`${uniqueId}-input`" class="group-label">
         Species and groups<span v-if="taxa.length > SCROLL_AFTER" class="tabular-nums"> ({{ taxa.length }})</span>
       </label>
       <button v-if="taxa.length" type="button" class="link-btn" @click="clearAll">Clear</button>
@@ -101,17 +101,19 @@ function onKey(e: KeyboardEvent) {
       :class="{ scrolls: taxa.length > SCROLL_AFTER }"
       :aria-label="`Selected taxa (${taxa.length})`"
     >
-      <li v-for="t in taxa" :key="t.key" :data-key="t.key" class="selected-row">
+      <li v-for="taxon in taxa" :key="taxon.key" :data-key="taxon.key" class="selected-row">
         <span class="min-w-0 truncate">
-          <span v-if="t.commonName" class="font-medium">{{ t.commonName }}</span>
-          <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': t.commonName }">{{ t.scientificName }}</span>
+          <span v-if="taxon.commonName" class="font-medium">{{ taxon.commonName }}</span>
+          <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': taxon.commonName }">{{
+            taxon.scientificName
+          }}</span>
         </span>
-        <span class="ml-auto shrink-0 text-[11px] text-subtle">{{ rankLabel(t.rank) }}</span>
+        <span class="ml-auto shrink-0 text-[11px] text-subtle">{{ rankLabel(taxon.rank) }}</span>
         <button
           type="button"
           class="remove-btn"
-          :aria-label="`Remove ${t.commonName ?? t.scientificName}`"
-          @click="removeTaxon(t.key)"
+          :aria-label="`Remove ${taxon.commonName ?? taxon.scientificName}`"
+          @click="removeTaxon(taxon.key)"
         >
           ×
         </button>
@@ -120,7 +122,7 @@ function onKey(e: KeyboardEvent) {
     <p v-else class="mb-2 text-muted">All life.</p>
 
     <input
-      :id="`${uid}-input`"
+      :id="`${uniqueId}-input`"
       v-model="query"
       type="search"
       class="picker-input"
@@ -139,24 +141,24 @@ function onKey(e: KeyboardEvent) {
 
     <ul v-show="open" :id="listId" role="listbox" class="options" aria-label="Species and group suggestions">
       <li
-        v-for="(h, i) in options"
-        :id="`${uid}-opt-${i}`"
-        :key="h.key"
+        v-for="(hit, index) in options"
+        :id="`${uniqueId}-opt-${index}`"
+        :key="hit.key"
         role="option"
         class="option"
-        :class="{ active: i === active }"
-        :aria-selected="i === active"
+        :class="{ active: index === active }"
+        :aria-selected="index === active"
         @mousedown.prevent
-        @click="pick(h)"
-        @mousemove="active = i"
+        @click="pick(hit)"
+        @mousemove="active = index"
       >
         <span class="min-w-0 truncate">
-          <span v-if="h.commonName" class="font-medium">{{ h.commonName }}</span>
-          <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': h.commonName }">{{ h.scientificName }}</span>
+          <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
+          <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': hit.commonName }">{{ hit.scientificName }}</span>
         </span>
         <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
-          <span class="block">{{ rankLabel(h.rank) }}</span>
-          <span v-if="h.count" class="block tabular-nums">{{ compact(h.count) }}</span>
+          <span class="block">{{ rankLabel(hit.rank) }}</span>
+          <span v-if="hit.count" class="block tabular-nums">{{ compact(hit.count) }}</span>
         </span>
       </li>
       <li v-if="!options.length" class="option-note" role="presentation">

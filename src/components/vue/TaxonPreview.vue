@@ -21,21 +21,21 @@ const liveCount = ref<number | null>(null);
 const imageLoading = ref(false);
 /** The photo file itself has loaded; until then the thumb shimmers. */
 const imageShown = ref(false);
-let seq = 0;
+let sequence = 0;
 
 const count = computed(() => props.hit.count ?? liveCount.value);
 const name = computed(() => props.hit.commonName ?? props.hit.scientificName);
 
 const load = debounce(async (hit: NameHit) => {
-  const mine = ++seq;
+  const mine = ++sequence;
   imageLoading.value = true;
-  const [img, total] = await Promise.allSettled([
+  const [imageResult, total] = await Promise.allSettled([
     leadPhoto({ key: hit.key, rank: hit.rank }),
     // The baked index knows counts; live suggestions need one cheap count request.
     hit.count === undefined ? occurrenceFacets({ taxonKey: hit.key }, []) : Promise.resolve(null),
   ]);
-  if (mine !== seq) return;
-  image.value = img.status === 'fulfilled' ? img.value : undefined;
+  if (mine !== sequence) return;
+  image.value = imageResult.status === 'fulfilled' ? imageResult.value : undefined;
   liveCount.value = total.status === 'fulfilled' && total.value ? total.value.count : null;
   imageLoading.value = false;
 }, 200);
@@ -43,7 +43,7 @@ const load = debounce(async (hit: NameHit) => {
 watch(
   () => props.hit.key,
   () => {
-    seq++;
+    sequence++;
     image.value = undefined;
     imageShown.value = false;
     liveCount.value = null;

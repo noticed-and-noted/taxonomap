@@ -18,27 +18,27 @@ const ROBIN = {
 
 function gbif() {
   return stubNetwork((url) => {
-    const p = url.pathname;
-    const q = url.searchParams;
-    if (p === '/v1/species/2492462') return ROBIN;
-    if (p === '/v1/species/2492462/vernacularNames')
+    const path = url.pathname;
+    const params = url.searchParams;
+    if (path === '/v1/species/2492462') return ROBIN;
+    if (path === '/v1/species/2492462/vernacularNames')
       return { results: [{ vernacularName: 'European Robin', language: 'eng' }] };
-    if (p === '/v1/species/2492462/synonyms')
+    if (path === '/v1/species/2492462/synonyms')
       return { results: [{ scientificName: 'Motacilla rubecula' }, { scientificName: 'Motacilla rubecula' }] };
-    if (p === '/v1/species/2492460/children')
+    if (path === '/v1/species/2492460/children')
       return {
         results: [
           { key: 2492462, scientificName: 'Erithacus rubecula' },
           { key: 7, canonicalName: 'Erithacus akahige', scientificName: 'Erithacus akahige (Temminck)' },
         ],
       };
-    if (p === '/v1/occurrence/search' && q.get('taxonKey') === '2492460')
+    if (path === '/v1/occurrence/search' && params.get('taxonKey') === '2492460')
       return facets(0, 'SPECIES_KEY', [
         [2492462, 100],
         [7, 5],
         [8, 1],
       ]);
-    if (p === '/v1/occurrence/search')
+    if (path === '/v1/occurrence/search')
       return {
         count: 1234,
         results: [],
@@ -61,7 +61,7 @@ function gbif() {
           },
         ],
       };
-    if (p === '/v1/dataset/ds1') return { key: 'ds1', title: 'Garden birds' };
+    if (path === '/v1/dataset/ds1') return { key: 'ds1', title: 'Garden birds' };
     return undefined;
   });
 }
@@ -80,8 +80,8 @@ describe('loadSpeciesData', () => {
   it('assembles the page from a fixed set of requests', async () => {
     const calls = gbif();
     const { loadSpeciesData } = await load();
-    const d = await loadSpeciesData(2492462, (k) => (k === 7 ? 'Japanese robin' : null));
-    expect(d).toMatchObject({
+    const data = await loadSpeciesData(2492462, (key) => (key === 7 ? 'Japanese robin' : null));
+    expect(data).toMatchObject({
       key: 2492462,
       slug: 'erithacus-rubecula',
       canonicalName: 'Erithacus rubecula',
@@ -107,7 +107,7 @@ describe('loadSpeciesData', () => {
       // The species itself and unnamed keys are left out.
       siblings: [{ key: 7, scientificName: 'Erithacus akahige', commonName: 'Japanese robin', count: 5 }],
     });
-    expect(d.months[4]).toBe(9);
+    expect(data.months[4]).toBe(9);
     expect(calls.length).toBeLessThanOrEqual(9);
   });
 });
@@ -122,12 +122,17 @@ describe('loadSpeciesData with sparse answers', () => {
       return bad();
     });
     const { loadSpeciesData } = await load();
-    const d = await loadSpeciesData(1, () => 'Lookup name');
-    expect(d).toMatchObject({ canonicalName: 'Alpha beta', commonName: 'Lookup name', synonyms: [], vernacular: [] });
-    expect(d).not.toHaveProperty('authorship');
-    expect(d).not.toHaveProperty('status');
-    expect([d.years, d.countries, d.datasets, d.siblings]).toEqual([[], [], [], []]);
-    expect(d.months).toEqual(Array(12).fill(0));
+    const data = await loadSpeciesData(1, () => 'Lookup name');
+    expect(data).toMatchObject({
+      canonicalName: 'Alpha beta',
+      commonName: 'Lookup name',
+      synonyms: [],
+      vernacular: [],
+    });
+    expect(data).not.toHaveProperty('authorship');
+    expect(data).not.toHaveProperty('status');
+    expect([data.years, data.countries, data.datasets, data.siblings]).toEqual([[], [], [], []]);
+    expect(data.months).toEqual(Array(12).fill(0));
   });
 
   it('has no siblings when the genus has no other recorded species, or cannot be loaded', async () => {
@@ -141,9 +146,9 @@ describe('loadSpeciesData with sparse answers', () => {
       return bad();
     });
     const { loadSpeciesData } = await load();
-    const d = await loadSpeciesData(2);
-    expect(d.siblings).toEqual([]);
-    expect(d).not.toHaveProperty('commonName');
+    const data = await loadSpeciesData(2);
+    expect(data.siblings).toEqual([]);
+    expect(data).not.toHaveProperty('commonName');
     await expect(loadSpeciesData(3)).resolves.toMatchObject({ siblings: [] });
   });
 });
@@ -178,8 +183,8 @@ describe('species links', () => {
 describe('species charts', () => {
   it('names countries and links datasets', async () => {
     const { speciesCharts } = await import('~/lib/species/charts');
-    const d = { countries: [['GB', 3]], datasets: [{ key: 'ds', title: 'Garden birds', count: 2 }] } as never;
-    expect(speciesCharts(d)).toEqual({
+    const data = { countries: [['GB', 3]], datasets: [{ key: 'ds', title: 'Garden birds', count: 2 }] } as never;
+    expect(speciesCharts(data)).toEqual({
       countries: [{ label: 'United Kingdom', value: 3 }],
       datasets: [{ label: 'Garden birds', value: 2, href: 'https://www.gbif.org/dataset/ds' }],
     });

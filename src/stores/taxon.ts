@@ -16,16 +16,16 @@ export interface TaxonInfo {
 
 /** Names for a taxon key: the baked name index first, then one cached GBIF call. */
 export async function lookupTaxon(key: number): Promise<TaxonInfo | null> {
-  const idx = await nameIndexWithin();
-  const hit = idx?.get(key);
+  const nameIndex = await nameIndexWithin();
+  const hit = nameIndex?.get(key);
   if (hit) return taxonFromHit(hit);
   try {
-    const u = await getSpecies(key);
+    const usage = await getSpecies(key);
     return {
       key,
-      scientificName: u.canonicalName ?? u.scientificName,
-      rank: u.rank,
-      ...(u.vernacularName && { commonName: u.vernacularName }),
+      scientificName: usage.canonicalName ?? usage.scientificName,
+      rank: usage.rank,
+      ...(usage.vernacularName && { commonName: usage.vernacularName }),
     };
   } catch {
     return null;
@@ -44,10 +44,10 @@ function info(key: number): TaxonInfo {
 async function resolve(keys: readonly number[]): Promise<void> {
   // Placeholders first, so chips render immediately.
   $taxa.set(keys.map(info));
-  const missing = keys.filter((k) => !names.has(k));
+  const missing = keys.filter((key) => !names.has(key));
   if (!missing.length) return;
   const found = await Promise.all(missing.map(lookupTaxon));
-  for (const t of found) if (t) names.set(t.key, t);
+  for (const taxon of found) if (taxon) names.set(taxon.key, taxon);
   // Only publish if the selection has not moved on meanwhile.
   if ($taxonKeys.get() === keys) $taxa.set(keys.map(info));
 }
@@ -55,36 +55,37 @@ async function resolve(keys: readonly number[]): Promise<void> {
 onMount($taxa, () => $taxonKeys.subscribe((keys) => void resolve(keys)));
 
 /** A search result (or index entry) as display info. */
-export function taxonFromHit(h: Pick<NameHit, 'key' | 'scientificName' | 'rank' | 'commonName'>): TaxonInfo {
+export function taxonFromHit(hit: Pick<NameHit, 'key' | 'scientificName' | 'rank' | 'commonName'>): TaxonInfo {
   return {
-    key: h.key,
-    scientificName: h.scientificName,
-    rank: h.rank,
-    ...(h.commonName && { commonName: h.commonName }),
+    key: hit.key,
+    scientificName: hit.scientificName,
+    rank: hit.rank,
+    ...(hit.commonName && { commonName: hit.commonName }),
   };
 }
 
 /** Seed the cache when the caller already knows the names (search picks). */
-export function primeTaxonInfo(t: TaxonInfo): void {
-  names.set(t.key, t);
+export function primeTaxonInfo(taxon: TaxonInfo): void {
+  names.set(taxon.key, taxon);
 }
 
 export type AddTaxonResult = 'added' | 'already' | 'full';
 
 /** Add a taxon to the What filter (records of any selected taxon are shown). */
-export function addTaxon(t: TaxonInfo): AddTaxonResult {
+export function addTaxon(taxon: TaxonInfo): AddTaxonResult {
   const keys = $taxonKeys.get();
-  if (keys.includes(t.key)) return 'already';
+  if (keys.includes(taxon.key)) return 'already';
   if (keys.length >= MAX_TAXA) return 'full';
-  primeTaxonInfo(t);
+  primeTaxonInfo(taxon);
   clearHexSelection();
-  $taxonKeys.set([...keys, t.key].sort((a, b) => a - b));
+  $taxonKeys.set([...keys, taxon.key].sort((left, right) => left - right));
   return 'added';
 }
 
+/** Takes a taxon out of the selection. */
 export function removeTaxon(key: number): void {
   clearHexSelection();
-  $taxonKeys.set($taxonKeys.get().filter((k) => k !== key));
+  $taxonKeys.set($taxonKeys.get().filter((existing) => existing !== key));
 }
 
 export interface TaxonGroup {
@@ -169,16 +170,16 @@ export const TAXON_GROUPS: readonly TaxonGroup[] = [
 /** Add all of `taxa` to the What filter, or remove them all when they are all there already (one history step). */
 export function toggleTaxa(taxa: readonly TaxonInfo[]): AddTaxonResult | 'removed' {
   const keys = $taxonKeys.get();
-  const mine = new Set(taxa.map((t) => t.key));
-  if (taxa.every((t) => keys.includes(t.key))) {
+  const mine = new Set(taxa.map((taxon) => taxon.key));
+  if (taxa.every((taxon) => keys.includes(taxon.key))) {
     clearHexSelection();
-    $taxonKeys.set(keys.filter((k) => !mine.has(k)));
+    $taxonKeys.set(keys.filter((key) => !mine.has(key)));
     return 'removed';
   }
   const next = new Set([...keys, ...mine]);
   if (next.size > MAX_TAXA) return 'full';
-  for (const t of taxa) primeTaxonInfo(t);
+  for (const taxon of taxa) primeTaxonInfo(taxon);
   clearHexSelection();
-  $taxonKeys.set([...next].sort((a, b) => a - b));
+  $taxonKeys.set([...next].sort((left, right) => left - right));
   return 'added';
 }

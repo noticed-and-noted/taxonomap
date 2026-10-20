@@ -54,60 +54,62 @@ describe('taxon selection', () => {
   beforeEach(() => stubNetwork(snapshots({ names: NAMES })));
 
   it('adds taxa in key order, refusing duplicates and a full list', async () => {
-    const s = await load();
-    expect(s.addTaxon(robin)).toBe('added');
-    expect(s.addTaxon({ key: 212, scientificName: 'Aves', rank: 'CLASS' })).toBe('added');
-    expect(s.$taxonKeys.get()).toEqual([212, 2492462]);
-    expect(s.addTaxon(robin)).toBe('already');
-    s.$taxonKeys.set(Array.from({ length: s.MAX_TAXA }, (_, i) => i + 1));
-    expect(s.addTaxon(robin)).toBe('full');
+    const store = await load();
+    expect(store.addTaxon(robin)).toBe('added');
+    expect(store.addTaxon({ key: 212, scientificName: 'Aves', rank: 'CLASS' })).toBe('added');
+    expect(store.$taxonKeys.get()).toEqual([212, 2492462]);
+    expect(store.addTaxon(robin)).toBe('already');
+    store.$taxonKeys.set(Array.from({ length: store.MAX_TAXA }, (_unused, index) => index + 1));
+    expect(store.addTaxon(robin)).toBe('full');
   });
 
   it('clears the selected cell whenever the taxa change', async () => {
-    const s = await load();
+    const store = await load();
     const select = () => {
-      s.$selectedHex.set([1, 2]);
-      s.$panel.set('hex');
+      store.$selectedHex.set([1, 2]);
+      store.$panel.set('hex');
     };
     select();
-    s.addTaxon(robin);
-    expect(s.$selectedHex.get()).toBeNull();
-    expect(s.$panel.get()).toBe('none');
+    store.addTaxon(robin);
+    expect(store.$selectedHex.get()).toBeNull();
+    expect(store.$panel.get()).toBe('none');
     select();
-    s.removeTaxon(robin.key);
-    expect(s.$selectedHex.get()).toBeNull();
-    expect(s.$taxonKeys.get()).toEqual([]);
+    store.removeTaxon(robin.key);
+    expect(store.$selectedHex.get()).toBeNull();
+    expect(store.$taxonKeys.get()).toEqual([]);
   });
 
   it('publishes placeholders at once, then the names', async () => {
-    const s = await load();
+    const store = await load();
     const seen: string[][] = [];
-    const off = s.$taxa.subscribe((t) => seen.push(t.map((x) => x.scientificName)));
-    s.$taxonKeys.set([212]);
-    await vi.waitFor(() => expect(s.$taxa.get()[0]?.scientificName).toBe('Aves'));
+    const off = store.$taxa.subscribe((list) => seen.push(list.map((taxon) => taxon.scientificName)));
+    store.$taxonKeys.set([212]);
+    await vi.waitFor(() => expect(store.$taxa.get()[0]?.scientificName).toBe('Aves'));
     expect(seen).toContainEqual(['Taxon 212']);
     off();
   });
 
   it('keeps placeholders for taxa it cannot name, and drops answers for a selection that moved on', async () => {
     stubNetwork(snapshots({}));
-    const s = await load();
-    const off = s.$taxa.listen(() => {});
-    s.$taxonKeys.set([1]);
-    s.$taxonKeys.set([2]);
-    await vi.waitFor(() => expect(s.$taxa.get()).toEqual([{ key: 2, scientificName: 'Taxon 2', rank: 'UNRANKED' }]));
+    const store = await load();
+    const off = store.$taxa.listen(() => {});
+    store.$taxonKeys.set([1]);
+    store.$taxonKeys.set([2]);
+    await vi.waitFor(() =>
+      expect(store.$taxa.get()).toEqual([{ key: 2, scientificName: 'Taxon 2', rank: 'UNRANKED' }]),
+    );
     // Known names need no lookup.
-    s.primeTaxonInfo({ key: 3, scientificName: 'Known', rank: 'GENUS' });
-    s.$taxonKeys.set([3]);
-    expect(s.$taxa.get()[0]?.scientificName).toBe('Known');
+    store.primeTaxonInfo({ key: 3, scientificName: 'Known', rank: 'GENUS' });
+    store.$taxonKeys.set([3]);
+    expect(store.$taxa.get()[0]?.scientificName).toBe('Known');
     off();
   });
 
   it('shows a picked taxon by name straight away (no lookup)', async () => {
-    const s = await load();
-    const off = s.$taxa.listen(() => {});
-    s.addTaxon(robin);
-    expect(s.$taxa.get()[0]?.scientificName).toBe('Erithacus rubecula');
+    const store = await load();
+    const off = store.$taxa.listen(() => {});
+    store.addTaxon(robin);
+    expect(store.$taxa.get()[0]?.scientificName).toBe('Erithacus rubecula');
     off();
   });
 });
@@ -116,13 +118,13 @@ describe('toggleTaxa', () => {
   it('adds a whole group, removes it again, and refuses past the limit', async () => {
     stubNetwork(snapshots({ names: NAMES }));
     const { $taxonKeys, MAX_TAXA, TAXON_GROUPS, toggleTaxa } = await load();
-    const reptiles = TAXON_GROUPS.find((g) => g.label === 'Reptiles')!.taxa;
+    const reptiles = TAXON_GROUPS.find((group) => group.label === 'Reptiles')!.taxa;
     $taxonKeys.set([212]);
     expect(toggleTaxa(reptiles)).toBe('added');
     expect($taxonKeys.get()).toEqual([212, 11418114, 11493978, 11592253]);
     expect(toggleTaxa(reptiles)).toBe('removed');
     expect($taxonKeys.get()).toEqual([212]);
-    $taxonKeys.set(Array.from({ length: MAX_TAXA - 1 }, (_, i) => i + 1));
+    $taxonKeys.set(Array.from({ length: MAX_TAXA - 1 }, (_unused, index) => index + 1));
     expect(toggleTaxa(reptiles)).toBe('full');
     expect($taxonKeys.get()).toHaveLength(MAX_TAXA - 1);
   });

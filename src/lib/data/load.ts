@@ -13,12 +13,12 @@ const cache = new Map<string, Promise<unknown>>();
  * the service worker). Resolves null if unavailable so callers can go live.
  */
 export function loadSnapshot<K extends keyof Snapshots>(name: K): Promise<Snapshots[K] | null> {
-  let p = cache.get(name) as Promise<Snapshots[K] | null> | undefined;
-  if (!p) {
-    p = fetch(`/data/${name}.json`)
-      .then((r) => (r.ok ? (r.json() as Promise<Snapshots[K]>) : null))
+  let pending = cache.get(name) as Promise<Snapshots[K] | null> | undefined;
+  if (!pending) {
+    pending = fetch(`/data/${name}.json`)
+      .then((response) => (response.ok ? (response.json() as Promise<Snapshots[K]>) : null))
       .catch(() => null);
-    cache.set(name, p);
+    cache.set(name, pending);
   }
-  return p;
+  return pending;
 }

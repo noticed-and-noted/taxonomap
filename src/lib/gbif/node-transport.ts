@@ -33,73 +33,92 @@ interface CachedResponse {
 function packageVersion(): string {
   if (process.env['npm_package_version']) return process.env['npm_package_version'];
   try {
-    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version?: string };
-    return pkg.version ?? '0.0.0';
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version?: string };
+    return packageJson.version ?? '0.0.0';
   } catch {
     return '0.0.0';
   }
 }
 
+/** The User-Agent that identifies this build to GBIF, with an optional contact address. */
 export function userAgent(contact = process.env['GBIF_CONTACT_EMAIL']): string {
   return `Taxonomap/${packageVersion()} (contact: ${contact || 'unset'})`;
 }
 
-export function createNodeTransport(o: NodeTransportOptions = {}): Transport {
-  const cacheDir = o.cacheDir ?? join(process.cwd(), '.cache', 'gbif');
-  const ttlMs = o.ttlMs ?? Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? 168) * HOUR;
-  const refresh = o.refresh ?? process.env['GBIF_CACHE_REFRESH'] === '1';
-  const limit = pLimit(o.concurrency ?? 5);
-  const doFetch = o.fetchImpl ?? fetch;
-  const ua = userAgent(o.contact);
-  // Shared pause: a Retry-After on any request delays all queued requests.
-  let pausedUntil = 0;
+const DEFAULT_CACHE_TTL_HOURS = 168;
+const DEFAULT_CONCURRENCY = 5;
+const MAX_RETRY_PAUSE_MS = 2 * MINUTE;
 
+interface DiskCache {
+  read(url: string): Promise<CachedResponse | undefined>;
+  write(entry: CachedResponse): Promise<void>;
+}
+
+/** Responses stored as JSON files under `cacheDir`, sharded by the first byte of the URL's hash. */
+function createDiskCache(cacheDir: string, ttlMs: number, refresh: boolean): DiskCache {
   const pathFor = (url: string) => {
-    const h = createHash('sha1').update(url).digest('hex');
-    return join(cacheDir, h.slice(0, 2), `${h}.json`);
+    const hash = createHash('sha1').update(url).digest('hex');
+    return join(cacheDir, hash.slice(0, 2), `${hash}.json`);
   };
 
-  async function readCache(url: string): Promise<CachedResponse | undefined> {
-    if (refresh) return undefined;
-    try {
-      const c = JSON.parse(await readFile(pathFor(url), 'utf8')) as CachedResponse;
-      return Date.now() - c.fetchedAt < ttlMs ? c : undefined;
-    } catch {
-      return undefined;
-    }
+  return {
+    async read(url) {
+      if (refresh) return undefined;
+      try {
+        const cached = JSON.parse(await readFile(pathFor(url), 'utf8')) as CachedResponse;
+        return Date.now() - cached.fetchedAt < ttlMs ? cached : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    async write(entry) {
+      const file = pathFor(entry.url);
+      await mkdir(join(file, '..'), { recursive: true });
+      await writeFile(file, JSON.stringify(entry));
+    },
+  };
+}
+
+/**
+ * A transport for build scripts: a disk cache in front of GBIF, at most N requests at once,
+ * with a Retry-After on any response pausing every queued request.
+ */
+export function createNodeTransport(options: NodeTransportOptions = {}): Transport {
+  const cache = createDiskCache(
+    options.cacheDir ?? join(process.cwd(), '.cache', 'gbif'),
+    options.ttlMs ?? Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? DEFAULT_CACHE_TTL_HOURS) * HOUR,
+    options.refresh ?? process.env['GBIF_CACHE_REFRESH'] === '1',
+  );
+  const limit = pLimit(options.concurrency ?? DEFAULT_CONCURRENCY);
+  const doFetch = options.fetchImpl ?? fetch;
+  const agent = userAgent(options.contact);
+  let pausedUntil = 0;
+
+  async function fetchFromGbif(url: string, requestInit?: Parameters<Transport>[1]): Promise<Response> {
+    const wait = pausedUntil - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    const response = await doFetch(url, {
+      headers: { 'User-Agent': agent, Accept: 'application/json' },
+      ...(requestInit?.signal ? { signal: requestInit.signal } : {}),
+    });
+    const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+    if (retryAfterMs) pausedUntil = Math.max(pausedUntil, Date.now() + Math.min(retryAfterMs, MAX_RETRY_PAUSE_MS));
+    // Cache successes and definitive 404s; never cache throttling or errors.
+    if (response.status !== 200 && response.status !== 404) return response;
+    const body = await response.text();
+    const contentType = response.headers.get('content-type') ?? 'application/json';
+    await cache.write({ url, status: response.status, contentType, body, fetchedAt: Date.now() });
+    return new Response(body, { status: response.status, headers: { 'content-type': contentType } });
   }
 
-  async function writeCache(entry: CachedResponse): Promise<void> {
-    const file = pathFor(entry.url);
-    await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, JSON.stringify(entry));
-  }
-
-  return async (url, init) => {
-    const cached = await readCache(url);
+  return async (url, requestInit) => {
+    const cached = await cache.read(url);
     if (cached) {
       return new Response(cached.body, {
         status: cached.status,
         headers: { 'content-type': cached.contentType, 'x-cache': 'disk' },
       });
     }
-    return limit(async () => {
-      const wait = pausedUntil - Date.now();
-      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      const res = await doFetch(url, {
-        headers: { 'User-Agent': ua, Accept: 'application/json' },
-        ...(init?.signal ? { signal: init.signal } : {}),
-      });
-      const ms = parseRetryAfter(res.headers.get('retry-after'));
-      if (ms) pausedUntil = Math.max(pausedUntil, Date.now() + Math.min(ms, 2 * MINUTE));
-      // Cache successes and definitive 404s; never cache throttling or errors.
-      if (res.status === 200 || res.status === 404) {
-        const body = await res.text();
-        const contentType = res.headers.get('content-type') ?? 'application/json';
-        await writeCache({ url, status: res.status, contentType, body, fetchedAt: Date.now() });
-        return new Response(body, { status: res.status, headers: { 'content-type': contentType } });
-      }
-      return res;
-    });
+    return limit(() => fetchFromGbif(url, requestInit));
   };
 }

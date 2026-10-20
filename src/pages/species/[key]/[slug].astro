@@ -20,7 +20,7 @@ import SpeciesPage from '~/components/vue/SpeciesPage.vue';
 
 export async function getStaticPaths() {
   const list = await bakeSpeciesList();
-  return list.map((s) => ({ params: { key: String(s.key), slug: s.slug } }));
+  return list.map((species) => ({ params: { key: String(species.key), slug: species.slug } }));
 }
 
 const key = Number(Astro.params.key);
@@ -32,7 +32,7 @@ const charts = speciesCharts(data);
 const title = data.commonName ? `${data.commonName} (${data.canonicalName})` : data.canonicalName;
 const topCountries = data.countries
   .slice(0, 3)
-  .map(([c]) => c)
+  .map(([countryCode]) => countryCode)
   .join(', ');
 const description =
   `${title}: ${full(data.count)} occurrence records on GBIF` +

@@ -18,42 +18,42 @@ let startHeight = 0;
 
 watch(
   () => props.open,
-  (o) => {
-    if (o) snap.value = 1;
+  (isOpen) => {
+    if (isOpen) snap.value = 1;
   },
 );
 
 const height = computed(() => `calc(${(SNAPS[snap.value] ?? 0.55) * 100}dvh - ${dragOffset.value}px)`);
 const snapLabel = computed(() => ['collapsed', 'half height', 'full height'][snap.value]);
 
-function onDown(e: PointerEvent) {
+function onDown(event: PointerEvent) {
   dragging.value = true;
   moved = false;
-  startY = e.clientY;
+  startY = event.clientY;
   startHeight = (SNAPS[snap.value] ?? 0.55) * window.innerHeight;
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 }
 
-function onMoveDrag(e: PointerEvent) {
+function onMoveDrag(event: PointerEvent) {
   if (!dragging.value) return;
-  dragOffset.value = e.clientY - startY;
+  dragOffset.value = event.clientY - startY;
   if (Math.abs(dragOffset.value) > 4) moved = true;
 }
 
 function onUp() {
   if (!dragging.value) return;
   dragging.value = false;
-  const h = startHeight - dragOffset.value;
+  const sheetHeight = startHeight - dragOffset.value;
   dragOffset.value = 0;
   // Dragged well below the lowest snap: close.
-  if (h < SNAPS[0] * window.innerHeight * 0.6) {
+  if (sheetHeight < SNAPS[0] * window.innerHeight * 0.6) {
     emit('close');
     return;
   }
-  const frac = h / window.innerHeight;
+  const frac = sheetHeight / window.innerHeight;
   let best = 0;
-  SNAPS.forEach((s, i) => {
-    if (Math.abs(s - frac) < Math.abs((SNAPS[best] ?? 0) - frac)) best = i;
+  SNAPS.forEach((snapPoint, index) => {
+    if (Math.abs(snapPoint - frac) < Math.abs((SNAPS[best] ?? 0) - frac)) best = index;
   });
   snap.value = best;
 }
@@ -64,15 +64,15 @@ function onHandleClick() {
   moved = false;
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'ArrowUp') {
-    e.preventDefault();
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
     snap.value = Math.min(SNAPS.length - 1, snap.value + 1);
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault();
     if (snap.value === 0) emit('close');
     else snap.value--;
-  } else if (e.key === 'Escape') emit('close');
+  } else if (event.key === 'Escape') emit('close');
 }
 </script>
 

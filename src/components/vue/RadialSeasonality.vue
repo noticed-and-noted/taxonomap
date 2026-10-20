@@ -17,28 +17,28 @@ const props = withDefaults(defineProps<{ counts: readonly number[]; size?: numbe
 const inner = computed(() => props.size * 0.16);
 const outer = computed(() => props.size / 2 - 18);
 const max = computed(() => Math.max(1, ...props.counts));
-const total = computed(() => props.counts.reduce((a, b) => a + b, 0));
+const total = computed(() => props.counts.reduce((sum, count) => sum + count, 0));
 const peak = computed(() => props.counts.indexOf(Math.max(...props.counts)));
 
 const wedges = computed(() => {
-  const r = scaleRadial().domain([0, max.value]).range([inner.value, outer.value]);
+  const radius = scaleRadial().domain([0, max.value]).range([inner.value, outer.value]);
   const step = (2 * Math.PI) / 12;
-  const gen = arc<{ i: number; v: number }>()
+  const arcGenerator = arc<{ index: number; count: number }>()
     .innerRadius(inner.value)
-    .outerRadius((d) => r(d.v))
-    .startAngle((d) => d.i * step + 0.02)
-    .endAngle((d) => (d.i + 1) * step - 0.02)
+    .outerRadius((slice) => radius(slice.count))
+    .startAngle((slice) => slice.index * step + 0.02)
+    .endAngle((slice) => (slice.index + 1) * step - 0.02)
     .padAngle(0.01)
     .cornerRadius(2);
-  return MONTHS.map((m, i) => {
-    const v = props.counts[i] ?? 0;
-    const mid = (i + 0.5) * step;
+  return MONTHS.map((label, index) => {
+    const count = props.counts[index] ?? 0;
+    const middleAngle = (index + 0.5) * step;
     return {
-      m,
-      v,
-      d: gen({ i, v }) ?? '',
-      lx: Math.sin(mid) * (outer.value + 10),
-      ly: -Math.cos(mid) * (outer.value + 10),
+      m: label,
+      v: count,
+      d: arcGenerator({ index, count }) ?? '',
+      lx: Math.sin(middleAngle) * (outer.value + 10),
+      ly: -Math.cos(middleAngle) * (outer.value + 10),
     };
   });
 });
@@ -57,24 +57,24 @@ const wedges = computed(() => {
       <circle :r="outer" fill="none" stroke="var(--border)" stroke-dasharray="2 3" />
       <circle :r="inner" fill="none" stroke="var(--border)" />
       <path
-        v-for="(w, i) in wedges"
-        :key="w.m"
-        :d="w.d"
-        :fill="i === peak ? 'var(--accent)' : 'var(--ramp-4)'"
-        :fill-opacity="i === peak ? 1 : 0.75"
+        v-for="(wedge, index) in wedges"
+        :key="wedge.m"
+        :d="wedge.d"
+        :fill="index === peak ? 'var(--accent)' : 'var(--ramp-4)'"
+        :fill-opacity="index === peak ? 1 : 0.75"
       >
-        <title>{{ w.m }}: {{ full(w.v) }}</title>
+        <title>{{ wedge.m }}: {{ full(wedge.v) }}</title>
       </path>
       <text
-        v-for="w in wedges"
-        :key="`l-${w.m}`"
-        :x="w.lx"
-        :y="w.ly"
+        v-for="wedge in wedges"
+        :key="`l-${wedge.m}`"
+        :x="wedge.lx"
+        :y="wedge.ly"
         text-anchor="middle"
         dominant-baseline="middle"
         class="fill-[var(--text-subtle)] text-[11px]"
       >
-        {{ w.m[0] }}
+        {{ wedge.m[0] }}
       </text>
     </svg>
     <template #table>
@@ -86,9 +86,9 @@ const wedges = computed(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="w in wedges" :key="`t-${w.m}`">
-            <td>{{ w.m }}</td>
-            <td>{{ full(w.v) }}</td>
+          <tr v-for="wedge in wedges" :key="`t-${wedge.m}`">
+            <td>{{ wedge.m }}</td>
+            <td>{{ full(wedge.v) }}</td>
           </tr>
         </tbody>
       </table>

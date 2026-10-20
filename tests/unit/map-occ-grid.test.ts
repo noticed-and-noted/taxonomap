@@ -1,7 +1,7 @@
 /** The occurrence hex grid: level from zoom, tiles for a view, GBIF tiles decoded to hexes. */
 import type Point from '@mapbox/point-geometry';
 import { fromVectorTileJs } from '@maplibre/vt-pbf';
-import { E, hexAt, mvt, type Px } from './helpers/tiles';
+import { TILE_EXTENT, hexAt, mvt, type Px } from './helpers/tiles';
 import {
   adhocLevel,
   clipRingLat,
@@ -28,12 +28,12 @@ describe('adhocLevel', () => {
 
 describe('gridLevel', () => {
   // A 1024 × 768 view: the globe fills it from an equator-equivalent zoom of about 3.
-  const W = 1024;
-  const H = 768;
-  const level = (zoom: number, lat: number) => gridLevel(zoom, lat, W, H);
+  const WIDTH = 1024;
+  const HEIGHT = 768;
+  const level = (zoom: number, lat: number) => gridLevel(zoom, lat, WIDTH, HEIGHT);
 
   it('fills a 1024 × 768 view from about zoom 3', () => {
-    expect(fillZoom(W, H)).toBeCloseTo(2.97, 2);
+    expect(fillZoom(WIDTH, HEIGHT)).toBeCloseTo(2.97, 2);
     expect(zoomDrop(0)).toBe(0);
     expect(zoomDrop(60)).toBeCloseTo(1);
   });
@@ -56,7 +56,7 @@ describe('gridLevel', () => {
   });
 
   it('switches at one point, not gradually', () => {
-    const at = fillZoom(W, H) + 1; // a zoom level past filling the view
+    const at = fillZoom(WIDTH, HEIGHT) + 1; // a zoom level past filling the view
     expect(level(at - 0.01 - zoomDrop(80), 80)).toBe(Math.floor(at - 0.01));
     expect(level(at - zoomDrop(80), 80)).toBe(Math.floor(at) - 2);
   });
@@ -70,8 +70,8 @@ describe('gridLevel', () => {
 
   it('keeps the same grid while panning anywhere below 60°', () => {
     // Panning the close-up globe over Spain and beyond: MapLibre's zoom moves, the grid does not.
-    for (const z of [5, 5.5, 6.9]) {
-      const levels = [0, 20, 34.36, 40, 44, 55, -45].map((lat) => level(z - zoomDrop(lat), lat));
+    for (const zoom of [5, 5.5, 6.9]) {
+      const levels = [0, 20, 34.36, 40, 44, 55, -45].map((lat) => level(zoom - zoomDrop(lat), lat));
       expect(new Set(levels).size).toBe(1);
     }
   });
@@ -126,7 +126,7 @@ describe('ringAround and shiftTiles', () => {
     expect(ring).toHaveLength(6);
     expect(ring).toContainEqual({ x: 2, y: 0 });
     expect(ring).toContainEqual({ x: 1, y: 1 });
-    expect(ring.every((t) => t.y >= 0)).toBe(true);
+    expect(ring.every((tile) => tile.y >= 0)).toBe(true);
     expect(ring).not.toContainEqual({ x: 3, y: 0 });
   });
 
@@ -158,10 +158,10 @@ describe('clipRingLat', () => {
     // An open ring is clipped the same way.
     expect(clipRingLat(ring.slice(0, -1), -85, 85)).toEqual(out);
     expect(out[0]).toEqual(out.at(-1));
-    expect(Math.max(...out.map((p) => p[1]))).toBe(85);
+    expect(Math.max(...out.map((point) => point[1]))).toBe(85);
     expect(
       clipRingLat(
-        ring.map(([x, y]) => [x, y + 10] as LngLat),
+        ring.map(([lng, lat]) => [lng, lat + 10] as LngLat),
         -85,
         85,
       ),
@@ -178,15 +178,15 @@ describe('decodeHexes', () => {
     expect(left).toHaveLength(1);
     expect(left[0]!.properties.id).toBe(right[0]!.properties.id);
     expect(left[0]!.geometry.coordinates[0]).toHaveLength(7);
-    const lngs = left[0]!.geometry.coordinates[0]!.map((p) => p[0]!);
+    const lngs = left[0]!.geometry.coordinates[0]!.map((point) => point[0]!);
     expect(Math.min(...lngs)).toBeLessThan(0);
     expect(Math.max(...lngs)).toBeGreaterThan(0);
     expect(left[0]!.properties.home).toBe(false);
     expect(right[0]!.properties.home).toBe(true);
     // The home copy wins over a higher count, in either order; alone, the padded copy stands in.
-    expect([...mergeHexes([left, right]).values()].map((h) => h.properties.total)).toEqual([7]);
-    expect([...mergeHexes([right, left]).values()].map((h) => h.properties.total)).toEqual([7]);
-    expect([...mergeHexes([left]).values()].map((h) => h.properties.total)).toEqual([15]);
+    expect([...mergeHexes([left, right]).values()].map((hex) => hex.properties.total)).toEqual([7]);
+    expect([...mergeHexes([right, left]).values()].map((hex) => hex.properties.total)).toEqual([7]);
+    expect([...mergeHexes([left]).values()].map((hex) => hex.properties.total)).toEqual([15]);
   });
 
   it('halves GBIF hex totals, which count each record twice', async () => {
@@ -197,18 +197,18 @@ describe('decodeHexes', () => {
   it('clips cells off the poles', async () => {
     // A hex straddling the top edge of the top row (85.05°).
     const [hex] = await decodeHexes(mvt([{ ring: hexAt(2048, 0), total: 3 }]), { x: 0, y: 0 }, 0);
-    expect(Math.max(...hex!.geometry.coordinates[0]!.map((p) => p[1]!))).toBe(85);
+    expect(Math.max(...hex!.geometry.coordinates[0]!.map((point) => point[1]!))).toBe(85);
   });
 
   it('skips points and empty polygons, and takes the first ring of a multipolygon', async () => {
     const feature = (type: 1 | 3, rings: Px[][], total: unknown = 4) => ({
       id: 1,
       type,
-      extent: E,
+      extent: TILE_EXTENT,
       properties: { total } as Record<string, number>,
-      loadGeometry: () => rings.map((r) => r.map(([x, y]) => ({ x, y }) as Point)),
+      loadGeometry: () => rings.map((ring) => ring.map(([pointX, pointY]) => ({ x: pointX, y: pointY }) as Point)),
     });
-    const closed = (r: Px[]) => [...r, r[0]!];
+    const closed = (ring: Px[]) => [...ring, ring[0]!];
     const features = [
       feature(1, [[[100, 100]]]),
       feature(3, []),
@@ -216,7 +216,15 @@ describe('decodeHexes', () => {
       feature(3, [hexAt(1000, 1000), closed(hexAt(3000, 3000))], 'n/a'),
     ];
     const bytes = fromVectorTileJs({
-      layers: { occurrence: { version: 2, name: 'occurrence', extent: E, length: 3, feature: (i) => features[i]! } },
+      layers: {
+        occurrence: {
+          version: 2,
+          name: 'occurrence',
+          extent: TILE_EXTENT,
+          length: 3,
+          feature: (index) => features[index]!,
+        },
+      },
     });
     const hexes = await decodeHexes(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
@@ -228,9 +236,9 @@ describe('decodeHexes', () => {
   });
 
   it('places a hex by its centre, closed ring or not', () => {
-    const ring = hexAt(5000, 100).map(([x, y]) => ({ x, y }));
-    expect(homeOffset(ring, E)).toEqual([1, 0]);
-    expect(homeOffset([...ring, ring[0]!], E)).toEqual([1, 0]);
+    const ring = hexAt(5000, 100).map(([pointX, pointY]) => ({ x: pointX, y: pointY }));
+    expect(homeOffset(ring, TILE_EXTENT)).toEqual([1, 0]);
+    expect(homeOffset([...ring, ring[0]!], TILE_EXTENT)).toEqual([1, 0]);
   });
 
   it('drops a cell wholly past the latitude limit', async () => {

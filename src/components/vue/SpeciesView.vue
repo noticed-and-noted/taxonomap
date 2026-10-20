@@ -26,34 +26,34 @@ const key = ref<number | null>(null);
 
 async function load() {
   error.value = null;
-  const k = Number(window.location.pathname.split('/')[3]);
-  if (!Number.isInteger(k) || k <= 0) {
+  const speciesKey = Number(window.location.pathname.split('/')[3]);
+  if (!Number.isInteger(speciesKey) || speciesKey <= 0) {
     error.value = 'missing-key';
     return;
   }
-  key.value = k;
-  const m = await loadSpeciesManifest();
-  manifest.value = m;
-  if (m?.[String(k)]) {
-    window.location.replace(speciesPath(k, m));
+  key.value = speciesKey;
+  const loadedManifest = await loadSpeciesManifest();
+  manifest.value = loadedManifest;
+  if (loadedManifest?.[String(speciesKey)]) {
+    window.location.replace(speciesPath(speciesKey, loadedManifest));
     return;
   }
   try {
-    const idx = await loadNameIndex();
-    data.value = await loadSpeciesData(k, (sk) => idx?.get(sk)?.commonName ?? null);
-    const d = data.value;
-    document.title = `${d.commonName ? `${d.commonName} (${d.canonicalName})` : d.canonicalName} · Taxonomap`;
-  } catch (e) {
-    const kind = classifyError(e);
+    const nameIndex = await loadNameIndex();
+    data.value = await loadSpeciesData(speciesKey, (taxonKey) => nameIndex?.get(taxonKey)?.commonName ?? null);
+    const loaded = data.value;
+    document.title = `${loaded.commonName ? `${loaded.commonName} (${loaded.canonicalName})` : loaded.canonicalName} · Taxonomap`;
+  } catch (failure) {
+    const kind = classifyError(failure);
     if (kind === 'not-found' || kind === 'bad-request') {
-      window.location.replace(treeHref(k));
+      window.location.replace(treeHref(speciesKey));
       return;
     }
     error.value = kind;
   }
 }
 
-const treeHref = (k: number) => `/tree?focus=${k}`;
+const treeHref = (taxonKey: number) => `/tree?focus=${taxonKey}`;
 
 onMounted(load);
 </script>

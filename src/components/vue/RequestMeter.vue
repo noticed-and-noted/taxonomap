@@ -18,9 +18,9 @@ let timer: ReturnType<typeof setInterval> | undefined;
 
 const HIDDEN_KEY = 'gbif:request-meter-hidden';
 
-function onKey(e: KeyboardEvent) {
-  if (!e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'd') return;
-  e.preventDefault();
+function onKey(event: KeyboardEvent) {
+  if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'd') return;
+  event.preventDefault();
   visible.value = !visible.value;
   try {
     localStorage.setItem(HIDDEN_KEY, visible.value ? '0' : '1');

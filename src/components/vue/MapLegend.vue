@@ -31,17 +31,17 @@ onBeforeUnmount(() => {
   >
     <p class="mb-1 text-xs font-medium text-muted">Records per cell</p>
     <div class="flex h-2.5 overflow-hidden rounded-sm">
-      <span v-for="c in colors" :key="c" class="flex-1" :style="{ background: c }"></span>
+      <span v-for="colour in colors" :key="colour" class="flex-1" :style="{ background: colour }"></span>
     </div>
     <!-- Every other bin boundary, so labels never collide at narrow widths. -->
     <div class="relative mt-0.5 h-3.5 text-xs text-subtle tabular-nums" aria-hidden="true">
       <span
-        v-for="(l, i) in labels"
-        v-show="i % 2 === 0"
-        :key="i"
+        v-for="(label, index) in labels"
+        v-show="index % 2 === 0"
+        :key="index"
         class="absolute top-0"
-        :style="{ left: `${(i / labels.length) * 100}%` }"
-        >{{ l }}</span
+        :style="{ left: `${(index / labels.length) * 100}%` }"
+        >{{ label }}</span
       >
     </div>
   </div>

@@ -5,8 +5,8 @@ import { RANK_BY_CODE } from './ranks';
 import type { NameRow } from './types';
 
 /** Lower-case, strip accents and punctuation. */
-export function normalise(s: string): string {
-  return s
+export function normalise(text: string): string {
+  return text
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
@@ -51,15 +51,16 @@ interface Entry {
  * "robin" prefers robins over the genus Robinia, unless the scientific name
  * matches exactly or as a full prefix and nothing common-named does.
  */
-function score(text: string, q: string, qWords: string[]): number {
+function score(text: string, query: string, qWords: string[]): number {
   if (!text) return 0;
-  if (text === q) return 4;
-  if (text.startsWith(q)) return 3;
+  if (text === query) return 4;
+  if (text.startsWith(query)) return 3;
   const words = text.split(' ');
-  if (qWords.every((w) => words.some((x) => x.startsWith(w)))) return 2;
+  if (qWords.every((queryWord) => words.some((word) => word.startsWith(queryWord)))) return 2;
   return 0;
 }
 
+/** In-memory search over the baked names, matching common and scientific names by word prefix. */
 export class NameIndex {
   readonly #entries: Entry[];
   readonly #byKey: Map<number, IndexedName>;
@@ -70,21 +71,24 @@ export class NameIndex {
       common: normalise(name.commonName ?? ''),
       sci: normalise(name.scientificName),
     }));
-    this.#byKey = new Map(this.#entries.map((e) => [e.name.key, e.name]));
+    this.#byKey = new Map(this.#entries.map((entry) => [entry.name.key, entry.name]));
   }
 
-  search(query: string, limit = 8): NameHit[] {
-    const q = normalise(query);
-    if (q.length < 2) return [];
-    const qWords = q.split(' ');
-    const hits: { e: Entry; s: number }[] = [];
-    for (const e of this.#entries) {
-      const s = Math.max(score(e.common, q, qWords), score(e.sci, q, qWords) - 1.5);
-      if (s > 0) hits.push({ e, s });
+  search(query: string, limit = 20): NameHit[] {
+    const normalisedQuery = normalise(query);
+    if (normalisedQuery.length < 2) return [];
+    const qWords = normalisedQuery.split(' ');
+    const hits: { entry: Entry; score: number }[] = [];
+    for (const entry of this.#entries) {
+      const bestScore = Math.max(
+        score(entry.common, normalisedQuery, qWords),
+        score(entry.sci, normalisedQuery, qWords) - 1.5,
+      );
+      if (bestScore > 0) hits.push({ entry, score: bestScore });
     }
     // Rows are pre-sorted by count; sort is stable, so ties keep count order.
-    hits.sort((a, b) => b.s - a.s);
-    return hits.slice(0, limit).map(({ e }) => ({ ...e.name, source: 'index' as const }));
+    hits.sort((left, right) => right.score - left.score);
+    return hits.slice(0, limit).map(({ entry }) => ({ ...entry.name, source: 'index' as const }));
   }
 
   get(key: number): IndexedName | undefined {
@@ -97,7 +101,7 @@ let loaded: NameIndex | null = null;
 
 /** Lazily load /data/names.json (first omnibox focus). */
 export function loadNameIndex(): Promise<NameIndex | null> {
-  indexPromise ??= loadSnapshot('names').then((s) => (loaded = s ? new NameIndex(s.names) : null));
+  indexPromise ??= loadSnapshot('names').then((snapshot) => (loaded = snapshot ? new NameIndex(snapshot.names) : null));
   return indexPromise;
 }
 
@@ -111,13 +115,13 @@ export function nameIndexIfLoaded(): NameIndex | null {
  * lookups rather than block the UI on a slow network).
  */
 export function nameIndexWithin(ms = 1500): Promise<NameIndex | null> {
-  return Promise.race([loadNameIndex(), new Promise<null>((r) => setTimeout(() => r(null), ms))]);
+  return Promise.race([loadNameIndex(), new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
 }
 
 export const bakedIndexProvider: NameSearchProvider = {
   id: 'baked-index',
-  async search(q) {
-    const idx = await loadNameIndex();
-    return idx ? idx.search(q) : [];
+  async search(query) {
+    const nameIndex = await loadNameIndex();
+    return nameIndex ? nameIndex.search(query) : [];
   },
 };

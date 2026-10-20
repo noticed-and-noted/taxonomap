@@ -14,17 +14,17 @@ const rows: NameRow[] = [
 
 describe('NameIndex', () => {
   // The baked index is sorted by count, descending.
-  const idx = new NameIndex([...rows].sort((a, b) => b[4] - a[4]));
+  const nameIndex = new NameIndex([...rows].sort((left, right) => right[4] - left[4]));
 
   it('looks up a taxon by key, decoded', () => {
-    expect(idx.get(212)).toEqual({
+    expect(nameIndex.get(212)).toEqual({
       key: 212,
       rank: 'CLASS',
       scientificName: 'Aves',
       commonName: 'Birds',
       count: 900_000_000,
     });
-    expect(idx.get(1)).toBeUndefined();
+    expect(nameIndex.get(1)).toBeUndefined();
   });
 
   it('decodes the iNaturalist ID a row carries, when it has one', () => {
@@ -36,23 +36,27 @@ describe('NameIndex', () => {
       count: 9,
       inatId: 3017,
     });
-    expect(idx.get(5231190)).not.toHaveProperty('inatId');
+    expect(nameIndex.get(5231190)).not.toHaveProperty('inatId');
   });
 
   it('finds common names by word prefix, most-recorded first', () => {
-    expect(idx.search('robin').map((h) => h.key)).toEqual([9510564, 2492462, 7]);
+    expect(nameIndex.search('robin').map((hit) => hit.key)).toEqual([9510564, 2492462, 7]);
   });
 
   it('matches multi-word queries in any order', () => {
-    expect(idx.search('sparrow house')[0]?.key).toBe(5231190);
+    expect(nameIndex.search('sparrow house')[0]?.key).toBe(5231190);
   });
 
   it('ranks a full-prefix match above word matches', () => {
-    expect(idx.search('house sp')[0]).toMatchObject({ key: 5231190, commonName: 'House sparrow', rank: 'SPECIES' });
+    expect(nameIndex.search('house sp')[0]).toMatchObject({
+      key: 5231190,
+      commonName: 'House sparrow',
+      rank: 'SPECIES',
+    });
   });
 
   it('matches scientific names', () => {
-    expect(idx.search('erithacus')[0]?.key).toBe(2492462);
+    expect(nameIndex.search('erithacus')[0]?.key).toBe(2492462);
   });
 
   it('normalises accents and punctuation', () => {
@@ -60,16 +64,16 @@ describe('NameIndex', () => {
   });
 
   it('ignores one-letter queries', () => {
-    expect(idx.search('r')).toEqual([]);
+    expect(nameIndex.search('r')).toEqual([]);
   });
 });
 
 describe('NameIndex scoring', () => {
-  const idx = new NameIndex(rows);
+  const nameIndex = new NameIndex(rows);
 
   it('puts an exact name first, and finds taxa with no common name', () => {
-    expect(idx.search('birds')[0]?.key).toBe(212);
-    expect(idx.search('ursus arctos').map((h) => h.key)).toEqual([8]);
+    expect(nameIndex.search('birds')[0]?.key).toBe(212);
+    expect(nameIndex.search('ursus arctos').map((hit) => hit.key)).toEqual([8]);
   });
 });
 
@@ -94,18 +98,18 @@ describe('loading the index', () => {
 
   it('hands out the index only once it has loaded, without starting a load', async () => {
     const calls = stubNetwork(snapshots({ names: rows }));
-    const m = await fresh();
-    expect(m.nameIndexIfLoaded()).toBeNull();
+    const freshModule = await fresh();
+    expect(freshModule.nameIndexIfLoaded()).toBeNull();
     expect(calls).toHaveLength(0);
-    const loaded = await m.loadNameIndex();
-    expect(m.nameIndexIfLoaded()).toBe(loaded);
+    const loaded = await freshModule.loadNameIndex();
+    expect(freshModule.nameIndexIfLoaded()).toBe(loaded);
   });
 
   it('gives up waiting after the time limit', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', () => new Promise(() => {}));
-    const p = (await fresh()).nameIndexWithin(100);
+    const pending = (await fresh()).nameIndexWithin(100);
     await vi.advanceTimersByTimeAsync(100);
-    await expect(p).resolves.toBeNull();
+    await expect(pending).resolves.toBeNull();
   });
 });

@@ -29,13 +29,14 @@ const vectorBase: StyleSpecification = {
   ],
 };
 
-const ids = (s: StyleSpecification) => s.layers.map((l) => l.id);
-const layer = (s: StyleSpecification, id: string) => s.layers.find((l) => l.id === id) as Record<string, unknown>;
+const ids = (style: StyleSpecification) => style.layers.map((styleLayer) => styleLayer.id);
+const layer = (style: StyleSpecification, id: string) =>
+  style.layers.find((styleLayer) => styleLayer.id === id) as Record<string, unknown>;
 
 describe('buildStyle', () => {
   it('puts the data under the basemap labels and selections on top', async () => {
-    const s = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
-    expect(ids(s)).toEqual([
+    const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
+    expect(ids(style)).toEqual([
       'background',
       'road_major',
       'water',
@@ -49,20 +50,20 @@ describe('buildStyle', () => {
       'near-edge',
       'near-pin',
     ]);
-    expect(Object.keys(s.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'near']);
+    expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'near']);
     // Cell ids let arriving tiles update the hexes in place.
-    expect(s.sources['occ']).toMatchObject({ promoteId: 'id' });
-    expect(s.projection).toEqual({ type: 'globe' });
+    expect(style.sources['occ']).toMatchObject({ promoteId: 'id' });
+    expect(style.projection).toEqual({ type: 'globe' });
   });
 
   it('themes the basemap: background, label colours, and roads and minor labels only up close', async () => {
-    const s = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
-    expect(layer(s, 'background')['paint']).toEqual({ 'background-color': '#b' });
-    expect(layer(s, 'road_major')['minzoom']).toBe(8);
-    expect(layer(s, 'water')['minzoom']).toBeUndefined();
-    expect(layer(s, 'place_city')['minzoom']).toBe(5);
-    expect(layer(s, 'place_country')['minzoom']).toBe(1);
-    expect(layer(s, 'place_city')['paint']).toMatchObject({ 'text-color': '#t', 'text-halo-color': '#b' });
+    const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
+    expect(layer(style, 'background')['paint']).toEqual({ 'background-color': '#b' });
+    expect(layer(style, 'road_major')['minzoom']).toBe(8);
+    expect(layer(style, 'water')['minzoom']).toBeUndefined();
+    expect(layer(style, 'place_city')['minzoom']).toBe(5);
+    expect(layer(style, 'place_country')['minzoom']).toBe(1);
+    expect(layer(style, 'place_city')['paint']).toMatchObject({ 'text-color': '#t', 'text-halo-color': '#b' });
   });
 
   it('asks for the theme’s vector style', async () => {
@@ -72,25 +73,28 @@ describe('buildStyle', () => {
   });
 
   it('draws raster basemaps under the data', async () => {
-    const s = await buildStyle('terrain', 'dark', COLORS, DATA, async () => {
+    const style = await buildStyle('terrain', 'dark', COLORS, DATA, async () => {
       throw new Error('raster basemaps have no style to load');
     });
-    expect(ids(s).slice(0, 3)).toEqual(['background', 'base', 'occ-fill']);
-    expect(s.sources['base']).toMatchObject({ type: 'raster', tileSize: 256 });
-    expect(s.glyphs).toMatch(/openfreemap/);
+    expect(ids(style).slice(0, 3)).toEqual(['background', 'base', 'occ-fill']);
+    expect(style.sources['base']).toMatchObject({ type: 'raster', tileSize: 256 });
+    expect(style.glyphs).toMatch(/openfreemap/);
   });
 
   it('puts the data on top of a basemap without labels', async () => {
-    const unlabelled = { ...vectorBase, layers: vectorBase.layers.filter((l) => l.type !== 'symbol') };
-    const s = await buildStyle('plain', 'dark', COLORS, DATA, async () => unlabelled);
-    expect(ids(s).slice(0, 3)).toEqual(['background', 'road_major', 'water']);
-    expect(ids(s).indexOf('occ-fill')).toBe(3);
+    const unlabelled = {
+      ...vectorBase,
+      layers: vectorBase.layers.filter((styleLayer) => styleLayer.type !== 'symbol'),
+    };
+    const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => unlabelled);
+    expect(ids(style).slice(0, 3)).toEqual(['background', 'road_major', 'water']);
+    expect(ids(style).indexOf('occ-fill')).toBe(3);
   });
 
   it('falls back to a plain background when the vector style cannot load', async () => {
-    const s = await buildStyle('plain', 'dark', COLORS, DATA, async () => null);
-    expect(ids(s).slice(0, 2)).toEqual(['background', 'occ-fill']);
-    expect(s.sources['base']).toBeUndefined();
+    const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => null);
+    expect(ids(style).slice(0, 2)).toEqual(['background', 'occ-fill']);
+    expect(style.sources['base']).toBeUndefined();
   });
 
   it('starts the sources from the data given', async () => {
@@ -104,15 +108,15 @@ describe('buildStyle', () => {
       wkt: '',
       tileTotal: 1,
     });
-    const s = await buildStyle('plain', 'dark', COLORS, { ...DATA, selected }, async () => null);
-    expect(s.sources['occ']).toMatchObject({ type: 'geojson', data: HEXES });
-    expect(s.sources['selected']).toEqual({ type: 'geojson', data: selected });
+    const style = await buildStyle('plain', 'dark', COLORS, { ...DATA, selected }, async () => null);
+    expect(style.sources['occ']).toMatchObject({ type: 'geojson', data: HEXES });
+    expect(style.sources['selected']).toEqual({ type: 'geojson', data: selected });
   });
 });
 
 describe('fillColor', () => {
   it('bins cell counts by the grid level’s thresholds, as the legend does', () => {
-    const steps = (level: number) => (fillColor(level) as unknown[]).filter((v) => typeof v === 'number');
+    const steps = (level: number) => (fillColor(level) as unknown[]).filter((value) => typeof value === 'number');
     expect(steps(6)).toEqual(thresholdsAt(6));
     expect(steps(2)).toEqual(thresholdsAt(2));
     expect(fillColor(6).slice(0, 2)).toEqual(['step', ['get', 'total']]);
@@ -122,8 +126,8 @@ describe('fillColor', () => {
 describe('map GeoJSON', () => {
   it('draws the near-me pin and its circle', () => {
     expect(nearGeoJson(null, 2)).toBe(EMPTY);
-    const fc = nearGeoJson({ lat: 51.5, lng: -0.1 }, 2);
-    expect(fc.features.map((f) => f.geometry.type)).toEqual(['Polygon', 'Point']);
+    const collection = nearGeoJson({ lat: 51.5, lng: -0.1 }, 2);
+    expect(collection.features.map((feature) => feature.geometry.type)).toEqual(['Polygon', 'Point']);
   });
 
   it('outlines the selected cell', () => {
@@ -140,8 +144,8 @@ describe('map GeoJSON', () => {
     ];
     const feature = (geometry: GeoJSON.Geometry, total?: number) =>
       ({ geometry, properties: total === undefined ? {} : { total } }) as unknown as MapGeoJSONFeature;
-    const g = geometryOf(feature({ type: 'Polygon', coordinates: [square] }, 42));
-    expect(g).toMatchObject({ tileTotal: 42, wkt: 'POLYGON((0 0,1 0,1 1,0 1,0 0))' });
+    const geometry = geometryOf(feature({ type: 'Polygon', coordinates: [square] }, 42));
+    expect(geometry).toMatchObject({ tileTotal: 42, wkt: 'POLYGON((0 0,1 0,1 1,0 1,0 0))' });
     expect(geometryOf(feature({ type: 'MultiPolygon', coordinates: [[square]] }))?.tileTotal).toBe(0);
     expect(geometryOf(feature({ type: 'Point', coordinates: [0, 0] }))).toBeNull();
     expect(
@@ -173,6 +177,6 @@ describe('fetchStyle', () => {
     await expect(fetchStyle('https://style.test/bad')).resolves.toBeNull();
     vi.stubGlobal('fetch', () => Promise.reject(new TypeError('offline')));
     await expect(fetchStyle('https://style.test/down')).resolves.toBeNull();
-    expect(calls.filter((u) => u.pathname === '/ok')).toHaveLength(1);
+    expect(calls.filter((url) => url.pathname === '/ok')).toHaveLength(1);
   });
 });

@@ -1,28 +1,29 @@
+import { capitalise } from '~/lib/format';
 import type { VernacularName } from '~/lib/gbif';
 
 const ENGLISH = new Set(['eng', 'en']);
 
-function tidy(s: string): string {
-  const t = s.trim().replace(/\s+/g, ' ');
-  return t.charAt(0).toUpperCase() + t.slice(1);
+function tidy(text: string): string {
+  return capitalise(text.trim().replace(/\s+/g, ' '));
 }
 
 /** Most frequent English name (case-insensitive); a `preferred` flag wins. */
 export function englishName(names: readonly VernacularName[]): string | null {
-  const eng = names.filter((n) => n.language && ENGLISH.has(n.language) && n.vernacularName.trim());
-  const preferred = eng.find((n) => n.preferred);
+  const eng = names.filter((name) => name.language && ENGLISH.has(name.language) && name.vernacularName.trim());
+  const preferred = eng.find((name) => name.preferred);
   if (preferred) return tidy(preferred.vernacularName);
   const tally = new Map<string, { name: string; n: number }>();
-  for (const v of eng) {
-    const k = v.vernacularName.trim().toLowerCase();
-    const t = tally.get(k);
-    if (t) {
-      t.n++;
+  for (const name of eng) {
+    const lowered = name.vernacularName.trim().toLowerCase();
+    const tallyEntry = tally.get(lowered);
+    if (tallyEntry) {
+      tallyEntry.n++;
       // Keep the capitalised variant when there is one.
-      if (/^[A-Z]/.test(v.vernacularName) && !/^[A-Z]/.test(t.name)) t.name = v.vernacularName.trim();
-    } else tally.set(k, { name: v.vernacularName.trim(), n: 1 });
+      if (/^[A-Z]/.test(name.vernacularName) && !/^[A-Z]/.test(tallyEntry.name))
+        tallyEntry.name = name.vernacularName.trim();
+    } else tally.set(lowered, { name: name.vernacularName.trim(), n: 1 });
   }
-  const best = [...tally.values()].sort((a, b) => b.n - a.n || a.name.length - b.name.length)[0];
+  const best = [...tally.values()].sort((left, right) => right.n - left.n || left.name.length - right.name.length)[0];
   return best ? tidy(best.name) : null;
 }
 
@@ -124,13 +125,14 @@ const ISO3_TO_1: Record<string, string> = {
 
 let displayNames: Intl.DisplayNames | null | undefined;
 
+/** English name of a language code (ISO 639-1 or -3); "Other" for none, the code itself if unknown. */
 export function languageName(code: string | undefined): string {
   if (!code) return 'Other';
-  const c = ISO3_TO_1[code] ?? code;
+  const isoCode = ISO3_TO_1[code] ?? code;
   try {
     displayNames ??= new Intl.DisplayNames(['en'], { type: 'language' });
-    const n = displayNames.of(c);
-    return n && n !== c ? n : code;
+    const label = displayNames.of(isoCode);
+    return label && label !== isoCode ? label : code;
   } catch {
     return code;
   }
@@ -145,10 +147,10 @@ export interface NamesByLanguage {
 /** Group vernacular names by language: English first, then by name count. */
 export function groupByLanguage(names: readonly VernacularName[], max = 40): NamesByLanguage[] {
   const groups = new Map<string, Set<string>>();
-  for (const n of names) {
-    const code = n.language || 'und';
+  for (const name of names) {
+    const code = name.language || 'und';
     const set = groups.get(code) ?? new Set<string>();
-    set.add(n.vernacularName.trim());
+    set.add(name.vernacularName.trim());
     groups.set(code, set);
   }
   return [...groups]
@@ -157,12 +159,12 @@ export function groupByLanguage(names: readonly VernacularName[], max = 40): Nam
       language: languageName(code === 'und' ? undefined : code),
       names: [...set].slice(0, 6),
     }))
-    .sort((a, b) =>
-      a.code === 'eng'
+    .sort((left, right) =>
+      left.code === 'eng'
         ? -1
-        : b.code === 'eng'
+        : right.code === 'eng'
           ? 1
-          : b.names.length - a.names.length || a.language.localeCompare(b.language),
+          : right.names.length - left.names.length || left.language.localeCompare(right.language),
     )
     .slice(0, max);
 }

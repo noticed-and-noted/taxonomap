@@ -19,11 +19,13 @@ const fresh = (): RequestCounts => ({ tile: 0, json: 0, image: 0, startedAt: Dat
 
 export const $requestCounts = map<RequestCounts>(fresh());
 
+/** Counts one outgoing request of this kind, for the request meter. */
 export function countRequest(kind: RequestKind): void {
-  const c = $requestCounts.get();
-  $requestCounts.setKey(kind, c[kind] + 1);
+  const counts = $requestCounts.get();
+  $requestCounts.setKey(kind, counts[kind] + 1);
 }
 
+/** Zeroes the request counts. */
 export function resetRequestCounts(): void {
   $requestCounts.set(fresh());
 }

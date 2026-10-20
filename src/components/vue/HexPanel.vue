@@ -17,7 +17,7 @@ import { HEX_SPECIES, useHexSummary } from './useHexSummary';
 
 const { loading, error, count, months, classes, species, cellSpecies, group, pickGroup, reload } = useHexSummary();
 const taxa = useStore($taxa);
-const selectedKeys = computed(() => taxa.value.map((t) => t.key));
+const selectedKeys = computed(() => taxa.value.map((taxon) => taxon.key));
 const tableNote = computed(() =>
   species.value.length >= HEX_SPECIES ? `the ${HEX_SPECIES} most recorded` : undefined,
 );
@@ -63,16 +63,16 @@ const tab = ref<'species' | 'records'>('species');
       <section v-if="loading || count">
         <div role="tablist" aria-label="Cell lists" class="mb-2 flex gap-1 border-b border-border text-sm">
           <button
-            v-for="t in ['species', 'records'] as const"
-            :key="t"
+            v-for="mode in ['species', 'records'] as const"
+            :key="mode"
             role="tab"
             type="button"
-            :aria-selected="tab === t"
+            :aria-selected="tab === mode"
             class="-mb-px border-b-2 px-3 py-1.5"
-            :class="tab === t ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
-            @click="tab = t"
+            :class="tab === mode ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
+            @click="tab = mode"
           >
-            {{ t === 'species' ? 'Species' : 'Records' }}
+            {{ mode === 'species' ? 'Species' : 'Records' }}
           </button>
         </div>
         <div v-if="tab === 'species'" role="tabpanel" aria-label="Species">

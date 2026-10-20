@@ -44,44 +44,46 @@ interface Cell {
   disabled: boolean;
 }
 
-const keyOf = (d: Date, l: DateUnit) => isoDate(d).slice(0, KEY_LENGTH[l]);
+const keyOf = (date: Date, unit: DateUnit) => isoDate(date).slice(0, KEY_LENGTH[unit]);
 const cursorKey = computed(() => keyOf(cursor.value, level.value));
 
 const cells = computed((): Cell[] => {
-  const c = cursor.value;
-  const l = level.value;
-  const n = KEY_LENGTH[l];
-  const cell = (d: Date, label: string, name: string, out = false): Cell => {
-    const key = keyOf(d, l);
-    return { key, label, name, out, disabled: key > today.slice(0, n) || d.getFullYear() < MIN_YEAR };
+  const current = cursor.value;
+  const currentLevel = level.value;
+  const keyLength = KEY_LENGTH[currentLevel];
+  const cell = (date: Date, label: string, name: string, out = false): Cell => {
+    const key = keyOf(date, currentLevel);
+    return { key, label, name, out, disabled: key > today.slice(0, keyLength) || date.getFullYear() < MIN_YEAR };
   };
-  if (l === 'y') {
-    const first = Math.floor(c.getFullYear() / 10) * 10 - 1;
-    return Array.from({ length: 12 }, (_, i) => {
-      const y = first + i;
-      return cell(new Date(y, 0, 1), String(y), String(y), i === 0 || i === 11);
+  if (currentLevel === 'y') {
+    const first = Math.floor(current.getFullYear() / 10) * 10 - 1;
+    return Array.from({ length: 12 }, (_unused, index) => {
+      const year = first + index;
+      return cell(new Date(year, 0, 1), String(year), String(year), index === 0 || index === 11);
     });
   }
-  if (l === 'm')
-    return MONTHS.map((m, i) => cell(new Date(c.getFullYear(), i, 1), m, `${MONTH_NAMES[i]} ${c.getFullYear()}`));
+  if (currentLevel === 'm')
+    return MONTHS.map((label, index) =>
+      cell(new Date(current.getFullYear(), index, 1), label, `${MONTH_NAMES[index]} ${current.getFullYear()}`),
+    );
   // Six Monday-first weeks around the cursor's month.
-  const offset = (new Date(c.getFullYear(), c.getMonth(), 1).getDay() + 6) % 7;
-  return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(c.getFullYear(), c.getMonth(), 1 - offset + i);
+  const offset = (new Date(current.getFullYear(), current.getMonth(), 1).getDay() + 6) % 7;
+  return Array.from({ length: 42 }, (_unused, index) => {
+    const day = new Date(current.getFullYear(), current.getMonth(), 1 - offset + index);
     return cell(
-      d,
-      String(d.getDate()),
-      `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
-      d.getMonth() !== c.getMonth(),
+      day,
+      String(day.getDate()),
+      `${day.getDate()} ${MONTH_NAMES[day.getMonth()]} ${day.getFullYear()}`,
+      day.getMonth() !== current.getMonth(),
     );
   });
 });
 
 const title = computed(() => {
-  const c = cursor.value;
-  if (level.value === 'd') return `${MONTH_NAMES[c.getMonth()]} ${c.getFullYear()}`;
-  if (level.value === 'm') return String(c.getFullYear());
-  const first = Math.floor(c.getFullYear() / 10) * 10;
+  const current = cursor.value;
+  if (level.value === 'd') return `${MONTH_NAMES[current.getMonth()]} ${current.getFullYear()}`;
+  if (level.value === 'm') return String(current.getFullYear());
+  const first = Math.floor(current.getFullYear() / 10) * 10;
   return `${first}–${first + 9}`;
 });
 const canZoomOut = computed(() => level.value !== 'y');
@@ -89,20 +91,20 @@ const canZoomOut = computed(() => level.value !== 'y');
 /** Range shading only at the picked unit. */
 function state(key: string): 'end' | 'in' | null {
   if (level.value !== props.unit) return null;
-  const n = KEY_LENGTH[props.unit];
-  const f = props.from?.slice(0, n);
-  const t = props.to?.slice(0, n);
-  if (key === f || key === t) return 'end';
-  return f && t && key > f && key < t ? 'in' : null;
+  const keyLength = KEY_LENGTH[props.unit];
+  const fromKey = props.from?.slice(0, keyLength);
+  const toKey = props.to?.slice(0, keyLength);
+  if (key === fromKey || key === toKey) return 'end';
+  return fromKey && toKey && key > fromKey && key < toKey ? 'in' : null;
 }
 
 /** Move the cursor by days, months or years (month moves clamp to the month's end). */
 function move(days: number, months = 0, years = 0) {
-  const c = cursor.value;
-  const d = new Date(c.getFullYear() + years, c.getMonth() + months, 1);
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(c.getDate(), last) + days);
-  cursor.value = d;
+  const current = cursor.value;
+  const next = new Date(current.getFullYear() + years, current.getMonth() + months, 1);
+  const last = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(current.getDate(), last) + days);
+  cursor.value = next;
 }
 
 /** One page back or forward: a month, a year or a decade. */
@@ -115,35 +117,36 @@ function zoomOut() {
   level.value = level.value === 'd' ? 'm' : 'y';
 }
 
-function choose(c: Cell) {
-  if (c.disabled) return;
+function choose(picked: Cell) {
+  if (picked.disabled) return;
   cursor.value = new Date(
-    Number(c.key.slice(0, 4)),
-    Number(c.key.slice(5, 7) || 1) - 1,
-    Number(c.key.slice(8, 10) || 1),
+    Number(picked.key.slice(0, 4)),
+    Number(picked.key.slice(5, 7) || 1) - 1,
+    Number(picked.key.slice(8, 10) || 1),
   );
-  if (level.value === props.unit) emit('pick', c.key);
+  if (level.value === props.unit) emit('pick', picked.key);
   else level.value = level.value === 'y' ? 'm' : 'd';
 }
 
-function onKey(e: KeyboardEvent) {
-  const l = level.value;
-  const cols = l === 'd' ? 7 : 4;
-  const step = (n: number) => (l === 'd' ? move(n) : l === 'm' ? move(0, n) : move(0, 0, n));
+function onKey(event: KeyboardEvent) {
+  const currentLevel = level.value;
+  const cols = currentLevel === 'd' ? 7 : 4;
+  const step = (amount: number) =>
+    currentLevel === 'd' ? move(amount) : currentLevel === 'm' ? move(0, amount) : move(0, 0, amount);
   const keys: Record<string, () => void> = {
     ArrowLeft: () => step(-1),
     ArrowRight: () => step(1),
     ArrowUp: () => step(-cols),
     ArrowDown: () => step(cols),
-    PageUp: () => (e.shiftKey ? move(0, 0, -1) : page(-1)),
-    PageDown: () => (e.shiftKey ? move(0, 0, 1) : page(1)),
-    Home: () => (l === 'd' ? move(-((cursor.value.getDay() + 6) % 7)) : undefined),
-    End: () => (l === 'd' ? move(6 - ((cursor.value.getDay() + 6) % 7)) : undefined),
+    PageUp: () => (event.shiftKey ? move(0, 0, -1) : page(-1)),
+    PageDown: () => (event.shiftKey ? move(0, 0, 1) : page(1)),
+    Home: () => (currentLevel === 'd' ? move(-((cursor.value.getDay() + 6) % 7)) : undefined),
+    End: () => (currentLevel === 'd' ? move(6 - ((cursor.value.getDay() + 6) % 7)) : undefined),
   };
-  const fn = keys[e.key];
-  if (!fn) return;
-  e.preventDefault();
-  fn();
+  const callback = keys[event.key];
+  if (!callback) return;
+  event.preventDefault();
+  callback();
   void nextTick(() => gridEl.value?.querySelector<HTMLElement>('[tabindex="0"]')?.focus());
 }
 </script>
@@ -205,22 +208,22 @@ function onKey(e: KeyboardEvent) {
     </div>
     <div ref="gridEl" class="grid" :class="level === 'd' ? 'days' : 'wide'" @keydown="onKey">
       <template v-if="level === 'd'">
-        <span v-for="(d, i) in 'MTWTFSS'" :key="i" class="weekday" aria-hidden="true">{{ d }}</span>
+        <span v-for="(initial, index) in 'MTWTFSS'" :key="index" class="weekday" aria-hidden="true">{{ initial }}</span>
       </template>
       <button
-        v-for="c in cells"
-        :key="c.key"
+        v-for="cell in cells"
+        :key="cell.key"
         type="button"
         class="cell"
-        :class="[state(c.key), { out: c.out }]"
-        :disabled="c.disabled"
-        :tabindex="c.key === cursorKey ? 0 : -1"
-        :aria-label="c.name"
-        :aria-pressed="state(c.key) === 'end'"
-        :aria-current="c.key === today.slice(0, c.key.length) ? 'date' : undefined"
-        @click="choose(c)"
+        :class="[state(cell.key), { out: cell.out }]"
+        :disabled="cell.disabled"
+        :tabindex="cell.key === cursorKey ? 0 : -1"
+        :aria-label="cell.name"
+        :aria-pressed="state(cell.key) === 'end'"
+        :aria-current="cell.key === today.slice(0, cell.key.length) ? 'date' : undefined"
+        @click="choose(cell)"
       >
-        {{ c.label }}
+        {{ cell.label }}
       </button>
     </div>
   </div>

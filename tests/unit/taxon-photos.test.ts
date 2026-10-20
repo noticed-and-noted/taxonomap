@@ -39,9 +39,9 @@ const taxon = (id: number, rank_level: number, photos: InatPhoto[] = [], ancesto
   name: `Taxon ${id}`,
   rank_level,
   ancestor_ids,
-  taxon_photos: photos.map((p) => ({ photo: p })),
+  taxon_photos: photos.map((photoItem) => ({ photo: photoItem })),
 });
-const obs = (id: number, ...photos: InatPhoto[]): Obs => ({
+const observation = (id: number, ...photos: InatPhoto[]): Obs => ({
   id,
   uri: `https://www.inaturalist.org/observations/${id}`,
   photos,
@@ -56,46 +56,52 @@ const occ = (key: number, url: string) => ({
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
-function network(w: World) {
+function network(world: World) {
   const calls: string[] = [];
   vi.stubGlobal('fetch', async (raw: string) => {
     calls.push(raw);
-    const u = new URL(raw, 'http://site.test');
-    const q = u.searchParams;
-    if (u.pathname === '/data/names.json') return json({ v: 1, generated: '', names: w.names ?? [] });
-    if (u.host === 'api.gbif.org' && u.pathname === '/v1/occurrence/search' && q.has('speciesKey')) {
-      if (w.crowdedOut === 'all') return new Response('bad', { status: 400 });
-      const out = (w.crowdedOut ?? []) as number[];
-      const results = q
+    const parsedUrl = new URL(raw, 'http://site.test');
+    const params = parsedUrl.searchParams;
+    if (parsedUrl.pathname === '/data/names.json') return json({ v: 1, generated: '', names: world.names ?? [] });
+    if (
+      parsedUrl.host === 'api.gbif.org' &&
+      parsedUrl.pathname === '/v1/occurrence/search' &&
+      params.has('speciesKey')
+    ) {
+      if (world.crowdedOut === 'all') return new Response('bad', { status: 400 });
+      const out = (world.crowdedOut ?? []) as number[];
+      const results = params
         .getAll('speciesKey')
         .map(Number)
-        .flatMap((k) =>
-          w.records[k] && !out.includes(k) ? [{ key: 1, datasetKey: 'd', speciesKey: k, ...w.records[k] }] : [],
+        .flatMap((key) =>
+          world.records[key] && !out.includes(key)
+            ? [{ key: 1, datasetKey: 'd', speciesKey: key, ...world.records[key] }]
+            : [],
         );
       return json({ results, count: results.length, endOfRecords: true });
     }
-    if (u.host === 'api.gbif.org' && u.pathname === '/v1/occurrence/search') {
-      const key = Number(q.get('taxonKey'));
-      if (q.get('limit') === '1') {
-        if (w.fail?.records?.includes(key)) return new Response('bad', { status: 400 });
-        const r = w.records[key];
-        return json({ results: r ? [{ key: 1, datasetKey: 'd', ...r }] : [], count: 0, endOfRecords: true });
+    if (parsedUrl.host === 'api.gbif.org' && parsedUrl.pathname === '/v1/occurrence/search') {
+      const key = Number(params.get('taxonKey'));
+      if (params.get('limit') === '1') {
+        if (world.fail?.records?.includes(key)) return new Response('bad', { status: 400 });
+        const record = world.records[key];
+        return json({ results: record ? [{ key: 1, datasetKey: 'd', ...record }] : [], count: 0, endOfRecords: true });
       }
-      const results = (q.get('datasetKey') ? w.gbifInat : w.gbifAny)[key] ?? [];
+      const results = (params.get('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? [];
       return json({ results, count: results.length, endOfRecords: true });
     }
-    if (u.host === 'api.inaturalist.org' && u.pathname === '/v2/taxa') {
-      if (w.fail?.names?.includes(q.get('q')!)) return new Response('bad', { status: 400 });
-      const hit = w.byName?.[q.get('q')!];
+    if (parsedUrl.host === 'api.inaturalist.org' && parsedUrl.pathname === '/v2/taxa') {
+      if (world.fail?.names?.includes(params.get('q')!)) return new Response('bad', { status: 400 });
+      const hit = world.byName?.[params.get('q')!];
       return json({ results: hit ? [hit] : [] });
     }
-    if (u.host === 'api.inaturalist.org' && u.pathname.startsWith('/v2/taxa/')) {
-      const ids = u.pathname.slice('/v2/taxa/'.length).split(',').map(Number);
-      return json({ results: ids.flatMap((id) => w.taxa[id] ?? []) });
+    if (parsedUrl.host === 'api.inaturalist.org' && parsedUrl.pathname.startsWith('/v2/taxa/')) {
+      const ids = parsedUrl.pathname.slice('/v2/taxa/'.length).split(',').map(Number);
+      return json({ results: ids.flatMap((id) => world.taxa[id] ?? []) });
     }
-    if (u.host === 'api.inaturalist.org' && u.pathname === '/v2/observations') {
-      if (w.fail?.voted?.includes(Number(q.get('taxon_id')))) return new Response('bad', { status: 400 });
-      return json({ results: w.voted[Number(q.get('taxon_id'))] ?? [] });
+    if (parsedUrl.host === 'api.inaturalist.org' && parsedUrl.pathname === '/v2/observations') {
+      if (world.fail?.voted?.includes(Number(params.get('taxon_id')))) return new Response('bad', { status: 400 });
+      return json({ results: world.voted[Number(params.get('taxon_id'))] ?? [] });
     }
     return new Response('not found', { status: 404 });
   });
@@ -109,8 +115,8 @@ async function load() {
 }
 
 /** A short label per photo, to compare lists. */
-const label = (img: { source?: string; url: string; photoId?: number }) =>
-  img.source === 'inat' ? `inat:${img.photoId}` : `gbif:${img.url}`;
+const label = (image: { source?: string; url: string; photoId?: number }) =>
+  image.source === 'inat' ? `inat:${image.photoId}` : `gbif:${image.url}`;
 
 // Remembered IDs would otherwise carry between tests through the runtime's own localStorage.
 beforeEach(() => void stubStorage());
@@ -124,7 +130,7 @@ describe('taxon photos', () => {
     network({
       records: { 100: { taxonID: '8021', species: 'Corvus brachyrhynchos' } },
       taxa: { 8021: taxon(8021, 10, [photo(1), photo(2, null), photo(3, 'cc-by-nc-sa')]) },
-      voted: { 8021: [obs(10, photo(3)), obs(11, photo(2, null), photo(4))] },
+      voted: { 8021: [observation(10, photo(3)), observation(11, photo(2, null), photo(4))] },
       gbifInat: {
         100: [
           occ(500, 'https://inaturalist-open-data.s3.amazonaws.com/photos/4/original.jpg'),
@@ -133,13 +139,13 @@ describe('taxon photos', () => {
       },
       gbifAny: { 100: [occ(501, 'https://x/a.jpg'), occ(502, 'https://x/b.jpg')] },
     });
-    const m = await load();
-    const list = await m.taxonPhotos({ key: 100, rank: 'SPECIES' });
+    const loaded = await load();
+    const list = await loaded.taxonPhotos({ key: 100, rank: 'SPECIES' });
     // Photo 2 is all rights reserved; 3 and 4 are already listed; record 501 already gave a photo.
     expect(list.map(label)).toEqual(['inat:1', 'inat:3', 'inat:4', 'gbif:https://x/a.jpg', 'gbif:https://x/b.jpg']);
     expect(list[0]).toMatchObject({ licence: 'CC-BY', creator: 'Person 1', publisher: 'iNaturalist' });
     expect(list[2]).toMatchObject({ observationUrl: 'https://www.inaturalist.org/observations/11' });
-    expect(label((await m.leadPhoto({ key: 100, rank: 'SPECIES' }))!)).toBe('inat:1');
+    expect(label((await loaded.leadPhoto({ key: 100, rank: 'SPECIES' }))!)).toBe('inat:1');
   });
 
   it('keeps the lead photo equal to the first listed photo through every fallback', async () => {
@@ -153,16 +159,16 @@ describe('taxon photos', () => {
         6: {}, // no photos at all
       },
       taxa: { 11: taxon(11, 10, [photo(111)]), 12: taxon(12, 10, [photo(121, null)]), 13: taxon(13, 10) },
-      voted: { 12: [obs(1, photo(122))] },
+      voted: { 12: [observation(1, photo(122))] },
       gbifInat: { 3: [occ(30, 'https://x/3.jpg')], 4: [occ(40, 'https://x/4.jpg')] },
       gbifAny: { 3: [occ(31, 'https://x/3b.jpg')], 5: [occ(50, 'https://x/5.jpg')] },
     };
     network(world);
-    const m = await load();
+    const loaded = await load();
     const taxa = [1, 2, 3, 4, 5, 6].map((key) => ({ key, rank: 'SPECIES' as const }));
-    const { images } = await m.leadPhotos(taxa);
-    const leads = taxa.map((t) => images.get(t.key));
-    expect(leads.map((l) => (l ? label(l) : null))).toEqual([
+    const { images } = await loaded.leadPhotos(taxa);
+    const leads = taxa.map((lead) => images.get(lead.key));
+    expect(leads.map((lead) => (lead ? label(lead) : null))).toEqual([
       'inat:111',
       'inat:122',
       'gbif:https://x/3.jpg',
@@ -170,9 +176,9 @@ describe('taxon photos', () => {
       'gbif:https://x/5.jpg',
       null,
     ]);
-    for (const t of taxa) {
-      const first = (await m.taxonPhotos(t))[0];
-      expect(first && label(first)).toBe(images.get(t.key) && label(images.get(t.key)!));
+    for (const candidate of taxa) {
+      const first = (await loaded.taxonPhotos(candidate))[0];
+      expect(first && label(first)).toBe(images.get(candidate.key) && label(images.get(candidate.key)!));
     }
   });
 
@@ -189,8 +195,8 @@ describe('taxon photos', () => {
       gbifInat: {},
       gbifAny: {},
     });
-    const m = await load();
-    const { images } = await m.leadPhotos([
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos([
       { key: 7, rank: 'SPECIES' },
       { key: 8, rank: 'GENUS' },
     ]);
@@ -205,32 +211,32 @@ describe('taxon photos', () => {
         11: taxon(
           11,
           10,
-          Array.from({ length: 12 }, (_, i) => photo(100 + i)),
+          Array.from({ length: 12 }, (_unused, index) => photo(100 + index)),
         ),
       },
-      voted: { 11: Array.from({ length: 20 }, (_, i) => obs(i, photo(200 + i))) },
+      voted: { 11: Array.from({ length: 20 }, (_unused, index) => observation(index, photo(200 + index))) },
       gbifInat: { 1: [occ(1, 'https://x/1.jpg')] },
       gbifAny: {},
     });
-    const m = await load();
-    const list = await m.taxonPhotos({ key: 1, rank: 'SPECIES' });
+    const loaded = await load();
+    const list = await loaded.taxonPhotos({ key: 1, rank: 'SPECIES' });
     expect(list).toHaveLength(20);
-    expect(list.every((i) => i.source === 'inat')).toBe(true);
+    expect(list.every((index) => index.source === 'inat')).toBe(true);
   });
 
   it('batches iNaturalist taxa 30 to a request', async () => {
-    const keys = Array.from({ length: 35 }, (_, i) => i + 1);
+    const keys = Array.from({ length: 35 }, (_unused, index) => index + 1);
     const calls = network({
-      records: Object.fromEntries(keys.map((k) => [k, { taxonID: String(1000 + k) }])),
-      taxa: Object.fromEntries(keys.map((k) => [1000 + k, taxon(1000 + k, 10, [photo(k)])])),
+      records: Object.fromEntries(keys.map((key) => [key, { taxonID: String(1000 + key) }])),
+      taxa: Object.fromEntries(keys.map((key) => [1000 + key, taxon(1000 + key, 10, [photo(key)])])),
       voted: {},
       gbifInat: {},
       gbifAny: {},
     });
-    const m = await load();
-    const { images } = await m.leadPhotos(keys.map((key) => ({ key, rank: 'SPECIES' as const })));
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos(keys.map((key) => ({ key, rank: 'SPECIES' as const })));
     expect(images.size).toBe(35);
-    expect(calls.filter((c) => c.includes('api.inaturalist.org'))).toHaveLength(2);
+    expect(calls.filter((call) => call.includes('api.inaturalist.org'))).toHaveLength(2);
   });
 
   it('forms taxa batches from the requested IDs, not from what is already loaded', async () => {
@@ -246,24 +252,28 @@ describe('taxon photos', () => {
     await getTaxa([5]);
     // The same list always makes the same request, so caches can share it.
     await getTaxa([40, 5]);
-    expect(calls.map((c) => new URL(c).pathname)).toEqual(['/v2/taxa/5', '/v2/taxa/5,40']);
+    expect(calls.map((call) => new URL(call).pathname)).toEqual(['/v2/taxa/5', '/v2/taxa/5,40']);
   });
 });
 
 describe('iNaturalist photo URLs', () => {
   it('picks the smallest iNaturalist size at least as wide as requested', async () => {
     const { thumbnailUrl } = await import('~/lib/gbif/images');
-    const img = {
+    const image = {
       source: 'inat' as const,
       photoId: 1,
       licence: 'CC-BY' as const,
       url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/square.jpeg',
     };
-    expect(thumbnailUrl(img, '200x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg?x-cors');
-    expect(thumbnailUrl(img, '400x')).toBe(
+    expect(thumbnailUrl(image, '200x')).toBe(
+      'https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg?x-cors',
+    );
+    expect(thumbnailUrl(image, '400x')).toBe(
       'https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpeg?x-cors',
     );
-    expect(thumbnailUrl(img, '800x')).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg?x-cors');
+    expect(thumbnailUrl(image, '800x')).toBe(
+      'https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg?x-cors',
+    );
   });
 
   it('asks for CORS only from hosts that send it (GBIF’s image cache does not)', async () => {
@@ -295,8 +305,8 @@ describe('taxon photo edge cases', () => {
       gbifAny: { 1: [occ(11, 'u.jpg')], 2: [occ(12, 'f.jpg')], 3: [occ(13, 's.jpg')], 4: [occ(14, 'g.jpg')] },
       fail: { records: [2] },
     });
-    const m = await load();
-    const { images } = await m.leadPhotos(
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos(
       [
         { key: 1, rank: 'UNRANKED' as never },
         { key: 2, rank: 'SPECIES' },
@@ -305,7 +315,7 @@ describe('taxon photo edge cases', () => {
       ],
       { signal: new AbortController().signal },
     );
-    expect([1, 2, 3, 4].map((k) => label(images.get(k)!))).toEqual([
+    expect([1, 2, 3, 4].map((key) => label(images.get(key)!))).toEqual([
       'gbif:u.jpg',
       'gbif:f.jpg',
       'gbif:s.jpg',
@@ -321,15 +331,15 @@ describe('taxon photo edge cases', () => {
       gbifInat: { 5: [{ ...occ(15, 'a.jpg'), media: [{ identifier: 'a.jpg' }, { identifier: 'b.jpg' }] }] },
       fail: { voted: [50] },
     });
-    const m = await load();
-    const photos = await m.taxonPhotos({ key: 5, rank: 'SPECIES' }, { signal: new AbortController().signal });
+    const loaded = await load();
+    const photos = await loaded.taxonPhotos({ key: 5, rank: 'SPECIES' }, { signal: new AbortController().signal });
     expect(photos.map(label)).toEqual(['gbif:a.jpg']);
   });
 
   it('stops once its signal aborts', async () => {
     const calls = network({ ...empty, gbifAny: { 6: [occ(16, 'x.jpg')] } });
-    const m = await load();
-    const { images } = await m.leadPhotos([{ key: 6, rank: 'SPECIES' }], { signal: AbortSignal.abort() });
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos([{ key: 6, rank: 'SPECIES' }], { signal: AbortSignal.abort() });
     expect(images.size).toBe(0);
     expect(calls).toHaveLength(0);
   });
@@ -339,8 +349,8 @@ describe('iNaturalist photos', () => {
   it('credit the attribution name, and allow taxa and observations without photos', async () => {
     vi.resetModules();
     const inat = await import('~/lib/photos/inat');
-    const p = { ...photo(1), attribution_name: 'Ann' };
-    expect(inat.toImage(p)).toMatchObject({ creator: 'Ann' });
+    const photoWithAttribution = { ...photo(1), attribution_name: 'Ann' };
+    expect(inat.toImage(photoWithAttribution)).toMatchObject({ creator: 'Ann' });
     expect(inat.toImage({ ...photo(2), attribution: 'odd' })).not.toHaveProperty('creator');
     expect(inat.curatedImages({ id: 1, name: 'x', rank_level: 10 })).toEqual([]);
     expect(inat.observationImages([{ id: 1 }, { id: 2, photos: [photo(3, null)] }])).toEqual([]);
@@ -351,19 +361,19 @@ describe('iNaturalist photos', () => {
 function stubStorage(initial: Record<string, string> = {}) {
   const store = new Map(Object.entries(initial));
   vi.stubGlobal('localStorage', {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, v),
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
   });
   return store;
 }
 
 const speciesTaxa = (...ids: number[]) =>
   Object.fromEntries(ids.map((id) => [id, taxon(id, 10, [photo(id * 10)], [1, id])]));
-const recordsFor = (...keys: number[]) => Object.fromEntries(keys.map((k) => [k, { taxonID: String(k + 100) }]));
+const recordsFor = (...keys: number[]) => Object.fromEntries(keys.map((key) => [key, { taxonID: String(key + 100) }]));
 const url = (raw: string) => new URL(raw, 'http://site.test');
 const batched = (calls: string[]) =>
-  calls.filter((c) => url(c).pathname === '/v1/occurrence/search' && url(c).searchParams.has('speciesKey'));
-const single = (calls: string[]) => calls.filter((c) => url(c).searchParams.get('limit') === '1');
+  calls.filter((call) => url(call).pathname === '/v1/occurrence/search' && url(call).searchParams.has('speciesKey'));
+const single = (calls: string[]) => calls.filter((call) => url(call).searchParams.get('limit') === '1');
 
 describe('finding iNaturalist taxa cheaply', () => {
   const base = { records: {}, taxa: {}, voted: {}, gbifInat: {}, gbifAny: {} };
@@ -371,12 +381,16 @@ describe('finding iNaturalist taxa cheaply', () => {
 
   it('searches GBIF for several species’ iNaturalist records five to a request', async () => {
     const keys = [1, 2, 3, 4, 5, 6, 7];
-    const calls = network({ ...base, records: recordsFor(...keys), taxa: speciesTaxa(...keys.map((k) => k + 100)) });
-    const m = await load();
-    const { images } = await m.leadPhotos(species(...keys));
-    expect(batched(calls).map((c) => new URL(c).searchParams.getAll('speciesKey').length)).toEqual([5, 2]);
+    const calls = network({
+      ...base,
+      records: recordsFor(...keys),
+      taxa: speciesTaxa(...keys.map((key) => key + 100)),
+    });
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos(species(...keys));
+    expect(batched(calls).map((call) => new URL(call).searchParams.getAll('speciesKey').length)).toEqual([5, 2]);
     expect(single(calls)).toHaveLength(0);
-    expect(keys.map((k) => label(images.get(k)!))).toEqual(keys.map((k) => `inat:${(k + 100) * 10}`));
+    expect(keys.map((key) => label(images.get(key)!))).toEqual(keys.map((key) => `inat:${(key + 100) * 10}`));
   });
 
   it('searches one by one for the species a batch left out or failed on', async () => {
@@ -385,7 +399,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     const calls = network({ ...world, crowdedOut: [2] });
     const { leadPhotos } = await load();
     await leadPhotos(species(...keys));
-    expect(single(calls).map((c) => new URL(c).searchParams.get('taxonKey'))).toEqual(['2']);
+    expect(single(calls).map((call) => new URL(call).searchParams.get('taxonKey'))).toEqual(['2']);
 
     vi.unstubAllGlobals();
     const failed = network({ ...world, crowdedOut: 'all' });
@@ -397,9 +411,9 @@ describe('finding iNaturalist taxa cheaply', () => {
 
   it('does not batch a lone species, or taxa above species', async () => {
     const calls = network({ ...base, records: recordsFor(1, 2), taxa: speciesTaxa(101, 102) });
-    const m = await load();
-    await m.leadPhotos([{ key: 1, rank: 'SPECIES' }]);
-    await m.leadPhotos([
+    const loaded = await load();
+    await loaded.leadPhotos([{ key: 1, rank: 'SPECIES' }]);
+    await loaded.leadPhotos([
       { key: 2, rank: 'GENUS' },
       { key: 3, rank: 'FAMILY' },
     ]);
@@ -413,8 +427,8 @@ describe('finding iNaturalist taxa cheaply', () => {
       records: { 1: { taxonID: 'urn:x' }, 2: { taxonID: '102' }, 3: { taxonID: '0' }, 4: {} },
       taxa: speciesTaxa(102),
     });
-    const m = await load();
-    const { images, names } = await m.leadPhotos(species(1, 2, 3, 4));
+    const loaded = await load();
+    const { images, names } = await loaded.leadPhotos(species(1, 2, 3, 4));
     expect(single(calls)).toHaveLength(3);
     expect([...images.keys()]).toEqual([2]);
     expect(names.size).toBe(0);
@@ -430,19 +444,19 @@ describe('finding iNaturalist taxa cheaply', () => {
         [3, 'S', 'Three', null, 7],
       ],
     });
-    const m = await load();
+    const loaded = await load();
     await (await import('~/lib/data/name-index')).loadNameIndex();
-    const { images } = await m.leadPhotos([...species(1, 2, 3), { key: 1, rank: 'GENUS' as const }]);
+    const { images } = await loaded.leadPhotos([...species(1, 2, 3), { key: 1, rank: 'GENUS' as const }]);
     // Species 3 has no baked ID, and the genus is not a species: both are looked up the old way.
-    expect(single(calls).map((c) => new URL(c).searchParams.get('taxonKey'))).toEqual(['3', '1']);
-    expect([1, 2].map((k) => label(images.get(k)!))).toEqual(['inat:5010', 'inat:5020']);
+    expect(single(calls).map((call) => new URL(call).searchParams.get('taxonKey'))).toEqual(['3', '1']);
+    expect([1, 2].map((key) => label(images.get(key)!))).toEqual(['inat:5010', 'inat:5020']);
   });
 
   it('does not wait for the name index to load', async () => {
     const calls = network({ ...base, names: [[1, 'S', 'One', null, 9, 501]] });
-    const m = await load();
-    await m.leadPhotos(species(1));
-    expect(calls.some((c) => c.includes('/data/names.json'))).toBe(false);
+    const loaded = await load();
+    await loaded.leadPhotos(species(1));
+    expect(calls.some((call) => call.includes('/data/names.json'))).toBe(false);
     expect(single(calls)).toHaveLength(1);
   });
 
@@ -483,8 +497,8 @@ describe('finding iNaturalist taxa cheaply', () => {
       gbifAny: { 3: [occ(13, 'g.jpg')], 4: [occ(14, 'h.jpg')], 5: [occ(15, 'i.jpg')], 6: [occ(16, 'j.jpg')] },
       fail: { names: ['Broken'] },
     });
-    const m = await load();
-    const { images } = await m.leadPhotos(
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos(
       [
         { key: 1, rank: 'SPECIES', name: 'Genus one' },
         { key: 2, rank: 'SPECIES', name: 'Never searched: GBIF had a record' },
@@ -496,10 +510,10 @@ describe('finding iNaturalist taxa cheaply', () => {
       { signal: new AbortController().signal },
     );
     const searched = calls
-      .filter((c) => new URL(c).pathname === '/v2/taxa')
-      .map((c) => new URL(c).searchParams.get('q'));
+      .filter((call) => new URL(call).pathname === '/v2/taxa')
+      .map((call) => new URL(call).searchParams.get('q'));
     expect(searched).toEqual(['Genus one', 'Not on iNaturalist', 'Broken']);
-    expect([1, 2, 3, 4, 5, 6].map((k) => label(images.get(k)!))).toEqual([
+    expect([1, 2, 3, 4, 5, 6].map((key) => label(images.get(key)!))).toEqual([
       'inat:9010',
       'inat:1020',
       'gbif:g.jpg',
@@ -521,9 +535,9 @@ describe('finding iNaturalist taxa cheaply', () => {
       byName: { Found: taxon(902, 10) },
       gbifAny: { 1: [occ(11, 'g.jpg')] },
     });
-    const m = await load();
-    await m.leadPhotos([{ key: 1, rank: 'SPECIES', name: 'Found' }]);
-    expect(calls.some((c) => new URL(c).pathname === '/v2/taxa')).toBe(false);
+    const loaded = await load();
+    await loaded.leadPhotos([{ key: 1, rank: 'SPECIES', name: 'Found' }]);
+    expect(calls.some((call) => new URL(call).pathname === '/v2/taxa')).toBe(false);
   });
 
   it('tells the species page and the previews the same story: both find the photo by name', async () => {
@@ -531,11 +545,11 @@ describe('finding iNaturalist taxa cheaply', () => {
       ...base,
       byName: { Found: { ...taxon(902, 10, [photo(9020)]), name: 'found' } },
     });
-    const m = await load();
-    const t = { key: 1, rank: 'SPECIES' as const, name: 'Found' };
-    const lead = (await m.leadPhotos([t])).images.get(1);
+    const loaded = await load();
+    const target = { key: 1, rank: 'SPECIES' as const, name: 'Found' };
+    const lead = (await loaded.leadPhotos([target])).images.get(1);
     expect(label(lead!)).toBe('inat:9020');
-    expect((await m.taxonPhotos(t)).map(label)).toEqual(['inat:9020']);
+    expect((await loaded.taxonPhotos(target)).map(label)).toEqual(['inat:9020']);
   });
 
   it('resolves iNaturalist species IDs for a bake, leaving out species with none', async () => {
@@ -545,8 +559,8 @@ describe('finding iNaturalist taxa cheaply', () => {
       taxa: speciesTaxa(101),
       byName: { Named: { ...taxon(902, 10), name: 'Named' } },
     });
-    const m = await load();
-    const ids = await m.resolveInatIds([
+    const loaded = await load();
+    const ids = await loaded.resolveInatIds([
       { key: 1, rank: 'SPECIES' },
       { key: 2, rank: 'SPECIES', name: 'Named' },
       { key: 3, rank: 'SPECIES', name: 'Nobody' },
@@ -568,12 +582,12 @@ describe('remembered iNaturalist IDs', () => {
 
   it('works for this visit alone when there is no storage', async () => {
     vi.stubGlobal('localStorage', undefined);
-    const m = await load();
-    expect(m.knownInatId(1)).toBeUndefined();
-    m.rememberInatIds(new Map([[1, 11]]));
-    expect(m.knownInatId(1)).toBe(11);
-    m.forgetInatId(1);
-    expect(m.knownInatId(1)).toBeUndefined();
+    const loaded = await load();
+    expect(loaded.knownInatId(1)).toBeUndefined();
+    loaded.rememberInatIds(new Map([[1, 11]]));
+    expect(loaded.knownInatId(1)).toBe(11);
+    loaded.forgetInatId(1);
+    expect(loaded.knownInatId(1)).toBeUndefined();
   });
 
   it('reads what an earlier visit stored, ignoring what is not an ID pair', async () => {
@@ -585,8 +599,8 @@ describe('remembered iNaturalist IDs', () => {
         [4, 44],
       ]),
     });
-    const m = await load();
-    expect([1, 3, 4].map(m.knownInatId)).toEqual([11, undefined, 44]);
+    const loaded = await load();
+    expect([1, 3, 4].map(loaded.knownInatId)).toEqual([11, undefined, 44]);
   });
 
   it('starts empty when the stored value is not JSON', async () => {
@@ -597,25 +611,25 @@ describe('remembered iNaturalist IDs', () => {
   it('writes only when something changed, newest last', async () => {
     const store = stubStorage();
     const setItem = vi.spyOn(localStorage, 'setItem');
-    const m = await load();
-    m.rememberInatIds(new Map([[1, 11]]));
-    m.rememberInatIds(new Map([[1, 11]]));
-    m.rememberInatIds(
+    const loaded = await load();
+    loaded.rememberInatIds(new Map([[1, 11]]));
+    loaded.rememberInatIds(new Map([[1, 11]]));
+    loaded.rememberInatIds(
       new Map([
         [2, 22],
         [1, 12],
       ]),
     );
-    m.forgetInatId(9);
-    m.forgetInatId(2);
+    loaded.forgetInatId(9);
+    loaded.forgetInatId(2);
     expect(setItem).toHaveBeenCalledTimes(3);
     expect(JSON.parse(store.get('inat-ids')!)).toEqual([[1, 12]]);
   });
 
   it('keeps the newest 3000', async () => {
     const store = stubStorage();
-    const m = await load();
-    m.rememberInatIds(new Map(Array.from({ length: 3002 }, (_, i) => [i, i + 1])));
+    const loaded = await load();
+    loaded.rememberInatIds(new Map(Array.from({ length: 3002 }, (_unused, index) => [index, index + 1])));
     const kept = JSON.parse(store.get('inat-ids')!) as [number, number][];
     expect(kept).toHaveLength(3000);
     expect(kept[0]).toEqual([2, 3]);
@@ -629,8 +643,8 @@ describe('remembered iNaturalist IDs', () => {
         throw new Error('quota');
       },
     });
-    const m = await load();
-    m.rememberInatIds(new Map([[1, 11]]));
-    expect(m.knownInatId(1)).toBe(11);
+    const loaded = await load();
+    loaded.rememberInatIds(new Map([[1, 11]]));
+    expect(loaded.knownInatId(1)).toBe(11);
   });
 });

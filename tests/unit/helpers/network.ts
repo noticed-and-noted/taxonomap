@@ -6,18 +6,18 @@
  */
 import type { NameRow, TreeNodeRow } from '~/lib/data/types';
 
-export type Handler = (url: URL, init?: RequestInit) => unknown;
+export type Handler = (url: URL, requestInit?: RequestInit) => unknown;
 
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 export function stubNetwork(handler: Handler): URL[] {
   const calls: URL[] = [];
-  vi.stubGlobal('fetch', async (raw: string | URL, init?: RequestInit) => {
+  vi.stubGlobal('fetch', async (raw: string | URL, requestInit?: RequestInit) => {
     const url = new URL(String(raw), 'http://site.test');
     calls.push(url);
-    if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const out = await handler(url, init);
+    if (requestInit?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const out = await handler(url, requestInit);
     if (out instanceof Response) return out;
     if (out === undefined) return json({ message: 'not found' }, 404);
     return json(out);
@@ -26,10 +26,10 @@ export function stubNetwork(handler: Handler): URL[] {
 }
 
 /** Baked snapshots, as served from /data. */
-export function snapshots(s: { names?: NameRow[]; tree?: TreeNodeRow[] }) {
+export function snapshots(data: { names?: NameRow[]; tree?: TreeNodeRow[] }) {
   return (url: URL): unknown => {
-    if (url.pathname === '/data/names.json') return s.names && { v: 1, generated: '', names: s.names };
-    if (url.pathname === '/data/tree.json') return s.tree && { v: 1, generated: '', nodes: s.tree };
+    if (url.pathname === '/data/names.json') return data.names && { v: 1, generated: '', names: data.names };
+    if (url.pathname === '/data/tree.json') return data.tree && { v: 1, generated: '', nodes: data.tree };
     return undefined;
   };
 }
@@ -41,7 +41,7 @@ export const facets = (count: number, field: string, counts: [string | number, n
   endOfRecords: true,
   count,
   results: [],
-  facets: [{ field, counts: counts.map(([name, n]) => ({ name: String(name), count: n })) }],
+  facets: [{ field, counts: counts.map(([name, total]) => ({ name: String(name), count: total })) }],
 });
 
 /** All values of a repeated query parameter, as numbers. */

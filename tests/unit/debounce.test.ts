@@ -3,16 +3,16 @@ import { debounce, throttle } from '~/lib/util/debounce';
 describe('debounce', () => {
   it('fires once with the last arguments after 250 ms', () => {
     vi.useFakeTimers();
-    const fn = vi.fn();
-    const d = debounce(fn, 250);
-    d('a');
-    d('ab');
+    const callback = vi.fn();
+    const debounced = debounce(callback, 250);
+    debounced('a');
+    debounced('ab');
     vi.advanceTimersByTime(249);
-    expect(fn).not.toHaveBeenCalled();
-    d('abc');
+    expect(callback).not.toHaveBeenCalled();
+    debounced('abc');
     vi.advanceTimersByTime(250);
-    expect(fn).toHaveBeenCalledOnce();
-    expect(fn).toHaveBeenCalledWith('abc');
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith('abc');
     vi.useRealTimers();
   });
 });
@@ -22,17 +22,17 @@ describe('debounce controls', () => {
   afterEach(() => vi.useRealTimers());
 
   it('cancel drops the pending call; flush runs it now', () => {
-    const fn = vi.fn();
-    const d = debounce(fn, 100);
-    d('a');
-    d.cancel();
+    const callback = vi.fn();
+    const debounced = debounce(callback, 100);
+    debounced('a');
+    debounced.cancel();
     vi.advanceTimersByTime(200);
-    expect(fn).not.toHaveBeenCalled();
-    d('b');
-    d.flush();
-    expect(fn).toHaveBeenCalledWith('b');
-    d.flush();
-    expect(fn).toHaveBeenCalledOnce();
+    expect(callback).not.toHaveBeenCalled();
+    debounced('b');
+    debounced.flush();
+    expect(callback).toHaveBeenCalledWith('b');
+    debounced.flush();
+    expect(callback).toHaveBeenCalledOnce();
   });
 });
 
@@ -41,13 +41,13 @@ describe('throttle', () => {
   afterEach(() => vi.useRealTimers());
 
   it('runs the first call at once and the last one at the end of the window', () => {
-    const fn = vi.fn();
-    const t = throttle(fn, 300);
-    t(1);
-    t(2);
-    t(3);
-    expect(fn.mock.calls).toEqual([[1]]);
+    const callback = vi.fn();
+    const throttled = throttle(callback, 300);
+    throttled(1);
+    throttled(2);
+    throttled(3);
+    expect(callback.mock.calls).toEqual([[1]]);
     vi.advanceTimersByTime(300);
-    expect(fn.mock.calls).toEqual([[1], [3]]);
+    expect(callback.mock.calls).toEqual([[1], [3]]);
   });
 });

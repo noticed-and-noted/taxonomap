@@ -24,8 +24,8 @@ const loading = ref(true);
 
 onMounted(async () => {
   try {
-    const r = await leadPhotos(props.species.map((s) => ({ key: s.key, rank: 'SPECIES' as const })));
-    images.value = r.images;
+    const photos = await leadPhotos(props.species.map((sibling) => ({ key: sibling.key, rank: 'SPECIES' as const })));
+    images.value = photos.images;
   } finally {
     loading.value = false;
   }
@@ -34,16 +34,16 @@ onMounted(async () => {
 
 <template>
   <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-    <li v-for="s in species" :key="s.key">
+    <li v-for="sibling in species" :key="sibling.key">
       <SpeciesCard
-        :species-key="s.key"
-        :scientific-name="s.scientificName"
-        :common-name="s.commonName ?? s.scientificName"
-        :count="s.count"
-        :image="images.get(s.key)"
+        :species-key="sibling.key"
+        :scientific-name="sibling.scientificName"
+        :common-name="sibling.commonName ?? sibling.scientificName"
+        :count="sibling.count"
+        :image="images.get(sibling.key)"
         :loading="loading"
         size="400x"
-        :href="s.href"
+        :href="sibling.href"
       />
     </li>
   </ul>

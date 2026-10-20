@@ -28,7 +28,7 @@ const env = {
 };
 const code = await new Promise<number>((resolve) => {
   const child = spawn('npx', ['astro', 'build'], { env, stdio: 'inherit' });
-  child.on('exit', (c) => resolve(c ?? 1));
+  child.on('exit', (exitCode) => resolve(exitCode ?? 1));
 });
 server.close();
 process.exit(code);

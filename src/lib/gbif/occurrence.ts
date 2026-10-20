@@ -22,21 +22,24 @@ export interface Refinements {
   eventDate?: string | undefined;
 }
 
-export function refinementParams(r: Refinements): Params {
-  const media = [r.hasImage && 'StillImage', r.hasSound && 'Sound'].filter((m): m is string => !!m);
+/** Query parameters for the refinement filters (media, basis of record, and so on). */
+export function refinementParams(refinements: Refinements): Params {
+  const media = [refinements.hasImage && 'StillImage', refinements.hasSound && 'Sound'].filter(
+    (medium): medium is string => !!medium,
+  );
   return {
     mediaType: media.length ? media : undefined,
-    month: r.months,
-    continent: r.continents,
-    coordinateUncertaintyInMeters: r.maxUncertaintyM ? `0,${r.maxUncertaintyM}` : undefined,
-    iucnRedListCategory: r.iucn,
-    eventDate: r.eventDate,
+    month: refinements.months,
+    continent: refinements.continents,
+    coordinateUncertaintyInMeters: refinements.maxUncertaintyM ? `0,${refinements.maxUncertaintyM}` : undefined,
+    iucnRedListCategory: refinements.iucn,
+    eventDate: refinements.eventDate,
   };
 }
 
 /** True when any refinement applies (so map tiles must use the adhoc endpoint). */
-export function hasRefinements(r: Refinements): boolean {
-  return Object.values(refinementParams(r)).some((v) => v !== undefined);
+export function hasRefinements(refinements: Refinements): boolean {
+  return Object.values(refinementParams(refinements)).some((value) => value !== undefined);
 }
 
 /** Shared occurrence filter used by maps, panels and charts. */
@@ -62,26 +65,27 @@ export interface OccurrenceFilter extends Refinements {
 }
 
 /** The taxa as taxonKey (taxon and everything under it) or, when exact, acceptedTaxonKey. */
-export function taxonParams(f: Pick<OccurrenceFilter, 'taxonKey' | 'taxonKeys' | 'exactTaxon'>): Params {
-  const keys = f.taxonKeys ?? f.taxonKey;
-  return f.exactTaxon && keys !== undefined ? { acceptedTaxonKey: keys } : { taxonKey: keys };
+export function taxonParams(filter: Pick<OccurrenceFilter, 'taxonKey' | 'taxonKeys' | 'exactTaxon'>): Params {
+  const keys = filter.taxonKeys ?? filter.taxonKey;
+  return filter.exactTaxon && keys !== undefined ? { acceptedTaxonKey: keys } : { taxonKey: keys };
 }
 
-export function filterToParams(f: OccurrenceFilter): Params {
+/** Query parameters for an occurrence filter, with unset fields left out. */
+export function filterToParams(filter: OccurrenceFilter): Params {
   return {
-    ...taxonParams(f),
-    speciesKey: f.speciesKeys,
-    classKey: f.classKey,
-    year: yearRangeParam(f.year),
-    ...refinementParams(f),
+    ...taxonParams(filter),
+    speciesKey: filter.speciesKeys,
+    classKey: filter.classKey,
+    year: yearRangeParam(filter.year),
+    ...refinementParams(filter),
     // A single month (e.g. a chart drill-down) narrows any month refinement.
-    month: f.month ?? f.months,
-    basisOfRecord: f.basisOfRecord,
-    country: f.country,
-    geometry: f.geometry,
-    datasetKey: f.datasetKey,
-    hasCoordinate: f.georeferenced ? true : undefined,
-    hasGeospatialIssue: f.georeferenced ? false : undefined,
+    month: filter.month ?? filter.months,
+    basisOfRecord: filter.basisOfRecord,
+    country: filter.country,
+    geometry: filter.geometry,
+    datasetKey: filter.datasetKey,
+    hasCoordinate: filter.georeferenced ? true : undefined,
+    hasGeospatialIssue: filter.georeferenced ? false : undefined,
   };
 }
 
@@ -103,7 +107,7 @@ export type FacetField =
 export async function occurrenceFacets(
   filter: OccurrenceFilter,
   facets: readonly FacetField[],
-  opts: {
+  options: {
     facetLimit?: number;
     /** Per-field limits (GBIF's `<field>.facetLimit`), e.g. { year: 600, country: 10 }. */
     limits?: Partial<Record<FacetField, number>>;
@@ -112,40 +116,60 @@ export async function occurrenceFacets(
     signal?: AbortSignal;
   } = {},
 ): Promise<{ count: number; facets: Record<string, FacetCount[]> }> {
-  const perField = Object.fromEntries(Object.entries(opts.limits ?? {}).map(([k, v]) => [`${k}.facetLimit`, v]));
-  const res = await http().getJson<OccurrenceSearch>(
+  const perField = Object.fromEntries(
+    Object.entries(options.limits ?? {}).map(([field, limit]) => [`${field}.facetLimit`, limit]),
+  );
+  const response = await http().getJson<OccurrenceSearch>(
     '/v1/occurrence/search',
     {
       ...filterToParams(filter),
       limit: 0,
       facet: facets,
-      facetLimit: opts.facetLimit ?? 200,
-      facetOffset: opts.facetOffset || undefined,
+      facetLimit: options.facetLimit ?? 200,
+      facetOffset: options.facetOffset || undefined,
       ...perField,
     },
-    { ttlMs: HOUR, ...(opts.signal && { signal: opts.signal }) },
+    { ttlMs: HOUR, ...(options.signal && { signal: options.signal }) },
   );
-  return { count: res.count, facets: indexFacets(res.facets ?? []) };
+  return { count: response.count, facets: indexFacets(response.facets ?? []) };
+}
+
+export const MONTHS_IN_YEAR = 12;
+
+/** Records per calendar month (index 0 = January) from a `month` facet. */
+export function monthCounts(monthFacet: readonly FacetCount[] | undefined): number[] {
+  const months = Array<number>(MONTHS_IN_YEAR).fill(0);
+  for (const entry of monthFacet ?? []) months[Number(entry.name) - 1] = entry.count;
+  return months;
 }
 
 /** "YEAR" → "year", "SPECIES_KEY" → "speciesKey". */
 export function facetFieldName(field: string): string {
-  return field.toLowerCase().replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+  return field.toLowerCase().replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
 }
 
+/** Facet lists keyed by camel-cased field name. */
 export function indexFacets(facets: readonly Facet[]): Record<string, FacetCount[]> {
-  return Object.fromEntries(facets.map((f) => [facetFieldName(f.field), f.counts]));
+  return Object.fromEntries(facets.map((facet) => [facetFieldName(facet.field), facet.counts]));
 }
 
+/**
+ * Number of occurrences matching a filter.
+ * @throws GbifRequestError or GbifUnavailableError when GBIF cannot answer.
+ */
 export async function occurrenceCount(filter: OccurrenceFilter, signal?: AbortSignal): Promise<number> {
-  const res = await http().getJson<OccurrenceSearch>(
+  const response = await http().getJson<OccurrenceSearch>(
     '/v1/occurrence/search',
     { ...filterToParams(filter), limit: 0 },
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
-  return res.count;
+  return response.count;
 }
 
+/**
+ * One page of occurrence records. A page beyond GBIF's paging limit comes back empty rather than as an error.
+ * @param page Page size (capped) and offset.
+ */
 export function searchOccurrences(
   filter: OccurrenceFilter,
   page: { limit?: number; offset?: number } = {},
@@ -166,6 +190,10 @@ export function searchOccurrences(
   );
 }
 
+/**
+ * One occurrence record.
+ * @throws GbifNotFoundError when there is no such record.
+ */
 export function getOccurrence(key: number): Promise<Occurrence> {
   return http().getJson(`/v1/occurrence/${key}`, undefined, { ttlMs: DAY });
 }

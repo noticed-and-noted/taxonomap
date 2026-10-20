@@ -56,23 +56,25 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
     <script is:inline>
       (() => {
         const apply = (doc) => {
-          let t = null;
+          let savedTheme = null;
           try {
-            t = localStorage.getItem('theme');
+            savedTheme = localStorage.getItem('theme');
           } catch {
             /* storage blocked: fall back to the dark default */
           }
-          doc.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+          doc.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark';
         };
         apply(document);
-        document.addEventListener('astro:before-swap', (e) => apply(e.newDocument));
+        document.addEventListener('astro:before-swap', (event) => apply(event.newDocument));
         // Hide photos that fail to load (some GBIF media are gone), including
         // on static, non-hydrated cards. Error events don't bubble; capture does.
         document.addEventListener(
           'error',
-          (e) => {
-            const t = e.target;
-            if (t instanceof HTMLImageElement && t.hasAttribute('data-hide-on-error')) t.style.visibility = 'hidden';
+          (event) => {
+            const target = event.target;
+            if (target instanceof HTMLImageElement && target.hasAttribute('data-hide-on-error')) {
+              target.style.visibility = 'hidden';
+            }
           },
           true,
         );
@@ -92,8 +94,8 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
         void import('workbox-window').then(({ Workbox }) => {
           const wb = new Workbox('/sw.js');
           // A new deploy took over: reload once so the page matches the new shell.
-          wb.addEventListener('controlling', (e) => {
-            if (e.isUpdate) window.location.reload();
+          wb.addEventListener('controlling', (event) => {
+            if (event.isUpdate) window.location.reload();
           });
           void wb.register();
         });
@@ -103,8 +105,8 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
       // HTML of the next page doesn't list it, so ClientRouter drops it on swap
       // and Vite never re-injects (module already loaded). Carry it across.
       if (import.meta.env.DEV) {
-        document.addEventListener('astro:before-swap', (e) => {
-          const head = e.newDocument.head;
+        document.addEventListener('astro:before-swap', (event) => {
+          const head = event.newDocument.head;
           for (const style of document.head.querySelectorAll('style[data-vite-dev-id]')) {
             const id = style.getAttribute('data-vite-dev-id');
             if (!head.querySelector(`style[data-vite-dev-id="${CSS.escape(id!)}"]`)) {

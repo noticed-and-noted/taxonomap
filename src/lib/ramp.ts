@@ -92,12 +92,14 @@ export const RAMPS = [
 export type RampId = (typeof RAMPS)[number]['id'];
 export const DEFAULT_RAMP: RampId = 'lichen-fern';
 
-export function isRampId(v: unknown): v is RampId {
-  return RAMPS.some((r) => r.id === v);
+/** Whether a value is the id of a known ramp. */
+export function isRampId(value: unknown): value is RampId {
+  return RAMPS.some((ramp) => ramp.id === value);
 }
 
+/** The ramp with this id (the first, if none matches). */
 export function rampById(id: RampId): Ramp {
-  return RAMPS.find((r) => r.id === id) ?? RAMPS[0];
+  return RAMPS.find((ramp) => ramp.id === id) ?? RAMPS[0];
 }
 
 const FALLBACK = rampById(DEFAULT_RAMP).colors.slice(1);
@@ -105,34 +107,37 @@ const FALLBACK = rampById(DEFAULT_RAMP).colors.slice(1);
 /** Seven colours, one per bin. */
 export function rampColors(): string[] {
   if (typeof document === 'undefined') return FALLBACK;
-  const cs = getComputedStyle(document.documentElement);
-  return FALLBACK.map((fb, i) => cs.getPropertyValue(`--ramp-${i + 1}`).trim() || fb);
+  const computedStyle = getComputedStyle(document.documentElement);
+  return FALLBACK.map((fallback, index) => computedStyle.getPropertyValue(`--ramp-${index + 1}`).trim() || fallback);
 }
 
 /** Round to 1, 2 or 5 × 10ⁿ. */
-export function nice(n: number): number {
-  if (n <= 1) return 1;
-  const p = 10 ** Math.floor(Math.log10(n));
-  const m = n / p;
-  return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+export function nice(value: number): number {
+  if (value <= 1) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const mantissa = value / magnitude;
+  return (mantissa < 1.5 ? 1 : mantissa < 3.5 ? 2 : mantissa < 7.5 ? 5 : 10) * magnitude;
 }
 
 /** Bin thresholds (6 values, strictly increasing) for a zoom level. */
 export function thresholdsAt(zoom: number): number[] {
   const scale = 4 ** (REF_ZOOM - Math.round(zoom));
   const out: number[] = [];
-  for (const t of BASE_THRESHOLDS) {
-    const v = nice(t * scale);
-    out.push(out.length && v <= (out[out.length - 1] as number) ? (out[out.length - 1] as number) * 10 : v);
+  for (const base of BASE_THRESHOLDS) {
+    const niceValue = nice(base * scale);
+    out.push(
+      out.length && niceValue <= (out[out.length - 1] as number) ? (out[out.length - 1] as number) * 10 : niceValue,
+    );
   }
   return out;
 }
 
-export function formatCount(n: number): string {
-  if (n >= 1e9) return `${n / 1e9}B`;
-  if (n >= 1e6) return `${n / 1e6}M`;
-  if (n >= 1e3) return `${n / 1e3}K`;
-  return String(n);
+/** A legend count, shortened: 5K, 2M, 1B. */
+export function formatCount(value: number): string {
+  if (value >= 1e9) return `${value / 1e9}B`;
+  if (value >= 1e6) return `${value / 1e6}M`;
+  if (value >= 1e3) return `${value / 1e3}K`;
+  return String(value);
 }
 
 /** Lower bound of each of the 7 bins at a zoom level. */

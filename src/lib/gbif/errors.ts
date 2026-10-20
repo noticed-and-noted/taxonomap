@@ -21,6 +21,7 @@ export class GbifRequestError extends Error {
   }
 }
 
+/** GBIF answered 404: the thing asked for does not exist. */
 export class GbifNotFoundError extends GbifRequestError {
   override readonly name: string = 'GbifNotFoundError';
 }
@@ -28,9 +29,9 @@ export class GbifNotFoundError extends GbifRequestError {
 export type UiErrorKind = 'unavailable' | 'not-found' | 'bad-request' | 'unknown';
 
 /** Map any thrown value to a UI-safe category. Never surface raw messages. */
-export function classifyError(err: unknown): UiErrorKind {
-  if (err instanceof GbifNotFoundError) return 'not-found';
-  if (err instanceof GbifRequestError) return 'bad-request';
-  if (err instanceof GbifUnavailableError) return 'unavailable';
+export function classifyError(error: unknown): UiErrorKind {
+  if (error instanceof GbifNotFoundError) return 'not-found';
+  if (error instanceof GbifRequestError) return 'bad-request';
+  if (error instanceof GbifUnavailableError) return 'unavailable';
   return 'unknown';
 }

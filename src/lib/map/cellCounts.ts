@@ -25,10 +25,10 @@ export function knownCount(filter: OccurrenceFilter, wkt: string): number | unde
 }
 
 /** Record a cell's exact count. */
-export function rememberCount(filter: OccurrenceFilter, wkt: string, n: number): void {
+export function rememberCount(filter: OccurrenceFilter, wkt: string, count: number): void {
   const key = keyOf(filter, wkt);
   counts.delete(key);
-  counts.set(key, n);
+  counts.set(key, count);
   if (counts.size > MAX_CELLS) counts.delete(counts.keys().next().value!);
 }
 
@@ -37,17 +37,17 @@ export function fetchCount(filter: OccurrenceFilter, wkt: string): Promise<numbe
   const key = keyOf(filter, wkt);
   const known = counts.get(key);
   if (known !== undefined) return Promise.resolve(known);
-  let p = inFlight.get(key);
-  if (!p) {
-    p = occurrenceCount({ ...filter, geometry: wkt })
-      .then((n) => {
-        rememberCount(filter, wkt, n);
-        return n;
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = occurrenceCount({ ...filter, geometry: wkt })
+      .then((count) => {
+        rememberCount(filter, wkt, count);
+        return count;
       })
       .finally(() => inFlight.delete(key));
-    inFlight.set(key, p);
+    inFlight.set(key, pending);
   }
-  return p;
+  return pending;
 }
 
 /**
@@ -55,7 +55,7 @@ export function fetchCount(filter: OccurrenceFilter, wkt: string): Promise<numbe
  * wait for a new cell and `cancel` drops it; `onCount` hears only about the
  * cell still hovered when its count arrives.
  */
-export function createHoverCounter(onCount: (wkt: string, n: number) => void, delayMs = HOVER_DELAY_MS) {
+export function createHoverCounter(onCount: (wkt: string, count: number) => void, delayMs = HOVER_DELAY_MS) {
   let current: { filter: OccurrenceFilter; wkt: string } | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => {
@@ -73,7 +73,7 @@ export function createHoverCounter(onCount: (wkt: string, n: number) => void, de
       current = cell;
       timer = setTimeout(() => {
         fetchCount(filter, wkt).then(
-          (n) => current === cell && onCount(wkt, n),
+          (count) => current === cell && onCount(wkt, count),
           () => undefined, // The estimate stays up.
         );
       }, delayMs);

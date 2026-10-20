@@ -25,9 +25,9 @@ async function load() {
   };
 }
 
-function run<T>(fn: () => T) {
+function run<T>(callback: () => T) {
   const scope = effectScope();
-  const result = scope.run(fn) as T;
+  const result = scope.run(callback) as T;
   return { result, stop: () => scope.stop() };
 }
 
@@ -49,31 +49,31 @@ describe('useHexSummary', () => {
       };
     });
     const { explorer, hex } = await load();
-    const { result: s, stop } = run(() => hex.useHexSummary());
-    expect(s.count.value).toBeNull();
+    const { result: summary, stop } = run(() => hex.useHexSummary());
+    expect(summary.count.value).toBeNull();
     explorer.$hexGeometry.set(CELL);
-    await vi.waitFor(() => expect(s.species.value).toHaveLength(1));
-    expect(s.count.value).toBe(40);
-    expect(s.months.value[2]).toBe(7);
-    expect(s.classes.value).toEqual([{ key: 212, name: 'Aves', common: 'Birds', records: 40 }]);
-    expect(s.loading.value).toBe(false);
+    await vi.waitFor(() => expect(summary.species.value).toHaveLength(1));
+    expect(summary.count.value).toBe(40);
+    expect(summary.months.value[2]).toBe(7);
+    expect(summary.classes.value).toEqual([{ key: 212, name: 'Aves', common: 'Birds', records: 40 }]);
+    expect(summary.loading.value).toBe(false);
     // Every facet request is limited to the cell (the name lookup is not).
-    const facetCalls = calls.filter((u) => u.searchParams.has('facet'));
+    const facetCalls = calls.filter((url) => url.searchParams.has('facet'));
     expect(facetCalls.length).toBeGreaterThan(0);
-    expect(facetCalls.every((u) => u.searchParams.get('geometry') === CELL.wkt)).toBe(true);
+    expect(facetCalls.every((url) => url.searchParams.get('geometry') === CELL.wkt)).toBe(true);
     // Totals, groups, months and species in one request.
     expect(facetCalls).toHaveLength(1);
     expect(facetCalls[0]!.searchParams.getAll('facet')).toEqual(['classKey', 'month', 'speciesKey']);
 
     // Picking a group asks once for its species; going back to all uses the loaded list.
-    await s.pickGroup(212);
-    expect(s.group.value).toBe(212);
-    expect(s.species.value.map((r) => r.key)).toEqual([2]);
-    expect(s.cellSpecies.value.map((r) => r.key)).toEqual([1]);
-    await s.pickGroup(null);
-    expect(s.species.value.map((r) => r.key)).toEqual([1]);
-    await s.pickGroup(212);
-    const groupCalls = calls.filter((u) => u.searchParams.get('classKey') === '212');
+    await summary.pickGroup(212);
+    expect(summary.group.value).toBe(212);
+    expect(summary.species.value.map((row) => row.key)).toEqual([2]);
+    expect(summary.cellSpecies.value.map((row) => row.key)).toEqual([1]);
+    await summary.pickGroup(null);
+    expect(summary.species.value.map((row) => row.key)).toEqual([1]);
+    await summary.pickGroup(212);
+    const groupCalls = calls.filter((url) => url.searchParams.get('classKey') === '212');
     expect(groupCalls).toHaveLength(1);
     expect(groupCalls[0]!.searchParams.get('geometry')).toBe(CELL.wkt);
     stop();
@@ -82,10 +82,10 @@ describe('useHexSummary', () => {
   it('reports a failure as a UI error kind', async () => {
     stubNetwork(() => new Response('bad', { status: 400 }));
     const { explorer, hex } = await load();
-    const { result: s, stop } = run(() => hex.useHexSummary());
+    const { result: summary, stop } = run(() => hex.useHexSummary());
     explorer.$hexGeometry.set(CELL);
-    await vi.waitFor(() => expect(s.error.value).toBe('bad-request'));
-    expect(s.loading.value).toBe(false);
+    await vi.waitFor(() => expect(summary.error.value).toBe('bad-request'));
+    expect(summary.loading.value).toBe(false);
     stop();
   });
 
@@ -94,12 +94,12 @@ describe('useHexSummary', () => {
       url.pathname === '/v1/occurrence/search' ? facets(5, 'CLASS_KEY', []) : snapshots({ tree: TREE })(url),
     );
     const { explorer, hex } = await load();
-    const { result: s, stop } = run(() => hex.useHexSummary());
+    const { result: summary, stop } = run(() => hex.useHexSummary());
     explorer.$hexGeometry.set(CELL);
-    await vi.waitFor(() => expect(s.count.value).toBe(5));
+    await vi.waitFor(() => expect(summary.count.value).toBe(5));
     explorer.$hexGeometry.set(null);
     await nextTick();
-    expect(s.count.value).toBeNull();
+    expect(summary.count.value).toBeNull();
     stop();
   });
 });
@@ -111,18 +111,18 @@ describe('useYearHistogram', () => {
       return facets(9, 'YEAR', [[1990, 9]]);
     });
     const { explorer, years } = await load();
-    const { result: h, stop } = run(() => years.useYearHistogram());
-    await vi.waitFor(() => expect(h.loading.value).toBe(false));
-    expect([...h.counts.value]).toEqual([
+    const { result: histogram, stop } = run(() => years.useYearHistogram());
+    await vi.waitFor(() => expect(histogram.loading.value).toBe(false));
+    expect([...histogram.counts.value]).toEqual([
       [2000, 1],
       [2001, 2],
     ]);
-    expect(h.live.value).toBe(false);
+    expect(histogram.live.value).toBe(false);
 
     explorer.$hasPhoto.set(true);
-    await vi.waitFor(() => expect(h.live.value).toBe(true));
-    expect([...h.counts.value]).toEqual([[1990, 9]]);
-    const live = calls.find((u) => u.pathname === '/v1/occurrence/search')!;
+    await vi.waitFor(() => expect(histogram.live.value).toBe(true));
+    expect([...histogram.counts.value]).toEqual([[1990, 9]]);
+    const live = calls.find((url) => url.pathname === '/v1/occurrence/search')!;
     expect(live.searchParams.get('mediaType')).toBe('StillImage');
 
     // The date filter itself never changes the histogram.
@@ -139,31 +139,31 @@ describe('useYearHistogram', () => {
 describe('useLatestLoad', () => {
   it('lets only the latest run publish, aborting the one before', async () => {
     const { useLatestLoad } = await import('~/components/vue/useLatestLoad');
-    const { result: l, stop } = run(() => useLatestLoad());
+    const { result: latest, stop } = run(() => useLatestLoad());
     const signals: AbortSignal[] = [];
     let release!: () => void;
-    const first = l.run(async (signal) => {
+    const first = latest.run(async (signal) => {
       signals.push(signal);
-      await new Promise<void>((r) => (release = r));
+      await new Promise<void>((resolve) => (release = resolve));
       throw new Error('superseded runs never report errors');
     });
-    const second = l.run(async (signal) => void signals.push(signal));
+    const second = latest.run(async (signal) => void signals.push(signal));
     await second;
-    expect(signals.map((s) => s.aborted)).toEqual([true, false]);
-    expect(l.loading.value).toBe(false);
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
+    expect(latest.loading.value).toBe(false);
     release();
     await first;
-    expect(l.error.value).toBeNull();
+    expect(latest.error.value).toBeNull();
     stop();
   });
 
   it('reports the latest run’s failure', async () => {
     const { useLatestLoad } = await import('~/components/vue/useLatestLoad');
-    const { result: l, stop } = run(() => useLatestLoad());
-    await l.run(async () => {
+    const { result: latest, stop } = run(() => useLatestLoad());
+    await latest.run(async () => {
       throw new Error('boom');
     });
-    expect(l.error.value).toBe('unknown');
+    expect(latest.error.value).toBe('unknown');
     stop();
   });
 });

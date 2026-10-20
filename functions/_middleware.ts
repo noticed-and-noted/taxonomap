@@ -16,15 +16,15 @@ interface Context {
 
 const REALM = 'Taxonomap';
 
-async function digest(s: string): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+async function digest(text: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
 }
 
 /** Compares SHA-256 digests so the time taken does not depend on where the strings differ. */
-async function safeEqual(a: string, b: string): Promise<boolean> {
-  const [x, y] = await Promise.all([digest(a), digest(b)]);
+async function safeEqual(left: string, right: string): Promise<boolean> {
+  const [leftDigest, rightDigest] = await Promise.all([digest(left), digest(right)]);
   let diff = 0;
-  for (let i = 0; i < x.length; i++) diff |= x[i]! ^ y[i]!;
+  for (let index = 0; index < leftDigest.length; index++) diff |= leftDigest[index]! ^ rightDigest[index]!;
   return diff === 0;
 }
 
@@ -35,6 +35,10 @@ function challenge(): Response {
   });
 }
 
+/**
+ * Pages Function gating the whole site behind HTTP Basic auth.
+ * @returns 503 when no credentials are configured, 401 on a mismatch, otherwise the site's response.
+ */
 export const onRequest = async ({ request, env, next }: Context): Promise<Response> => {
   const { BASIC_AUTH_USER: user, BASIC_AUTH_PASS: pass } = env;
   if (!user || !pass) return new Response('Login is not configured', { status: 503 });
@@ -45,7 +49,7 @@ export const onRequest = async ({ request, env, next }: Context): Promise<Respon
 
   let decoded: string;
   try {
-    decoded = new TextDecoder().decode(Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)));
+    decoded = new TextDecoder().decode(Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0)));
   } catch {
     return challenge();
   }

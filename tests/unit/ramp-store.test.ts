@@ -7,20 +7,20 @@ async function store() {
   return import('~/stores/ramp');
 }
 
-const token = (i: number) => document.documentElement.style.getPropertyValue(`--ramp-${i}`);
+const token = (index: number) => document.documentElement.style.getPropertyValue(`--ramp-${index}`);
 
 // Newer Node ships its own localStorage global, which shadows jsdom's; stub a plain one.
 function memoryStorage(): Storage {
-  const m = new Map<string, string>();
+  const storage = new Map<string, string>();
   return {
     get length() {
-      return m.size;
+      return storage.size;
     },
-    clear: () => m.clear(),
-    getItem: (k) => m.get(k) ?? null,
-    key: (i) => [...m.keys()][i] ?? null,
-    removeItem: (k) => void m.delete(k),
-    setItem: (k, v) => void m.set(k, String(v)),
+    clear: () => storage.clear(),
+    getItem: (key) => storage.get(key) ?? null,
+    key: (index) => [...storage.keys()][index] ?? null,
+    removeItem: (key) => void storage.delete(key),
+    setItem: (key, value) => void storage.set(key, String(value)),
   };
 }
 
@@ -44,10 +44,10 @@ describe('a blocked storage', () => {
 
 describe('ramp catalogue', () => {
   it('gives every ramp a unique id and eight hex stops', () => {
-    expect(new Set(RAMPS.map((r) => r.id)).size).toBe(RAMPS.length);
-    for (const r of RAMPS) {
-      expect(r.colors).toHaveLength(8);
-      for (const c of r.colors) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+    expect(new Set(RAMPS.map((ramp) => ramp.id)).size).toBe(RAMPS.length);
+    for (const ramp of RAMPS) {
+      expect(ramp.colors).toHaveLength(8);
+      for (const colour of ramp.colors) expect(colour).toMatch(/^#[0-9a-f]{6}$/);
     }
   });
 
@@ -62,23 +62,23 @@ describe('ramp catalogue', () => {
   it('keeps the tokens.css default in step with the default ramp', async () => {
     const { readFile } = await import('node:fs/promises');
     const css = await readFile('src/styles/tokens.css', 'utf8');
-    rampById(DEFAULT_RAMP).colors.forEach((c, i) => expect(css).toContain(`--ramp-${i}: ${c};`));
+    rampById(DEFAULT_RAMP).colors.forEach((colour, index) => expect(css).toContain(`--ramp-${index}: ${colour};`));
   });
 });
 
 describe('ramp store', () => {
   it('starts on the default and writes no overrides', async () => {
-    const s = await store();
-    expect(s.$ramp.get()).toBe(DEFAULT_RAMP);
+    const rampStore = await store();
+    expect(rampStore.$ramp.get()).toBe(DEFAULT_RAMP);
     expect(token(1)).toBe('');
   });
 
   it('applies, saves and restores a chosen ramp', async () => {
-    const s = await store();
-    s.setRamp('magma');
-    expect(s.$ramp.get()).toBe('magma');
+    const rampStore = await store();
+    rampStore.setRamp('magma');
+    expect(rampStore.$ramp.get()).toBe('magma');
     expect(token(1)).toBe(rampById('magma').colors[1]);
-    expect(localStorage.getItem(s.RAMP_KEY)).toBe('magma');
+    expect(localStorage.getItem(rampStore.RAMP_KEY)).toBe('magma');
 
     document.documentElement.removeAttribute('style');
     const again = await store();
@@ -87,30 +87,30 @@ describe('ramp store', () => {
   });
 
   it('sets the tokens before listeners hear about the change', async () => {
-    const s = await store();
+    const rampStore = await store();
     let seen = '';
-    s.$ramp.listen(() => (seen = token(4)));
-    s.setRamp('bamako');
+    rampStore.$ramp.listen(() => (seen = token(4)));
+    rampStore.setRamp('bamako');
     expect(seen).toBe(rampById('bamako').colors[4]);
   });
 
   it('going back to the default clears the overrides and the saved value', async () => {
-    const s = await store();
-    s.setRamp('mako');
-    s.setRamp(DEFAULT_RAMP);
+    const rampStore = await store();
+    rampStore.setRamp('mako');
+    rampStore.setRamp(DEFAULT_RAMP);
     expect(token(1)).toBe('');
-    expect(localStorage.getItem(s.RAMP_KEY)).toBeNull();
+    expect(localStorage.getItem(rampStore.RAMP_KEY)).toBeNull();
   });
 
   it('ignores a saved id it does not know', async () => {
     localStorage.setItem('map-colours', 'rainbow');
-    const s = await store();
-    expect(s.$ramp.get()).toBe(DEFAULT_RAMP);
+    const rampStore = await store();
+    expect(rampStore.$ramp.get()).toBe(DEFAULT_RAMP);
   });
 
   it('re-applies the choice after a ClientRouter swap', async () => {
-    const s = await store();
-    s.setRamp('plasma');
+    const rampStore = await store();
+    rampStore.setRamp('plasma');
     document.documentElement.removeAttribute('style');
     document.dispatchEvent(new Event('astro:after-swap'));
     expect(token(2)).toBe(rampById('plasma').colors[2]);

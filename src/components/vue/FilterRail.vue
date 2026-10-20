@@ -19,7 +19,7 @@ const counts = useStore($groupCounts);
 const total = useStore($activeFilterCount);
 const open = ref<PanelId | null>(null);
 const current = computed(() =>
-  open.value === 'settings' ? SETTINGS : (FILTER_GROUPS.find((g) => g.id === open.value) ?? null),
+  open.value === 'settings' ? SETTINGS : (FILTER_GROUPS.find((group) => group.id === open.value) ?? null),
 );
 const buttons = ref<Record<string, HTMLButtonElement>>({});
 
@@ -34,15 +34,15 @@ async function close() {
   if (id) buttons.value[id]?.focus();
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && open.value) {
-    e.stopPropagation();
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'Escape' && open.value) {
+    event.stopPropagation();
     void close();
   }
 }
 
-function label(name: string, n: number) {
-  return n ? `${name}, ${n} active` : name;
+function label(name: string, count: number) {
+  return count ? `${name}, ${count} active` : name;
 }
 </script>
 
@@ -50,22 +50,22 @@ function label(name: string, n: number) {
   <div class="filter-rail-wrap" @keydown="onKey">
     <nav class="rail" aria-label="Filters">
       <button
-        v-for="g in FILTER_GROUPS"
-        :key="g.id"
-        :ref="(el) => el && (buttons[g.id] = el as HTMLButtonElement)"
+        v-for="group in FILTER_GROUPS"
+        :key="group.id"
+        :ref="(el) => el && (buttons[group.id] = el as HTMLButtonElement)"
         type="button"
         class="rail-btn"
-        :class="{ active: counts[g.id] }"
-        :aria-expanded="open === g.id"
+        :class="{ active: counts[group.id] }"
+        :aria-expanded="open === group.id"
         aria-controls="filter-flyout"
-        :aria-label="label(g.title, counts[g.id])"
-        @click="toggle(g.id)"
+        :aria-label="label(group.title, counts[group.id])"
+        @click="toggle(group.id)"
       >
         <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-          <path :d="g.icon" stroke-linecap="round" stroke-linejoin="round" />
+          <path :d="group.icon" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <span class="rail-label" aria-hidden="true">{{ g.label }}</span>
-        <span v-if="counts[g.id]" class="badge tabular-nums" aria-hidden="true">{{ counts[g.id] }}</span>
+        <span class="rail-label" aria-hidden="true">{{ group.label }}</span>
+        <span v-if="counts[group.id]" class="badge tabular-nums" aria-hidden="true">{{ counts[group.id] }}</span>
       </button>
       <button v-if="total" type="button" class="rail-btn rail-clear" @click="clearFilters">
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

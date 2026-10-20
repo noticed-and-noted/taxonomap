@@ -22,10 +22,10 @@ describe('near data', () => {
       records: 120,
       classes: [{ key: 212, name: 'Aves', records: 100 }],
     });
-    const q = calls[0]!.searchParams;
-    expect(q.get('geometry')).toMatch(/^POLYGON\(\(/);
-    expect(q.get('month')).toBe('5');
-    expect(q.get('facetLimit')).toBe('50');
+    const params = calls[0]!.searchParams;
+    expect(params.get('geometry')).toMatch(/^POLYGON\(\(/);
+    expect(params.get('month')).toBe('5');
+    expect(params.get('facetLimit')).toBe('50');
   });
 
   it('gives the circle as an occurrence filter for the records list', async () => {
@@ -48,7 +48,7 @@ describe('near data without much to go on', () => {
     await expect(classesNear(AREA, signal)).resolves.toEqual({ records: 0, classes: [] });
     await expect(speciesNear(AREA, null, signal)).resolves.toEqual([]);
     await expect(speciesNear(AREA, 212)).resolves.toEqual([]);
-    const perClass = calls.filter((u) => u.searchParams.get('classKey') === '212');
+    const perClass = calls.filter((url) => url.searchParams.get('classKey') === '212');
     expect(perClass[0]!.searchParams.get('facetLimit')).toBe('200');
   });
 });

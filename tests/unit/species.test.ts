@@ -17,18 +17,18 @@ describe('species helpers', () => {
   });
 
   it('picks the most common English name, preferring flagged names', () => {
-    const n = (vernacularName: string, language = 'eng', preferred?: boolean) => ({
+    const name = (vernacularName: string, language = 'eng', preferred?: boolean) => ({
       vernacularName,
       language,
       ...(preferred !== undefined && { preferred }),
     });
-    expect(englishName([n('robin'), n('European Robin'), n('european robin'), n('Rouge-gorge', 'fra')])).toBe(
-      'European Robin',
-    );
-    expect(englishName([n('Robin'), n('Redbreast', 'eng', true)])).toBe('Redbreast');
-    expect(englishName([n('Rouge-gorge', 'fra')])).toBeNull();
+    expect(
+      englishName([name('robin'), name('European Robin'), name('european robin'), name('Rouge-gorge', 'fra')]),
+    ).toBe('European Robin');
+    expect(englishName([name('Robin'), name('Redbreast', 'eng', true)])).toBe('Redbreast');
+    expect(englishName([name('Rouge-gorge', 'fra')])).toBeNull();
     // Equal counts: the capitalised variant, then the shorter name.
-    expect(englishName([n('robin'), n('Robin'), n('Redbreast robin'), n('redbreast robin')])).toBe('Robin');
+    expect(englishName([name('robin'), name('Robin'), name('Redbreast robin'), name('redbreast robin')])).toBe('Robin');
   });
 
   it('names languages, falling back to the code', () => {
@@ -44,7 +44,7 @@ describe('species helpers', () => {
       { vernacularName: 'Petirrojo', language: 'spa' },
       { vernacularName: 'Mystery' } as never,
     ]);
-    expect(groups.map((g) => g.language)).toEqual(['English', 'German', 'Other', 'Spanish']);
+    expect(groups.map((group) => group.language)).toEqual(['English', 'German', 'Other', 'Spanish']);
   });
 
   it('groups names by language with English first', () => {
@@ -73,7 +73,7 @@ describe('species helpers', () => {
         kingdomKey: 1,
         genus: 'Erithacus',
         genusKey: 2492460,
-      }).map((t) => t.rank),
+      }).map((taxon) => taxon.rank),
     ).toEqual(['KINGDOM', 'GENUS']);
   });
 });

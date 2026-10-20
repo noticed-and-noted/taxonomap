@@ -4,29 +4,30 @@ import type { NameUsage, Paged, Rank, SuggestResult, VernacularName } from './ty
 
 import { DAY, HOUR } from '~/lib/util/time';
 
+/** A backbone taxon. @throws GbifNotFoundError when GBIF has no such taxon. */
 export function getSpecies(key: number, signal?: AbortSignal): Promise<NameUsage> {
   return http().getJson(`/v1/species/${key}`, undefined, { ttlMs: DAY, ...(signal && { signal }) });
 }
 
 /** Scientific-name autocomplete. Does NOT match common names (verified). */
-export function suggestSpecies(q: string, opts: { limit?: number; rank?: Rank } = {}, signal?: AbortSignal) {
+export function suggestSpecies(query: string, options: { limit?: number; rank?: Rank } = {}, signal?: AbortSignal) {
   return http().getJson<SuggestResult[]>(
     '/v1/species/suggest',
-    { q: q.trim(), limit: opts.limit ?? 8, rank: opts.rank, datasetKey: BACKBONE_DATASET_KEY },
+    { q: query.trim(), limit: options.limit ?? 8, rank: options.rank, datasetKey: BACKBONE_DATASET_KEY },
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
 }
 
 /** Long-tail common-name search; ranking is poor, so callers re-rank. */
-export function searchVernacular(q: string, opts: { limit?: number } = {}, signal?: AbortSignal) {
+export function searchVernacular(query: string, options: { limit?: number } = {}, signal?: AbortSignal) {
   return http().getJson<Paged<NameUsage & { vernacularNames?: VernacularName[] }>>(
     '/v1/species/search',
     {
-      q: q.trim(),
+      q: query.trim(),
       qField: 'VERNACULAR',
       datasetKey: BACKBONE_DATASET_KEY,
       status: 'ACCEPTED',
-      limit: opts.limit ?? 10,
+      limit: options.limit ?? 10,
     },
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
@@ -41,6 +42,7 @@ export function listByRank(rank: Rank, offset = 0, limit = 1000) {
   );
 }
 
+/** Common names of a taxon, in all languages, up to `limit`. */
 export function getVernacularNames(key: number, limit = 300, signal?: AbortSignal) {
   return http().getJson<Paged<VernacularName>>(
     `/v1/species/${key}/vernacularNames`,
@@ -49,18 +51,21 @@ export function getVernacularNames(key: number, limit = 300, signal?: AbortSigna
   );
 }
 
+/** Synonyms of a taxon, up to `limit`. */
 export function getSynonyms(key: number, limit = 100) {
   return http().getJson<Paged<NameUsage>>(`/v1/species/${key}/synonyms`, { limit }, { ttlMs: DAY });
 }
 
-export function getChildren(key: number, opts: { limit?: number; offset?: number } = {}, signal?: AbortSignal) {
+/** The accepted children of a taxon, one page at a time. */
+export function getChildren(key: number, options: { limit?: number; offset?: number } = {}, signal?: AbortSignal) {
   return http().getJson<Paged<NameUsage>>(
     `/v1/species/${key}/children`,
-    { limit: opts.limit ?? 100, offset: opts.offset },
+    { limit: options.limit ?? 100, offset: options.offset },
     { ttlMs: DAY, ...(signal && { signal }) },
   );
 }
 
+/** A taxon's ancestors, from the kingdom down. */
 export function getParents(key: number): Promise<NameUsage[]> {
   return http().getJson(`/v1/species/${key}/parents`, undefined, { ttlMs: DAY });
 }
@@ -75,7 +80,7 @@ export async function speciesCountsUnder(
   facetLimit = 3000,
   signal?: AbortSignal,
 ): Promise<Map<number, number>> {
-  const res = await http().getJson<{ facets?: { field: string; counts: { name: string; count: number }[] }[] }>(
+  const response = await http().getJson<{ facets?: { field: string; counts: { name: string; count: number }[] }[] }>(
     '/v1/species/search',
     {
       datasetKey: BACKBONE_DATASET_KEY,
@@ -88,5 +93,5 @@ export async function speciesCountsUnder(
     },
     { ttlMs: DAY, ...(signal && { signal }) },
   );
-  return new Map((res.facets?.[0]?.counts ?? []).map((c) => [Number(c.name), c.count]));
+  return new Map((response.facets?.[0]?.counts ?? []).map((facet) => [Number(facet.name), facet.count]));
 }

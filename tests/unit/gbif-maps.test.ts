@@ -10,23 +10,23 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('map tiles', () => {
   it('uses density tiles for taxon, year and record type', async () => {
-    const g = await gbif();
-    const f = { taxonKey: 212, year: [2000, 2010] as const, basisOfRecord: ['HUMAN_OBSERVATION' as const] };
-    expect(g.needsAdhoc(f)).toBe(false);
-    expect(g.occurrenceTileTemplate(f)).toBe(
+    const api = await gbif();
+    const filter = { taxonKey: 212, year: [2000, 2010] as const, basisOfRecord: ['HUMAN_OBSERVATION' as const] };
+    expect(api.needsAdhoc(filter)).toBe(false);
+    expect(api.occurrenceTileTemplate(filter)).toBe(
       'https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?basisOfRecord=HUMAN_OBSERVATION&bin=hex&hexPerTile=60&srs=EPSG%3A3857&style=purpleYellow-noborder.poly&taxonKey=212&year=2000%2C2010',
     );
   });
 
   it('switches to adhoc tiles for refinements or several taxa', async () => {
-    const g = await gbif();
-    expect(g.needsAdhoc({ hasImage: true })).toBe(true);
-    expect(g.needsAdhoc({ taxonKeys: [1] })).toBe(false);
-    expect(g.needsAdhoc({ taxonKeys: [1, 2] })).toBe(true);
+    const api = await gbif();
+    expect(api.needsAdhoc({ hasImage: true })).toBe(true);
+    expect(api.needsAdhoc({ taxonKeys: [1] })).toBe(false);
+    expect(api.needsAdhoc({ taxonKeys: [1, 2] })).toBe(true);
     // Density tiles ignore eventDate (checked against the live API).
-    expect(g.needsAdhoc({ eventDate: '2025-01-01,2025-01-07' })).toBe(true);
+    expect(api.needsAdhoc({ eventDate: '2025-01-01,2025-01-07' })).toBe(true);
     const url = new URL(
-      g.occurrenceTileTemplate({ taxonKeys: [1, 2], months: [5] }, { hexPerTile: 28 }, 'mvt').replace(/[{}]/g, ''),
+      api.occurrenceTileTemplate({ taxonKeys: [1, 2], months: [5] }, { hexPerTile: 28 }, 'mvt').replace(/[{}]/g, ''),
     );
     expect(url.pathname).toBe('/v2/map/occurrence/adhoc/z/x/y.mvt');
     expect(url.searchParams.getAll('taxonKey')).toEqual(['1', '2']);
@@ -36,46 +36,46 @@ describe('map tiles', () => {
   });
 
   it('matches exact taxa with acceptedTaxonKey on adhoc tiles', async () => {
-    const g = await gbif();
-    expect(g.needsAdhoc({ exactTaxon: true })).toBe(false);
-    const url = new URL(g.occurrenceTileTemplate({ taxonKey: 5219173, exactTaxon: true }).replace(/[{}]/g, ''));
+    const api = await gbif();
+    expect(api.needsAdhoc({ exactTaxon: true })).toBe(false);
+    const url = new URL(api.occurrenceTileTemplate({ taxonKey: 5219173, exactTaxon: true }).replace(/[{}]/g, ''));
     expect(url.pathname).toBe('/v2/map/occurrence/adhoc/z/x/y@1x.png');
     expect(url.searchParams.get('acceptedTaxonKey')).toBe('5219173');
     expect(url.searchParams.has('taxonKey')).toBe(false);
-    expect(g.filterToParams({ taxonKeys: [1, 2], exactTaxon: true })).toMatchObject({ acceptedTaxonKey: [1, 2] });
+    expect(api.filterToParams({ taxonKeys: [1, 2], exactTaxon: true })).toMatchObject({ acceptedTaxonKey: [1, 2] });
   });
 
   it('takes a style and fills in a concrete tile', async () => {
-    const g = await gbif();
-    expect(g.tileParams({}, { style: 'classic.point', srs: 'EPSG:3857' })).toMatchObject({ style: 'classic.point' });
-    expect(g.occurrenceTileUrl({ country: 'GB' }, 3, 4, 5)).toMatch(
+    const api = await gbif();
+    expect(api.tileParams({}, { style: 'classic.point', srs: 'EPSG:3857' })).toMatchObject({ style: 'classic.point' });
+    expect(api.occurrenceTileUrl({ country: 'GB' }, 3, 4, 5)).toMatch(
       /^https:\/\/api\.gbif\.org\/v2\/map\/occurrence\/density\/3\/4\/5@1x\.png\?.*country=GB/,
     );
   });
 
   it('leaves the query off when there is none', async () => {
     vi.resetModules();
-    vi.doMock('~/lib/gbif/params', async (orig) => ({
-      ...(await orig<typeof import('~/lib/gbif/params')>()),
+    vi.doMock('~/lib/gbif/params', async (original) => ({
+      ...(await original<typeof import('~/lib/gbif/params')>()),
       toQueryString: () => '',
     }));
-    const g = await import('~/lib/gbif');
-    expect(g.occurrenceTileTemplate({})).toBe('https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png');
+    const api = await import('~/lib/gbif');
+    expect(api.occurrenceTileTemplate({})).toBe('https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png');
     vi.doUnmock('~/lib/gbif/params');
   });
 
   it('points GBIF basemap tiles at the theme', async () => {
-    const g = await gbif();
-    expect(g.gbifBasemapTile(1, 2, 3)).toBe('https://tile.gbif.org/3857/omt/1/2/3@1x.png?style=gbif-dark');
-    expect(g.gbifBasemapTile(1, 2, 3, 'light')).toMatch(/style=gbif-light$/);
+    const api = await gbif();
+    expect(api.gbifBasemapTile(1, 2, 3)).toBe('https://tile.gbif.org/3857/omt/1/2/3@1x.png?style=gbif-dark');
+    expect(api.gbifBasemapTile(1, 2, 3, 'light')).toMatch(/style=gbif-light$/);
   });
 
   it('asks for map capabilities', async () => {
     const calls = stubNetwork(() => ({ total: 1 }));
-    const g = await gbif();
-    await g.mapCapabilities();
-    await g.mapCapabilities({ taxonKey: 212, country: 'GB' });
-    expect(calls.map((u) => `${u.pathname}${u.search}`)).toEqual([
+    const api = await gbif();
+    await api.mapCapabilities();
+    await api.mapCapabilities({ taxonKey: 212, country: 'GB' });
+    expect(calls.map((url) => `${url.pathname}${url.search}`)).toEqual([
       '/v2/map/occurrence/density/capabilities.json',
       '/v2/map/occurrence/density/capabilities.json?country=GB&taxonKey=212',
     ]);
@@ -85,41 +85,44 @@ describe('map tiles', () => {
 describe('datasets and organisations', () => {
   it('fetch by key', async () => {
     const calls = stubNetwork(() => ({ key: 'k', title: 't' }));
-    const g = await gbif();
-    await g.getDataset('d1');
-    await g.getOrganization('o1');
-    expect(calls.map((u) => u.pathname)).toEqual(['/v1/dataset/d1', '/v1/organization/o1']);
+    const api = await gbif();
+    await api.getDataset('d1');
+    await api.getOrganization('o1');
+    expect(calls.map((url) => url.pathname)).toEqual(['/v1/dataset/d1', '/v1/organization/o1']);
   });
 });
 
 describe('occurrence filters', () => {
   it('limits to georeferenced records, and passes a signal', async () => {
     const calls = stubNetwork(() => ({ count: 3, results: [] }));
-    const g = await gbif();
-    expect(g.filterToParams({ georeferenced: true })).toMatchObject({ hasCoordinate: true, hasGeospatialIssue: false });
-    const ctrl = new AbortController();
-    await expect(g.occurrenceCount({}, ctrl.signal)).resolves.toBe(3);
-    await g.searchOccurrences({}, undefined, ctrl.signal);
+    const api = await gbif();
+    expect(api.filterToParams({ georeferenced: true })).toMatchObject({
+      hasCoordinate: true,
+      hasGeospatialIssue: false,
+    });
+    const controller = new AbortController();
+    await expect(api.occurrenceCount({}, controller.signal)).resolves.toBe(3);
+    await api.searchOccurrences({}, undefined, controller.signal);
     expect(calls[1]!.searchParams.get('limit')).toBe('20');
   });
 
   it('reads a facet response with no facets', async () => {
     stubNetwork(() => ({ count: 5, results: [] }));
-    const g = await gbif();
-    await expect(g.occurrenceFacets({}, ['year'])).resolves.toEqual({ count: 5, facets: {} });
+    const api = await gbif();
+    await expect(api.occurrenceFacets({}, ['year'])).resolves.toEqual({ count: 5, facets: {} });
   });
 });
 
 describe('species endpoints with signals', () => {
   it('pass the signal through and read an empty facet', async () => {
-    const calls = stubNetwork((u) => (u.pathname === '/v1/species/search' ? { results: [] } : { key: 1 }));
-    const g = await gbif();
+    const calls = stubNetwork((url) => (url.pathname === '/v1/species/search' ? { results: [] } : { key: 1 }));
+    const api = await gbif();
     const { signal } = new AbortController();
-    await g.getSpecies(1, signal);
-    await g.getVernacularNames(1, 10, signal);
-    await g.getChildren(1, {}, signal);
-    await expect(g.speciesCountsUnder(undefined, 10, signal)).resolves.toEqual(new Map());
-    expect(calls.map((u) => `${u.pathname}${u.search}`)).toContain('/v1/species/1/children?limit=100');
+    await api.getSpecies(1, signal);
+    await api.getVernacularNames(1, 10, signal);
+    await api.getChildren(1, {}, signal);
+    await expect(api.speciesCountsUnder(undefined, 10, signal)).resolves.toEqual(new Map());
+    expect(calls.map((url) => `${url.pathname}${url.search}`)).toContain('/v1/species/1/children?limit=100');
     stubNetwork(() => ({ facets: [{ field: 'HIGHER_TAXON_KEY' }] }));
     await expect((await gbif()).speciesCountsUnder(2)).resolves.toEqual(new Map());
   });
@@ -127,13 +130,13 @@ describe('species endpoints with signals', () => {
 
 describe('request meter', () => {
   it('counts by kind and resets', async () => {
-    const g = await gbif();
-    g.countRequest('tile');
-    g.countRequest('tile');
-    g.countRequest('image');
-    expect(g.$requestCounts.get()).toMatchObject({ tile: 2, json: 0, image: 1 });
-    g.resetRequestCounts();
-    expect(g.$requestCounts.get()).toMatchObject({ tile: 0, json: 0, image: 0 });
+    const api = await gbif();
+    api.countRequest('tile');
+    api.countRequest('tile');
+    api.countRequest('image');
+    expect(api.$requestCounts.get()).toMatchObject({ tile: 2, json: 0, image: 1 });
+    api.resetRequestCounts();
+    expect(api.$requestCounts.get()).toMatchObject({ tile: 0, json: 0, image: 0 });
   });
 });
 
@@ -166,31 +169,31 @@ describe('images', () => {
         { key: 3, datasetKey: 'd', license: 'CC0_1_0', species: 'No key' },
       ],
     }));
-    const g = await gbif();
-    const r = await g.findImages({ taxonKey: 1 }, { signal: new AbortController().signal });
-    expect(r.images.map((i) => i.url)).toEqual(['a.jpg']);
-    expect([...r.names]).toEqual([[5, 'Turdus merula']]);
+    const api = await gbif();
+    const result = await api.findImages({ taxonKey: 1 }, { signal: new AbortController().signal });
+    expect(result.images.map((image) => image.url)).toEqual(['a.jpg']);
+    expect([...result.names]).toEqual([[5, 'Turdus merula']]);
     expect(calls[0]!.searchParams.get('limit')).toBe('24');
-    await g.findImages({}, { limit: 5 });
-    await g.findImages({});
+    await api.findImages({}, { limit: 5 });
+    await api.findImages({});
     expect(calls[1]!.searchParams.get('limit')).toBe('5');
   });
 
   it('uses iNaturalist’s largest size past 1024 px', async () => {
-    const g = await gbif();
-    const img = {
+    const api = await gbif();
+    const image = {
       source: 'inat' as const,
       photoId: 1,
       licence: 'CC0' as const,
       url: 'https://x.test/photos/1/square.jpg',
     };
-    expect(g.thumbnailUrl(img, '2048x2048')).toBe('https://x.test/photos/1/large.jpg');
+    expect(api.thumbnailUrl(image, '2048x2048')).toBe('https://x.test/photos/1/large.jpg');
   });
 });
 
 describe('polygonToWkt', () => {
   it('drops repeated points and keeps a ring that is already closed and counter-clockwise', async () => {
-    const g = await gbif();
+    const api = await gbif();
     const ring: [number, number][] = [
       [0, 0],
       [1, 0],
@@ -198,8 +201,8 @@ describe('polygonToWkt', () => {
       [1, 1],
       [0, 0],
     ];
-    expect(g.polygonToWkt(ring)).toBe('POLYGON((0 0,1 0,1 1,0 0))');
-    expect(g.polygonToWkt([])).toBe('POLYGON(())');
+    expect(api.polygonToWkt(ring)).toBe('POLYGON((0 0,1 0,1 1,0 0))');
+    expect(api.polygonToWkt([])).toBe('POLYGON(())');
   });
 });
 
@@ -215,7 +218,7 @@ describe('vernacular search', () => {
         },
       ],
     }));
-    const g = await gbif();
-    expect(await g.gbifVernacularProvider.search('rotkehl')).toMatchObject([{ commonName: 'Rotkehlchen' }]);
+    const api = await gbif();
+    expect(await api.gbifVernacularProvider.search('rotkehl')).toMatchObject([{ commonName: 'Rotkehlchen' }]);
   });
 });

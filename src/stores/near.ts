@@ -24,7 +24,7 @@ const atCodec: UrlCodec<LatLng> = {
     return roundLatLng(lat as number, lng as number);
   },
   // Never asked for the default (null): it is left out of the URL.
-  serialize: (v) => `${v!.lat.toFixed(3)},${v!.lng.toFixed(3)}`,
+  serialize: (position) => `${position!.lat.toFixed(3)},${position!.lng.toFixed(3)}`,
 };
 
 const radiusCodec: UrlCodec<RadiusKm> = {
@@ -34,7 +34,7 @@ const radiusCodec: UrlCodec<RadiusKm> = {
   history: 'replace',
   parse: (raw) =>
     (RADIUS_STEPS_KM as readonly number[]).includes(Number(raw)) ? (Number(raw) as RadiusKm) : undefined,
-  serialize: (v) => String(v),
+  serialize: (radius) => String(radius),
 };
 
 /** "Near me" mode on the map page (`?near=1`). */

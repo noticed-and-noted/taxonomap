@@ -35,7 +35,7 @@ import WhenMenu from './WhenMenu.vue';
 defineProps<{ group: FilterGroupId }>();
 
 // Unique per instance: the rail and the sheet can both render a group.
-const uid = useId();
+const uniqueId = useId();
 
 const iucn = useStore($iucn);
 const exact = useStore($exactTaxon);
@@ -49,26 +49,26 @@ const photo = useStore($hasPhoto);
 const sound = useStore($hasSound);
 const taxonKeys = useStore($taxonKeys);
 
-const groupOn = (g: TaxonGroup) => g.taxa.every((t) => taxonKeys.value.includes(t.key));
+const groupOn = (group: TaxonGroup) => group.taxa.every((taxon) => taxonKeys.value.includes(taxon.key));
 /** Set when a group would take the What filter past MAX_TAXA. */
 const groupsFull = ref(false);
-function toggleGroup(g: TaxonGroup) {
-  groupsFull.value = toggleTaxa(g.taxa) === 'full';
+function toggleGroup(group: TaxonGroup) {
+  groupsFull.value = toggleTaxa(group.taxa) === 'full';
 }
 watch(taxonKeys, () => (groupsFull.value = false));
 
-function toggleIn<T>(store: WritableAtom<T[]>, value: T, sort?: (a: T, b: T) => number) {
-  const cur = store.get();
-  const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+function toggleIn<T>(store: WritableAtom<T[]>, value: T, sort?: (left: T, right: T) => number) {
+  const current = store.get();
+  const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
   store.set(next.sort(sort));
 }
 
 // Vue does not expose $-prefixed setup bindings to templates in dev mode.
-const toggleIucn = (v: (typeof IUCN_CATEGORIES)[number]) => toggleIn($iucn, v);
-const toggleMonth = (m: number) => toggleIn($months, m, (a, b) => a - b);
-const toggleContinent = (v: (typeof CONTINENTS)[number]) => toggleIn($continents, v);
-const toggleBasis = (v: (typeof BASIS_OF_RECORD)[number]) => toggleIn($basisOfRecord, v);
-const setUncert = (m: number | null) => $maxUncertainty.set(m);
+const toggleIucn = (value: (typeof IUCN_CATEGORIES)[number]) => toggleIn($iucn, value);
+const toggleMonth = (month: number) => toggleIn($months, month, (left, right) => left - right);
+const toggleContinent = (value: (typeof CONTINENTS)[number]) => toggleIn($continents, value);
+const toggleBasis = (value: (typeof BASIS_OF_RECORD)[number]) => toggleIn($basisOfRecord, value);
+const setUncert = (metres: number | null) => $maxUncertainty.set(metres);
 const toggleExact = () => $exactTaxon.set(!exact.value);
 const togglePhoto = () => $hasPhoto.set(!photo.value);
 const toggleSound = () => $hasSound.set(!sound.value);
@@ -87,12 +87,12 @@ const clearDates = () => $dateRange.set(null);
         <!-- Three across: the nine animal groups fill three rows, plants, mosses and fungi the fourth. -->
         <div class="grid grid-cols-3 gap-0.5">
           <button
-            v-for="g in TAXON_GROUPS"
-            :key="g.label"
+            v-for="taxonGroup in TAXON_GROUPS"
+            :key="taxonGroup.label"
             type="button"
             class="group-tile"
-            :aria-pressed="groupOn(g)"
-            @click="toggleGroup(g)"
+            :aria-pressed="groupOn(taxonGroup)"
+            @click="toggleGroup(taxonGroup)"
           >
             <svg
               viewBox="0 0 24 24"
@@ -104,9 +104,9 @@ const clearDates = () => $dateRange.set(null);
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <path :d="g.icon" />
+              <path :d="taxonGroup.icon" />
             </svg>
-            {{ g.label }}
+            {{ taxonGroup.label }}
           </button>
         </div>
         <p v-if="groupsFull" class="hint" role="alert">
@@ -125,10 +125,10 @@ const clearDates = () => $dateRange.set(null);
 
       <fieldset>
         <legend class="group-label">IUCN Red List</legend>
-        <label v-for="c in IUCN_CATEGORIES" :key="c" class="check-row">
-          <input type="checkbox" :checked="iucn.includes(c)" @change="toggleIucn(c)" />
-          <span class="iucn-code">{{ c }}</span>
-          {{ IUCN_LABELS[c] }}
+        <label v-for="category in IUCN_CATEGORIES" :key="category" class="check-row">
+          <input type="checkbox" :checked="iucn.includes(category)" @change="toggleIucn(category)" />
+          <span class="iucn-code">{{ category }}</span>
+          {{ IUCN_LABELS[category] }}
         </label>
         <p class="hint">Global category of each record's species.</p>
       </fieldset>
@@ -145,25 +145,25 @@ const clearDates = () => $dateRange.set(null);
         </TimeSlider>
       </fieldset>
 
-      <fieldset :disabled="!monthsOn" :aria-describedby="`${uid}-months-hint`">
+      <fieldset :disabled="!monthsOn" :aria-describedby="`${uniqueId}-months-hint`">
         <legend class="group-label flex w-full justify-between">
           Months
           <button v-if="months.length" type="button" class="link-btn" @click="clearMonths">Clear</button>
         </legend>
         <div class="grid grid-cols-6 gap-1">
           <button
-            v-for="(m, i) in MONTHS"
-            :key="m"
+            v-for="(monthLabel, index) in MONTHS"
+            :key="monthLabel"
             type="button"
             class="toggle month"
-            :aria-pressed="months.includes(i + 1)"
-            :aria-label="MONTH_NAMES[i]"
-            @click="toggleMonth(i + 1)"
+            :aria-pressed="months.includes(index + 1)"
+            :aria-label="MONTH_NAMES[index]"
+            @click="toggleMonth(index + 1)"
           >
-            {{ m }}
+            {{ monthLabel }}
           </button>
         </div>
-        <p :id="`${uid}-months-hint`" class="hint">
+        <p :id="`${uniqueId}-months-hint`" class="hint">
           {{ monthsOn ? 'In any year. Pick several for a season.' : 'Select a date range in years to filter by month' }}
         </p>
       </fieldset>
@@ -172,9 +172,9 @@ const clearDates = () => $dateRange.set(null);
     <template v-else-if="group === 'where'">
       <fieldset>
         <legend class="group-label">Continent</legend>
-        <label v-for="c in CONTINENTS" :key="c" class="check-row">
-          <input type="checkbox" :checked="continents.includes(c)" @change="toggleContinent(c)" />
-          {{ CONTINENT_LABELS[c] }}
+        <label v-for="continent in CONTINENTS" :key="continent" class="check-row">
+          <input type="checkbox" :checked="continents.includes(continent)" @change="toggleContinent(continent)" />
+          {{ CONTINENT_LABELS[continent] }}
         </label>
       </fieldset>
 
@@ -185,21 +185,21 @@ const clearDates = () => $dateRange.set(null);
             <input
               type="radio"
               class="sr-only"
-              :name="`${uid}-uncert`"
+              :name="`${uniqueId}-uncert`"
               :checked="uncert === null"
               @change="setUncert(null)"
             />
             Any
           </label>
-          <label v-for="m in UNCERTAINTY_STEPS_M" :key="m" class="toggle radio">
+          <label v-for="metres in UNCERTAINTY_STEPS_M" :key="metres" class="toggle radio">
             <input
               type="radio"
               class="sr-only"
-              :name="`${uid}-uncert`"
-              :checked="uncert === m"
-              @change="setUncert(m)"
+              :name="`${uniqueId}-uncert`"
+              :checked="uncert === metres"
+              @change="setUncert(metres)"
             />
-            ≤ {{ distance(m) }}
+            ≤ {{ distance(metres) }}
           </label>
         </div>
         <p class="hint">Hides records without a stated uncertainty.</p>
@@ -209,9 +209,9 @@ const clearDates = () => $dateRange.set(null);
     <template v-else-if="group === 'how'">
       <fieldset>
         <legend class="group-label">Record type</legend>
-        <label v-for="b in BASIS_OF_RECORD" :key="b" class="check-row">
-          <input type="checkbox" :checked="basis.includes(b)" @change="toggleBasis(b)" />
-          {{ BASIS_LABELS[b] }}
+        <label v-for="recordBasis in BASIS_OF_RECORD" :key="recordBasis" class="check-row">
+          <input type="checkbox" :checked="basis.includes(recordBasis)" @change="toggleBasis(recordBasis)" />
+          {{ BASIS_LABELS[recordBasis] }}
         </label>
       </fieldset>
 

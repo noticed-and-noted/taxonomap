@@ -40,7 +40,7 @@ describe('namedClasses', () => {
       { key: 131, name: 'Amphibia', records: 20 },
       { key: 999, name: 'Class 999', records: 1 },
     ]);
-    expect(calls.filter((u) => u.pathname === '/data/tree.json')).toHaveLength(1);
+    expect(calls.filter((url) => url.pathname === '/data/tree.json')).toHaveLength(1);
   });
 });
 
@@ -63,14 +63,14 @@ describe('topSpecies', () => {
     const { nameFromRecords, topSpecies } = await load();
     const indexed = await topSpecies({ taxonKeys: [5], classKey: 212 }, { limit: 10 });
     // Index names first, so rows can show before the batched search.
-    expect(indexed.find((r) => r.key === 3)).toMatchObject({ scientificName: 'Species 3', unnamed: true });
+    expect(indexed.find((row) => row.key === 3)).toMatchObject({ scientificName: 'Species 3', unnamed: true });
     const rows = await nameFromRecords(indexed);
     expect(rows).toEqual([
       { key: 1, records: 20, scientificName: 'Erithacus rubecula', commonName: 'European robin' },
       { key: 2, records: 9, scientificName: 'Passer domesticus' },
       { key: 3, records: 5, scientificName: 'Turdus merula' },
     ]);
-    const facetCalls = calls.filter((u) => u.searchParams.get('facet') === 'speciesKey');
+    const facetCalls = calls.filter((url) => url.searchParams.get('facet') === 'speciesKey');
     // One request, the group AND'd with the caller's filter.
     expect(facetCalls).toHaveLength(1);
     expect(facetCalls[0]?.searchParams.get('classKey')).toBe('212');
@@ -82,8 +82,8 @@ describe('topSpecies', () => {
     const calls = stubNetwork(snapshots({ names: NAMES }));
     const { topSpecies } = await load();
     const rows = await topSpecies({}, { known: [{ name: '1', count: 20 }] });
-    expect(rows.map((r) => r.key)).toEqual([1]);
-    expect(calls.some((u) => u.pathname === '/v1/occurrence/search')).toBe(false);
+    expect(rows.map((row) => row.key)).toEqual([1]);
+    expect(calls.some((url) => url.pathname === '/v1/occurrence/search')).toBe(false);
   });
 
   it('marks rows it could not name', async () => {
@@ -103,15 +103,15 @@ describe('topSpecies', () => {
     );
     const { topSpecies } = await load();
     await expect(topSpecies({})).resolves.toEqual([]);
-    expect(calls.some((u) => u.pathname === '/data/names.json')).toBe(false);
+    expect(calls.some((url) => url.pathname === '/data/names.json')).toBe(false);
   });
 
   it('stops once its signal aborts', async () => {
     stubNetwork(() => facets(0, 'SPECIES_KEY', []));
     const { topSpecies } = await load();
-    const ctrl = new AbortController();
-    ctrl.abort();
-    await expect(topSpecies({}, { signal: ctrl.signal })).rejects.toThrow();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(topSpecies({}, { signal: controller.signal })).rejects.toThrow();
   });
 });
 
@@ -133,9 +133,9 @@ describe('resolveNames', () => {
   it('skips the remaining lookups once superseded', async () => {
     const calls = stubNetwork(() => ({ key: 1, scientificName: 'x' }));
     const { resolveNames } = await load();
-    const ctrl = new AbortController();
-    ctrl.abort();
-    expect((await resolveNames([1, 2], ctrl.signal)).size).toBe(0);
+    const controller = new AbortController();
+    controller.abort();
+    expect((await resolveNames([1, 2], controller.signal)).size).toBe(0);
     expect(calls).toHaveLength(0);
   });
 });

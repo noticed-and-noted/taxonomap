@@ -1,14 +1,19 @@
 const compactFmt = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 const fullFmt = new Intl.NumberFormat('en');
 
+/** Upper-cases the first character: "birds" → "Birds". */
+export function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /** 1.2M, 34K, 950 */
-export function compact(n: number): string {
-  return compactFmt.format(n);
+export function compact(value: number): string {
+  return compactFmt.format(value);
 }
 
 /** 1,234,567 */
-export function full(n: number): string {
-  return fullFmt.format(n);
+export function full(value: number): string {
+  return fullFmt.format(value);
 }
 
 /** "1 record" / "12,345 records" */
@@ -63,8 +68,8 @@ export const IUCN_LABELS: Record<string, string> = {
 };
 
 /** "10 m", "1 km". */
-export function distance(m: number): string {
-  return m >= 1000 ? `${m / 1000} km` : `${m} m`;
+export function distance(metres: number): string {
+  return metres >= 1000 ? `${metres / 1000} km` : `${metres} m`;
 }
 
 export const BASIS_LABELS: Record<string, string> = {

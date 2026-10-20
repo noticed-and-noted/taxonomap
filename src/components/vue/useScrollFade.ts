@@ -5,13 +5,18 @@
  */
 import { ref, type Ref } from 'vue';
 
-export function useScrollFade(el: Ref<HTMLElement | undefined>) {
+/**
+ * Tracks whether a scroll box has more content above or below.
+ * @param scrollBox The scrollable element.
+ * @returns `fadeTop` and `fadeBottom` flags and `update` to call on scroll and content change.
+ */
+export function useScrollFade(scrollBox: Ref<HTMLElement | undefined>) {
   const fadeTop = ref(false);
   const fadeBottom = ref(false);
   function update() {
-    const e = el.value;
-    fadeTop.value = !!e && e.scrollTop > 1;
-    fadeBottom.value = !!e && e.scrollTop + e.clientHeight < e.scrollHeight - 1;
+    const element = scrollBox.value;
+    fadeTop.value = !!element && element.scrollTop > 1;
+    fadeBottom.value = !!element && element.scrollTop + element.clientHeight < element.scrollHeight - 1;
   }
   return { fadeTop, fadeBottom, update };
 }

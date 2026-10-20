@@ -24,7 +24,7 @@ import {
 import { needsAdhoc } from '~/lib/gbif';
 import { createHoverCounter, fetchCount, knownCount } from '~/lib/map/cellCounts';
 import type { Hex } from '~/lib/map/occGrid';
-import { createOccLayer, type OccLayer } from '~/lib/map/occLayer';
+import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { PIN_CURSOR } from './pinCursors';
@@ -115,26 +115,26 @@ function changeHexes(add: Hex[], remove: string[]) {
     void src.updateData({ add });
     return;
   }
-  const m = map;
+  const activeMap = map;
   fresh = add;
   fade++;
   setData('occ-fresh', { type: 'FeatureCollection', features: add });
-  m.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: 0, delay: 0 });
-  m.setPaintProperty('occ-fresh-fill', 'fill-opacity', 0);
+  activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: 0, delay: 0 });
+  activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity', 0);
   requestAnimationFrame(() => {
-    m.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: FADE_MS, delay: 0 });
-    m.setPaintProperty('occ-fresh-fill', 'fill-opacity', occOpacity(m.getZoom()));
+    activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: FADE_MS, delay: 0 });
+    activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity', occOpacity(activeMap.getZoom()));
   });
   fadeTimer = setTimeout(settleFresh, FADE_MS + 20);
 }
 
 /** A whole new set of cells (new level or filters): no fade, nothing left mid-fade. */
-function replaceHexes(fc: GeoJSON.FeatureCollection) {
+function replaceHexes(collection: GeoJSON.FeatureCollection) {
   clearTimeout(fadeTimer);
   fresh = [];
   fade++;
   setData('occ-fresh', EMPTY);
-  setData('occ', fc);
+  setData('occ', collection);
 }
 
 /**
@@ -163,42 +163,42 @@ function styleFor() {
  * Whether a screen point misses the globe (space around it at low zoom).
  * There, unproject snaps to the horizon, so the point does not round-trip.
  */
-function offGlobe(p: { x: number; y: number }): boolean {
+function offGlobe(point: { x: number; y: number }): boolean {
   if (!map) return true;
-  const back = map.project(map.unproject([p.x, p.y]));
-  return Math.hypot(back.x - p.x, back.y - p.y) > 1;
+  const back = map.project(map.unproject([point.x, point.y]));
+  return Math.hypot(back.x - point.x, back.y - point.y) > 1;
 }
 
 /** The hex cell under a screen point, if any. */
 function hexAt(point: { x: number; y: number }): Hex | undefined {
   if (!map || !occ || offGlobe(point)) return undefined;
-  const ll = map.unproject([point.x, point.y]);
-  return occ.cellAt([ll.lng, ll.lat]);
+  const lngLat = map.unproject([point.x, point.y]);
+  return occ.cellAt([lngLat.lng, lngLat.lat]);
 }
 
 function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
-  const f = hexAt(point);
-  const geom = f && geometryOf(f);
-  if (!geom) {
+  const feature = hexAt(point);
+  const geometry = feature && geometryOf(feature);
+  if (!geometry) {
     clearHexSelection();
     return;
   }
-  $hexGeometry.set(geom);
+  $hexGeometry.set(geometry);
   $selectedHex.set([Number(lngLat.lng.toFixed(4)), Number(lngLat.lat.toFixed(4))]);
   $panel.set('hex');
 }
 
 /** Re-resolve a hex selected via the URL once its cell is loaded. */
 function restoreHex() {
-  const p = $selectedHex.get();
-  if (!occ || !p || $hexGeometry.get()) {
+  const selected = $selectedHex.get();
+  if (!occ || !selected || $hexGeometry.get()) {
     pendingHexRestore = false;
     return;
   }
-  const f = occ.cellAt([p[0], p[1]]);
-  const geom = f && geometryOf(f);
-  if (geom) {
-    $hexGeometry.set(geom);
+  const feature = occ.cellAt([selected[0], selected[1]]);
+  const geometry = feature && geometryOf(feature);
+  if (geometry) {
+    $hexGeometry.set(geometry);
     if ($panel.get() === 'none') $panel.set('hex');
   }
   pendingHexRestore = false;
@@ -219,49 +219,60 @@ function coveredEdges() {
   };
 }
 
-function fly(req: FlyRequest) {
+/** Breathing room between a fitted area and the map's edges, in px. */
+const FIT_PADDING = 60;
+const FIT_MAX_ZOOM = 9;
+const FIT_DURATION_MS = 1200;
+const FLIGHT_DURATION_MS = 1400;
+
+function fly(request: FlyRequest) {
   if (!map) return;
   const animate = !reducedMotion();
-  const c = coveredEdges();
-  if (req.kind === 'bounds') {
-    const [w, s, e, n] = req.bbox;
+  const covered = coveredEdges();
+  if (request.kind === 'bounds') {
+    const [west, south, east, north] = request.bbox;
     map.fitBounds(
       [
-        [w, s],
-        [e, n],
+        [west, south],
+        [east, north],
       ],
       {
-        padding: { top: c.top + 60, bottom: c.bottom + 60, left: c.left + 60, right: c.right + 60 },
-        maxZoom: req.maxZoom ?? 9,
-        duration: animate ? 1200 : 0,
+        padding: {
+          top: covered.top + FIT_PADDING,
+          bottom: covered.bottom + FIT_PADDING,
+          left: covered.left + FIT_PADDING,
+          right: covered.right + FIT_PADDING,
+        },
+        maxZoom: request.maxZoom ?? FIT_MAX_ZOOM,
+        duration: animate ? FIT_DURATION_MS : 0,
       },
     );
   } else {
     // An offset, not camera padding: MapLibre keeps padding after the move.
     map.flyTo({
-      center: [req.lng, req.lat],
-      zoom: req.zoom,
-      offset: [(c.left - c.right) / 2, (c.top - c.bottom) / 2],
-      duration: animate ? 1400 : 0,
+      center: [request.lng, request.lat],
+      zoom: request.zoom,
+      offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
+      duration: animate ? FLIGHT_DURATION_MS : 0,
       essential: false,
     });
   }
 }
 
-const records = (n: number, text: string) => `${text} record${n === 1 ? '' : 's'}`;
+const records = (count: number, text: string) => `${text} record${count === 1 ? '' : 's'}`;
 
 /** The hovered cell's exact count, once the pointer has rested on it (lib/map/cellCounts.ts). */
-const hoverCounter = createHoverCounter((wkt, n) => {
-  if (n === 0) {
+const hoverCounter = createHoverCounter((wkt, count) => {
+  if (count === 0) {
     clearHover();
     occ?.redraw();
-  } else if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(n, full(n)) };
+  } else if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(count, full(count)) };
 });
 
 /** A cell whose exact count is known to be 0. */
-function knownEmpty(h: Hex): boolean {
-  const g = geometryOf(h);
-  return !!g && knownCount($occurrenceFilter.get(), g.wkt) === 0;
+function knownEmpty(hex: Hex): boolean {
+  const geometry = geometryOf(hex);
+  return !!geometry && knownCount($occurrenceFilter.get(), geometry.wkt) === 0;
 }
 
 /** Estimates at or below this are checked for empty cells. */
@@ -277,17 +288,19 @@ const MAX_CHECKS = 40;
  */
 function checkSparse(hexes: Hex[]) {
   const filter = $occurrenceFilter.get();
-  const b = $mapBounds.get();
-  if (!needsAdhoc(filter) || !b) return;
-  const inView = (h: Hex) => {
-    const [lng, lat] = h.geometry.coordinates[0]![0]!;
-    return lng! >= b[0] && lng! <= b[2] && lat! >= b[1] && lat! <= b[3];
+  const bounds = $mapBounds.get();
+  if (!needsAdhoc(filter) || !bounds) return;
+  const inView = (hex: Hex) => {
+    const [lng, lat] = hex.geometry.coordinates[0]![0]!;
+    return lng! >= bounds[0] && lng! <= bounds[2] && lat! >= bounds[1] && lat! <= bounds[3];
   };
-  for (const h of hexes.filter((c) => c.properties.total <= SPARSE_MAX && inView(c)).slice(0, MAX_CHECKS)) {
-    const g = geometryOf(h);
-    if (!g) continue;
-    fetchCount(filter, g.wkt).then(
-      (n) => n === 0 && filter === $occurrenceFilter.get() && occ?.redraw(),
+  for (const hex of hexes
+    .filter((candidate) => candidate.properties.total <= SPARSE_MAX && inView(candidate))
+    .slice(0, MAX_CHECKS)) {
+    const geometry = geometryOf(hex);
+    if (!geometry) continue;
+    fetchCount(filter, geometry.wkt).then(
+      (count) => count === 0 && filter === $occurrenceFilter.get() && occ?.redraw(),
       () => undefined, // The estimate stays up.
     );
   }
@@ -299,49 +312,49 @@ function clearHover() {
   setData('hover', EMPTY);
 }
 
-function onMove(e: MapMouseEvent) {
+function onMove(event: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   if ($mapMode.get() === 'pin') return;
-  const f = hexAt(e.point);
-  const geom = f && geometryOf(f);
-  if (!geom) {
+  const feature = hexAt(event.point);
+  const geometry = feature && geometryOf(feature);
+  if (!geometry) {
     clearHover();
     map!.getCanvas().style.cursor = '';
     return;
   }
   setData('hover', {
     type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: f.geometry }],
+    features: [{ type: 'Feature', properties: {}, geometry: feature.geometry }],
   });
   // The tile's count is an estimate (~) until the exact one is known.
   const filter = $occurrenceFilter.get();
-  const exact = knownCount(filter, geom.wkt);
+  const exact = knownCount(filter, geometry.wkt);
   const text =
-    exact === undefined ? records(geom.tileTotal, `~${compact(geom.tileTotal)}`) : records(exact, full(exact));
-  tooltip.value = { x: e.point.x, y: e.point.y, text, wkt: geom.wkt };
-  hoverCounter.hover(filter, geom.wkt);
+    exact === undefined ? records(geometry.tileTotal, `~${compact(geometry.tileTotal)}`) : records(exact, full(exact));
+  tooltip.value = { x: event.point.x, y: event.point.y, text, wkt: geometry.wkt };
+  hoverCounter.hover(filter, geometry.wkt);
   map!.getCanvas().style.cursor = 'pointer';
 }
 
-function onClick(e: MapMouseEvent) {
-  if (!map || offGlobe(e.point)) return;
+function onClick(event: MapMouseEvent) {
+  if (!map || offGlobe(event.point)) return;
   if ($mapMode.get() === 'pin') {
-    setNearLocation(e.lngLat.lat, e.lngLat.lng);
+    setNearLocation(event.lngLat.lat, event.lngLat.lng);
     return;
   }
-  selectAt(e.point, e.lngLat);
+  selectAt(event.point, event.lngLat);
 }
 
-function onKey(e: KeyboardEvent) {
+function onKey(event: KeyboardEvent) {
   if (!map) return;
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    const c = map.getCanvas();
-    const point = { x: c.clientWidth / 2, y: c.clientHeight / 2 };
-    const ll = map.unproject([point.x, point.y]);
-    if ($mapMode.get() === 'pin') setNearLocation(ll.lat, ll.lng);
-    else selectAt(point, ll);
-  } else if (e.key === 'Escape') {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    const canvas = map.getCanvas();
+    const point = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+    const lngLat = map.unproject([point.x, point.y]);
+    if ($mapMode.get() === 'pin') setNearLocation(lngLat.lat, lngLat.lng);
+    else selectAt(point, lngLat);
+  } else if (event.key === 'Escape') {
     clearHexSelection();
   }
 }
@@ -354,42 +367,43 @@ async function rebuildStyle() {
   if (map && mine === styleSeq) map.setStyle(style, { diff: false });
 }
 
-onMounted(async () => {
-  const [ml, worker] = await Promise.all([
+type MapLibre = typeof import('maplibre-gl');
+
+/** MapLibre's own tile and label cross-fade. */
+const MAP_FADE_MS = 200;
+
+/** Loads MapLibre and points it at the bundled worker. */
+async function loadMapLibre(): Promise<MapLibre> {
+  const [maplibre, worker] = await Promise.all([
     import('maplibre-gl'),
     // MapLibre derives its worker URL from import.meta.url, which breaks once
     // bundled; ship the self-contained worker as an asset instead.
     import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
   ]);
-  ml.setWorkerUrl(worker.default);
-  if (!container.value) return;
-  const v = $mapView.get();
-  const style = await styleFor();
-  if (!container.value) return;
-  map = new ml.Map({
-    container: container.value,
-    style,
-    center: [v.lng, v.lat],
-    zoom: v.zoom,
-    attributionControl: { compact: true },
-    maxPitch: 0,
-    dragRotate: false,
-    renderWorldCopies: false,
-    fadeDuration: reducedMotion() ? 0 : 200,
-  });
-  occ = createOccLayer(map, {
+  maplibre.setWorkerUrl(worker.default);
+  return maplibre;
+}
+
+/** Whether a restore of a URL-selected hex is due: asked for, or selected without a resolved cell. */
+function restoreHexIfDue() {
+  if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
+}
+
+/** How the occurrence layer reads the filter and reports cells, level, progress and failure. */
+function occLayerOptions(): OccLayerOptions {
+  return {
     filter: () => $occurrenceFilter.get(),
-    listenFilter: (fn) => $occurrenceFilter.listen(fn),
+    listenFilter: (onChange) => $occurrenceFilter.listen(onChange),
     isEmpty: knownEmpty,
-    onCells: (fc) => {
-      replaceHexes(fc);
-      checkSparse(fc.features as Hex[]);
-      if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
+    onCells: (cells) => {
+      replaceHexes(cells);
+      checkSparse(cells.features as Hex[]);
+      restoreHexIfDue();
     },
     onChanges: (add, remove) => {
       changeHexes(add, remove);
       checkSparse(add);
-      if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
+      restoreHexIfDue();
     },
     onLevel: (level) => {
       $gridLevel.set(level);
@@ -397,81 +411,101 @@ onMounted(async () => {
     },
     onProgress: (done, total) => $mapLoad.set({ loading: done < total, done, total }),
     onFailed: () => (failed.value = true),
-  });
-  cleanups.push(() => occ?.destroy());
-  map.addControl(new ml.NavigationControl({ showCompass: false }), 'bottom-right');
-  if (import.meta.env.DEV) (window as unknown as { __map?: MlMap }).__map = map;
-  // Track container size (window resize alone misses layout changes).
-  const ro = new ResizeObserver(() => map?.resize());
-  ro.observe(container.value);
-  cleanups.push(() => ro.disconnect());
-  map.touchZoomRotate.disableRotation();
-  map
-    .getCanvas()
-    .setAttribute(
-      'aria-label',
-      'Map of occurrence records. Use arrow keys to pan, plus and minus to zoom, Enter to select the cell under the crosshair, Escape to clear.',
-    );
-
-  // Visible extent from the canvas corners (getBounds() is world-wide under
-  // the globe projection). At very low zoom, corners miss the globe: world.
-  const publishBounds = () => {
-    if (!map) return;
-    const c = map.getCanvas();
-    const w = c.clientWidth;
-    const h = c.clientHeight;
-    if (map.getZoom() < 2.5 || !w || !h) {
-      $mapBounds.set([-180, -85, 180, 85]);
-      return;
-    }
-    const pts = [
-      [0, 0],
-      [w, 0],
-      [0, h],
-      [w, h],
-      [w / 2, 0],
-      [w / 2, h],
-    ].map(([x, y]) => map!.unproject([x as number, y as number]));
-    const lngs = pts.map((p) => p.lng);
-    const lats = pts.map((p) => p.lat);
-    $mapBounds.set([
-      Math.min(...lngs),
-      Math.max(-85, Math.min(...lats)),
-      Math.max(...lngs),
-      Math.min(85, Math.max(...lats)),
-    ]);
   };
+}
+
+/** Below this zoom the canvas corners miss the globe, so the extent is the whole world. */
+const WORLD_BOUNDS_MAX_ZOOM = 2.5;
+const WORLD_BOUNDS: [number, number, number, number] = [-180, -85, 180, 85];
+const MAX_MERCATOR_LAT = 85;
+
+/**
+ * Visible extent from the canvas corners and edge midpoints (getBounds() is
+ * world-wide under the globe projection). At very low zoom, corners miss the
+ * globe: world.
+ */
+function publishBounds() {
+  if (!map) return;
+  const canvas = map.getCanvas();
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (map.getZoom() < WORLD_BOUNDS_MAX_ZOOM || !width || !height) {
+    $mapBounds.set(WORLD_BOUNDS);
+    return;
+  }
+  const corners = [
+    [0, 0],
+    [width, 0],
+    [0, height],
+    [width, height],
+    [width / 2, 0],
+    [width / 2, height],
+  ].map(([pixelX, pixelY]) => map!.unproject([pixelX as number, pixelY as number]));
+  const lngs = corners.map((corner) => corner.lng);
+  const lats = corners.map((corner) => corner.lat);
+  $mapBounds.set([
+    Math.min(...lngs),
+    Math.max(-MAX_MERCATOR_LAT, Math.min(...lats)),
+    Math.max(...lngs),
+    Math.min(MAX_MERCATOR_LAT, Math.max(...lats)),
+  ]);
+}
+
+/** After a move: publish the new extent and view, unless the view is already the stored one. */
+function onMoveEnd() {
+  if (!map) return;
+  publishBounds();
+  const center = map.getCenter();
+  const next = { lng: center.lng, lat: center.lat, zoom: map.getZoom() };
+  if (!sameView(next, $mapView.get())) $mapView.set(next);
+}
+
+const MAP_ARIA_LABEL =
+  'Map of occurrence records. Use arrow keys to pan, plus and minus to zoom, Enter to select the cell under the crosshair, Escape to clear.';
+
+/** Controls, accessibility label, dev hook and size tracking for a freshly created map. */
+function decorateMap(maplibre: MapLibre, element: HTMLElement) {
+  if (!map) return;
+  map.addControl(new maplibre.NavigationControl({ showCompass: false }), 'bottom-right');
+  if (import.meta.env.DEV) (window as unknown as { __map?: MlMap }).__map = map;
+  map.touchZoomRotate.disableRotation();
+  map.getCanvas().setAttribute('aria-label', MAP_ARIA_LABEL);
+  // Track container size (window resize alone misses layout changes).
+  const resizeObserver = new ResizeObserver(() => map?.resize());
+  resizeObserver.observe(element);
+  cleanups.push(() => resizeObserver.disconnect());
+}
+
+/** Wires the map's own events: extent, view, hover, click, style loads and keyboard. */
+function listenToMap() {
+  if (!map) return;
   map.once('load', publishBounds);
-  // Cells drawn off-screen are checked once they come into view.
-  cleanups.push($mapBounds.listen(() => checkSparse((occ?.collection().features ?? []) as Hex[])));
-  map.on('moveend', () => {
-    if (!map) return;
-    publishBounds();
-    const c = map.getCenter();
-    const next = { lng: c.lng, lat: c.lat, zoom: map.getZoom() };
-    if (!sameView(next, $mapView.get())) $mapView.set(next);
-  });
+  map.on('moveend', onMoveEnd);
   map.on('mousemove', onMove);
   map.on('mouseout', clearHover);
   map.on('click', onClick);
   map.on('style.load', syncOverlays);
   map.getCanvas().addEventListener('keydown', onKey);
   cleanups.push(() => map?.getCanvas().removeEventListener('keydown', onKey));
+}
 
-  // Store → map
+/** Store → map: view, basemap, ramp, selection, mode, "near me" and fly requests. */
+function listenToStores() {
   cleanups.push(
+    // Cells drawn off-screen are checked once they come into view.
+    $mapBounds.listen(() => checkSparse((occ?.collection().features ?? []) as Hex[])),
     $basemap.listen(() => void rebuildStyle()),
     // A new density ramp only repaints the hexes.
     $ramp.listen(() => paintHexes()),
-    $mapView.listen((v) => {
+    $mapView.listen((view) => {
       if (!map) return;
-      const c = map.getCenter();
-      if (!sameView(v, { lng: c.lng, lat: c.lat, zoom: map.getZoom() }))
-        map.jumpTo({ center: [v.lng, v.lat], zoom: v.zoom });
+      const center = map.getCenter();
+      if (!sameView(view, { lng: center.lng, lat: center.lat, zoom: map.getZoom() }))
+        map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom });
     }),
-    $hexGeometry.subscribe((g) => setData('selected', selectedGeoJson(g))),
-    $selectedHex.listen((p) => {
-      if (!p) $hexGeometry.set(null);
+    $hexGeometry.subscribe((geometry) => setData('selected', selectedGeoJson(geometry))),
+    $selectedHex.listen((selected) => {
+      if (!selected) $hexGeometry.set(null);
       else if (!$hexGeometry.get()) pendingHexRestore = true;
     }),
     $mapMode.subscribe((mode) => {
@@ -479,14 +513,17 @@ onMounted(async () => {
       clearHover();
       map.getCanvas().style.cursor = mode === 'pin' ? PIN_CURSOR : '';
     }),
-    ...[$nearAt, $nearRadius, $mapMode].map((s) => s.listen(() => setData('near', nearData()))),
-    $flyTo.subscribe((req) => {
-      if (!req) return;
-      fly(req);
+    ...[$nearAt, $nearRadius, $mapMode].map((store) => store.listen(() => setData('near', nearData()))),
+    $flyTo.subscribe((request) => {
+      if (!request) return;
+      fly(request);
       $flyTo.set(null);
     }),
   );
+}
 
+/** Page-level events: theme switches and client-side page swaps. */
+function listenToPage() {
   // Theme switch: the plain basemap and accent colours follow it.
   const observer = new MutationObserver(() => void rebuildStyle());
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -496,11 +533,37 @@ onMounted(async () => {
   const onSwap = () => requestAnimationFrame(() => map?.resize());
   document.addEventListener('astro:after-swap', onSwap);
   cleanups.push(() => document.removeEventListener('astro:after-swap', onSwap));
+}
+
+onMounted(async () => {
+  const maplibre = await loadMapLibre();
+  if (!container.value) return;
+  const view = $mapView.get();
+  const style = await styleFor();
+  const element = container.value;
+  if (!element) return;
+  map = new maplibre.Map({
+    container: element,
+    style,
+    center: [view.lng, view.lat],
+    zoom: view.zoom,
+    attributionControl: { compact: true },
+    maxPitch: 0,
+    dragRotate: false,
+    renderWorldCopies: false,
+    fadeDuration: reducedMotion() ? 0 : MAP_FADE_MS,
+  });
+  occ = createOccLayer(map, occLayerOptions());
+  cleanups.push(() => occ?.destroy());
+  decorateMap(maplibre, element);
+  listenToMap();
+  listenToStores();
+  listenToPage();
 });
 
 onBeforeUnmount(() => {
   hoverCounter.cancel();
-  cleanups.forEach((fn) => fn());
+  cleanups.forEach((cleanup) => cleanup());
   map?.remove();
   map = undefined;
 });

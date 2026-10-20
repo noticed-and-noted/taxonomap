@@ -8,13 +8,14 @@ export interface PlotBar {
   href?: string;
 }
 
-export function speciesCharts(d: SpeciesData): { countries: PlotBar[]; datasets: PlotBar[] } {
+/** Bar-chart data for a species page: top countries and datasets. */
+export function speciesCharts(speciesData: SpeciesData): { countries: PlotBar[]; datasets: PlotBar[] } {
   return {
-    countries: d.countries.map(([c, v]) => ({ label: countryName(c), value: v })),
-    datasets: d.datasets.map((ds) => ({
-      label: ds.title,
-      value: ds.count,
-      href: `https://www.gbif.org/dataset/${ds.key}`,
+    countries: speciesData.countries.map(([code, count]) => ({ label: countryName(code), value: count })),
+    datasets: speciesData.datasets.map((dataset) => ({
+      label: dataset.title,
+      value: dataset.count,
+      href: `https://www.gbif.org/dataset/${dataset.key}`,
     })),
   };
 }

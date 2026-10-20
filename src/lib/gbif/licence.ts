@@ -37,15 +37,15 @@ const BY_CODES: Record<string, AllowedLicence> = {
  */
 export function parseLicence(raw: string | undefined | null): AllowedLicence | null {
   if (!raw) return null;
-  const s = raw.trim().toLowerCase();
-  if (/publicdomain\/zero|\bcc0\b|cc0_1_0/.test(s)) return 'CC0';
+  const normalised = raw.trim().toLowerCase();
+  if (/publicdomain\/zero|\bcc0\b|cc0_1_0/.test(normalised)) return 'CC0';
   const code =
-    s.match(/creativecommons\.org\/licenses\/([a-z-]+)\//)?.[1] ??
-    s.match(/^cc[ _-]?(by(?:[ _-](?:nc|nd|sa))*)(?:[ _-]\d|$)/)?.[1];
+    normalised.match(/creativecommons\.org\/licenses\/([a-z-]+)\//)?.[1] ??
+    normalised.match(/^cc[ _-]?(by(?:[ _-](?:nc|nd|sa))*)(?:[ _-]\d|$)/)?.[1];
   if (!code) return null;
   // Normalise separators and order (older licences wrote "by-nd-nc").
-  const parts = code.split(/[ _-]/).filter((p) => p !== 'by');
-  const key = ['by', ...['nc', 'nd', 'sa'].filter((p) => parts.includes(p))].join('-');
+  const parts = code.split(/[ _-]/).filter((part) => part !== 'by');
+  const key = ['by', ...['nc', 'nd', 'sa'].filter((part) => parts.includes(part))].join('-');
   return BY_CODES[key] ?? null;
 }
 
@@ -89,21 +89,23 @@ export type UsableImage = GbifImage | InatImage;
 export function usableImages(occ: Occurrence): GbifImage[] {
   const recordLicence = parseLicence(occ.license);
   const out: GbifImage[] = [];
-  for (const m of occ.media ?? []) {
-    if (m.type && m.type !== 'StillImage') continue;
-    if (!m.identifier) continue;
-    const licence = mediaLicence(m, recordLicence);
+  for (const item of occ.media ?? []) {
+    if (item.type && item.type !== 'StillImage') continue;
+    if (!item.identifier) continue;
+    const licence = mediaLicence(item, recordLicence);
     if (!licence) continue;
     out.push({
-      url: m.identifier,
+      url: item.identifier,
       licence,
       occurrenceKey: occ.key,
       datasetKey: occ.datasetKey,
       ...(occ.speciesKey !== undefined && { speciesKey: occ.speciesKey }),
-      ...(m.creator && { creator: m.creator }),
-      ...((m.rightsHolder ?? occ.rightsHolder) && { rightsHolder: (m.rightsHolder ?? occ.rightsHolder) as string }),
-      ...((m.publisher ?? occ.publisher) && { publisher: (m.publisher ?? occ.publisher) as string }),
-      ...(m.references && { references: m.references }),
+      ...(item.creator && { creator: item.creator }),
+      ...((item.rightsHolder ?? occ.rightsHolder) && {
+        rightsHolder: (item.rightsHolder ?? occ.rightsHolder) as string,
+      }),
+      ...((item.publisher ?? occ.publisher) && { publisher: (item.publisher ?? occ.publisher) as string }),
+      ...(item.references && { references: item.references }),
     });
   }
   return out;
@@ -114,13 +116,13 @@ export function isCreativeCommons(raw: string | undefined | null): boolean {
   return !!raw && /creativecommons\.org\/(licenses|publicdomain)\/|^\s*cc[ _-]?(0|by)/i.test(raw);
 }
 
-function mediaLicence(m: Media, recordLicence: AllowedLicence | null): AllowedLicence | null {
-  if (isCreativeCommons(m.license)) return parseLicence(m.license);
+function mediaLicence(item: Media, recordLicence: AllowedLicence | null): AllowedLicence | null {
+  if (isCreativeCommons(item.license)) return parseLicence(item.license);
   return recordLicence;
 }
 
 /** Attribution line: "© creator · CC-BY". */
-export function attribution(img: Pick<UsableImage, 'creator' | 'rightsHolder' | 'licence'>): string {
-  const who = img.creator ?? img.rightsHolder;
-  return who ? `© ${who} · ${img.licence}` : img.licence;
+export function attribution(image: Pick<UsableImage, 'creator' | 'rightsHolder' | 'licence'>): string {
+  const credit = image.creator ?? image.rightsHolder;
+  return credit ? `© ${credit} · ${image.licence}` : image.licence;
 }

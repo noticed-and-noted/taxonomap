@@ -19,19 +19,19 @@ export interface NameHit {
 
 export interface NameSearchProvider {
   readonly id: string;
-  search(q: string, signal?: AbortSignal): Promise<NameHit[]>;
+  search(query: string, signal?: AbortSignal): Promise<NameHit[]>;
 }
 
 export const gbifSuggestProvider: NameSearchProvider = {
   id: 'gbif-suggest',
-  async search(q, signal) {
-    const res = await suggestSpecies(q, { limit: 8 }, signal);
-    return res
-      .filter((r) => !r.synonym)
-      .map((r) => ({
-        key: r.key,
-        scientificName: r.canonicalName ?? r.scientificName,
-        rank: r.rank,
+  async search(query, signal) {
+    const response = await suggestSpecies(query, { limit: 20 }, signal);
+    return response
+      .filter((hit) => !hit.synonym)
+      .map((hit) => ({
+        key: hit.key,
+        scientificName: hit.canonicalName ?? hit.scientificName,
+        rank: hit.rank,
         source: 'suggest' as const,
       }));
   },
@@ -39,20 +39,45 @@ export const gbifSuggestProvider: NameSearchProvider = {
 
 export const gbifVernacularProvider: NameSearchProvider = {
   id: 'gbif-vernacular',
-  async search(q, signal) {
-    const res = await searchVernacular(q, { limit: 10 }, signal);
-    const needle = q.trim().toLowerCase();
-    return res.results.map((r) => {
+  async search(query, signal) {
+    const response = await searchVernacular(query, { limit: 10 }, signal);
+    const needle = query.trim().toLowerCase();
+    return response.results.map((hit) => {
       const common =
-        r.vernacularNames?.find((v) => v.language === 'eng' && v.vernacularName.toLowerCase().includes(needle)) ??
-        r.vernacularNames?.find((v) => v.vernacularName.toLowerCase().includes(needle));
+        hit.vernacularNames?.find(
+          (vernacular) => vernacular.language === 'eng' && vernacular.vernacularName.toLowerCase().includes(needle),
+        ) ?? hit.vernacularNames?.find((vernacular) => vernacular.vernacularName.toLowerCase().includes(needle));
       return {
-        key: r.key,
-        scientificName: r.canonicalName ?? r.scientificName,
-        rank: r.rank,
+        key: hit.key,
+        scientificName: hit.canonicalName ?? hit.scientificName,
+        rank: hit.rank,
         ...(common && { commonName: common.vernacularName }),
         source: 'vernacular' as const,
       };
     });
   },
 };
+
+/** Broadest rank first; ranks not listed sort after these. */
+const RANK_ORDER: readonly Rank[] = [
+  'KINGDOM',
+  'PHYLUM',
+  'CLASS',
+  'ORDER',
+  'FAMILY',
+  'GENUS',
+  'SPECIES',
+  'SUBSPECIES',
+  'VARIETY',
+  'FORM',
+];
+
+function rankPosition(rank: Rank): number {
+  const position = RANK_ORDER.indexOf(rank);
+  return position === -1 ? RANK_ORDER.length : position;
+}
+
+/** Hits ordered broadest rank first (genus before species), keeping relevance order within a rank. */
+export function sortByRank(hits: readonly NameHit[]): NameHit[] {
+  return [...hits].sort((first, second) => rankPosition(first.rank) - rankPosition(second.rank));
+}

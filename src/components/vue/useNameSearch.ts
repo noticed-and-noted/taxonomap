@@ -13,6 +13,7 @@ import { debounce } from '~/lib/util/debounce';
 const MIN_QUERY = 2;
 const MIN_LIVE_QUERY = 3;
 
+/** Options for `useNameSearch`. */
 export interface NameSearchOptions {
   /** Most hits to return. */
   max: number;
@@ -20,86 +21,131 @@ export interface NameSearchOptions {
   exclude?: () => Iterable<number>;
 }
 
-export function useNameSearch({ max, exclude }: NameSearchOptions) {
-  const indexHits = ref<NameHit[]>([]);
-  const liveHits = ref<NameHit[]>([]);
+/** Live scientific matches are mostly noise once the index has answers, so only a few are kept then. */
+const MAX_LIVE_HITS_WITH_INDEX = 3;
+/** Vernacular search ranks poorly, so it is only asked when the index has fewer hits than this. */
+const THIN_INDEX_HITS = 3;
+const LIVE_DEBOUNCE_MS = 250;
+const INDEX_WAIT_MS = 1500;
+
+/** Index hits then live hits, without repeats or excluded keys, up to `max`. */
+function mergeHits(
+  indexHits: readonly NameHit[],
+  liveHits: readonly NameHit[],
+  excluded: Iterable<number>,
+  max: number,
+): NameHit[] {
+  const seen = new Set(excluded);
+  const merged: NameHit[] = [];
+  const live = indexHits.length ? liveHits.slice(0, MAX_LIVE_HITS_WITH_INDEX) : liveHits;
+  for (const hit of [...indexHits, ...live]) {
+    if (seen.has(hit.key)) continue;
+    seen.add(hit.key);
+    merged.push(hit);
+    if (merged.length >= max) break;
+  }
+  return merged;
+}
+
+/** Asks GBIF's live providers; `failed` is true when every one of them did. */
+async function askLiveProviders(text: string, indexHitCount: number, signal: AbortSignal) {
+  const results = await Promise.allSettled([
+    gbifSuggestProvider.search(text, signal),
+    indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal) : Promise.resolve([]),
+  ]);
+  return {
+    hits: results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+    failed: results.every((result) => result.status === 'rejected'),
+  };
+}
+
+/**
+ * Live GBIF suggestions for the latest query: debounced, one search in flight, the previous one aborted.
+ * @param prepare Runs first and resolves to how many hits the local index has, which decides whether
+ *   the poorly ranked vernacular search is worth asking.
+ */
+function useLiveHits(prepare: (text: string) => Promise<number>) {
+  const hits = ref<NameHit[]>([]);
   /** Live providers are being asked (or will be, once the debounce settles). */
   const loading = ref(false);
   /** Every live provider failed for the last query. */
   const failed = ref(false);
-  let current = '';
-  let ctrl: AbortController | undefined;
+  let controller: AbortController | undefined;
 
-  const hits = computed(() => {
-    const seen = new Set(exclude?.() ?? []);
-    const out: NameHit[] = [];
-    // Live scientific matches are mostly noise once the index has answers.
-    const live = indexHits.value.length ? liveHits.value.slice(0, 3) : liveHits.value;
-    for (const h of [...indexHits.value, ...live]) {
-      if (seen.has(h.key)) continue;
-      seen.add(h.key);
-      out.push(h);
-      if (out.length >= max) break;
-    }
-    return out;
-  });
-
-  async function runIndex(q: string) {
-    const found = await bakedIndexProvider.search(q);
-    if (q === current) indexHits.value = found;
-  }
-
-  const runLive = debounce(async (q: string) => {
-    ctrl?.abort();
-    if (q.trim().length < MIN_LIVE_QUERY) {
+  const run = debounce(async (text: string) => {
+    controller?.abort();
+    if (text.trim().length < MIN_LIVE_QUERY) {
       loading.value = false;
       return;
     }
-    const mine = (ctrl = new AbortController());
+    const mine = (controller = new AbortController());
     loading.value = true;
     failed.value = false;
-    // Let the local index answer first, so live results never reorder the list
-    // under the pointer, and decide on the vernacular search with it loaded.
-    await nameIndexWithin(1500);
-    await runIndex(q);
+    const indexHitCount = await prepare(text);
     if (mine.signal.aborted) return;
-    const results = await Promise.allSettled([
-      gbifSuggestProvider.search(q, mine.signal),
-      // Vernacular search ranks poorly, so only use it when the index is thin.
-      indexHits.value.length < 3 ? gbifVernacularProvider.search(q, mine.signal) : Promise.resolve([]),
-    ]);
+    const live = await askLiveProviders(text, indexHitCount, mine.signal);
     if (mine.signal.aborted) return;
-    liveHits.value = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-    failed.value = results.every((r) => r.status === 'rejected');
+    hits.value = live.hits;
+    failed.value = live.failed;
     loading.value = false;
-  }, 250);
+  }, LIVE_DEBOUNCE_MS);
 
   /** Stop any search in flight and empty the results. */
   function reset() {
-    current = '';
-    runLive.cancel();
-    ctrl?.abort();
-    indexHits.value = [];
-    liveHits.value = [];
+    run.cancel();
+    controller?.abort();
+    hits.value = [];
     loading.value = false;
     failed.value = false;
   }
 
-  /** Search for `q` (call on every input). */
-  function search(q: string) {
-    if (q.trim().length < MIN_QUERY) {
+  return { hits, loading, failed, run, reset };
+}
+
+/**
+ * Search for taxa by name: the baked index answers at once, GBIF's live providers follow.
+ * @returns Merged `hits`, `loading` and `failed` flags, `search(text)` to call on every input, and `reset()`.
+ */
+export function useNameSearch({ max, exclude }: NameSearchOptions) {
+  const indexHits = ref<NameHit[]>([]);
+  let current = '';
+
+  async function runIndex(text: string) {
+    const found = await bakedIndexProvider.search(text);
+    if (text === current) indexHits.value = found;
+  }
+
+  // Let the local index answer first, so live results never reorder the list
+  // under the pointer, and decide on the vernacular search with it loaded.
+  const live = useLiveHits(async (text) => {
+    await nameIndexWithin(INDEX_WAIT_MS);
+    await runIndex(text);
+    return indexHits.value.length;
+  });
+
+  const hits = computed(() => mergeHits(indexHits.value, live.hits.value, exclude?.() ?? [], max));
+
+  function reset() {
+    current = '';
+    indexHits.value = [];
+    live.reset();
+  }
+
+  /** Search for `text` (call on every input). */
+  function search(text: string) {
+    if (text.trim().length < MIN_QUERY) {
       reset();
       return;
     }
-    current = q;
+    current = text;
     // Live hits belong to the previous query.
-    liveHits.value = [];
-    loading.value = q.trim().length >= MIN_LIVE_QUERY;
-    void runIndex(q);
-    runLive(q);
+    live.hits.value = [];
+    live.loading.value = text.trim().length >= MIN_LIVE_QUERY;
+    void runIndex(text);
+    live.run(text);
   }
 
   onScopeDispose(reset);
 
-  return { hits, loading, failed, search, reset };
+  return { hits, loading: live.loading, failed: live.failed, search, reset };
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { __resetUrlSync, codecs, hrefWith, syncFromUrl, urlAtom } from '~/stores/url-sync';
 
-const flushMicrotasks = () => new Promise<void>((r) => queueMicrotask(r));
+const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 beforeEach(() => {
   __resetUrlSync();
@@ -32,11 +32,11 @@ describe('url-sync', () => {
 
   it('replace-mode changes are throttled and do not add history', async () => {
     vi.useFakeTimers();
-    const n = urlAtom(codecs.int('n', 0, { history: 'replace' }));
+    const counter = urlAtom(codecs.int('n', 0, { history: 'replace' }));
     const before = history.length;
-    n.set(1);
-    n.set(2);
-    n.set(3);
+    counter.set(1);
+    counter.set(2);
+    counter.set(3);
     expect(location.search).toBe('');
     vi.advanceTimersByTime(350);
     expect(location.search).toBe('?n=3');
@@ -45,8 +45,8 @@ describe('url-sync', () => {
 
   it('keeps unrelated params and sorts keys', async () => {
     history.replaceState(null, '', '/?utm=x');
-    const b = urlAtom(codecs.setOf('basis', ['B', 'A'] as const));
-    b.set(['B', 'A']);
+    const basisAtom = urlAtom(codecs.setOf('basis', ['B', 'A'] as const));
+    basisAtom.set(['B', 'A']);
     await flushMicrotasks();
     expect(location.search).toBe('?basis=A%2CB&utm=x');
   });
@@ -78,9 +78,9 @@ describe('withHistoryMode', () => {
   it('forces replace for writes inside the callback', async () => {
     const { withHistoryMode } = await import('~/stores/url-sync');
     vi.useFakeTimers();
-    const n = urlAtom(codecs.int('anim', 0));
+    const counter = urlAtom(codecs.int('anim', 0));
     const before = history.length;
-    withHistoryMode('replace', () => n.set(5));
+    withHistoryMode('replace', () => counter.set(5));
     vi.advanceTimersByTime(350);
     expect(location.search).toBe('?anim=5');
     expect(history.length).toBe(before);
@@ -88,9 +88,9 @@ describe('withHistoryMode', () => {
   });
 
   it('intSet parses a bounded, de-duplicated, numerically sorted list', () => {
-    const c = codecs.intSet('months', { min: 1, max: 12, limit: 3 });
-    expect(c.parse('12,4,x,4,13,2,1')).toEqual([1, 2, 4]);
-    expect(c.serialize([10, 2])).toBe('2,10');
+    const codec = codecs.intSet('months', { min: 1, max: 12, limit: 3 });
+    expect(codec.parse('12,4,x,4,13,2,1')).toEqual([1, 2, 4]);
+    expect(codec.serialize([10, 2])).toBe('2,10');
   });
 });
 
@@ -140,12 +140,12 @@ describe('url-sync edge cases', () => {
     taxon.set(9);
     page.set(1);
     const navigate = (to: string, navigationType = 'push') => {
-      const ev = Object.assign(new Event('astro:before-preparation'), {
+      const navigationEvent = Object.assign(new Event('astro:before-preparation'), {
         to: new URL(to, location.href),
         navigationType,
       });
-      document.dispatchEvent(ev);
-      return ev.to.href;
+      document.dispatchEvent(navigationEvent);
+      return navigationEvent.to.href;
     };
     expect(navigate('/')).toBe(`${location.origin}/?t5=9`);
     expect(navigate('/?t5=2')).toBe(`${location.origin}/?t5=2`);
@@ -181,21 +181,21 @@ describe('url-sync edge cases', () => {
 
   it('codecs reject what they cannot read and write their values back', () => {
     expect(codecs.int('i', null).parse('1.5')).toBeUndefined();
-    const b = codecs.bool('b');
-    expect([b.parse('0'), b.parse('1'), b.parse('yes')]).toEqual([false, true, undefined]);
-    expect([b.serialize(true), b.serialize(false)]).toEqual(['1', '0']);
-    const e = codecs.enumOf('e', ['a', 'b'] as const, 'a');
-    expect([e.parse('b'), e.parse('c'), e.serialize('b')]).toEqual(['b', undefined, 'b']);
+    const boolCodec = codecs.bool('b');
+    expect([boolCodec.parse('0'), boolCodec.parse('1'), boolCodec.parse('yes')]).toEqual([false, true, undefined]);
+    expect([boolCodec.serialize(true), boolCodec.serialize(false)]).toEqual(['1', '0']);
+    const enumCodec = codecs.enumOf('e', ['a', 'b'] as const, 'a');
+    expect([enumCodec.parse('b'), enumCodec.parse('c'), enumCodec.serialize('b')]).toEqual(['b', undefined, 'b']);
     const set = codecs.setOf('s', ['x', 'y'] as const);
     expect(set.parse('y,z,x,y')).toEqual(['x', 'y']);
     expect(codecs.intSet('n').parse('3,-1')).toEqual([-1, 3]);
-    const str = codecs.string('q', { pattern: /^[a-z]+$/ });
-    expect([str.parse('abc'), str.parse('ABC'), str.serialize('abc'), str.serialize(null)]).toEqual([
-      'abc',
-      undefined,
-      'abc',
-      '',
-    ]);
+    const stringCodec = codecs.string('q', { pattern: /^[a-z]+$/ });
+    expect([
+      stringCodec.parse('abc'),
+      stringCodec.parse('ABC'),
+      stringCodec.serialize('abc'),
+      stringCodec.serialize(null),
+    ]).toEqual(['abc', undefined, 'abc', '']);
     expect(codecs.string('r').parse('Anything')).toBe('Anything');
   });
 });

@@ -14,33 +14,33 @@ let dir: string;
 async function load() {
   vi.resetModules();
   const cwd = vi.spyOn(process, 'cwd').mockReturnValue(dir);
-  const m = await import('~/lib/og/species-card');
+  const module = await import('~/lib/og/species-card');
   cwd.mockRestore();
-  return m;
+  return module;
 }
 
 /** The element tree handed to satori, with resvg stubbed. */
 async function loadTree() {
   const trees: unknown[] = [];
-  vi.doMock('satori', () => ({ default: async (el: unknown) => (trees.push(el), '<svg/>') }));
+  vi.doMock('satori', () => ({ default: async (element: unknown) => (trees.push(element), '<svg/>') }));
   vi.doMock('@resvg/resvg-js', () => ({
     Resvg: class {
       render = () => ({ asPng: () => Buffer.from('png') });
     },
   }));
-  const m = await load();
-  return { ...m, trees };
+  const module = await load();
+  return { ...module, trees };
 }
 
 /** All the text in an element tree, in order. */
-function texts(el: unknown): string[] {
-  if (typeof el === 'string') return el ? [el] : [];
-  if (Array.isArray(el)) return el.flatMap(texts);
-  const props = (el as { props?: { children?: unknown } } | undefined)?.props;
+function texts(element: unknown): string[] {
+  if (typeof element === 'string') return element ? [element] : [];
+  if (Array.isArray(element)) return element.flatMap(texts);
+  const props = (element as { props?: { children?: unknown } } | undefined)?.props;
   return props ? texts(props.children) : [];
 }
-const imgSrc = (el: unknown) =>
-  (el as { props: { children: { props: { src?: string } }[] } }).props.children[0]!.props.src;
+const imgSrc = (element: unknown) =>
+  (element as { props: { children: { props: { src?: string } }[] } }).props.children[0]!.props.src;
 
 const BARE: UsableImage = { occurrenceKey: 1, datasetKey: 'd', licence: 'CC-BY', url: 'https://img.test/a.jpg' };
 const PHOTO: UsableImage = { ...BARE, creator: 'Ann' };
@@ -105,7 +105,8 @@ describe('renderSpeciesCard', () => {
     );
     vi.stubGlobal('fetch', fetch);
     const { renderSpeciesCard, trees } = await loadTree();
-    const card = (image: UsableImage, n = 1) => renderSpeciesCard({ scientificName: `Species ${n}`, count: n, image });
+    const card = (image: UsableImage, number = 1) =>
+      renderSpeciesCard({ scientificName: `Species ${number}`, count: number, image });
 
     await card(PHOTO);
     expect(imgSrc(trees[0])).toBe(`data:image/jpeg;base64,${Buffer.from('jpeg bytes').toString('base64')}`);
@@ -122,8 +123,8 @@ describe('renderSpeciesCard', () => {
       { ...PHOTO, occurrenceKey: 4 },
       { ...PHOTO, occurrenceKey: 5 },
     ];
-    for (const [i, image] of others.entries()) await card(image, i + 3);
-    expect(trees.slice(2).map((t) => imgSrc(t))).toEqual([undefined, undefined, undefined, undefined]);
+    for (const [index, image] of others.entries()) await card(image, index + 3);
+    expect(trees.slice(2).map((tree) => imgSrc(tree))).toEqual([undefined, undefined, undefined, undefined]);
     expect(texts(trees[2]).at(-1)).toBe('Photo © Bo · CC-BY');
     expect(texts(trees[3]).at(-1)).toBe('Photo © unknown · CC-BY');
   });

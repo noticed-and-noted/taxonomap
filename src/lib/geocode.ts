@@ -32,43 +32,48 @@ interface PhotonFeature {
   properties: { name?: string; country?: string; state?: string; extent?: [number, number, number, number] };
 }
 
-export async function searchPlaces(q: string, signal?: AbortSignal): Promise<Place[]> {
-  const query = q.trim();
+/**
+ * Places matching a search text.
+ * @param text What the user typed; blank returns no places.
+ * @throws Error when the geocoder answers with a failure status.
+ */
+export async function searchPlaces(text: string, signal?: AbortSignal): Promise<Place[]> {
+  const query = text.trim();
   if (!query) return [];
   if (PROVIDER === 'photon') {
-    const res = await fetch(`${BASE}?q=${encodeURIComponent(query)}&limit=10&lang=en`, signal ? { signal } : {});
-    if (!res.ok) throw new Error(`geocoder ${res.status}`);
-    const data = (await res.json()) as { features: PhotonFeature[] };
-    return data.features.map((f) => {
-      const [lng, lat] = f.geometry.coordinates;
-      const e = f.properties.extent;
+    const response = await fetch(`${BASE}?q=${encodeURIComponent(query)}&limit=10&lang=en`, signal ? { signal } : {});
+    if (!response.ok) throw new Error(`geocoder ${response.status}`);
+    const data = (await response.json()) as { features: PhotonFeature[] };
+    return data.features.map((feature) => {
+      const [lng, lat] = feature.geometry.coordinates;
+      const extent = feature.properties.extent;
       return {
-        name: f.properties.name ?? query,
-        ...((f.properties.state || f.properties.country) && {
-          detail: [f.properties.state, f.properties.country].filter(Boolean).join(', '),
+        name: feature.properties.name ?? query,
+        ...((feature.properties.state || feature.properties.country) && {
+          detail: [feature.properties.state, feature.properties.country].filter(Boolean).join(', '),
         }),
         lng,
         lat,
         // Photon extent is [minLon, maxLat, maxLon, minLat].
-        ...(e && { bbox: [e[0], e[3], e[2], e[1]] as [number, number, number, number] }),
+        ...(extent && { bbox: [extent[0], extent[3], extent[2], extent[1]] as [number, number, number, number] }),
       };
     });
   }
-  const res = await fetch(`${BASE}?q=${encodeURIComponent(query)}&format=jsonv2&limit=10&accept-language=en`, {
+  const response = await fetch(`${BASE}?q=${encodeURIComponent(query)}&format=jsonv2&limit=10&accept-language=en`, {
     ...(signal && { signal }),
   });
-  if (!res.ok) throw new Error(`geocoder ${res.status}`);
-  const data = (await res.json()) as NominatimHit[];
-  return data.map((h) => {
-    const [s, n, w, e] = (h.boundingbox ?? []).map(Number);
-    const parts = h.display_name.split(', ');
+  if (!response.ok) throw new Error(`geocoder ${response.status}`);
+  const data = (await response.json()) as NominatimHit[];
+  return data.map((hit) => {
+    const [south, north, west, east] = (hit.boundingbox ?? []).map(Number);
+    const parts = hit.display_name.split(', ');
     return {
-      name: h.name || parts[0] || query,
+      name: hit.name || parts[0] || query,
       detail: parts.slice(1).join(', '),
-      lng: Number(h.lon),
-      lat: Number(h.lat),
-      ...([s, n, w, e].every((v) => Number.isFinite(v)) && {
-        bbox: [w, s, e, n] as [number, number, number, number],
+      lng: Number(hit.lon),
+      lat: Number(hit.lat),
+      ...([south, north, west, east].every((value) => Number.isFinite(value)) && {
+        bbox: [west, south, east, north] as [number, number, number, number],
       }),
     };
   });

@@ -8,8 +8,8 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
     // Species pages come and go with the pre-render size (and stale manifests or
     // old links can point at ones that are gone); every taxon renders at /species/view.
     {
-      const m = /^\/species\/(\d+)(\/|$)/.exec(location.pathname);
-      if (m) location.replace(`/species/view/${m[1]}`);
+      const match = /^\/species\/(\d+)(\/|$)/.exec(location.pathname);
+      if (match) location.replace(`/species/view/${match[1]}`);
     }
   </script>
   <PageShell>
