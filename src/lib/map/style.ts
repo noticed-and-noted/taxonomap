@@ -198,6 +198,19 @@ function spliceOverlay(base: StyleSpecification, colors: MapColors, data: Overla
   };
 }
 
+/** The raster basemap as a style source. */
+function rasterSource(raster: RasterDef): StyleSpecification['sources'][string] {
+  const { tiles, tileSize, maxzoom, attribution } = raster;
+  return { type: 'raster', tiles, tileSize, maxzoom, attribution };
+}
+
+const RASTER_LAYER: LayerSpecification = {
+  id: 'base',
+  type: 'raster',
+  source: 'base',
+  paint: { 'raster-opacity': 0.9 },
+};
+
 /** A plain background (under a raster basemap, if there is one) with our layers on top. */
 function plainStyle(raster: RasterDef | null, colors: MapColors, data: OverlayData): StyleSpecification {
   const ours = overlay(colors, data);
@@ -205,31 +218,31 @@ function plainStyle(raster: RasterDef | null, colors: MapColors, data: OverlayDa
     version: 8,
     glyphs: GLYPHS,
     ...globeSettings(colors.bg),
-    sources: {
-      ...(raster && {
-        base: {
-          type: 'raster',
-          tiles: raster.tiles,
-          tileSize: raster.tileSize,
-          maxzoom: raster.maxzoom,
-          attribution: raster.attribution,
-        },
-      }),
-      ...ours.sources,
-    },
+    sources: { ...(raster && { base: rasterSource(raster) }), ...ours.sources },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': colors.bg } },
-      ...(raster ? [{ id: 'base', type: 'raster' as const, source: 'base', paint: { 'raster-opacity': 0.9 } }] : []),
+      ...(raster ? [RASTER_LAYER] : []),
       ...ours.data,
       ...ours.top,
     ],
   };
 }
 
+/** A vector style cut down to its background and labels, with the raster basemap between them. */
+function rasterUnderLabels(base: StyleSpecification, raster: RasterDef): StyleSpecification {
+  const backgrounds = base.layers.filter((layer) => layer.type === 'background');
+  const labels = base.layers.filter((layer) => layer.type === 'symbol');
+  return {
+    ...base,
+    sources: { ...base.sources, base: rasterSource(raster) },
+    layers: [...backgrounds, RASTER_LAYER, ...labels],
+  };
+}
+
 /**
  * The basemap's own style with our layers spliced in (data below its labels,
- * selections above everything), or a plain/raster style when the basemap is
- * raster or its vector style cannot be loaded.
+ * selections above everything). Raster basemaps get the plain style's labels
+ * on top; without a loadable vector style, labels are left out.
  * @param loadStyle Fetches a vector style by URL; overridable for tests.
  */
 export async function buildStyle(
@@ -240,9 +253,14 @@ export async function buildStyle(
   loadStyle: (url: string) => Promise<StyleSpecification | null> = fetchStyle,
 ): Promise<StyleSpecification> {
   const source = BASEMAPS[basemap].source(theme);
-  const base = source.kind === 'vector' ? await loadStyle(source.styleUrl) : null;
-  if (base) return spliceOverlay(base, colors, data);
-  return plainStyle(source.kind === 'raster' ? source : null, colors, data);
+  if (source.kind === 'vector') {
+    const base = await loadStyle(source.styleUrl);
+    return base ? spliceOverlay(base, colors, data) : plainStyle(null, colors, data);
+  }
+  // Raster basemaps borrow the plain map's labels, so place names read the same on both.
+  const plain = BASEMAPS.plain.source(theme);
+  const labels = plain.kind === 'vector' ? await loadStyle(plain.styleUrl) : null;
+  return labels ? spliceOverlay(rasterUnderLabels(labels, source), colors, data) : plainStyle(source, colors, data);
 }
 
 /** Pin and radius circle for "near me". */

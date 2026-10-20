@@ -15,7 +15,7 @@ test('the header search and the What filter add to one list of taxa', { tag: '@m
   await expect(page.getByRole('button', { name: /Remove taxon filter European Robin/i })).toBeVisible();
 
   test.skip(info.project.name === 'mobile', 'the sheet shares the same picker');
-  await page.getByRole('button', { name: 'What, 1 active' }).click();
+  await page.getByRole('button', { name: 'What, 2 active' }).click();
   const picker = page.getByRole('combobox', { name: 'Species and groups' });
   await picker.fill('blackbird');
   await page

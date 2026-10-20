@@ -36,7 +36,7 @@ pnpm dev             # http://localhost:4321
 | `SPECIES_PRERENDER_COUNT`                 | `2000`                      | Number of pre-rendered species pages                                                                                        |
 | `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)         | Species in the baked common-name index (`/data/names.json`), each with its iNaturalist taxon ID when the bake can match one |
 | `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `nominatim`                 | Place search provider (`nominatim` or `photon`); called on submit only                                                      |
-| `PUBLIC_BASEMAP_*`                        | see `.env.example`          | Override the Plain (dark/light), Terrain and Satellite basemaps                                                             |
+| `PUBLIC_BASEMAP_*`                        | see `.env.example`          | Override the Plain (dark/light) and Satellite basemaps                                                                      |
 
 `PUBLIC_*` values are inlined into the client bundle. Point the two bases at a caching proxy to change where requests go, with no code changes.
 

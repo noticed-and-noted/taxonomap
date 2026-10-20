@@ -20,6 +20,7 @@ import MapSettings from './MapSettings.vue';
 import NearExplorer from './NearExplorer.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import TaxonChip from './TaxonChip.vue';
+import ThemePicker from './ThemePicker.vue';
 
 const panel = useStore($panel);
 const hex = useStore($selectedHex);
@@ -63,9 +64,10 @@ function closePanel() {
   <div class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen && !near }">
     <NearExplorer v-if="near" />
     <div
-      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
+      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
     >
-      <div v-if="!near" class="min-w-0 sm:flex-1"><TaxonChip /></div>
+      <!-- flex-auto: the chips shrink only once the row is full; spare room still splits around the progress pill. -->
+      <div v-if="!near" class="min-w-0 sm:flex-auto"><TaxonChip /></div>
       <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
       <MapProgress
         v-if="!near"
@@ -174,11 +176,15 @@ function closePanel() {
             </button>
           </div>
         </template>
-        <div v-if="filtersOpen" class="space-y-4 pt-4">
+        <div v-if="filtersOpen" class="sm:space-y-4 md:pt-0 pt-4">
           <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
             <div>
               <p class="mb-2 text-sm font-medium">Basemap</p>
-              <BasemapSwitcher />
+              <BasemapSwitcher class="w-fit" />
+            </div>
+            <div>
+              <p class="mb-2 text-sm font-medium">Theme</p>
+              <ThemePicker />
             </div>
             <MapSettings inline />
           </div>
@@ -225,8 +231,13 @@ function closePanel() {
 .near-btn:hover {
   color: var(--text);
 }
+.near-phone,
+.filters-btn {
+  flex-shrink: 0;
+}
 .near-phone {
   width: 2rem;
+  margin-right: 0.5rem; /* the phone row has no gap, so the chips' scroll box can meet this button */
   justify-content: center;
   padding: 0;
 }

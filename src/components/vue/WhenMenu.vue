@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.25rem;
+  gap: 0.25rem 0.5rem;
   margin-top: 0.25rem;
 }
 .end {

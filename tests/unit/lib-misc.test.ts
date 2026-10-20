@@ -11,7 +11,7 @@ afterEach(() => {
 describe('basemaps', () => {
   it('uses the keyless defaults', async () => {
     const { BASEMAPS, BASEMAP_IDS } = await import('~/lib/basemaps');
-    expect(BASEMAP_IDS).toEqual(['plain', 'terrain', 'satellite']);
+    expect(BASEMAP_IDS).toEqual(['plain', 'satellite']);
     expect(BASEMAPS.plain.source('dark')).toEqual({
       kind: 'vector',
       styleUrl: 'https://tiles.openfreemap.org/styles/dark',
@@ -19,10 +19,6 @@ describe('basemaps', () => {
     expect(BASEMAPS.plain.source('light')).toEqual({
       kind: 'vector',
       styleUrl: 'https://tiles.openfreemap.org/styles/positron',
-    });
-    expect(BASEMAPS.terrain.source('dark')).toMatchObject({
-      kind: 'raster',
-      tiles: ['https://tile.opentopomap.org/{z}/{x}/{y}.png'],
     });
     expect(BASEMAPS.satellite.source('dark')).toMatchObject({
       kind: 'raster',
@@ -34,12 +30,10 @@ describe('basemaps', () => {
   it('takes overrides from PUBLIC_BASEMAP_*', async () => {
     vi.stubEnv('PUBLIC_BASEMAP_PLAIN_DARK', 'https://dark.test');
     vi.stubEnv('PUBLIC_BASEMAP_PLAIN_LIGHT', 'https://light.test');
-    vi.stubEnv('PUBLIC_BASEMAP_TERRAIN', 'https://terrain.test/{z}/{x}/{y}');
     vi.stubEnv('PUBLIC_BASEMAP_SATELLITE', 'https://sat.test/{z}/{x}/{y}');
     const { BASEMAPS } = await import('~/lib/basemaps');
     expect(BASEMAPS.plain.source('dark')).toMatchObject({ styleUrl: 'https://dark.test' });
     expect(BASEMAPS.plain.source('light')).toMatchObject({ styleUrl: 'https://light.test' });
-    expect(BASEMAPS.terrain.source('light')).toMatchObject({ tiles: ['https://terrain.test/{z}/{x}/{y}'] });
     expect(BASEMAPS.satellite.source('light')).toMatchObject({ tiles: ['https://sat.test/{z}/{x}/{y}'] });
   });
 });

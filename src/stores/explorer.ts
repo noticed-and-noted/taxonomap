@@ -339,11 +339,16 @@ export const $filterPills = computed(filterValues, (values) =>
 );
 
 /** Filters set per rail group: one per pill (so each IUCN category), or one for taxa. */
+/** How many selections a set filter adds to its group's badge: one per pill, or per taxon (taxa have no pills). */
+function selectionCount(filterDef: Filter, value: unknown): number {
+  if (filterDef.pills) return filterDef.pills(value).length;
+  return Array.isArray(value) ? value.length : 1;
+}
+
 export const $groupCounts = computed(filterValues, (values) => {
   const counts: Record<FilterGroupId, number> = { what: 0, when: 0, where: 0, how: 0 };
   FILTERS.forEach((filterDef, index) => {
-    if (filterDef.isSet(values[index]))
-      counts[filterDef.group] += filterDef.pills ? filterDef.pills(values[index]).length : 1;
+    if (filterDef.isSet(values[index])) counts[filterDef.group] += selectionCount(filterDef, values[index]);
   });
   return counts;
 });

@@ -8,7 +8,7 @@
  *  - GBIF JSON:  CacheFirst, 24 h max age, 300 entries
  *  - Map tiles:  CacheFirst, 7 days, 2000 entries (empty 204 tiles too)
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
- *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX, OpenTopoMap)
+ *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX)
  *  - Pages:      NetworkFirst (4 s timeout), 50 entries; offline fallback page
  *  - Baked data: StaleWhileRevalidate (/data/*.json, on demand)
  *  - App shell:  precached (main routes, offline/404 pages, JS/CSS, Latin font subsets)
@@ -130,7 +130,7 @@ function mediaRules(): RuntimeCaching {
   return [
     {
       // Basemap vector tiles, styles, sprites, glyphs and raster tiles.
-      urlPattern: /^https:\/\/(tiles\.openfreemap\.org|tiles\.maps\.eox\.at|[a-c]?\.?tile\.opentopomap\.org)\//,
+      urlPattern: /^https:\/\/(tiles\.openfreemap\.org|tiles\.maps\.eox\.at)\//,
       handler: 'CacheFirst',
       options: {
         cacheName: 'basemap',

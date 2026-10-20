@@ -55,6 +55,7 @@ const cleanups: (() => void)[] = [];
 let pendingHexRestore = false;
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -476,10 +477,28 @@ function decorateMap(maplibre: MapLibre, element: HTMLElement) {
   cleanups.push(() => resizeObserver.disconnect());
 }
 
+/** MapLibre opens the compact attribution once its text arrives; on a phone it covers too much map. */
+function collapseAttribution() {
+  const attribution = container.value?.querySelector('.maplibregl-compact');
+  if (!attribution) return;
+  attribution.classList.remove('maplibregl-compact-show');
+  map?.off('sourcedata', collapseAttribution);
+}
+
+/** Closes the open attribution when a press lands anywhere outside it. */
+function onPointerDownOutsideAttribution(event: PointerEvent) {
+  const attribution = container.value?.querySelector('.maplibregl-compact-show');
+  if (attribution && !attribution.contains(event.target as Node))
+    attribution.classList.remove('maplibregl-compact-show');
+}
+
 /** Wires the map's own events: extent, view, hover, click, style loads and keyboard. */
 function listenToMap() {
   if (!map) return;
   map.once('load', publishBounds);
+  if (isPhone()) map.on('sourcedata', collapseAttribution);
+  document.addEventListener('pointerdown', onPointerDownOutsideAttribution);
+  cleanups.push(() => document.removeEventListener('pointerdown', onPointerDownOutsideAttribution));
   map.on('moveend', onMoveEnd);
   map.on('mousemove', onMove);
   map.on('mouseout', clearHover);
@@ -641,6 +660,12 @@ onBeforeUnmount(() => {
 
 .map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
   background: var(--surface);
+}
+
+/* Pin the "i" button to the bottom so it stays put when the text wraps upwards. */
+.map-canvas .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib-button {
+  top: auto;
+  bottom: 0;
 }
 
 .map-canvas .maplibregl-ctrl-attrib a {

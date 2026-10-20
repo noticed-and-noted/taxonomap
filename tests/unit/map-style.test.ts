@@ -72,12 +72,25 @@ describe('buildStyle', () => {
     expect(asked).toEqual(['https://tiles.openfreemap.org/styles/positron']);
   });
 
-  it('draws raster basemaps under the data', async () => {
-    const style = await buildStyle('terrain', 'dark', COLORS, DATA, async () => {
-      throw new Error('raster basemaps have no style to load');
-    });
-    expect(ids(style).slice(0, 3)).toEqual(['background', 'base', 'occ-fill']);
+  it('draws raster basemaps under the data, with the plain map’s labels on top', async () => {
+    const asked: string[] = [];
+    const style = await buildStyle('satellite', 'dark', COLORS, DATA, async (url) => (asked.push(url), vectorBase));
+    expect(asked).toEqual(['https://tiles.openfreemap.org/styles/dark']);
+    expect(ids(style).slice(0, 6)).toEqual([
+      'background',
+      'base',
+      'occ-fill',
+      'occ-fresh-fill',
+      'place_city',
+      'place_country',
+    ]);
     expect(style.sources['base']).toMatchObject({ type: 'raster', tileSize: 256 });
+    expect(layer(style, 'place_city')['paint']).toMatchObject({ 'text-color': '#t', 'text-halo-color': '#b' });
+  });
+
+  it('draws raster basemaps without labels when the vector style cannot load', async () => {
+    const style = await buildStyle('satellite', 'dark', COLORS, DATA, async () => null);
+    expect(ids(style).slice(0, 3)).toEqual(['background', 'base', 'occ-fill']);
     expect(style.glyphs).toMatch(/openfreemap/);
   });
 

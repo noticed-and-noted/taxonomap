@@ -68,12 +68,12 @@ describe('explorer filter stores', () => {
   it('count set filters per rail group', async () => {
     const explorer = await import('~/stores/explorer');
     explorer.clearFilters();
-    explorer.$taxonKeys.set([212]);
+    explorer.$taxonKeys.set([212, 2492462]);
     explorer.$iucn.set(['VU', 'EN']);
     explorer.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
     explorer.$hasPhoto.set(true);
     explorer.$hasSound.set(true);
-    expect(explorer.$groupCounts.get()).toEqual({ what: 3, when: 1, where: 0, how: 2 });
+    expect(explorer.$groupCounts.get()).toEqual({ what: 4, when: 1, where: 0, how: 2 });
     explorer.clearFilters();
     expect(Object.values(explorer.$groupCounts.get()).every((count) => count === 0)).toBe(true);
   });

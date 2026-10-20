@@ -89,6 +89,14 @@ const options = computed<Option[]>(() => {
   return suggestions;
 });
 
+/* "Search places" is always last, so the scrolling rows keep their indexes into `options`. */
+const listOptions = computed(() => options.value.filter((option) => option.kind !== 'place-search'));
+
+/** Whether the scrolling list has anything in it; an empty one would leave stray padding above the place row. */
+const hasRows = computed(() => listOptions.value.length > 0 || placeholderRows.value > 0);
+
+const placeSearchOption = computed(() => options.value.find((option) => option.kind === 'place-search'));
+
 const activeId = computed(() => options.value[active.value]?.id);
 
 /** The result to preview: the highlighted species/group (the first, if the highlight's row has gone). */
@@ -297,25 +305,32 @@ onBeforeUnmount(() => {
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-3.5-3.5" />
       </svg>
-      <input
-        id="omnibox-input"
-        ref="input"
-        v-model="query"
-        type="search"
-        role="combobox"
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="Search species or places…"
-        class="h-[calc(var(--header-height)-2px)] w-full min-w-0 bg-transparent text-sm text-ellipsis text-text placeholder:text-subtle focus:outline-none"
-        aria-autocomplete="list"
-        aria-controls="omnibox-listbox"
-        :aria-expanded="open && options.length > 0"
-        :aria-activedescendant="activeId"
-        @input="onInput"
-        @focus="onFocus"
-        @keydown="onKeydown"
-      />
-      <span v-if="liveLoading || placeLoading" class="spinner" aria-hidden="true"></span>
+      <!-- A span, not the placeholder attribute: Chrome drops the placeholder's ellipsis while the input has focus. -->
+      <div class="relative min-w-0 flex-1">
+        <span
+          v-if="!query"
+          class="pointer-events-none absolute inset-0 truncate text-sm leading-[calc(var(--header-height)-2px)] text-subtle"
+          aria-hidden="true"
+          >Search species or places…</span
+        >
+        <input
+          id="omnibox-input"
+          ref="input"
+          v-model="query"
+          type="search"
+          role="combobox"
+          autocomplete="off"
+          spellcheck="false"
+          class="h-[calc(var(--header-height)-2px)] w-full min-w-0 bg-transparent text-sm text-ellipsis text-text focus:outline-none"
+          aria-autocomplete="list"
+          aria-controls="omnibox-listbox"
+          :aria-expanded="open && options.length > 0"
+          :aria-activedescendant="activeId"
+          @input="onInput"
+          @focus="onFocus"
+          @keydown="onKeydown"
+        />
+      </div>
     </div>
 
     <div
@@ -327,84 +342,101 @@ onBeforeUnmount(() => {
     >
       <!-- Only the list shrinks when space is short, so the preview stays in view. -->
       <div :class="{ 'with-preview': previewHit }" class="results flex min-h-0 flex-col">
-        <ul
+        <!-- "Search places" sits below the scrolling rows, so it never moves as they scroll. -->
+        <div
           id="omnibox-listbox"
           role="listbox"
           :aria-label="places ? 'Places' : 'Species and places'"
-          class="max-h-[60vh] min-h-0 min-w-0 overflow-auto overscroll-contain py-1"
+          class="flex min-h-0 min-w-0 flex-col"
         >
-          <li
-            v-for="(option, index) in options"
-            :id="option.id"
-            :key="option.id"
-            role="option"
-            :aria-selected="index === active"
-            :class="{ 'place-row': option.kind === 'place-search' }"
-            class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
-            @mousedown.prevent
-            @click="choose(option)"
-            @mousemove="active = index"
-          >
-            <template v-if="option.kind === 'taxon'">
-              <span class="min-w-0 flex-1">
-                <span v-if="option.hit.commonName" class="block truncate font-medium text-text">{{
-                  option.hit.commonName
-                }}</span>
-                <span
-                  class="sci-name block truncate"
-                  :class="option.hit.commonName ? 'text-xs text-muted' : 'text-text'"
-                  >{{ option.hit.scientificName }}</span
-                >
-              </span>
-              <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
-                <span class="block">{{ RANK_LABELS[option.hit.rank] ?? option.hit.rank }}</span>
-                <span v-if="option.hit.count" class="block">{{ compact(option.hit.count) }}</span>
-              </span>
-            </template>
-            <template v-else-if="option.kind === 'place-search'">
-              <svg
-                viewBox="0 0 24 24"
-                class="size-4 text-subtle"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
+          <ul v-if="hasRows" role="presentation" class="max-h-[60vh] min-h-0 overflow-auto overscroll-contain py-1">
+            <!-- Hover highlights for mice only: iOS treats a tap whose mousemove changes the page as a hover, and holds back the click. -->
+            <li
+              v-for="(option, index) in listOptions"
+              :id="option.id"
+              :key="option.id"
+              role="option"
+              :aria-selected="index === active"
+              class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
+              @mousedown.prevent
+              @click="choose(option)"
+              @pointermove="$event.pointerType === 'mouse' && (active = index)"
+            >
+              <template v-if="option.kind === 'taxon'">
+                <span class="min-w-0 flex-1">
+                  <span v-if="option.hit.commonName" class="block truncate font-medium text-text">{{
+                    option.hit.commonName
+                  }}</span>
+                  <span
+                    class="sci-name block truncate"
+                    :class="option.hit.commonName ? 'text-xs text-muted' : 'text-text'"
+                    >{{ option.hit.scientificName }}</span
+                  >
+                </span>
+                <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
+                  <span class="block">{{ RANK_LABELS[option.hit.rank] ?? option.hit.rank }}</span>
+                  <span v-if="option.hit.count" class="block">{{ compact(option.hit.count) }}</span>
+                </span>
+              </template>
+              <template v-else-if="option.kind === 'place'">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-text">{{ option.place.name }}</span>
+                  <span v-if="option.place.detail" class="block truncate text-xs text-muted">{{
+                    option.place.detail
+                  }}</span>
+                </span>
+              </template>
+            </li>
+            <!-- Placeholder rows where results will land, so nothing jumps when they arrive. -->
+            <template v-if="searching">
+              <li
+                v-for="row in placeholderRows"
+                :key="`skel-${row}`"
+                role="none"
+                class="flex items-center gap-3 px-3 py-2"
                 aria-hidden="true"
               >
-                <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
-                <circle cx="12" cy="10" r="2.5" />
-              </svg>
-              <span class="text-muted">Search places for “{{ query.trim() }}”</span>
+                <span class="min-w-0 flex-1 space-y-1.5">
+                  <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
+                  <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
+                </span>
+                <SkeletonBlock width="2.25rem" height="0.7rem" />
+              </li>
             </template>
-            <template v-else>
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-text">{{ option.place.name }}</span>
-                <span v-if="option.place.detail" class="block truncate text-xs text-muted">{{
-                  option.place.detail
-                }}</span>
-              </span>
-            </template>
-          </li>
-          <!-- Placeholder rows where results will land, so nothing jumps when they arrive. -->
-          <template v-if="searching">
-            <li
-              v-for="row in placeholderRows"
-              :key="`skel-${row}`"
-              role="none"
-              class="flex items-center gap-3 px-3 py-2"
+          </ul>
+          <div
+            v-if="placeSearchOption"
+            :id="placeSearchOption.id"
+            role="option"
+            :aria-selected="active === options.length - 1"
+            :class="{ 'border-t': hasRows }"
+            class="flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
+            @mousedown.prevent
+            @click="choose(placeSearchOption)"
+            @pointermove="$event.pointerType === 'mouse' && (active = options.length - 1)"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4 text-subtle"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
               aria-hidden="true"
             >
-              <span class="min-w-0 flex-1 space-y-1.5">
-                <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
-                <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
-              </span>
-              <SkeletonBlock width="2.25rem" height="0.7rem" />
-            </li>
-            <li role="none" class="place-row flex items-center gap-3 px-3 py-2.5">
-              <span class="sr-only">Searching {{ searching }}…</span>
-              <SkeletonBlock width="60%" height="0.8rem" aria-hidden="true" />
-            </li>
-          </template>
-        </ul>
+              <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
+              <circle cx="12" cy="10" r="2.5" />
+            </svg>
+            <span class="text-muted">Search places for “{{ query.trim() }}”</span>
+          </div>
+          <div
+            v-else-if="searching"
+            role="none"
+            class="flex shrink-0 items-center gap-3 border-t border-border px-3 py-2.5"
+          >
+            <span class="sr-only">Searching {{ searching }}…</span>
+            <SkeletonBlock width="60%" height="0.8rem" aria-hidden="true" />
+          </div>
+        </div>
         <TaxonPreview
           v-if="previewHit"
           :hit="previewHit"
@@ -471,18 +503,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* "Search places" stays in view at the foot of the list while species scroll under it. */
-.place-row {
-  position: sticky;
-  bottom: -0.25rem; /* the list's bottom padding */
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-}
-.place-row[aria-selected='true'] {
-  /* accent-soft is translucent: lay it over the surface so rows don't show through. */
-  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
-}
-
 /* Keyboard hints: only where there is likely a keyboard. */
 .hint-bar {
   display: none;
@@ -510,25 +530,11 @@ kbd {
   color: var(--text-muted);
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 3s;
-  }
-}
+/* Matches the box's px-3, so the clear button has equal space either side. */
 input[type='search']::-webkit-search-cancel-button {
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+  cursor: pointer;
   filter: grayscale(1);
 }
 </style>

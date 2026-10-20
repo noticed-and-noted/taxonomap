@@ -82,7 +82,8 @@ const nav = [
       ))}
     </ul>
   </nav>
-  <div class="pill theme-pill">
+  {/* On the map, phones get the toggle in the Filters sheet's Map tab instead. */}
+  <div class:list={['pill theme-pill', { 'theme-pill-map': path === '/' }]}>
     <ThemeToggle />
   </div>
 </header>
@@ -177,6 +178,9 @@ const nav = [
     }
     .app-header {
       gap: 0.375rem;
+    }
+    .theme-pill-map {
+      display: none;
     }
   }
 </style>

@@ -151,11 +151,11 @@
   }
 }
 
-/* iOS Safari zooms the page when a field under 16px gets focus. Unlayered so it beats text-* utilities. */
+/* iOS Safari zooms the page when a field under 16px gets focus. Important so it beats utilities and scoped component styles. */
 @media (pointer: coarse) {
   input,
   select,
   textarea {
-    font-size: max(16px, 1em);
+    font-size: max(16px, 1em) !important;
   }
 }
