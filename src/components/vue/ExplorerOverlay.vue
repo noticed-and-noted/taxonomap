@@ -176,7 +176,7 @@ function closePanel() {
             </button>
           </div>
         </template>
-        <div v-if="filtersOpen" class="space-y-4 pt-4">
+        <div v-if="filtersOpen" class="sm:space-y-4 md:pt-0 pt-4">
           <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
             <div>
               <p class="mb-2 text-sm font-medium">Basemap</p>
