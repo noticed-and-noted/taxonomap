@@ -64,9 +64,10 @@ function closePanel() {
   <div class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen && !near }">
     <NearExplorer v-if="near" />
     <div
-      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
+      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
     >
-      <div v-if="!near" class="min-w-0 sm:flex-1"><TaxonChip /></div>
+      <!-- flex-auto: the chips shrink only once the row is full; spare room still splits around the progress pill. -->
+      <div v-if="!near" class="min-w-0 sm:flex-auto"><TaxonChip /></div>
       <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
       <MapProgress
         v-if="!near"
@@ -230,8 +231,13 @@ function closePanel() {
 .near-btn:hover {
   color: var(--text);
 }
+.near-phone,
+.filters-btn {
+  flex-shrink: 0;
+}
 .near-phone {
   width: 2rem;
+  margin-right: 0.5rem; /* the phone row has no gap, so the chips' scroll box can meet this button */
   justify-content: center;
   padding: 0;
 }
