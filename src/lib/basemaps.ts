@@ -8,7 +8,7 @@
  */
 import { env } from '~/lib/env';
 
-export type BasemapId = 'plain' | 'terrain' | 'satellite';
+export type BasemapId = 'plain' | 'satellite';
 export type Theme = 'dark' | 'light';
 
 export interface RasterDef {
@@ -39,18 +39,6 @@ export const BASEMAPS: Record<BasemapId, BasemapDef> = {
       styleUrl:
         (theme === 'dark' ? env['PUBLIC_BASEMAP_PLAIN_DARK'] : env['PUBLIC_BASEMAP_PLAIN_LIGHT']) ||
         `https://tiles.openfreemap.org/styles/${theme === 'dark' ? 'dark' : 'positron'}`,
-    }),
-  },
-  terrain: {
-    id: 'terrain',
-    label: 'Terrain',
-    source: () => ({
-      kind: 'raster',
-      tiles: [env['PUBLIC_BASEMAP_TERRAIN'] || 'https://tile.opentopomap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      maxzoom: 17,
-      attribution:
-        'Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Style © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
     }),
   },
   satellite: {

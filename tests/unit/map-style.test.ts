@@ -73,7 +73,7 @@ describe('buildStyle', () => {
   });
 
   it('draws raster basemaps under the data', async () => {
-    const style = await buildStyle('terrain', 'dark', COLORS, DATA, async () => {
+    const style = await buildStyle('satellite', 'dark', COLORS, DATA, async () => {
       throw new Error('raster basemaps have no style to load');
     });
     expect(ids(style).slice(0, 3)).toEqual(['background', 'base', 'occ-fill']);
