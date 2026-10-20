@@ -4,7 +4,8 @@
  * required" tiles, so they are not used). Override with PUBLIC_BASEMAP_*.
  *
  * "plain" is an OpenFreeMap vector style that follows the site theme; its
- * label layers are drawn above the occurrence hexes.
+ * label layers are drawn above the occurrence hexes, and over the satellite
+ * imagery too.
  */
 import { env } from '~/lib/env';
 
