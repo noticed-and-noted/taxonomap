@@ -20,6 +20,7 @@ import MapSettings from './MapSettings.vue';
 import NearExplorer from './NearExplorer.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import TaxonChip from './TaxonChip.vue';
+import ThemePicker from './ThemePicker.vue';
 
 const panel = useStore($panel);
 const hex = useStore($selectedHex);
@@ -178,7 +179,11 @@ function closePanel() {
           <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
             <div>
               <p class="mb-2 text-sm font-medium">Basemap</p>
-              <BasemapSwitcher />
+              <BasemapSwitcher class="w-fit" />
+            </div>
+            <div>
+              <p class="mb-2 text-sm font-medium">Theme</p>
+              <ThemePicker />
             </div>
             <MapSettings inline />
           </div>

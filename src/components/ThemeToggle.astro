@@ -40,8 +40,9 @@
 </style>
 
 <script>
-  const label = () =>
-    document.documentElement.dataset['theme'] === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
+  import { currentTheme, setTheme } from '~/lib/theme';
+
+  const label = () => (currentTheme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
 
   const syncLabels = () => {
     for (const button of document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]')) {
@@ -52,16 +53,10 @@
   document.addEventListener('click', (event) => {
     const btn = (event.target as Element | null)?.closest('[data-theme-toggle]');
     if (!btn) return;
-    const next = document.documentElement.dataset['theme'] === 'light' ? 'dark' : 'light';
-    document.documentElement.dataset['theme'] = next;
-    try {
-      localStorage.setItem('theme', next);
-    } catch {
-      /* storage unavailable: theme applies for this page view only */
-    }
-    syncLabels();
-    document.dispatchEvent(new CustomEvent('themechange', { detail: next }));
+    setTheme(currentTheme() === 'light' ? 'dark' : 'light');
   });
 
+  // Also follows the switch in the phone Filters sheet.
+  document.addEventListener('themechange', syncLabels);
   document.addEventListener('astro:page-load', syncLabels);
 </script>

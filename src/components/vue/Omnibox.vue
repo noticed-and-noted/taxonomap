@@ -91,6 +91,10 @@ const options = computed<Option[]>(() => {
 
 /* "Search places" is always last, so the scrolling rows keep their indexes into `options`. */
 const listOptions = computed(() => options.value.filter((option) => option.kind !== 'place-search'));
+
+/** Whether the scrolling list has anything in it; an empty one would leave stray padding above the place row. */
+const hasRows = computed(() => listOptions.value.length > 0 || placeholderRows.value > 0);
+
 const placeSearchOption = computed(() => options.value.find((option) => option.kind === 'place-search'));
 
 const activeId = computed(() => options.value[active.value]?.id);
@@ -301,25 +305,32 @@ onBeforeUnmount(() => {
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-3.5-3.5" />
       </svg>
-      <input
-        id="omnibox-input"
-        ref="input"
-        v-model="query"
-        type="search"
-        role="combobox"
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="Search species or places…"
-        class="h-[calc(var(--header-height)-2px)] w-full min-w-0 bg-transparent text-sm text-ellipsis text-text placeholder:text-subtle focus:outline-none"
-        aria-autocomplete="list"
-        aria-controls="omnibox-listbox"
-        :aria-expanded="open && options.length > 0"
-        :aria-activedescendant="activeId"
-        @input="onInput"
-        @focus="onFocus"
-        @keydown="onKeydown"
-      />
-      <span v-if="liveLoading || placeLoading" class="spinner" aria-hidden="true"></span>
+      <!-- A span, not the placeholder attribute: Chrome drops the placeholder's ellipsis while the input has focus. -->
+      <div class="relative min-w-0 flex-1">
+        <span
+          v-if="!query"
+          class="pointer-events-none absolute inset-0 truncate text-sm leading-[calc(var(--header-height)-2px)] text-subtle"
+          aria-hidden="true"
+          >Search species or places…</span
+        >
+        <input
+          id="omnibox-input"
+          ref="input"
+          v-model="query"
+          type="search"
+          role="combobox"
+          autocomplete="off"
+          spellcheck="false"
+          class="h-[calc(var(--header-height)-2px)] w-full min-w-0 bg-transparent text-sm text-ellipsis text-text focus:outline-none"
+          aria-autocomplete="list"
+          aria-controls="omnibox-listbox"
+          :aria-expanded="open && options.length > 0"
+          :aria-activedescendant="activeId"
+          @input="onInput"
+          @focus="onFocus"
+          @keydown="onKeydown"
+        />
+      </div>
     </div>
 
     <div
@@ -338,7 +349,7 @@ onBeforeUnmount(() => {
           :aria-label="places ? 'Places' : 'Species and places'"
           class="flex min-h-0 min-w-0 flex-col"
         >
-          <ul role="presentation" class="max-h-[60vh] min-h-0 overflow-auto overscroll-contain py-1">
+          <ul v-if="hasRows" role="presentation" class="max-h-[60vh] min-h-0 overflow-auto overscroll-contain py-1">
             <!-- Hover highlights for mice only: iOS treats a tap whose mousemove changes the page as a hover, and holds back the click. -->
             <li
               v-for="(option, index) in listOptions"
@@ -398,7 +409,8 @@ onBeforeUnmount(() => {
             :id="placeSearchOption.id"
             role="option"
             :aria-selected="active === options.length - 1"
-            class="flex shrink-0 cursor-pointer items-center gap-3 border-t border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
+            :class="{ 'border-t': hasRows }"
+            class="flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
             @mousedown.prevent
             @click="choose(placeSearchOption)"
             @pointermove="$event.pointerType === 'mouse' && (active = options.length - 1)"
@@ -518,25 +530,11 @@ kbd {
   color: var(--text-muted);
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 3s;
-  }
-}
+/* Matches the box's px-3, so the clear button has equal space either side. */
 input[type='search']::-webkit-search-cancel-button {
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+  cursor: pointer;
   filter: grayscale(1);
 }
 </style>
