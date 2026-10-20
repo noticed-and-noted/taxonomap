@@ -5,6 +5,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $filterPills, type FilterGroupId } from '~/stores/explorer';
 import { $taxa, removeTaxon } from '~/stores/taxon';
 import { FILTER_GROUPS } from './filterGroups';
@@ -14,6 +15,7 @@ import { useScrollFade } from './useScrollFade';
 const SHOWN = 3;
 const taxa = useStore($taxa);
 const pills = useStore($filterPills);
+const manifest = useStore($speciesManifest);
 const iconOf = (group: FilterGroupId) => FILTER_GROUPS.find((filterGroup) => filterGroup.id === group)?.icon;
 const shown = computed(() => taxa.value.slice(0, SHOWN));
 const rest = computed(() => taxa.value.slice(SHOWN));
@@ -46,9 +48,13 @@ onBeforeUnmount(() => resize.disconnect());
   >
     <span v-for="taxon in shown" :key="taxon.key" class="chip max-w-[18rem]">
       <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf('what')" /></svg>
-      <span class="min-w-0 truncate" :class="{ 'sci-name': !taxon.commonName, 'font-medium': taxon.commonName }">{{
-        nameOf(taxon)
-      }}</span>
+      <a
+        :href="speciesPath(taxon.key, manifest)"
+        class="chip-link min-w-0 truncate"
+        :class="{ 'sci-name': !taxon.commonName, 'font-medium': taxon.commonName }"
+        :title="`About ${nameOf(taxon)}`"
+        >{{ nameOf(taxon) }}</a
+      >
       <button
         type="button"
         class="chip-x"
@@ -163,6 +169,11 @@ onBeforeUnmount(() => resize.disconnect());
   border-radius: 50%;
   font-size: 1rem;
   line-height: 1;
+}
+
+.chip-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .chip-x:hover {
