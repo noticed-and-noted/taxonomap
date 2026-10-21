@@ -61,13 +61,13 @@ function closePanel() {
 </script>
 
 <template>
-  <div class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen && !near }">
+  <div class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen && !near, near }">
     <NearExplorer v-if="near" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
     >
       <!-- flex-auto: the chips shrink only once the row is full; spare room still splits around the progress pill. -->
-      <div v-if="!near" class="min-w-0 sm:flex-auto"><TaxonChip /></div>
+      <div class="min-w-0 sm:flex-auto" :class="{ 'max-sm:mr-2': near }"><TaxonChip /></div>
       <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
       <MapProgress
         v-if="!near"
@@ -319,6 +319,18 @@ function closePanel() {
   }
   .panel-open .rail-region {
     --flyout-max: calc(100vw - var(--panel-width) - 7.5rem);
+  }
+}
+
+/* Near me: the chips stop short of NearExplorer's basemap switcher (about 7.6rem wide) and side panel. */
+@media (min-width: 640px) {
+  .near .top-bar {
+    padding-right: 8.25rem;
+  }
+}
+@media (min-width: 768px) {
+  .near .top-bar {
+    right: calc(var(--panel-width) + 1.5rem);
   }
 }
 
