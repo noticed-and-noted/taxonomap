@@ -90,19 +90,28 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
     <div class="try-collapse" :class="{ open: !isFinishing }" :inert="isFinishing">
       <div>
         <div class="flex items-center gap-1">
-          <button type="button" class="try-toggle" :aria-expanded="isOpen" :aria-controls="listId" @click="toggle">
+          <div class="try-heading">
             <span class="font-display text-sm">Try this</span>
             <span class="ml-auto text-xs text-subtle tabular-nums">{{ done.length }} of {{ CHECKLIST.length }}</span>
+          </div>
+          <button
+            type="button"
+            class="try-icon"
+            aria-label="Try this list"
+            :aria-expanded="isOpen"
+            :aria-controls="listId"
+            @click="toggle"
+          >
             <svg
               viewBox="0 0 24 24"
-              class="try-chevron size-4 text-muted"
+              class="try-chevron size-4"
               :class="{ open: isOpen }"
               fill="none"
               stroke="currentColor"
               stroke-width="1.7"
               aria-hidden="true"
             >
-              <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="m6 15 6-6 6 6" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
           <button type="button" class="try-hide" aria-label="Hide Try this" @click="hideChecklist">
@@ -222,6 +231,7 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
   overflow: hidden;
 }
 
+/* Up to open the list (it unfolds upward), turning down to close it. */
 .try-chevron {
   transition: transform var(--dur) var(--ease);
 }
@@ -246,18 +256,18 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
   stroke-dashoffset: 0;
 }
 
-.try-toggle {
+.try-heading {
   display: flex;
   flex: 1;
   align-items: center;
   gap: 0.5rem;
   min-height: 2.75rem;
-  border-radius: var(--radius-sm);
-  text-align: left;
 }
 
+.try-icon,
 .try-hide {
   display: grid;
+  flex-shrink: 0;
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
@@ -280,6 +290,7 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
   background: var(--surface-2);
 }
 
+.try-icon:hover,
 .try-hide:hover {
   color: var(--text);
   background: var(--surface-2);
@@ -287,6 +298,8 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 
 .try-bar {
   height: 0.25rem;
+  /* Clear of the heading buttons' hover squares, which fill the row. */
+  margin-top: 0.375rem;
   border-radius: 999px;
   background: var(--surface-2);
   overflow: hidden;
@@ -300,10 +313,11 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 }
 
 @media (min-width: 640px) {
-  .try-toggle {
+  .try-heading {
     min-height: 2rem;
   }
 
+  .try-icon,
   .try-hide {
     width: 2rem;
     height: 2rem;
