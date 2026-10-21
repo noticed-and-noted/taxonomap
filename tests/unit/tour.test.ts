@@ -1,5 +1,5 @@
 /** The tour's spotlight path and tip placement. */
-import { padBox, spotlightPath, tipPosition } from '~/lib/tour';
+import { clipBox, padBox, spotlightPath, tipPosition } from '~/lib/tour';
 
 const viewport = { width: 1000, height: 800 };
 const tip = { width: 320, height: 150 };
@@ -71,5 +71,22 @@ describe('the tip', () => {
       left: 340,
       bottom: 812,
     });
+  });
+});
+
+describe('clipping a box to its panel', () => {
+  const panel = { left: 800, top: 12, width: 400, height: 776 };
+
+  it('keeps the part inside', () => {
+    expect(clipBox({ left: 784, top: 400, width: 432, height: 600 }, panel)).toEqual({
+      left: 800,
+      top: 400,
+      width: 400,
+      height: 388,
+    });
+  });
+
+  it('is null when nothing is inside', () => {
+    expect(clipBox({ left: 0, top: 0, width: 100, height: 100 }, panel)).toBeNull();
   });
 });

@@ -59,6 +59,8 @@ function savedProgress(): ChecklistId[] {
 
 /** Whether this browser has finished or skipped the tour. */
 export const $tourSeen = atom(isBrowser && read(TOUR_KEY) === STORED_TRUE);
+/** The checklist item whose help is on screen, pointing at where to click. */
+export const $checklistHint = atom<ChecklistId | null>(null);
 /** True while the tour is on screen; its own map changes don't tick the checklist. */
 export const $tourOpen = atom(false);
 export const $checklistDone = atom<ChecklistId[]>(isBrowser ? savedProgress() : []);
@@ -92,6 +94,16 @@ export function restartTour(): void {
   }
   if ($panel.get() === 'filters') $panel.set('none');
   $tourSeen.set(false);
+}
+
+/** Bring a hidden checklist back (from Settings). */
+export function showChecklist(): void {
+  try {
+    localStorage.removeItem(HIDDEN_KEY);
+  } catch {
+    /* Storage unavailable: the checklist shows again for this page view only. */
+  }
+  $checklistHidden.set(false);
 }
 
 /** Put the checklist away for good. */

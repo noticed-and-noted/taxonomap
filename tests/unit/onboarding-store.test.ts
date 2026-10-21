@@ -88,6 +88,14 @@ describe('the checklist', () => {
     expect((await stores()).onboarding.$checklistHidden.get()).toBe(true);
   });
 
+  it('can be shown again from Settings', async () => {
+    const { onboarding } = await stores();
+    onboarding.hideChecklist();
+    onboarding.showChecklist();
+    expect(onboarding.$checklistHidden.get()).toBe(false);
+    expect((await stores()).onboarding.$checklistHidden.get()).toBe(false);
+  });
+
   it('drops unknown or corrupt saved progress', async () => {
     localStorage.setItem('try-this', '["hex","nope"]');
     expect((await stores()).onboarding.$checklistDone.get()).toEqual(['hex']);
@@ -111,5 +119,8 @@ describe('a blocked storage', () => {
     expect([onboarding.$checklistDone.get(), onboarding.$tourSeen.get()]).toEqual([['search'], true]);
     onboarding.restartTour();
     expect(onboarding.$tourSeen.get()).toBe(false);
+    onboarding.hideChecklist();
+    onboarding.showChecklist();
+    expect(onboarding.$checklistHidden.get()).toBe(false);
   });
 });

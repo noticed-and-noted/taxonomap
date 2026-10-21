@@ -13,8 +13,10 @@ test('the tour walks the map once, then hands over to the checklist', { tag: '@m
     await expect(page.getByRole('dialog', { name: title })).toBeVisible();
     // The hex steps outline the hex, plus the legend or the cell panel.
     if (title === 'Every hex is a count' || title === 'Inside a hex') {
-      await expect(page.locator('.tour-ring')).toHaveCount(2);
+      await expect(page.locator('.spotlight-ring')).toHaveCount(2);
     }
+    // The last step has nothing left to skip.
+    await expect(page.getByRole('button', { name: 'Skip' })).toHaveCount(title === 'Beyond the map' ? 0 : 1);
     await page.getByRole('button', { name: title === 'Beyond the map' ? 'Done' : 'Next' }).click();
   }
 
@@ -42,8 +44,49 @@ test('skipping the tour leaves the checklist, which ticks itself', async ({ page
   await page.getByRole('button', { name: 'Hide Try this' }).click();
   await expect(checklist).toHaveCount(0);
 
-  // Settings brings the tour back.
+  // Settings brings back the checklist, then the tour.
   await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Show Try this' }).click();
+  await expect(checklist).toContainText('1 of 7');
+  await expect(page.getByRole('button', { name: 'Show Try this' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Restart tour' }).click();
   await expect(page.getByRole('dialog', { name: 'Welcome to taxonomap' })).toBeVisible();
+});
+
+test('an item’s help spotlights where to click, and lets the click through', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Skip' }).click();
+  const checklist = page.getByRole('region', { name: 'Try this' });
+  await checklist.getByRole('button', { name: /^Try this/ }).click();
+
+  await page.getByRole('button', { name: 'Show me where: Filter to a decade' }).click();
+  const hint = page.getByRole('dialog', { name: 'Filter to a decade' });
+  await expect(hint).toContainText('Open the When filter');
+  await expect(page.locator('.spotlight-ring')).toHaveCount(1);
+
+  // The highlighted rail button still works: clicking it opens When and puts the hint away.
+  await page.getByRole('button', { name: 'When', exact: true }).click();
+  await expect(hint).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'When' })).toBeVisible();
+
+  // Escape closes a hint without doing anything.
+  await page.getByRole('button', { name: 'Hide When filters' }).click();
+  await page.getByRole('button', { name: 'Show me where: Find a species by name' }).click();
+  await expect(page.getByRole('dialog', { name: 'Find a species by name' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('turning on a group tile ticks “Narrow to one group”', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Skip' }).click();
+  const checklist = page.getByRole('region', { name: 'Try this' });
+  await expect(checklist).toContainText('0 of 7');
+
+  await page.getByRole('button', { name: 'What', exact: true }).click();
+  await page.getByRole('button', { name: 'Birds', exact: true }).click();
+  await expect(checklist).toContainText('1 of 7');
+  await page.getByRole('button', { name: 'Hide What filters' }).click();
+  await checklist.getByRole('button', { name: /^Try this/ }).click();
+  await expect(checklist.getByText('Narrow to one group (done)')).toBeVisible();
 });

@@ -38,6 +38,20 @@ export function padBox(box: ScreenBox): ScreenBox {
   };
 }
 
+/**
+ * The part of a box inside another, e.g. a list that scrolls past the edge of its panel.
+ * @param box The box to clip.
+ * @param bounds The box it must stay inside.
+ * @returns The visible part, or null when none of it is.
+ */
+export function clipBox(box: ScreenBox, bounds: ScreenBox): ScreenBox | null {
+  const left = Math.max(box.left, bounds.left);
+  const top = Math.max(box.top, bounds.top);
+  const right = Math.min(box.left + box.width, bounds.left + bounds.width);
+  const bottom = Math.min(box.top + box.height, bounds.top + bounds.height);
+  return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } : null;
+}
+
 function roundedRect({ left, top, width, height }: ScreenBox): string {
   const corner = Math.min(SPOT_RADIUS, width / 2, height / 2);
   const right = left + width;

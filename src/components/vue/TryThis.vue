@@ -7,7 +7,16 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, useId } from 'vue';
-import { $checklistDone, $checklistHidden, $tourOpen, $tourSeen, CHECKLIST, hideChecklist } from '~/stores/onboarding';
+import {
+  $checklistDone,
+  $checklistHidden,
+  $checklistHint,
+  $tourOpen,
+  $tourSeen,
+  CHECKLIST,
+  hideChecklist,
+  type ChecklistId,
+} from '~/stores/onboarding';
 import { useScrollFade } from './useScrollFade';
 
 const done = useStore($checklistDone);
@@ -29,6 +38,8 @@ const isShown = computed(
   () => tourSeen.value && !tourOpen.value && !isHidden.value && done.value.length < CHECKLIST.length,
 );
 const nextItem = computed(() => CHECKLIST.find((item) => !done.value.includes(item.id)));
+/** Spotlight where this item happens (see ChecklistHint.vue). */
+const showHint = (id: ChecklistId) => $checklistHint.set(id);
 const percent = computed(() => Math.round((done.value.length / CHECKLIST.length) * 100));
 </script>
 
@@ -83,12 +94,32 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
             stroke-linejoin="round"
           />
         </svg>
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <p class="text-sm" :class="done.includes(item.id) ? 'text-subtle line-through' : 'text-text'">
             {{ item.title }}<span v-if="done.includes(item.id)" class="sr-only"> (done)</span>
           </p>
           <p class="text-xs text-subtle">{{ item.hint }}</p>
         </div>
+        <button
+          v-if="!done.includes(item.id)"
+          type="button"
+          class="try-help"
+          :aria-label="`Show me where: ${item.title}`"
+          title="Show me where"
+          @click="showHint(item.id)"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4M12 17h.01" stroke-linecap="round" />
+          </svg>
+        </button>
       </li>
     </ul>
   </section>
@@ -104,6 +135,7 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 /* Short enough that the open list stays clear of the filter rail above the dock. */
 .try-list {
   max-height: min(16rem, 30dvh);
+  scrollbar-width: thin;
 }
 
 .try-toggle {
@@ -123,6 +155,21 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
   height: 2.75rem;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
+}
+
+.try-help {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.try-help:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .try-hide:hover {
@@ -150,6 +197,11 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
   }
 
   .try-hide {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .try-help {
     width: 2rem;
     height: 2rem;
   }

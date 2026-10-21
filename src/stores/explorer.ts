@@ -178,10 +178,11 @@ export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>(
 export const $flyTo = atom<FlyRequest | null>(null);
 
 /**
- * Tour hook: set true and MapCanvas selects the busiest hex in view (without
- * opening its panel), then answers on $busiestHexBox before this returns.
+ * Tour and hint hook: MapCanvas finds the busiest hex in view and answers on
+ * $busiestHexBox before this returns. 'select' also selects it (its panel
+ * stays closed); 'locate' only points at it.
  */
-export const $busiestHexRequest = atom(false);
+export const $busiestHexRequest = atom<'select' | 'locate' | null>(null);
 
 /** Where the hex picked for $busiestHexRequest sits on screen; null when no cell was loaded. */
 export const $busiestHexBox = atom<ScreenBox | null>(null);

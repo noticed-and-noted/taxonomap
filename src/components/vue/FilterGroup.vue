@@ -26,6 +26,7 @@ import {
   MAX_TAXA,
   UNCERTAINTY_STEPS_M,
 } from '~/stores/explorer';
+import { markDone } from '~/stores/onboarding';
 import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
 import type { FilterGroupId } from './filterGroups';
 import TaxaPicker from './TaxaPicker.vue';
@@ -53,7 +54,9 @@ const groupOn = (group: TaxonGroup) => group.taxa.every((taxon) => taxonKeys.val
 /** Set when a group would take the What filter past MAX_TAXA. */
 const groupsFull = ref(false);
 function toggleGroup(group: TaxonGroup) {
-  groupsFull.value = toggleTaxa(group.taxa) === 'full';
+  const result = toggleTaxa(group.taxa);
+  groupsFull.value = result === 'full';
+  if (result === 'added') markDone('group');
 }
 watch(taxonKeys, () => (groupsFull.value = false));
 

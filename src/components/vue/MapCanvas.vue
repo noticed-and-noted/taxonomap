@@ -267,26 +267,27 @@ function busiestInView(): Hex | undefined {
   return busiest;
 }
 
-/** Tour: select the busiest hex in view, leaving its panel closed, and publish where it is on screen. */
-function selectBusiestHex() {
+/** The outline of the hex the tour or a hint points at, kept so its box can follow the map. */
+let pointedRing: [number, number][] | null = null;
+
+/** Tour and hints: find the busiest hex in view, select it if asked (panel closed), and publish where it is. */
+function findBusiestHex(shouldSelect: boolean) {
   const hex = busiestInView();
   const geometry = hex && geometryOf(hex);
-  if (!map || !hex || !geometry) {
-    $busiestHexBox.set(null);
-    return;
+  pointedRing = geometry ? geometry.ring : null;
+  if (hex && geometry && shouldSelect) {
+    const [lng, lat] = centreOf(hex);
+    $hexGeometry.set(geometry);
+    $selectedHex.set([Number(lng.toFixed(4)), Number(lat.toFixed(4))]);
   }
-  const [lng, lat] = centreOf(hex);
-  $hexGeometry.set(geometry);
-  $selectedHex.set([Number(lng.toFixed(4)), Number(lat.toFixed(4))]);
-  $busiestHexBox.set(selectedBox());
+  $busiestHexBox.set(pointedBox());
 }
 
-/** The selected hex's box on screen, in viewport px. */
-function selectedBox(): ScreenBox | null {
-  const geometry = $hexGeometry.get();
-  if (!map || !geometry) return null;
+/** The pointed-at hex's box on screen, in viewport px. */
+function pointedBox(): ScreenBox | null {
+  if (!map || !pointedRing) return null;
   const box = map.getContainer().getBoundingClientRect();
-  const points = geometry.ring.map((position) => map!.project(position));
+  const points = pointedRing.map((position) => map!.project(position));
   const xs = points.map((point) => point.x);
   const ys = points.map((point) => point.y);
   const left = Math.min(...xs);
@@ -294,9 +295,9 @@ function selectedBox(): ScreenBox | null {
   return { left: box.left + left, top: box.top + top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
 }
 
-/** Keep the tour's hex box on its hex as the map moves or resizes. */
+/** Keep the tour's or hint's hex box on its hex as the map moves or resizes. */
 function followBusiestHex() {
-  if ($busiestHexBox.get()) $busiestHexBox.set(selectedBox());
+  if ($busiestHexBox.get()) $busiestHexBox.set(pointedBox());
 }
 
 /** How much of the map the floating header, bottom sheet and side panel cover, in px per edge. */
@@ -634,10 +635,10 @@ function listenToStores() {
       fly(request);
       $flyTo.set(null);
     }),
-    $busiestHexRequest.subscribe((isRequested) => {
-      if (!isRequested) return;
-      $busiestHexRequest.set(false);
-      selectBusiestHex();
+    $busiestHexRequest.subscribe((request) => {
+      if (!request) return;
+      $busiestHexRequest.set(null);
+      findBusiestHex(request === 'select');
     }),
   );
 }

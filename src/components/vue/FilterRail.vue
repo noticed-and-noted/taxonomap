@@ -13,7 +13,7 @@ import { $tourOpen } from '~/stores/onboarding';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterGroup from './FilterGroup.vue';
 import MapSettings from './MapSettings.vue';
-import RestartTour from './RestartTour.vue';
+import OnboardingSettings from './OnboardingSettings.vue';
 
 type PanelId = FilterGroupId | 'settings';
 
@@ -61,6 +61,7 @@ function label(name: string, count: number) {
         v-for="group in FILTER_GROUPS"
         :key="group.id"
         :ref="(el) => el && (buttons[group.id] = el as HTMLButtonElement)"
+        :data-tour="`rail-${group.id}`"
         type="button"
         class="rail-btn"
         :class="{ active: counts[group.id] }"
@@ -86,6 +87,7 @@ function label(name: string, count: number) {
         :ref="(el) => el && (buttons.settings = el as HTMLButtonElement)"
         type="button"
         class="rail-btn rail-settings"
+        data-tour="rail-settings"
         :aria-expanded="open === 'settings'"
         aria-controls="filter-flyout"
         @click="toggle('settings')"
@@ -128,7 +130,7 @@ function label(name: string, count: number) {
         <!-- Settings scrolls its own option list, so its body doesn't scroll. -->
         <div v-if="current.id === 'settings'" class="flex min-h-0 flex-1 flex-col px-4 pt-3">
           <MapSettings />
-          <RestartTour class="-mx-4 border-t border-border px-4 py-3" />
+          <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
         </div>
         <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <FilterGroup :group="current.id" />

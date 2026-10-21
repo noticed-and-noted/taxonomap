@@ -427,6 +427,11 @@ watch([query, group, sortKey, sortDesc], () => {
         <button type="button" class="text-text underline" @click="resetAll">Clear search and filters</button>
       </p>
     </template>
+
+    <!-- Records named only to genus or above have no species key, so they are counted but never listed. -->
+    <p v-else class="rounded-md bg-surface-2 p-3 text-sm text-muted">
+      None of these records is identified to species. See the Records tab.
+    </p>
   </div>
 </template>
 
