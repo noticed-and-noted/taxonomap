@@ -8,7 +8,7 @@
  * The first result is highlighted until you arrow, so Enter picks it. The
  * highlighted species result is previewed beside the list, with a link to its
  * About page; Cmd/Ctrl-Enter opens that page, and Cmd/Ctrl-Shift-Enter
- * searches places. ARIA 1.2 combobox with a listbox popup.
+ * searches places (or, from places, goes back to species and groups). ARIA 1.2 combobox with a listbox popup.
  */
 import { navigate } from 'astro:transitions/client';
 import { useStore } from '@nanostores/vue';
@@ -73,8 +73,8 @@ const searching = computed(() =>
   placeLoading.value ? 'places' : liveLoading.value && !places.value ? 'species' : null,
 );
 
-/** Placeholder rows to show while species load: enough to make three rows with what's in. */
-const placeholderRows = computed(() => (searching.value === 'species' ? Math.max(0, 3 - taxa.value.length) : 0));
+/** Placeholder rows to show while results load: enough to make three rows with what's in. */
+const placeholderRows = computed(() => (searching.value ? Math.max(0, 3 - listOptions.value.length) : 0));
 
 const options = computed<Option[]>(() => {
   if (places.value) return places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }));
@@ -83,9 +83,7 @@ const options = computed<Option[]>(() => {
     id: `omni-taxon-${hit.key}`,
     hit,
   }));
-  // Not while results are loading: they would push it down as they arrive.
-  if (query.value.trim().length >= 2 && !searching.value)
-    suggestions.push({ kind: 'place-search', id: 'omni-place-search' });
+  if (query.value.trim().length >= 2) suggestions.push({ kind: 'place-search', id: 'omni-place-search' });
   return suggestions;
 });
 
@@ -162,16 +160,32 @@ async function runPlaceSearch() {
   if (!trimmed) return;
   placeLoading.value = true;
   placeFailed.value = false;
+  // Switch to the (empty) places list now, so its placeholder rows show while the geocoder answers.
+  places.value = [];
+  active.value = 0;
   try {
-    places.value = await searchPlaces(trimmed);
+    const found = await searchPlaces(trimmed);
+    // Gone back to species, or typed, while the geocoder answered.
+    if (!places.value) return;
+    places.value = found;
     open.value = true;
     active.value = 0;
   } catch {
+    if (!places.value) return;
     placeFailed.value = true;
     places.value = [];
   } finally {
     placeLoading.value = false;
   }
+}
+
+/** Leave the places list for the species and group results still behind it. */
+function showSpecies() {
+  places.value = null;
+  placeLoading.value = false;
+  placeFailed.value = false;
+  open.value = true;
+  active.value = 0;
 }
 
 /** Label for picking a result in place; undefined where a pick opens its About page. */
@@ -242,8 +256,10 @@ function onKeydown(event: KeyboardEvent) {
     active.value = count ? (active.value - 1 + count) % count : 0;
   } else if (event.key === 'Enter') {
     event.preventDefault();
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey) void runPlaceSearch();
-    else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
+      if (places.value) showSpecies();
+      else void runPlaceSearch();
+    } else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
     else if (options.value[active.value]) choose(options.value[active.value]);
     // Nothing to pick yet (still loading, or no matches): look for a place.
     else void runPlaceSearch();
@@ -410,7 +426,7 @@ onBeforeUnmount(() => {
             role="option"
             :aria-selected="active === options.length - 1"
             :class="{ 'border-t': hasRows }"
-            class="flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
+            class="mt-auto flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
             @mousedown.prevent
             @click="choose(placeSearchOption)"
             @pointermove="$event.pointerType === 'mouse' && (active = options.length - 1)"
@@ -428,14 +444,7 @@ onBeforeUnmount(() => {
             </svg>
             <span class="text-muted">Search places for “{{ query.trim() }}”</span>
           </div>
-          <div
-            v-else-if="searching"
-            role="none"
-            class="flex shrink-0 items-center gap-3 border-t border-border px-3 py-2.5"
-          >
-            <span class="sr-only">Searching {{ searching }}…</span>
-            <SkeletonBlock width="60%" height="0.8rem" aria-hidden="true" />
-          </div>
+          <span v-if="searching" role="none" class="sr-only">Searching {{ searching }}…</span>
         </div>
         <TaxonPreview
           v-if="previewHit"
@@ -447,7 +456,9 @@ onBeforeUnmount(() => {
           @about="close"
         />
       </div>
-      <p v-if="places && !places.length && !placeFailed" class="px-3 py-2 text-sm text-muted">No places found.</p>
+      <p v-if="places && !places.length && !placeFailed && !placeLoading" class="px-3 py-2 text-sm text-muted">
+        No places found.
+      </p>
       <p v-if="placeFailed" class="px-3 py-2 text-sm text-muted">Place search is unavailable right now.</p>
       <p v-if="liveFailed && !places" class="border-t border-border px-3 py-1.5 text-xs text-subtle">
         Live species search is busy; showing saved names only.
@@ -457,8 +468,8 @@ onBeforeUnmount(() => {
         <span v-if="previewHit && selectLabel()"
           ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
         >
-        <span v-if="!places && enterLabel !== 'Search places'"
-          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> Places</span
+        <span v-if="places || enterLabel !== 'Search places'"
+          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> {{ places ? 'Species' : 'Places' }}</span
         >
         <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
       </p>
