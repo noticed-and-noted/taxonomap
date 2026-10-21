@@ -278,13 +278,18 @@ function onBlur(event: FocusEvent) {
    visual viewport (not the layout one) on iOS and Android, hiding its foot. */
 const dropdown = ref<HTMLDivElement>();
 const fitHeight = ref<number | null>(null);
+const isShown = computed(
+  () => open.value && (options.value.length > 0 || !!searching.value || placeFailed.value || places.value?.length === 0),
+);
 function fit() {
-  if (!open.value || !dropdown.value) return;
+  // Hidden (v-show) it measures at top 0, which would size it past the keyboard.
+  if (!isShown.value || !dropdown.value) return;
   const viewport = window.visualViewport;
   const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
   fitHeight.value = Math.max(160, Math.floor(bottom - dropdown.value.getBoundingClientRect().top - 8));
 }
-watch(open, (isOpen) => (isOpen ? void nextTick(fit) : undefined));
+// On first use results arrive after `open`, so fit when it actually shows.
+watch(isShown, (shown) => (shown ? void nextTick(fit) : undefined));
 
 // Search for anything typed before hydration (see query).
 onMounted(() => {
@@ -350,7 +355,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-show="open && (options.length > 0 || searching || placeFailed || (places && !places.length))"
+      v-show="isShown"
       ref="dropdown"
       class="dropdown absolute left-0 right-0 top-full z-40 mt-1 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-panel"
       :class="{ 'with-preview': previewHit }"
