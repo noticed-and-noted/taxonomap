@@ -42,6 +42,7 @@ const emit = defineEmits<{ close: []; collapse: []; expand: [] }>();
       >
         <header class="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <h2 class="truncate font-display text-lg">{{ title }}</h2>
+          <slot name="actions" />
           <button
             v-if="!collapsible || closable"
             type="button"

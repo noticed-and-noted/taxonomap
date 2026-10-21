@@ -41,14 +41,17 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', update));
     @expand="emit('open')"
   >
     <template v-if="$slots.top" #top><slot name="top" /></template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />
   </SidePanel>
   <SidePanel v-else-if="desktop" :title="title" :open="open" @close="emit('close')">
     <template v-if="$slots.top" #top><slot name="top" /></template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />
   </SidePanel>
   <BottomSheet v-else :title="title" :open="open" :close-label="dismissible" @close="closeSheet">
     <template v-if="$slots.top" #top><slot name="top" /></template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />
   </BottomSheet>
 </template>

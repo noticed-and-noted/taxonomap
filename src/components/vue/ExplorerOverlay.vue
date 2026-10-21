@@ -61,7 +61,10 @@ function closePanel() {
 </script>
 
 <template>
-  <div class="explorer-overlay pointer-events-none absolute inset-0 z-10" :class="{ 'panel-open': panelOpen && !near, near }">
+  <div
+    class="explorer-overlay pointer-events-none absolute inset-0 z-10"
+    :class="{ 'panel-open': panelOpen && !near, near }"
+  >
     <NearExplorer v-if="near" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
@@ -176,6 +179,18 @@ function closePanel() {
             </button>
           </div>
         </template>
+        <template v-if="filtersOpen && activeFilters" #actions>
+          <!-- pointerdown.stop: the sheet header is a drag handle. -->
+          <button
+            type="button"
+            class="clear-all"
+            aria-label="Clear all filters"
+            @pointerdown.stop
+            @click="clearFilters"
+          >
+            Clear all
+          </button>
+        </template>
         <div v-if="filtersOpen" class="sm:space-y-4 md:pt-0 pt-4">
           <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
             <div>
@@ -191,7 +206,6 @@ function closePanel() {
           <div v-else role="tabpanel">
             <FilterGroup :group="filterTab" />
           </div>
-          <button v-if="activeFilters" type="button" class="clear-all" @click="clearFilters">Clear all filters</button>
         </div>
         <HexPanel v-else />
       </ResponsivePanel>
@@ -299,17 +313,26 @@ function closePanel() {
   --flyout-max: calc(100vw - 6.5rem);
 }
 
+/* In the panel header, pushed right beside the close button. */
 .clear-all {
-  height: 2rem;
+  margin-left: auto;
+  height: 2.75rem;
   padding: 0 0.75rem;
-  border-radius: 999px;
   border: 1px solid var(--border);
+  border-radius: var(--radius);
   color: var(--text-muted);
   font-size: 0.8125rem;
+  white-space: nowrap;
 }
 .clear-all:hover {
   color: var(--text);
   border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+@media (min-width: 640px) {
+  .clear-all {
+    height: 2rem;
+  }
 }
 
 /* Keep the dock and flyout clear of the desktop side panel. */
