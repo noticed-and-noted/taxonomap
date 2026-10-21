@@ -27,6 +27,23 @@ test('the header search and the What filter add to one list of taxa', { tag: '@m
   await expect(page).toHaveURL(/taxon=2490719%2C2492462/);
 });
 
+test(
+  'on touch, the first tap on a search result previews it and the second picks it',
+  { tag: '@mobile' },
+  async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'mice preview on hover instead');
+    await page.goto('/');
+    await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+    const robin = page.getByRole('option', { name: /^European Robin/i }).first();
+    await expect(page.getByRole('region', { name: 'Preview: Robins' })).toBeVisible();
+    await robin.tap();
+    await expect(page.getByRole('region', { name: 'Preview: European Robin' })).toBeVisible();
+    await expect(page).not.toHaveURL(/taxon=/);
+    await robin.tap();
+    await expect(page).toHaveURL(/taxon=2492462/);
+  },
+);
+
 test('a place search moves the map there', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('combobox', { name: 'Search species or places' }).fill('london');

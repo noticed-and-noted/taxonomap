@@ -31,6 +31,8 @@ const imageShown = ref(false);
 let sequence = 0;
 
 const count = computed(() => props.hit.count ?? liveCount.value);
+/** Only live suggestions wait for a count; `imageLoading` covers both requests, so a failed count stops shimmering too. */
+const isCountLoading = computed(() => props.hit.count === undefined && liveCount.value === null && imageLoading.value);
 const name = computed(() => props.hit.commonName ?? props.hit.scientificName);
 
 const load = debounce(async (hit: NameHit) => {
@@ -90,7 +92,10 @@ onBeforeUnmount(() => load.cancel());
       <p v-if="hit.commonName" class="sci-name truncate text-xs text-muted">{{ hit.scientificName }}</p>
       <p class="mt-0.5 text-[11px] text-subtle">
         {{ RANK_LABELS[hit.rank] ?? hit.rank
-        }}<span v-if="count !== null" class="tabular-nums"> · {{ compact(count) }} records</span>
+        }}<span v-if="count !== null" class="tabular-nums"> · {{ compact(count) }} records</span
+        ><span v-else-if="isCountLoading" class="ml-1 inline-flex items-center gap-1 align-middle"
+          ><span aria-hidden="true">·</span><SkeletonBlock width="4.5rem" height="0.6rem" label="Loading record count"
+        /></span>
       </p>
     </div>
     <div class="actions">

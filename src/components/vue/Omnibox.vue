@@ -249,6 +249,15 @@ function choose(option: Option | undefined) {
   else void runPlaceSearch();
 }
 
+/* Set on pointerdown: Safari's click events don't say whether a finger or a mouse made them. */
+let lastPointerType = '';
+
+/** Phones have no hover, so a tap on another species row previews it first; tapping it again (or the preview's buttons) picks it. */
+function onRowClick(option: Option, index: number) {
+  if (lastPointerType === 'touch' && option.kind === 'taxon' && index !== active.value) active.value = index;
+  else choose(option);
+}
+
 function onKeydown(event: KeyboardEvent) {
   const count = options.value.length;
   if (event.key === 'ArrowDown') {
@@ -385,7 +394,8 @@ onBeforeUnmount(() => {
               :aria-selected="index === active"
               class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
               @mousedown.prevent
-              @click="choose(option)"
+              @pointerdown="lastPointerType = $event.pointerType"
+              @click="onRowClick(option, index)"
               @pointermove="$event.pointerType === 'mouse' && (active = index)"
             >
               <template v-if="option.kind === 'taxon'">
