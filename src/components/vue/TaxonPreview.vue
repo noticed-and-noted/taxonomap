@@ -12,8 +12,15 @@ import { leadPhoto } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import UiIcon from './UiIcon.vue';
 
-const props = defineProps<{ hit: NameHit; href: string; aboutLabel: string; selectLabel?: string | undefined }>();
+const props = defineProps<{
+  hit: NameHit;
+  href: string;
+  aboutLabel: string;
+  /** Picking the result in place: full label for screen readers, short caption beside or under the icon. */
+  select?: { label: string; caption: string; icon: 'filter' | 'tree' } | undefined;
+}>();
 const emit = defineEmits<{ select: []; about: [] }>();
 
 const image = ref<UsableImage>();
@@ -85,12 +92,24 @@ onBeforeUnmount(() => load.cancel());
         {{ RANK_LABELS[hit.rank] ?? hit.rank
         }}<span v-if="count !== null" class="tabular-nums"> · {{ compact(count) }} records</span>
       </p>
-      <div class="actions">
-        <button v-if="selectLabel" type="button" class="action" @mousedown.prevent @click="emit('select')">
-          {{ selectLabel }}
-        </button>
-        <a :href="href" class="action primary" @click="emit('about')">{{ aboutLabel }}</a>
-      </div>
+    </div>
+    <div class="actions">
+      <button
+        v-if="select"
+        type="button"
+        class="action select"
+        :aria-label="select.label"
+        @mousedown.prevent
+        @click="emit('select')"
+      >
+        <span class="action-icon"><UiIcon :name="select.icon" size="18" /></span>
+        <span class="action-caption" aria-hidden="true">{{ select.caption }}</span>
+      </button>
+      <a :href="href" class="action about-link" @click="emit('about')">
+        <span class="action-icon primary"><UiIcon name="info" size="18" /></span>
+        <span class="action-caption" aria-hidden="true">{{ aboutLabel }}</span>
+        <span class="sr-only">{{ aboutLabel }} {{ name }}</span>
+      </a>
     </div>
   </section>
 </template>
@@ -99,6 +118,7 @@ onBeforeUnmount(() => load.cancel());
 /* Phones: a compact row under the results. sm+: a card beside them. */
 .taxon-preview {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
   padding: 0.625rem 0.75rem;
   border-top: 1px solid var(--border);
@@ -121,33 +141,51 @@ onBeforeUnmount(() => load.cancel());
 }
 .actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-top: 0.5rem;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
+/* Icon over a short caption, like the filter rail. */
 .action {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  height: 1.75rem;
-  padding: 0 0.625rem;
+  gap: 0.1875rem;
+  min-width: 2.75rem;
+  color: var(--text);
+}
+.action-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.75rem;
-  white-space: nowrap;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
-.action:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
-}
-.action.primary {
+.action-icon.primary {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-
+.select:hover .action-icon {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+/* A deeper accent tint, so About still reads as the main action on hover. */
+.about-link:hover .action-icon.primary {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+.action-caption {
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
 @media (min-width: 640px) {
   .taxon-preview {
     flex-direction: column;
+    align-items: stretch;
     gap: 0.5rem;
     border-top: 0;
     border-left: 1px solid var(--border);
@@ -155,6 +193,52 @@ onBeforeUnmount(() => load.cancel());
   .thumb {
     width: 100%;
     height: 7.5rem;
+  }
+  /* Room for words here: bordered buttons with an icon and the caption. */
+  .actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.375rem;
+  }
+  .action {
+    flex-direction: row;
+    gap: 0.375rem;
+    min-width: 0;
+    height: 1.75rem;
+    padding: 0 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition:
+      border-color var(--dur-fast) var(--ease),
+      background-color var(--dur-fast) var(--ease);
+  }
+  .action-icon,
+  .action-icon.primary,
+  .select:hover .action-icon,
+  .about-link:hover .action-icon.primary {
+    width: auto;
+    height: auto;
+    border: 0;
+    background: none;
+  }
+  .action-icon svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .about-link {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .select:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+  .about-link:hover {
+    background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+  }
+  .action-caption {
+    font-size: 0.75rem;
+    color: var(--text);
   }
 }
 </style>

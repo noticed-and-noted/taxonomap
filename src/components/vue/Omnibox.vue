@@ -188,11 +188,15 @@ function showSpecies() {
   active.value = 0;
 }
 
+/** Picking a result in place, per page; none where a pick opens its About page. */
+const SELECT_ACTIONS: Partial<Record<SearchMode, { label: string; caption: string; icon: 'filter' | 'tree' }>> = {
+  map: { label: 'Filter on map', caption: 'Filter', icon: 'filter' },
+  tree: { label: 'Show in tree', caption: 'Tree', icon: 'tree' },
+};
+
 /** Label for picking a result in place; undefined where a pick opens its About page. */
 function selectLabel(): string | undefined {
-  if (props.mode === 'map') return 'Add to map';
-  if (props.mode === 'tree') return 'Show in tree';
-  return undefined;
+  return SELECT_ACTIONS[props.mode]?.label;
 }
 
 async function pickTaxon(hit: NameHit) {
@@ -279,7 +283,8 @@ function onBlur(event: FocusEvent) {
 const dropdown = ref<HTMLDivElement>();
 const fitHeight = ref<number | null>(null);
 const isShown = computed(
-  () => open.value && (options.value.length > 0 || !!searching.value || placeFailed.value || places.value?.length === 0),
+  () =>
+    open.value && (options.value.length > 0 || !!searching.value || placeFailed.value || places.value?.length === 0),
 );
 function fit() {
   // Hidden (v-show) it measures at top 0, which would size it past the keyboard.
@@ -417,9 +422,14 @@ onBeforeUnmount(() => {
                 class="flex items-center gap-3 px-3 py-2"
                 aria-hidden="true"
               >
-                <span class="min-w-0 flex-1 space-y-1.5">
-                  <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
-                  <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
+                <!-- Line boxes match a result's text-sm and text-xs lines, so rows keep their height. -->
+                <span class="min-w-0 flex-1">
+                  <span class="flex h-5 items-center">
+                    <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
+                  </span>
+                  <span class="flex h-4 items-center">
+                    <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
+                  </span>
                 </span>
                 <SkeletonBlock width="2.25rem" height="0.7rem" />
               </li>
@@ -456,7 +466,7 @@ onBeforeUnmount(() => {
           :hit="previewHit"
           :href="aboutHref(previewHit)"
           :about-label="'About'"
-          :select-label="selectLabel()"
+          :select="SELECT_ACTIONS[mode]"
           @select="pickTaxon(previewHit)"
           @about="close"
         />
