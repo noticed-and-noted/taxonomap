@@ -4,7 +4,7 @@
  * checklist ticks itself from the stores the real actions change, so a tick
  * always means the viewer did the thing.
  */
-import { atom } from 'nanostores';
+import { atom, computed } from 'nanostores';
 import { $dateRange, $panel, $selectedHex } from './explorer';
 import { $nearMode } from './near';
 import { $ramp } from './ramp';
@@ -20,9 +20,9 @@ export const CHECKLIST = [
   { id: 'hex', title: 'Click a hex', hint: 'See the species and records inside' },
   { id: 'when', title: 'Filter to a decade', hint: 'When, then drag the time slider' },
   { id: 'group', title: 'Narrow to one group', hint: 'What, then pick birds, fungi or similar' },
-  { id: 'near', title: 'See what’s near you', hint: 'Near me, then use your location or a place' },
   { id: 'tree', title: 'Climb the tree of life', hint: 'Open Tree of life and drill down a rank' },
   { id: 'style', title: 'Make it yours', hint: 'Change the map colours or the theme' },
+  { id: 'near', title: 'See what’s near you', hint: 'Near me, then use your location or a place' },
 ] as const;
 
 export type ChecklistId = (typeof CHECKLIST)[number]['id'];
@@ -65,6 +65,18 @@ export const $checklistHint = atom<ChecklistId | null>(null);
 export const $tourOpen = atom(false);
 export const $checklistDone = atom<ChecklistId[]>(isBrowser ? savedProgress() : []);
 export const $checklistHidden = atom(isBrowser && read(HIDDEN_KEY) === STORED_TRUE);
+/**
+ * True from the last item's tick until the finish is closed, so the list can
+ * celebrate once; in memory only, so it also shows on return from another page.
+ */
+export const $checklistJustFinished = atom(false);
+
+/** Whether the "Try this" list is on screen: after the tour, unless hidden, and until it is finished and closed. */
+export const $checklistShown = computed(
+  [$tourSeen, $tourOpen, $checklistHidden, $checklistDone, $checklistJustFinished],
+  (tourSeen, tourOpen, isHidden, done, justFinished) =>
+    tourSeen && !tourOpen && !isHidden && (done.length < CHECKLIST_IDS.length || justFinished),
+);
 
 /**
  * Tick a checklist item (once; ignored while the tour drives the page).
@@ -76,6 +88,7 @@ export function markDone(id: ChecklistId): void {
   const next = CHECKLIST_IDS.filter((itemId) => itemId === id || done.includes(itemId));
   $checklistDone.set(next);
   write(PROGRESS_KEY, JSON.stringify(next));
+  if (next.length === CHECKLIST_IDS.length) $checklistJustFinished.set(true);
 }
 
 /** Close the tour for good (finished or skipped); the checklist takes over. */
@@ -104,6 +117,18 @@ export function showChecklist(): void {
     /* Storage unavailable: the checklist shows again for this page view only. */
   }
   $checklistHidden.set(false);
+}
+
+/** Start the checklist over (from Settings): nothing ticked, and shown again. */
+export function resetChecklist(): void {
+  try {
+    localStorage.removeItem(PROGRESS_KEY);
+  } catch {
+    /* Storage unavailable: the fresh list lasts for this page view only. */
+  }
+  $checklistDone.set([]);
+  $checklistJustFinished.set(false);
+  showChecklist();
 }
 
 /** Put the checklist away for good. */

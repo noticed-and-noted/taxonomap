@@ -2,27 +2,29 @@
 /**
  * "Try this": seven things to do on the site, shown above the map legend once
  * the tour is over. Collapsed it shows progress and the next item; open, the
- * whole list. Items tick themselves (see stores/onboarding.ts), and the list
- * goes away for good once everything is done or the viewer hides it.
+ * whole list. Items tick themselves (see stores/onboarding.ts), each with a
+ * pen-stroke tick. Finishing the last one folds the list away and the fern in,
+ * which grows once the fold settles and stays until it is closed; after that,
+ * or once the viewer hides it, the list is gone for good.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, ref, useId } from 'vue';
+import { computed, nextTick, onMounted, ref, useId, watch } from 'vue';
+import { $nearMode } from '~/stores/near';
 import {
   $checklistDone,
-  $checklistHidden,
   $checklistHint,
-  $tourOpen,
-  $tourSeen,
+  $checklistJustFinished,
+  $checklistShown,
   CHECKLIST,
   hideChecklist,
   type ChecklistId,
 } from '~/stores/onboarding';
+import ChecklistFinish from './ChecklistFinish.vue';
 import { useScrollFade } from './useScrollFade';
 
 const done = useStore($checklistDone);
-const isHidden = useStore($checklistHidden);
-const tourSeen = useStore($tourSeen);
-const tourOpen = useStore($tourOpen);
+// In Near me a map click drops a pin rather than picking a hex, so the hints step aside there.
+const near = useStore($nearMode);
 const isOpen = ref(false);
 const listId = useId();
 const list = ref<HTMLElement>();
@@ -34,9 +36,32 @@ async function toggle() {
   updateFade();
 }
 
-const isShown = computed(
-  () => tourSeen.value && !tourOpen.value && !isHidden.value && done.value.length < CHECKLIST.length,
-);
+const justFinished = useStore($checklistJustFinished);
+/** The finish folds open over the list, a moment late so the last tick and the bar finish first. */
+const isFinishing = ref(false);
+/** The fern grows only once the fold is fully open. */
+const isFernPlaying = ref(false);
+const finishFold = ref<HTMLElement>();
+const FINISH_DELAY_MS = 600;
+
+function openFinish() {
+  if (!$checklistJustFinished.get() || !finishFold.value) return;
+  isFinishing.value = true;
+  // The fold's own duration (0 under reduced motion), so the fern starts as it settles.
+  const foldMs = parseFloat(getComputedStyle(finishFold.value).transitionDuration) * 1000;
+  window.setTimeout(() => (isFernPlaying.value = true), foldMs);
+}
+
+watch(justFinished, (isJust) => {
+  if (isJust) return void window.setTimeout(openFinish, FINISH_DELAY_MS);
+  isFinishing.value = false;
+  isFernPlaying.value = false;
+});
+// Back from another page with the list just finished: fold it open straight away.
+onMounted(() => justFinished.value && requestAnimationFrame(openFinish));
+const closeFinish = () => $checklistJustFinished.set(false);
+
+const isShown = useStore($checklistShown);
 const nextItem = computed(() => CHECKLIST.find((item) => !done.value.includes(item.id)));
 /** Spotlight where this item happens (see ChecklistHint.vue). */
 const showHint = (id: ChecklistId) => $checklistHint.set(id);
@@ -45,69 +70,10 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 
 <template>
   <section v-if="isShown" class="try-this" aria-label="Try this">
-    <div class="flex items-center gap-1">
-      <button type="button" class="try-toggle" :aria-expanded="isOpen" :aria-controls="listId" @click="toggle">
-        <span class="font-display text-sm">Try this</span>
-        <span class="ml-auto text-xs text-subtle tabular-nums">{{ done.length }} of {{ CHECKLIST.length }}</span>
-        <svg
-          viewBox="0 0 24 24"
-          class="size-4 text-muted"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.7"
-          aria-hidden="true"
-        >
-          <path :d="isOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button type="button" class="try-hide" aria-label="Hide Try this" @click="hideChecklist">
-        <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-          <path d="M6 6l12 12M18 6 6 18" stroke-linecap="round" />
-        </svg>
-      </button>
-    </div>
-    <div class="try-bar" aria-hidden="true"><span :style="{ width: `${percent}%` }"></span></div>
-    <p v-if="!isOpen && nextItem" class="mt-1.5 text-xs text-muted">Next: {{ nextItem.title }}</p>
-    <ul
-      v-show="isOpen"
-      :id="listId"
-      ref="list"
-      class="try-list fade-list mt-2 space-y-2 overflow-y-auto overscroll-contain"
-      :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
-      @scroll="updateFade"
-    >
-      <li v-for="item in CHECKLIST" :key="item.id" class="flex gap-2">
-        <svg
-          viewBox="0 0 24 24"
-          class="mt-px size-4 shrink-0"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.7"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" :class="done.includes(item.id) ? 'text-accent' : 'text-subtle'" />
-          <path
-            v-if="done.includes(item.id)"
-            d="m8 12.5 2.5 2.5L16 9.5"
-            class="text-accent"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <div class="min-w-0 flex-1">
-          <p class="text-sm" :class="done.includes(item.id) ? 'text-subtle line-through' : 'text-text'">
-            {{ item.title }}<span v-if="done.includes(item.id)" class="sr-only"> (done)</span>
-          </p>
-          <p class="text-xs text-subtle">{{ item.hint }}</p>
-        </div>
-        <button
-          v-if="!done.includes(item.id)"
-          type="button"
-          class="try-help"
-          :aria-label="`Show me where: ${item.title}`"
-          title="Show me where"
-          @click="showHint(item.id)"
-        >
+    <div v-if="justFinished" ref="finishFold" class="try-collapse" :class="{ open: isFinishing }" :inert="!isFinishing">
+      <div class="relative">
+        <ChecklistFinish :playing="isFernPlaying" />
+        <button type="button" class="try-hide absolute right-0 top-0" aria-label="Close" @click="closeFinish">
           <svg
             viewBox="0 0 24 24"
             class="size-4"
@@ -116,12 +82,114 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
             stroke-width="1.7"
             aria-hidden="true"
           >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4M12 17h.01" stroke-linecap="round" />
+            <path d="M6 6l12 12M18 6 6 18" stroke-linecap="round" />
           </svg>
         </button>
-      </li>
-    </ul>
+      </div>
+    </div>
+    <div class="try-collapse" :class="{ open: !isFinishing }" :inert="isFinishing">
+      <div>
+        <div class="flex items-center gap-1">
+          <button type="button" class="try-toggle" :aria-expanded="isOpen" :aria-controls="listId" @click="toggle">
+            <span class="font-display text-sm">Try this</span>
+            <span class="ml-auto text-xs text-subtle tabular-nums">{{ done.length }} of {{ CHECKLIST.length }}</span>
+            <svg
+              viewBox="0 0 24 24"
+              class="try-chevron size-4 text-muted"
+              :class="{ open: isOpen }"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button type="button" class="try-hide" aria-label="Hide Try this" @click="hideChecklist">
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12M18 6 6 18" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="try-bar" aria-hidden="true"><span :style="{ width: `${percent}%` }"></span></div>
+        <div v-if="nextItem" class="try-collapse" :class="{ open: !isOpen }" :inert="isOpen">
+          <div>
+            <p class="mt-1.5 text-xs text-muted">Next: {{ nextItem.title }}</p>
+          </div>
+        </div>
+        <div class="try-collapse" :class="{ open: isOpen }" :inert="!isOpen">
+          <div>
+            <ul
+              :id="listId"
+              ref="list"
+              class="try-list fade-list mt-2 space-y-2 overflow-y-auto overscroll-contain"
+              :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
+              @scroll="updateFade"
+            >
+              <li v-for="item in CHECKLIST" :key="item.id" class="flex gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  class="mt-px size-4 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                    class="try-ring"
+                    :class="done.includes(item.id) ? 'text-accent' : 'text-subtle'"
+                  />
+                  <path
+                    d="m8 12.5 2.5 2.5L16 9.5"
+                    pathLength="1"
+                    class="try-tick"
+                    :class="{ 'is-done': done.includes(item.id) }"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm" :class="done.includes(item.id) ? 'text-subtle line-through' : 'text-text'">
+                    {{ item.title }}<span v-if="done.includes(item.id)" class="sr-only"> (done)</span>
+                  </p>
+                  <p class="text-xs text-subtle">{{ item.hint }}</p>
+                </div>
+                <button
+                  v-if="!near && !done.includes(item.id)"
+                  type="button"
+                  class="try-help"
+                  :aria-label="`Show me where: ${item.title}`"
+                  title="Show me where"
+                  @click="showHint(item.id)"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.4M12 17h.01" stroke-linecap="round" />
+                  </svg>
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -136,6 +204,46 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 .try-list {
   max-height: min(16rem, 30dvh);
   scrollbar-width: thin;
+}
+
+/* Folds open and shut: the row grows from 0fr to 1fr, so no height has to be known. */
+.try-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur) var(--ease);
+}
+
+.try-collapse.open {
+  grid-template-rows: 1fr;
+}
+
+.try-collapse > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.try-chevron {
+  transition: transform var(--dur) var(--ease);
+}
+
+.try-chevron.open {
+  transform: rotate(180deg);
+}
+
+.try-ring {
+  transition: color var(--dur-fast) var(--ease);
+}
+
+/* The tick draws itself like a pen stroke when the item is done. */
+.try-tick {
+  stroke: var(--accent);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset var(--dur) var(--ease);
+}
+
+.try-tick.is-done {
+  stroke-dashoffset: 0;
 }
 
 .try-toggle {

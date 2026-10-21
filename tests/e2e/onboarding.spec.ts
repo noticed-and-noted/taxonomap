@@ -90,3 +90,32 @@ test('turning on a group tile ticks “Narrow to one group”', async ({ page })
   await checklist.getByRole('button', { name: /^Try this/ }).click();
   await expect(checklist.getByText('Narrow to one group (done)')).toBeVisible();
 });
+
+test('finishing the last item grows the fern, then the list is gone for good', async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('try-this', JSON.stringify(['search', 'hex', 'when', 'group', 'near', 'tree'])),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Skip' }).click();
+  const checklist = page.getByRole('region', { name: 'Try this' });
+  await expect(checklist).toContainText('6 of 7');
+
+  await page.getByRole('button', { name: /^Switch to (light|dark) theme$/ }).click();
+  await expect(checklist.getByRole('status')).toContainText("You've found your way around");
+  await checklist.getByRole('button', { name: 'Close' }).click();
+  await expect(checklist).toHaveCount(0);
+
+  // Settings starts it over: the only way back to a finished list.
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Reset Try this' }).click();
+  await expect(checklist).toContainText('0 of 7');
+});
+
+test('Near me keeps the checklist and the legend, and ticks the list', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Near me' }).click();
+  const checklist = page.getByRole('region', { name: 'Try this' });
+  await expect(checklist).toContainText('1 of 7');
+  await expect(page.getByText('Records per cell')).toBeVisible();
+});

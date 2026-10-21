@@ -52,6 +52,32 @@ describe('the checklist', () => {
     expect((await stores()).onboarding.$checklistDone.get()).toEqual(['search', 'tree']);
   });
 
+  it('celebrates once when the last item is ticked, not on a later visit', async () => {
+    const { onboarding } = await stores();
+    for (const item of onboarding.CHECKLIST.slice(0, -1)) onboarding.markDone(item.id);
+    expect(onboarding.$checklistJustFinished.get()).toBe(false);
+    onboarding.markDone('near');
+    expect(onboarding.$checklistJustFinished.get()).toBe(true);
+    expect((await stores()).onboarding.$checklistJustFinished.get()).toBe(false);
+  });
+
+  it('is shown after the tour until hidden, or finished and closed', async () => {
+    const { onboarding } = await stores();
+    expect(onboarding.$checklistShown.get()).toBe(false);
+    onboarding.finishTour();
+    expect(onboarding.$checklistShown.get()).toBe(true);
+    onboarding.$tourOpen.set(true);
+    expect(onboarding.$checklistShown.get()).toBe(false);
+    onboarding.$tourOpen.set(false);
+    for (const item of onboarding.CHECKLIST) onboarding.markDone(item.id);
+    expect(onboarding.$checklistShown.get()).toBe(true);
+    onboarding.$checklistJustFinished.set(false);
+    expect(onboarding.$checklistShown.get()).toBe(false);
+    onboarding.resetChecklist();
+    onboarding.hideChecklist();
+    expect(onboarding.$checklistShown.get()).toBe(false);
+  });
+
   it('ignores changes the tour makes', async () => {
     const { onboarding } = await stores();
     onboarding.$tourOpen.set(true);
@@ -66,7 +92,7 @@ describe('the checklist', () => {
     near.$nearMode.set(true);
     tree.$treeFocus.set(212);
     ramp.setRamp('magma');
-    expect(onboarding.$checklistDone.get()).toEqual(['hex', 'when', 'near', 'tree', 'style']);
+    expect(onboarding.$checklistDone.get()).toEqual(['hex', 'when', 'tree', 'style', 'near']);
   });
 
   it('does not tick on cleared values, and counts a theme switch', async () => {
@@ -86,6 +112,20 @@ describe('the checklist', () => {
     onboarding.hideChecklist();
     expect(onboarding.$checklistHidden.get()).toBe(true);
     expect((await stores()).onboarding.$checklistHidden.get()).toBe(true);
+  });
+
+  it('can be reset from Settings, even once finished and hidden', async () => {
+    const { onboarding } = await stores();
+    for (const item of onboarding.CHECKLIST) onboarding.markDone(item.id);
+    onboarding.hideChecklist();
+    onboarding.resetChecklist();
+    const state = (atoms: typeof onboarding) => [
+      atoms.$checklistDone.get(),
+      atoms.$checklistHidden.get(),
+      atoms.$checklistJustFinished.get(),
+    ];
+    expect(state(onboarding)).toEqual([[], false, false]);
+    expect(state((await stores()).onboarding)).toEqual([[], false, false]);
   });
 
   it('can be shown again from Settings', async () => {
@@ -122,5 +162,7 @@ describe('a blocked storage', () => {
     onboarding.hideChecklist();
     onboarding.showChecklist();
     expect(onboarding.$checklistHidden.get()).toBe(false);
+    onboarding.resetChecklist();
+    expect(onboarding.$checklistDone.get()).toEqual([]);
   });
 });

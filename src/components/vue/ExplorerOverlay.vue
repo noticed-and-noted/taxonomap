@@ -126,12 +126,13 @@ function closePanel() {
       </button>
     </div>
 
+    <!-- Stays in Near me too, on wider screens; phones hide it under Near me's sheet (see the styles). -->
     <div
-      v-if="!near"
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
       :class="{ stashed: dockStashed }"
     >
       <button
+        v-if="!near"
         type="button"
         class="stash-toggle"
         :aria-label="dockStashed ? 'Show legend' : 'Slide legend away'"
@@ -369,9 +370,10 @@ function closePanel() {
   }
 }
 
-/* Mobile: the dock hides behind the bottom sheet while it is open. */
+/* Mobile: the dock hides behind the bottom sheet while it is open (Near me's sheet always is). */
 @media (max-width: 767.98px) {
-  .panel-open .bottom-dock {
+  .panel-open .bottom-dock,
+  .near .bottom-dock {
     visibility: hidden;
   }
 }
