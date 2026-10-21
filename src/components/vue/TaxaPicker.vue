@@ -208,7 +208,6 @@ function onKey(event: KeyboardEvent) {
 .selected-list.scrolls {
   max-height: 12.25rem;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 0.25rem;
   scrollbar-width: thin;
 }

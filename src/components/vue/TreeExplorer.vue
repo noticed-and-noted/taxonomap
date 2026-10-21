@@ -353,7 +353,7 @@ const share = (node: TreeNode) => {
             {{ children.length }} {{ children.length === 1 ? 'group' : 'groups' }} in {{ focus.common ?? focus.name }}
           </h3>
           <ol
-            class="max-h-[50dvh] space-y-0.5 overflow-y-auto overscroll-contain pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1"
+            class="max-h-[50dvh] space-y-0.5 overflow-y-auto pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1"
           >
             <li v-for="child in children" :key="child.key">
               <button

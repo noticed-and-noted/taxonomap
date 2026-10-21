@@ -306,7 +306,7 @@ const institution = (occurrence: Occurrence) =>
       </div>
       <div
         ref="scroller"
-        class="fade-list -mx-4 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        class="fade-list -mx-4 overflow-y-auto [scrollbar-gutter:stable]"
         :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': fadeBottom }]"
         @scroll.passive="updateFade"
       >
