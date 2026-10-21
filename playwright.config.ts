@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4321;
+// Not 4321, so a running `astro dev` (real GBIF and basemaps) is never reused in place of the fake-world preview.
+const PORT = 4329;
 // Locally, PW_CHANNEL=chrome uses the installed Google Chrome, or PW_CHROMIUM a
 // Chromium binary, instead of Playwright's own download; CI installs Playwright's.
 const channel = process.env['PW_CHANNEL'];

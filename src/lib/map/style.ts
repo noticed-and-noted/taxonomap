@@ -184,17 +184,18 @@ function globeSettings(bg: string): Pick<StyleSpecification, 'projection' | 'sky
   };
 }
 
-/** The loaded vector style with our layers inserted below its first label layer and the rest above. */
+/** The loaded vector style with our data above all its non-label layers, and its labels and our selections on top. */
 function spliceOverlay(base: StyleSpecification, colors: MapColors, data: OverlayData): StyleSpecification {
   const ours = overlay(colors, data);
-  const firstSymbol = base.layers.findIndex((layer) => layer.type === 'symbol');
-  const cut = firstSymbol === -1 ? base.layers.length : firstSymbol;
   const layers = base.layers.map((layer) => themeBasemapLayer(layer, colors));
+  // Not a cut at the first label: OpenFreeMap's dark style puts water names before its roads and buildings.
+  const shapes = layers.filter((layer) => layer.type !== 'symbol');
+  const labels = layers.filter((layer) => layer.type === 'symbol');
   return {
     ...base,
     ...globeSettings(colors.bg),
     sources: { ...base.sources, ...ours.sources },
-    layers: [...layers.slice(0, cut), ...ours.data, ...layers.slice(cut), ...ours.top],
+    layers: [...shapes, ...ours.data, ...labels, ...ours.top],
   };
 }
 

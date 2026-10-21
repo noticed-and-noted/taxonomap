@@ -9,6 +9,7 @@ import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $filterPills, type FilterGroupId } from '~/stores/explorer';
 import { $taxa, removeTaxon } from '~/stores/taxon';
 import { FILTER_GROUPS } from './filterGroups';
+import UiIcon from './UiIcon.vue';
 import { useDragScroll } from './useDragScroll';
 import { useScrollFade } from './useScrollFade';
 
@@ -61,14 +62,16 @@ onBeforeUnmount(() => resize.disconnect());
         :aria-label="`Remove taxon filter ${nameOf(taxon)}`"
         @click="removeTaxon(taxon.key)"
       >
-        ×
+        <UiIcon name="close" size="0.875rem" />
       </button>
     </span>
     <span v-if="rest.length" class="chip more" :title="rest.map(nameOf).join(', ')">+{{ rest.length }} more</span>
     <span v-for="pill in pills" :key="pill.id" class="chip max-w-[18rem]" :title="pill.text">
       <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf(pill.group)" /></svg>
       <span class="min-w-0 truncate">{{ pill.text }}</span>
-      <button type="button" class="chip-x" :aria-label="`Remove filter ${pill.text}`" @click="pill.clear()">×</button>
+      <button type="button" class="chip-x" :aria-label="`Remove filter ${pill.text}`" @click="pill.clear()">
+        <UiIcon name="close" size="0.875rem" />
+      </button>
     </span>
   </span>
 </template>

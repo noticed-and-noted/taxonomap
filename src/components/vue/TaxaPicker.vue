@@ -3,19 +3,21 @@
  * The What filter's taxa: species or groups of any rank, records of any of
  * them shown. Suggestions come from the baked name index (instant) and GBIF
  * suggest / vernacular search (debounced), as in the header search, which
- * adds to the same list. ARIA 1.2 combobox; the listbox is inline so the
- * flyout never clips it.
+ * adds to the same list. ARIA 1.2 combobox; the listbox floats over the
+ * content below and scrolls.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, useId, watch } from 'vue';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import type { NameHit } from '~/lib/gbif';
+import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
 import { $taxa, addTaxon, removeTaxon, taxonFromHit } from '~/stores/taxon';
+import UiIcon from './UiIcon.vue';
 import { useNameSearch } from './useNameSearch';
 
-const MAX_OPTIONS = 8;
+const MAX_OPTIONS = 20;
 /** Past this many selected taxa, the list scrolls instead of growing. */
 const SCROLL_AFTER = 5;
 const uniqueId = useId();
@@ -23,6 +25,7 @@ const listId = `${uniqueId}-taxa-list`;
 
 const keys = useStore($taxonKeys);
 const taxa = useStore($taxa);
+const manifest = useStore($speciesManifest);
 const list = ref<HTMLUListElement>();
 
 // The list is sorted by key, so a newly added taxon (here or from the header
@@ -61,6 +64,7 @@ function move(delta: number) {
   const count = options.value.length;
   if (!count) return;
   active.value = (active.value + delta + count) % count;
+  nextTick(() => document.getElementById(activeId.value ?? '')?.scrollIntoView({ block: 'nearest' }));
 }
 
 function onKey(event: KeyboardEvent) {
@@ -103,10 +107,14 @@ function onKey(event: KeyboardEvent) {
     >
       <li v-for="taxon in taxa" :key="taxon.key" :data-key="taxon.key" class="selected-row">
         <span class="min-w-0 truncate">
-          <span v-if="taxon.commonName" class="font-medium">{{ taxon.commonName }}</span>
-          <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': taxon.commonName }">{{
-            taxon.scientificName
-          }}</span>
+          <a
+            :href="speciesPath(taxon.key, manifest)"
+            class="taxon-link"
+            :class="taxon.commonName ? 'font-medium' : 'sci-name'"
+            :title="`About ${taxon.commonName ?? taxon.scientificName}`"
+            >{{ taxon.commonName ?? taxon.scientificName }}</a
+          >
+          <span v-if="taxon.commonName" class="sci-name ml-1 text-xs text-muted">{{ taxon.scientificName }}</span>
         </span>
         <span class="ml-auto shrink-0 text-[11px] text-subtle">{{ rankLabel(taxon.rank) }}</span>
         <button
@@ -115,56 +123,60 @@ function onKey(event: KeyboardEvent) {
           :aria-label="`Remove ${taxon.commonName ?? taxon.scientificName}`"
           @click="removeTaxon(taxon.key)"
         >
-          ×
+          <UiIcon name="close" size="0.875rem" />
         </button>
       </li>
     </ul>
     <p v-else class="mb-2 text-muted">All life.</p>
 
-    <input
-      :id="`${uniqueId}-input`"
-      v-model="query"
-      type="search"
-      class="picker-input"
-      role="combobox"
-      autocomplete="off"
-      :placeholder="full ? `Up to ${MAX_TAXA} at once` : 'Add a species or group'"
-      :disabled="full"
-      :aria-expanded="open"
-      :aria-controls="listId"
-      aria-autocomplete="list"
-      :aria-activedescendant="activeId"
-      @focus="loadNameIndex"
-      @input="onInput"
-      @keydown="onKey"
-    />
+    <div class="relative">
+      <input
+        :id="`${uniqueId}-input`"
+        v-model="query"
+        type="search"
+        class="picker-input"
+        role="combobox"
+        autocomplete="off"
+        :placeholder="full ? `Up to ${MAX_TAXA} at once` : 'Add a species or group'"
+        :disabled="full"
+        :aria-expanded="open"
+        :aria-controls="listId"
+        aria-autocomplete="list"
+        :aria-activedescendant="activeId"
+        @focus="loadNameIndex"
+        @input="onInput"
+        @keydown="onKey"
+      />
 
-    <ul v-show="open" :id="listId" role="listbox" class="options" aria-label="Species and group suggestions">
-      <li
-        v-for="(hit, index) in options"
-        :id="`${uniqueId}-opt-${index}`"
-        :key="hit.key"
-        role="option"
-        class="option"
-        :class="{ active: index === active }"
-        :aria-selected="index === active"
-        @mousedown.prevent
-        @click="pick(hit)"
-        @mousemove="active = index"
-      >
-        <span class="min-w-0 truncate">
-          <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
-          <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': hit.commonName }">{{ hit.scientificName }}</span>
-        </span>
-        <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
-          <span class="block">{{ rankLabel(hit.rank) }}</span>
-          <span v-if="hit.count" class="block tabular-nums">{{ compact(hit.count) }}</span>
-        </span>
-      </li>
-      <li v-if="!options.length" class="option-note" role="presentation">
-        {{ loading ? 'Searching…' : 'Nothing found' }}
-      </li>
-    </ul>
+      <ul v-show="open" :id="listId" role="listbox" class="options" aria-label="Species and group suggestions">
+        <li
+          v-for="(hit, index) in options"
+          :id="`${uniqueId}-opt-${index}`"
+          :key="hit.key"
+          role="option"
+          class="option"
+          :class="{ active: index === active }"
+          :aria-selected="index === active"
+          @mousedown.prevent
+          @click="pick(hit)"
+          @mousemove="active = index"
+        >
+          <span class="min-w-0 truncate">
+            <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
+            <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': hit.commonName }">{{
+              hit.scientificName
+            }}</span>
+          </span>
+          <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
+            <span class="block">{{ rankLabel(hit.rank) }}</span>
+            <span v-if="hit.count" class="block tabular-nums">{{ compact(hit.count) }}</span>
+          </span>
+        </li>
+        <li v-if="!options.length" class="option-note" role="presentation">
+          {{ loading ? 'Searching…' : 'Nothing found' }}
+        </li>
+      </ul>
+    </div>
 
     <p class="hint">Shows records of any selected species or group. The search at the top adds here too.</p>
   </div>
@@ -196,7 +208,6 @@ function onKey(event: KeyboardEvent) {
 .selected-list.scrolls {
   max-height: 12.25rem;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 0.25rem;
   scrollbar-width: thin;
 }
@@ -210,6 +221,11 @@ function onKey(event: KeyboardEvent) {
   border-radius: var(--radius-sm);
   border: 1px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+
+.taxon-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .remove-btn {
@@ -245,6 +261,14 @@ function onKey(event: KeyboardEvent) {
 }
 
 .options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin-top: 0.25rem;
   padding: 0.25rem;
   border-radius: var(--radius-sm);

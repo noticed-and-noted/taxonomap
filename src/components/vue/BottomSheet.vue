@@ -106,6 +106,7 @@ function onKey(event: KeyboardEvent) {
         @pointercancel="onUp"
       >
         <h2 class="truncate font-display text-lg">{{ title }}</h2>
+        <slot name="actions" />
         <button
           type="button"
           class="grid size-11 place-items-center sm:size-8 rounded-md text-muted hover:bg-surface-2"

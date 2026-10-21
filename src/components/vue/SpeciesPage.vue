@@ -25,7 +25,7 @@ const englishNames = computed(
 </script>
 
 <template>
-  <article class="species-page mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6">
+  <article class="species-page mx-auto max-w-6xl px-4 pb-8 pt-6 sm:px-6 sm:pb-16">
     <nav aria-label="Classification" class="mb-3 text-xs text-subtle">
       <ol class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <li v-for="(taxon, index) in speciesData.classification" :key="taxon.key" class="flex items-center gap-1.5">

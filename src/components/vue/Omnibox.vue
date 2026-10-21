@@ -8,7 +8,7 @@
  * The first result is highlighted until you arrow, so Enter picks it. The
  * highlighted species result is previewed beside the list, with a link to its
  * About page; Cmd/Ctrl-Enter opens that page, and Cmd/Ctrl-Shift-Enter
- * searches places. ARIA 1.2 combobox with a listbox popup.
+ * searches places (or, from places, goes back to species and groups). ARIA 1.2 combobox with a listbox popup.
  */
 import { navigate } from 'astro:transitions/client';
 import { useStore } from '@nanostores/vue';
@@ -73,8 +73,8 @@ const searching = computed(() =>
   placeLoading.value ? 'places' : liveLoading.value && !places.value ? 'species' : null,
 );
 
-/** Placeholder rows to show while species load: enough to make three rows with what's in. */
-const placeholderRows = computed(() => (searching.value === 'species' ? Math.max(0, 3 - taxa.value.length) : 0));
+/** Placeholder rows to show while results load: enough to make three rows with what's in. */
+const placeholderRows = computed(() => (searching.value ? Math.max(0, 3 - listOptions.value.length) : 0));
 
 const options = computed<Option[]>(() => {
   if (places.value) return places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }));
@@ -83,9 +83,7 @@ const options = computed<Option[]>(() => {
     id: `omni-taxon-${hit.key}`,
     hit,
   }));
-  // Not while results are loading: they would push it down as they arrive.
-  if (query.value.trim().length >= 2 && !searching.value)
-    suggestions.push({ kind: 'place-search', id: 'omni-place-search' });
+  if (query.value.trim().length >= 2) suggestions.push({ kind: 'place-search', id: 'omni-place-search' });
   return suggestions;
 });
 
@@ -98,6 +96,11 @@ const hasRows = computed(() => listOptions.value.length > 0 || placeholderRows.v
 const placeSearchOption = computed(() => options.value.find((option) => option.kind === 'place-search'));
 
 const activeId = computed(() => options.value[active.value]?.id);
+
+// Arrowing past the list's edge would otherwise highlight a row nobody can see; hovered and tapped rows are already in view, so "nearest" leaves them be.
+watch(activeId, (id) => {
+  if (id) void nextTick(() => document.getElementById(id)?.scrollIntoView({ block: 'nearest' }));
+});
 
 /** The result to preview: the highlighted species/group (the first, if the highlight's row has gone). */
 const previewHit = computed<NameHit | null>(() => {
@@ -162,11 +165,18 @@ async function runPlaceSearch() {
   if (!trimmed) return;
   placeLoading.value = true;
   placeFailed.value = false;
+  // Switch to the (empty) places list now, so its placeholder rows show while the geocoder answers.
+  places.value = [];
+  active.value = 0;
   try {
-    places.value = await searchPlaces(trimmed);
+    const found = await searchPlaces(trimmed);
+    // Gone back to species, or typed, while the geocoder answered.
+    if (!places.value) return;
+    places.value = found;
     open.value = true;
     active.value = 0;
   } catch {
+    if (!places.value) return;
     placeFailed.value = true;
     places.value = [];
   } finally {
@@ -174,11 +184,24 @@ async function runPlaceSearch() {
   }
 }
 
+/** Leave the places list for the species and group results still behind it. */
+function showSpecies() {
+  places.value = null;
+  placeLoading.value = false;
+  placeFailed.value = false;
+  open.value = true;
+  active.value = 0;
+}
+
+/** Picking a result in place, per page; none where a pick opens its About page. */
+const SELECT_ACTIONS: Partial<Record<SearchMode, { label: string; caption: string; icon: 'filter' | 'tree' }>> = {
+  map: { label: 'Filter on map', caption: 'Filter', icon: 'filter' },
+  tree: { label: 'Show in tree', caption: 'Tree', icon: 'tree' },
+};
+
 /** Label for picking a result in place; undefined where a pick opens its About page. */
 function selectLabel(): string | undefined {
-  if (props.mode === 'map') return 'Add to map';
-  if (props.mode === 'tree') return 'Show in tree';
-  return undefined;
+  return SELECT_ACTIONS[props.mode]?.label;
 }
 
 async function pickTaxon(hit: NameHit) {
@@ -231,6 +254,15 @@ function choose(option: Option | undefined) {
   else void runPlaceSearch();
 }
 
+/* Set on pointerdown: Safari's click events don't say whether a finger or a mouse made them. */
+let lastPointerType = '';
+
+/** Phones have no hover, so a tap on another species row previews it first; tapping it again (or the preview's buttons) picks it. */
+function onRowClick(option: Option, index: number) {
+  if (lastPointerType === 'touch' && option.kind === 'taxon' && index !== active.value) active.value = index;
+  else choose(option);
+}
+
 function onKeydown(event: KeyboardEvent) {
   const count = options.value.length;
   if (event.key === 'ArrowDown') {
@@ -242,8 +274,10 @@ function onKeydown(event: KeyboardEvent) {
     active.value = count ? (active.value - 1 + count) % count : 0;
   } else if (event.key === 'Enter') {
     event.preventDefault();
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey) void runPlaceSearch();
-    else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
+      if (places.value) showSpecies();
+      else void runPlaceSearch();
+    } else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
     else if (options.value[active.value]) choose(options.value[active.value]);
     // Nothing to pick yet (still loading, or no matches): look for a place.
     else void runPlaceSearch();
@@ -262,13 +296,19 @@ function onBlur(event: FocusEvent) {
    visual viewport (not the layout one) on iOS and Android, hiding its foot. */
 const dropdown = ref<HTMLDivElement>();
 const fitHeight = ref<number | null>(null);
+const isShown = computed(
+  () =>
+    open.value && (options.value.length > 0 || !!searching.value || placeFailed.value || places.value?.length === 0),
+);
 function fit() {
-  if (!open.value || !dropdown.value) return;
+  // Hidden (v-show) it measures at top 0, which would size it past the keyboard.
+  if (!isShown.value || !dropdown.value) return;
   const viewport = window.visualViewport;
   const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
   fitHeight.value = Math.max(160, Math.floor(bottom - dropdown.value.getBoundingClientRect().top - 8));
 }
-watch(open, (isOpen) => (isOpen ? void nextTick(fit) : undefined));
+// On first use results arrive after `open`, so fit when it actually shows.
+watch(isShown, (shown) => (shown ? void nextTick(fit) : undefined));
 
 // Search for anything typed before hydration (see query).
 onMounted(() => {
@@ -334,7 +374,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-show="open && (options.length > 0 || searching || placeFailed || (places && !places.length))"
+      v-show="isShown"
       ref="dropdown"
       class="dropdown absolute left-0 right-0 top-full z-40 mt-1 flex flex-col overflow-hidden rounded-md border border-border bg-surface shadow-panel"
       :class="{ 'with-preview': previewHit }"
@@ -359,7 +399,8 @@ onBeforeUnmount(() => {
               :aria-selected="index === active"
               class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm aria-selected:bg-accent-soft"
               @mousedown.prevent
-              @click="choose(option)"
+              @pointerdown="lastPointerType = $event.pointerType"
+              @click="onRowClick(option, index)"
               @pointermove="$event.pointerType === 'mouse' && (active = index)"
             >
               <template v-if="option.kind === 'taxon'">
@@ -396,9 +437,14 @@ onBeforeUnmount(() => {
                 class="flex items-center gap-3 px-3 py-2"
                 aria-hidden="true"
               >
-                <span class="min-w-0 flex-1 space-y-1.5">
-                  <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
-                  <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
+                <!-- Line boxes match a result's text-sm and text-xs lines, so rows keep their height. -->
+                <span class="min-w-0 flex-1">
+                  <span class="flex h-5 items-center">
+                    <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
+                  </span>
+                  <span class="flex h-4 items-center">
+                    <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
+                  </span>
                 </span>
                 <SkeletonBlock width="2.25rem" height="0.7rem" />
               </li>
@@ -410,7 +456,7 @@ onBeforeUnmount(() => {
             role="option"
             :aria-selected="active === options.length - 1"
             :class="{ 'border-t': hasRows }"
-            class="flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
+            class="mt-auto flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
             @mousedown.prevent
             @click="choose(placeSearchOption)"
             @pointermove="$event.pointerType === 'mouse' && (active = options.length - 1)"
@@ -428,26 +474,21 @@ onBeforeUnmount(() => {
             </svg>
             <span class="text-muted">Search places for “{{ query.trim() }}”</span>
           </div>
-          <div
-            v-else-if="searching"
-            role="none"
-            class="flex shrink-0 items-center gap-3 border-t border-border px-3 py-2.5"
-          >
-            <span class="sr-only">Searching {{ searching }}…</span>
-            <SkeletonBlock width="60%" height="0.8rem" aria-hidden="true" />
-          </div>
+          <span v-if="searching" role="none" class="sr-only">Searching {{ searching }}…</span>
         </div>
         <TaxonPreview
           v-if="previewHit"
           :hit="previewHit"
           :href="aboutHref(previewHit)"
           :about-label="'About'"
-          :select-label="selectLabel()"
+          :select="SELECT_ACTIONS[mode]"
           @select="pickTaxon(previewHit)"
           @about="close"
         />
       </div>
-      <p v-if="places && !places.length && !placeFailed" class="px-3 py-2 text-sm text-muted">No places found.</p>
+      <p v-if="places && !places.length && !placeFailed && !placeLoading" class="px-3 py-2 text-sm text-muted">
+        No places found.
+      </p>
       <p v-if="placeFailed" class="px-3 py-2 text-sm text-muted">Place search is unavailable right now.</p>
       <p v-if="liveFailed && !places" class="border-t border-border px-3 py-1.5 text-xs text-subtle">
         Live species search is busy; showing saved names only.
@@ -457,8 +498,8 @@ onBeforeUnmount(() => {
         <span v-if="previewHit && selectLabel()"
           ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
         >
-        <span v-if="!places && enterLabel !== 'Search places'"
-          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> Places</span
+        <span v-if="places || enterLabel !== 'Search places'"
+          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> {{ places ? 'Species' : 'Places' }}</span
         >
         <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
       </p>

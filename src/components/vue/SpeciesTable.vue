@@ -251,7 +251,7 @@ watch([query, group, sortKey, sortDesc], () => {
           </p>
           <div
             ref="groupList"
-            class="fade-list -mx-1 max-h-72 space-y-0.5 overflow-y-auto overscroll-contain px-1"
+            class="fade-list -mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1"
             :class="{ 'fade-bottom': groupFade }"
             @scroll.passive="updateGroupFade"
           >
@@ -340,7 +340,7 @@ watch([query, group, sortKey, sortDesc], () => {
         <!-- Scrolls on its own so whatever follows (e.g. the seasonality chart) stays close. -->
         <div
           ref="scroller"
-          class="fade-list -mx-4 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+          class="fade-list -mx-4 overflow-y-auto [scrollbar-gutter:stable]"
           :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': resultsFade }]"
           tabindex="0"
           aria-label="Species results"

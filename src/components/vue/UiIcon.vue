@@ -10,6 +10,10 @@ const PATHS = {
   'arrow-up': 'M12 19V5m-6 6 6-6 6 6',
   'chevron-right': 'm9 6 6 6-6 6',
   close: 'M6 6l12 12M18 6 6 18',
+  filter: 'M4 7h16M7 12h10M10 17h4',
+  // The header's Tree of life sprout.
+  tree: 'M12 21V11M12 11c0-4 3-6 7-6 0 4-3 6-7 6zM12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z',
+  info: 'M12 3a9 9 0 1 1 0 18 9 9 0 1 1 0-18zM12 11v5M12 8h.01',
 } as const;
 
 const { name, size = '1em' } = defineProps<{ name: keyof typeof PATHS; size?: string | number }>();
