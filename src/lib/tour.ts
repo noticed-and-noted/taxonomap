@@ -22,7 +22,7 @@ const SPOT_RADIUS = 10;
 /** Room between a spotlight and its tip. */
 const TIP_GAP = 12;
 /** Least room between the tip and the viewport's edges. */
-const VIEWPORT_EDGE = 16;
+export const VIEWPORT_EDGE = 16;
 
 /**
  * Grows a box on every side, so the spotlight doesn't touch its target.

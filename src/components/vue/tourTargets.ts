@@ -40,6 +40,8 @@ export interface Hint {
   targets: () => (ScreenBox | null)[];
   /** Asks the map for a hex to point at (its box arrives on $busiestHexBox). */
   needsHex?: boolean;
+  /** Shown instead of `body` when there is nothing clear of the chrome to point at. */
+  emptyBody?: string;
 }
 
 /** What each "Try this" item's help shows: where to click, and what to do there. */
@@ -49,9 +51,11 @@ export const HINTS: Record<ChecklistId, Hint> = {
     targets: () => [boxOf('[data-tour="search"]')],
   },
   hex: {
-    body: 'Click any hex, such as this busy one, to see the species and records inside it.',
+    body: 'Click any hex to see the species and records found inside it.',
     targets: () => [$busiestHexBox.get()],
     needsHex: true,
+    emptyBody:
+      'Can’t see a hex? Pan or zoom out the map, or loosen your filters. Then click a hex to see what was found there.',
   },
   when: {
     body: 'Open the When filter, then drag the time slider or pick a range of years.',

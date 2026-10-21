@@ -47,6 +47,14 @@ function write(key: string, value: string): void {
   }
 }
 
+function remove(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* Storage unavailable: the change lasts for this page view only. */
+  }
+}
+
 function savedProgress(): ChecklistId[] {
   try {
     const parsed: unknown = JSON.parse(read(PROGRESS_KEY) ?? '[]');
@@ -100,32 +108,20 @@ export function finishTour(): void {
 
 /** Show the tour again (from Settings), closing the phone filters sheet it would sit behind. */
 export function restartTour(): void {
-  try {
-    localStorage.removeItem(TOUR_KEY);
-  } catch {
-    /* Storage unavailable: the tour shows again for this page view only. */
-  }
+  remove(TOUR_KEY);
   if ($panel.get() === 'filters') $panel.set('none');
   $tourSeen.set(false);
 }
 
 /** Bring a hidden checklist back (from Settings). */
 export function showChecklist(): void {
-  try {
-    localStorage.removeItem(HIDDEN_KEY);
-  } catch {
-    /* Storage unavailable: the checklist shows again for this page view only. */
-  }
+  remove(HIDDEN_KEY);
   $checklistHidden.set(false);
 }
 
 /** Start the checklist over (from Settings): nothing ticked, and shown again. */
 export function resetChecklist(): void {
-  try {
-    localStorage.removeItem(PROGRESS_KEY);
-  } catch {
-    /* Storage unavailable: the fresh list lasts for this page view only. */
-  }
+  remove(PROGRESS_KEY);
   $checklistDone.set([]);
   $checklistJustFinished.set(false);
   showChecklist();

@@ -21,8 +21,14 @@ const title = computed(() => CHECKLIST.find((item) => item.id === props.id)?.tit
 
 const close = () => $checklistHint.set(null);
 
+/** True when the step settled with nothing to point at. */
+const isEmpty = ref(false);
+const body = computed(() => (isEmpty.value && hint.value.emptyBody) || hint.value.body);
+
+// A hint with words for an empty view keeps its card, centred; the rest have nothing to show.
 function onSettled(count: number) {
-  if (!count) close();
+  isEmpty.value = !count;
+  if (!count && !hint.value.emptyBody) close();
 }
 
 // Doing the thing is the clearest sign the hint has served its purpose.
@@ -58,7 +64,7 @@ onBeforeUnmount(() => {
     @dismiss="close"
   >
     <h2 :id="titleId" class="font-display text-lg">{{ title }}</h2>
-    <p class="mt-1 text-sm text-muted">{{ hint.body }}</p>
+    <p class="mt-1 text-sm text-muted">{{ body }}</p>
     <div class="mt-3 flex justify-end">
       <button type="button" class="tour-btn primary" @click="close">Got it</button>
     </div>

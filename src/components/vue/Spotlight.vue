@@ -8,7 +8,7 @@
  * reach the page beneath, and any click outside the card dismisses it.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { padBox, spotlightPath, tipPosition, type ScreenBox } from '~/lib/tour';
+import { padBox, spotlightPath, tipPosition, VIEWPORT_EDGE, type ScreenBox } from '~/lib/tour';
 
 const props = defineProps<{
   /** What to spotlight; the first box anchors the card. */
@@ -33,7 +33,6 @@ const STILL_FRAMES = 3;
 /** Longest wait for targets to stop moving, past the slowest slide (--dur-slow). */
 const SETTLE_MAX_MS = 1000;
 const TIP_MAX_WIDTH = 320;
-const VIEWPORT_EDGE = 16;
 
 const card = ref<HTMLElement>();
 const boxes = ref<ScreenBox[]>([]);
