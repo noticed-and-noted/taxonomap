@@ -9,6 +9,7 @@ import { useStore } from '@nanostores/vue';
 import { computed, ref } from 'vue';
 import { $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
+import { $tourSeen } from '~/stores/onboarding';
 import BasemapSwitcher from './BasemapSwitcher.vue';
 import FilterGroup from './FilterGroup.vue';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
@@ -18,11 +19,15 @@ import MapLegend from './MapLegend.vue';
 import MapProgress from './MapProgress.vue';
 import MapSettings from './MapSettings.vue';
 import NearExplorer from './NearExplorer.vue';
+import OnboardingTour from './OnboardingTour.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
+import RestartTour from './RestartTour.vue';
 import TaxonChip from './TaxonChip.vue';
 import ThemePicker from './ThemePicker.vue';
+import TryThis from './TryThis.vue';
 
 const panel = useStore($panel);
+const tourSeen = useStore($tourSeen);
 const hex = useStore($selectedHex);
 const activeFilters = useStore($activeFilterCount);
 const groupCounts = useStore($groupCounts);
@@ -66,6 +71,7 @@ function closePanel() {
     :class="{ 'panel-open': panelOpen && !near, near }"
   >
     <NearExplorer v-if="near" />
+    <OnboardingTour v-if="!tourSeen && !near" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
     >
@@ -105,6 +111,7 @@ function closePanel() {
       <button
         type="button"
         class="filters-btn"
+        data-tour="filters"
         :aria-expanded="filtersOpen"
         :class="{ active: activeFilters, 'ml-auto': near }"
         @click="openFilters"
@@ -137,7 +144,8 @@ function closePanel() {
           />
         </svg>
       </button>
-      <MapLegend class="w-full max-w-56" />
+      <TryThis />
+      <MapLegend class="w-full max-w-56" data-tour="legend" />
     </div>
 
     <div class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block">
@@ -202,6 +210,7 @@ function closePanel() {
               <ThemePicker />
             </div>
             <MapSettings inline />
+            <RestartTour />
           </div>
           <div v-else role="tabpanel">
             <FilterGroup :group="filterTab" />

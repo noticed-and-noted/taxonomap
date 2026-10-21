@@ -7,6 +7,7 @@ import { BASEMAP_IDS } from '~/lib/basemaps';
 import { parseRange, rangeFilter, rangeLabel, serializeRange, type DateRange } from '~/lib/dates';
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTHS } from '~/lib/format';
 import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
+import type { ScreenBox } from '~/lib/tour';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
@@ -175,6 +176,15 @@ export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>(
 
 /** One-shot camera requests (place search, taxon extent). */
 export const $flyTo = atom<FlyRequest | null>(null);
+
+/**
+ * Tour hook: set true and MapCanvas selects the busiest hex in view (without
+ * opening its panel), then answers on $busiestHexBox before this returns.
+ */
+export const $busiestHexRequest = atom(false);
+
+/** Where the hex picked for $busiestHexRequest sits on screen; null when no cell was loaded. */
+export const $busiestHexBox = atom<ScreenBox | null>(null);
 
 /** Clear the hex selection and anything that depends on it. */
 export function clearHexSelection(): void {

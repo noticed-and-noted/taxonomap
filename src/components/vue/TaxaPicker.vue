@@ -13,6 +13,7 @@ import { compact, RANK_LABELS } from '~/lib/format';
 import type { NameHit } from '~/lib/gbif';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
+import { markDone } from '~/stores/onboarding';
 import { $taxa, addTaxon, removeTaxon, taxonFromHit } from '~/stores/taxon';
 import UiIcon from './UiIcon.vue';
 import { useNameSearch } from './useNameSearch';
@@ -53,7 +54,7 @@ function onInput() {
 }
 
 function pick(hit: NameHit) {
-  addTaxon(taxonFromHit(hit));
+  if (addTaxon(taxonFromHit(hit)) !== 'full') markDone('group');
   query.value = '';
   onInput();
 }
