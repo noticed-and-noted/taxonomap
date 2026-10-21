@@ -56,6 +56,13 @@ describe('buildStyle', () => {
     expect(style.projection).toEqual({ type: 'globe' });
   });
 
+  it('keeps roads under the data when a label layer comes before them', async () => {
+    const [background, road, water, ...labels] = vectorBase.layers;
+    const labelFirst = { ...vectorBase, layers: [background!, ...labels, road!, water!] };
+    const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => labelFirst);
+    expect(ids(style).slice(0, 4)).toEqual(['background', 'road_major', 'water', 'occ-fill']);
+  });
+
   it('themes the basemap: background, label colours, and roads and minor labels only up close', async () => {
     const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
     expect(layer(style, 'background')['paint']).toEqual({ 'background-color': '#b' });
