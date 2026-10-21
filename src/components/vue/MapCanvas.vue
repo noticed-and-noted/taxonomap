@@ -27,9 +27,12 @@ import type { Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
+import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
 import {
   $basemap,
+  $busiestHexBox,
+  $busiestHexRequest,
   $flyTo,
   $gridLevel,
   $hexGeometry,
@@ -203,6 +206,98 @@ function restoreHex() {
     if ($panel.get() === 'none') $panel.set('hex');
   }
   pendingHexRestore = false;
+}
+
+/** Room kept between the tour's hex and the map's covered edges, so its tip and the legend never hide it. */
+const BUSIEST_MARGIN = 120;
+/** The same with the bottom sheet, which leaves a short band of map; the tip moves itself off the hex there. */
+const SHEET_MARGIN = 40;
+
+/** A cell's centre: the mean of its vertices (the ring repeats the first one at the end). */
+function centreOf(hex: Hex): [number, number] {
+  const vertices = hex.geometry.coordinates[0]!.slice(0, -1);
+  const sum = (index: 0 | 1) => vertices.reduce((total, vertex) => total + (vertex[index] as number), 0);
+  return [sum(0) / vertices.length, sum(1) / vertices.length];
+}
+
+/** cos of the widest angle from the map's centre a tour hex may sit at (60°), so it faces the viewer on the globe. */
+const FACING_COS = 0.5;
+
+/** Whether a point is within FACING_COS of the map's centre, by great-circle angle. */
+function isFacing([lng, lat]: [number, number]): boolean {
+  const centre = map!.getCenter();
+  const radians = Math.PI / 180;
+  const cosAngle =
+    Math.sin(lat * radians) * Math.sin(centre.lat * radians) +
+    Math.cos(lat * radians) * Math.cos(centre.lat * radians) * Math.cos((lng - centre.lng) * radians);
+  return cosAngle > FACING_COS;
+}
+
+/** The bottom sheet's height when it opens (BottomSheet's half snap), as a share of the page. */
+const SHEET_OPEN_SHARE = 0.55;
+/** The side panel's inset from the map's right edge (right-3). */
+const PANEL_INSET = 12;
+
+/** The covered edges, plus a margin, once the cell panel is open too, since the tour opens it on the hex it picks. */
+function coveredWithPanel(box: DOMRect) {
+  const covered = coveredEdges();
+  if (window.matchMedia('(min-width: 768px)').matches) {
+    const panelWidth = parseFloat(css('--panel-width', '400px'));
+    return { ...covered, right: Math.max(covered.right, panelWidth + PANEL_INSET), margin: BUSIEST_MARGIN };
+  }
+  return { ...covered, bottom: Math.max(covered.bottom, box.height * SHEET_OPEN_SHARE), margin: SHEET_MARGIN };
+}
+
+/** The loaded cell with the most records that faces the viewer, clear of the floating chrome and the cell panel. */
+function busiestInView(): Hex | undefined {
+  if (!map || !occ) return undefined;
+  const box = map.getContainer().getBoundingClientRect();
+  const covered = coveredWithPanel(box);
+  let busiest: Hex | undefined;
+  for (const hex of occ.collection().features as Hex[]) {
+    const centre = centreOf(hex);
+    const point = map.project(centre);
+    const isClear =
+      point.x > covered.left + covered.margin &&
+      point.x < box.width - covered.right - covered.margin &&
+      point.y > covered.top + covered.margin &&
+      point.y < box.height - covered.bottom - covered.margin;
+    if (isClear && isFacing(centre) && hex.properties.total > (busiest?.properties.total ?? 0)) busiest = hex;
+  }
+  return busiest;
+}
+
+/** The outline of the hex the tour or a hint points at, kept so its box can follow the map. */
+let pointedRing: [number, number][] | null = null;
+
+/** Tour and hints: find the busiest hex in view, select it if asked (panel closed), and publish where it is. */
+function findBusiestHex(shouldSelect: boolean) {
+  const hex = busiestInView();
+  const geometry = hex && geometryOf(hex);
+  pointedRing = geometry ? geometry.ring : null;
+  if (hex && geometry && shouldSelect) {
+    const [lng, lat] = centreOf(hex);
+    $hexGeometry.set(geometry);
+    $selectedHex.set([Number(lng.toFixed(4)), Number(lat.toFixed(4))]);
+  }
+  $busiestHexBox.set(pointedBox());
+}
+
+/** The pointed-at hex's box on screen, in viewport px. */
+function pointedBox(): ScreenBox | null {
+  if (!map || !pointedRing) return null;
+  const box = map.getContainer().getBoundingClientRect();
+  const points = pointedRing.map((position) => map!.project(position));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+  return { left: box.left + left, top: box.top + top, width: Math.max(...xs) - left, height: Math.max(...ys) - top };
+}
+
+/** Keep the tour's or hint's hex box on its hex as the map moves or resizes. */
+function followBusiestHex() {
+  if ($busiestHexBox.get()) $busiestHexBox.set(pointedBox());
 }
 
 /** How much of the map the floating header, bottom sheet and side panel cover, in px per edge. */
@@ -500,6 +595,8 @@ function listenToMap() {
   document.addEventListener('pointerdown', onPointerDownOutsideAttribution);
   cleanups.push(() => document.removeEventListener('pointerdown', onPointerDownOutsideAttribution));
   map.on('moveend', onMoveEnd);
+  map.on('move', followBusiestHex);
+  map.on('resize', followBusiestHex);
   map.on('mousemove', onMove);
   map.on('mouseout', clearHover);
   map.on('click', onClick);
@@ -537,6 +634,11 @@ function listenToStores() {
       if (!request) return;
       fly(request);
       $flyTo.set(null);
+    }),
+    $busiestHexRequest.subscribe((request) => {
+      if (!request) return;
+      $busiestHexRequest.set(null);
+      findBusiestHex(request === 'select');
     }),
   );
 }

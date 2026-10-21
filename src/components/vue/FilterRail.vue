@@ -7,11 +7,13 @@
  * Settings (map colours) sits at the foot of the rail, apart from the filters.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { clearFilters } from '~/stores/explorer';
+import { $tourOpen } from '~/stores/onboarding';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterGroup from './FilterGroup.vue';
 import MapSettings from './MapSettings.vue';
+import OnboardingSettings from './OnboardingSettings.vue';
 
 type PanelId = FilterGroupId | 'settings';
 
@@ -22,6 +24,12 @@ const current = computed(() =>
   open.value === 'settings' ? SETTINGS : (FILTER_GROUPS.find((group) => group.id === open.value) ?? null),
 );
 const buttons = ref<Record<string, HTMLButtonElement>>({});
+const tourOpen = useStore($tourOpen);
+
+// The tour (restarted from Settings) spotlights the rail itself, so the flyout makes way.
+watch(tourOpen, (isOpen) => {
+  if (isOpen) open.value = null;
+});
 
 function toggle(id: PanelId) {
   open.value = open.value === id ? null : id;
@@ -48,11 +56,12 @@ function label(name: string, count: number) {
 
 <template>
   <div class="filter-rail-wrap" @keydown="onKey">
-    <nav class="rail" aria-label="Filters">
+    <nav class="rail" aria-label="Filters" data-tour="filters">
       <button
         v-for="group in FILTER_GROUPS"
         :key="group.id"
         :ref="(el) => el && (buttons[group.id] = el as HTMLButtonElement)"
+        :data-tour="`rail-${group.id}`"
         type="button"
         class="rail-btn"
         :class="{ active: counts[group.id] }"
@@ -78,6 +87,7 @@ function label(name: string, count: number) {
         :ref="(el) => el && (buttons.settings = el as HTMLButtonElement)"
         type="button"
         class="rail-btn rail-settings"
+        data-tour="rail-settings"
         :aria-expanded="open === 'settings'"
         aria-controls="filter-flyout"
         @click="toggle('settings')"
@@ -120,6 +130,7 @@ function label(name: string, count: number) {
         <!-- Settings scrolls its own option list, so its body doesn't scroll. -->
         <div v-if="current.id === 'settings'" class="flex min-h-0 flex-1 flex-col px-4 pt-3">
           <MapSettings />
+          <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
         </div>
         <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <FilterGroup :group="current.id" />

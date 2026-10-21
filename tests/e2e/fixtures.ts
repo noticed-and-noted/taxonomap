@@ -7,7 +7,16 @@
 import { test as base, expect } from '@playwright/test';
 import { answer } from './fake/world';
 
-export const test = base.extend<{ external: string[] }>({
+export const test = base.extend<{ external: string[]; showTour: boolean; seenTour: void }>({
+  // A fresh browser gets the onboarding tour, which covers the page; journeys skip it unless they test it.
+  showTour: [false, { option: true }],
+  seenTour: [
+    async ({ context, showTour }, use) => {
+      if (!showTour) await context.addInitScript(() => localStorage.setItem('tour-seen', '1'));
+      await use();
+    },
+    { auto: true },
+  ],
   // Auto: every journey gets it. Tests can read `external` to see what was refused.
   external: [
     async ({ context, baseURL }, use) => {

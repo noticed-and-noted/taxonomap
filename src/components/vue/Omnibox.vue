@@ -19,6 +19,7 @@ import { searchPlaces, type Place } from '~/lib/geocode';
 import { mapCapabilities, sortByRank, type NameHit } from '~/lib/gbif';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
 import { hrefWith } from '~/stores/url-sync';
@@ -220,6 +221,7 @@ async function pickTaxon(hit: NameHit) {
     announce(`You can show up to ${MAX_TAXA} species or groups. Remove one in the What filter first.`);
     return;
   }
+  markDone('search');
   try {
     const capabilities = await mapCapabilities({ taxonKey: hit.key });
     if (capabilities.total > 0) {
@@ -329,7 +331,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="omnibox relative w-full max-w-xl" @focusout="onBlur">
+  <div class="omnibox relative w-full max-w-xl" data-tour="search" @focusout="onBlur">
     <label for="omnibox-input" class="sr-only">Search species or places</label>
     <div
       class="flex items-center gap-2 rounded-[var(--radius)] border border-border bg-surface px-3 shadow-panel transition-colors duration-200 focus-within:border-accent focus-within:outline focus-within:outline-2 focus-within:outline-[var(--focus)]"

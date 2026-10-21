@@ -24,3 +24,12 @@ it('give the tree page its URL state', async () => {
   const tree = await import('~/stores/tree');
   expect([tree.$treeFocus.get(), tree.$treeLayout.get(), tree.$treeMetric.get()]).toEqual([null, 'auto', 'records']);
 });
+
+it('start onboarding unseen and empty at build time', async () => {
+  const onboarding = await import('~/stores/onboarding');
+  expect([onboarding.$tourSeen.get(), onboarding.$checklistHidden.get(), onboarding.$checklistDone.get()]).toEqual([
+    false,
+    false,
+    [],
+  ]);
+});

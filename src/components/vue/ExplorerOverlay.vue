@@ -9,7 +9,9 @@ import { useStore } from '@nanostores/vue';
 import { computed, ref } from 'vue';
 import { $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
+import { $checklistHint, $tourSeen } from '~/stores/onboarding';
 import BasemapSwitcher from './BasemapSwitcher.vue';
+import ChecklistHint from './ChecklistHint.vue';
 import FilterGroup from './FilterGroup.vue';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterRail from './FilterRail.vue';
@@ -18,11 +20,16 @@ import MapLegend from './MapLegend.vue';
 import MapProgress from './MapProgress.vue';
 import MapSettings from './MapSettings.vue';
 import NearExplorer from './NearExplorer.vue';
+import OnboardingTour from './OnboardingTour.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
+import OnboardingSettings from './OnboardingSettings.vue';
 import TaxonChip from './TaxonChip.vue';
 import ThemePicker from './ThemePicker.vue';
+import TryThis from './TryThis.vue';
 
 const panel = useStore($panel);
+const tourSeen = useStore($tourSeen);
+const hintId = useStore($checklistHint);
 const hex = useStore($selectedHex);
 const activeFilters = useStore($activeFilterCount);
 const groupCounts = useStore($groupCounts);
@@ -66,6 +73,8 @@ function closePanel() {
     :class="{ 'panel-open': panelOpen && !near, near }"
   >
     <NearExplorer v-if="near" />
+    <OnboardingTour v-if="!tourSeen && !near" />
+    <ChecklistHint v-if="hintId && !near" :id="hintId" :key="hintId" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
     >
@@ -80,7 +89,7 @@ function closePanel() {
         v-if="!near"
         class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1"
       >
-        <button type="button" class="near-btn" @click="toggleNear">
+        <button type="button" class="near-btn" data-tour="near" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"
             class="size-4"
@@ -96,7 +105,7 @@ function closePanel() {
         <BasemapSwitcher />
       </div>
       <!-- Phone: Near me + Filters button (the rail is hidden). -->
-      <button v-if="!near" type="button" class="near-btn near-phone ml-auto" @click="toggleNear">
+      <button v-if="!near" type="button" class="near-btn near-phone ml-auto" data-tour="near" @click="toggleNear">
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <path :d="pinIcon" />
         </svg>
@@ -105,6 +114,7 @@ function closePanel() {
       <button
         type="button"
         class="filters-btn"
+        data-tour="filters"
         :aria-expanded="filtersOpen"
         :class="{ active: activeFilters, 'ml-auto': near }"
         @click="openFilters"
@@ -116,12 +126,13 @@ function closePanel() {
       </button>
     </div>
 
+    <!-- Stays in Near me too, on wider screens; phones hide it under Near me's sheet (see the styles). -->
     <div
-      v-if="!near"
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
       :class="{ stashed: dockStashed }"
     >
       <button
+        v-if="!near"
         type="button"
         class="stash-toggle"
         :aria-label="dockStashed ? 'Show legend' : 'Slide legend away'"
@@ -137,7 +148,8 @@ function closePanel() {
           />
         </svg>
       </button>
-      <MapLegend class="w-full max-w-56" />
+      <TryThis />
+      <MapLegend class="w-full max-w-56" data-tour="legend" />
     </div>
 
     <div class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block">
@@ -202,6 +214,7 @@ function closePanel() {
               <ThemePicker />
             </div>
             <MapSettings inline />
+            <OnboardingSettings />
           </div>
           <div v-else role="tabpanel">
             <FilterGroup :group="filterTab" />
@@ -357,9 +370,10 @@ function closePanel() {
   }
 }
 
-/* Mobile: the dock hides behind the bottom sheet while it is open. */
+/* Mobile: the dock hides behind the bottom sheet while it is open (Near me's sheet always is). */
 @media (max-width: 767.98px) {
-  .panel-open .bottom-dock {
+  .panel-open .bottom-dock,
+  .near .bottom-dock {
     visibility: hidden;
   }
 }

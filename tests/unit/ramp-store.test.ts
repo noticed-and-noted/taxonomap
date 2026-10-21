@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** The density-ramp choice: its catalogue, its saved value and the tokens it writes. */
 import { DEFAULT_RAMP, RAMPS, isRampId, rampById } from '~/lib/ramp';
+import { memoryStorage } from './helpers/storage';
 
 async function store() {
   vi.resetModules();
@@ -8,21 +9,6 @@ async function store() {
 }
 
 const token = (index: number) => document.documentElement.style.getPropertyValue(`--ramp-${index}`);
-
-// Newer Node ships its own localStorage global, which shadows jsdom's; stub a plain one.
-function memoryStorage(): Storage {
-  const storage = new Map<string, string>();
-  return {
-    get length() {
-      return storage.size;
-    },
-    clear: () => storage.clear(),
-    getItem: (key) => storage.get(key) ?? null,
-    key: (index) => [...storage.keys()][index] ?? null,
-    removeItem: (key) => void storage.delete(key),
-    setItem: (key, value) => void storage.set(key, String(value)),
-  };
-}
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', memoryStorage());
