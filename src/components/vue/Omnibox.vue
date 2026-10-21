@@ -97,6 +97,11 @@ const placeSearchOption = computed(() => options.value.find((option) => option.k
 
 const activeId = computed(() => options.value[active.value]?.id);
 
+// Arrowing past the list's edge would otherwise highlight a row nobody can see; hovered and tapped rows are already in view, so "nearest" leaves them be.
+watch(activeId, (id) => {
+  if (id) void nextTick(() => document.getElementById(id)?.scrollIntoView({ block: 'nearest' }));
+});
+
 /** The result to preview: the highlighted species/group (the first, if the highlight's row has gone). */
 const previewHit = computed<NameHit | null>(() => {
   if (places.value) return null;
