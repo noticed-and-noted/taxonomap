@@ -5,11 +5,14 @@
  */
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/components/PageShell.astro';
+import SpeciesSkeleton from '~/components/vue/SpeciesSkeleton.vue';
 import SpeciesView from '~/components/vue/SpeciesView.vue';
 ---
 
 <BaseLayout title="Species" noindex>
   <PageShell>
-    <SpeciesView client:only="vue" />
+    <SpeciesView client:only="vue">
+      <SpeciesSkeleton slot="fallback" />
+    </SpeciesView>
   </PageShell>
 </BaseLayout>

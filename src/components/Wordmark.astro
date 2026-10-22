@@ -1,0 +1,66 @@
+---
+/**
+ * The taxonomap wordmark: Patrick Hand letters with the fiddlehead fern as the first "o".
+ * Decorative (the surrounding link carries the label); sized by the parent's font-size.
+ */
+interface Props {
+  /** Below 640 px show the fern alone, as the header does. */
+  compact?: boolean;
+}
+
+const { compact = false } = Astro.props;
+---
+
+<span class:list={['wordmark', { compact }]} aria-hidden="true">
+  <span class="letters">tax</span>
+  {/* The fern stands in for the first "o"; its stem and leaflets hang below the baseline. */}
+  <svg viewBox="16 7 32 53" class="fern">
+    <path
+      d="M40 58C40 48 40 37 32 37"
+      fill="none"
+      stroke="var(--accent)"
+      stroke-width="4.5"
+      stroke-linecap="round"
+    ></path>
+    <g transform="translate(17 8.5) scale(0.75)">
+      <path
+        d="M20 38A18 18 0 0 1 20 2A14 14 0 0 1 20 30A8 8 0 0 1 20 14"
+        fill="none"
+        stroke="var(--accent)"
+        stroke-width="6"
+        stroke-linecap="round"
+      ></path>
+      <circle cx="20.5" cy="14" r="3.6" fill="var(--accent)"></circle>
+    </g>
+    <path d="M40 51C35 50 31 47 30 43C35 43 38 46 40 51Z" fill="var(--text-muted)"></path>
+    <path d="M40 46C44 44 48 44 51 41C50 46 45 48 40 46Z" fill="var(--text-muted)"></path>
+  </svg>
+  <span class="letters">nomap</span>
+</span>
+
+<style>
+  /* Sizes are tied to Patrick Hand's x-height (0.467em) so the fern's coil matches the lowercase letters. */
+  .wordmark {
+    display: flex;
+    align-items: baseline;
+    font-family: var(--font-hand);
+    line-height: 1;
+    color: var(--text);
+    transform: translateY(-0.12em);
+  }
+
+  .fern {
+    flex: none;
+    width: 0.474em;
+    height: 0.786em;
+    margin: 0 0.02em;
+    overflow: visible;
+    transform: translateY(0.308em);
+  }
+
+  @media (max-width: 639.98px) {
+    .compact .letters {
+      display: none;
+    }
+  }
+</style>

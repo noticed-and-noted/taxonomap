@@ -124,13 +124,22 @@ function onBackdrop(event: MouseEvent) {
 </script>
 
 <template>
-  <div v-if="loading" class="grid gap-1.5 sm:grid-cols-[2fr_1fr]" role="status" aria-label="Loading photos">
+  <div
+    v-if="loading"
+    class="grid gap-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+    role="status"
+    aria-label="Loading photos"
+  >
     <SkeletonBlock class="aspect-[4/3]" height="auto" rounded="lg" aria-hidden="true" />
     <div class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
       <SkeletonBlock v-for="slot in 4" :key="slot" class="aspect-square" height="auto" aria-hidden="true" />
     </div>
   </div>
-  <div v-else-if="!images.length" class="grid aspect-[4/3] place-items-center rounded-lg bg-photo text-sm text-subtle">
+  <!-- Square below sm and 2:1 above: the loading grid's footprint, so the page does not jump. -->
+  <div
+    v-else-if="!images.length"
+    class="grid aspect-square place-items-center sm:aspect-[2/1] rounded-lg bg-photo text-sm text-subtle"
+  >
     No openly licensed photos yet
   </div>
   <section v-else class="species-gallery" aria-label="Photos">
