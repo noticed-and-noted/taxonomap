@@ -408,7 +408,8 @@ function clearHover() {
 
 function onMove(event: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
-  if ($mapMode.get() === 'pin') return;
+  // Dragging: the tooltip stays hidden until the drag ends (dragstart clears it).
+  if ($mapMode.get() === 'pin' || map!.dragPan.isActive()) return;
   const feature = hexAt(event.point);
   const geometry = feature && geometryOf(feature);
   if (!geometry) {
@@ -416,10 +417,12 @@ function onMove(event: MapMouseEvent) {
     map!.getCanvas().style.cursor = '';
     return;
   }
-  setData('hover', {
-    type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: feature.geometry }],
-  });
+  // Moving within the same cell only moves the tooltip; skip resending the outline to the map worker.
+  if (tooltip.value?.wkt !== geometry.wkt)
+    setData('hover', {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {}, geometry: feature.geometry }],
+    });
   // The tile's count is an estimate (~) until the exact one is known.
   const filter = $occurrenceFilter.get();
   const exact = knownCount(filter, geometry.wkt);
@@ -597,6 +600,7 @@ function listenToMap() {
   map.on('resize', followBusiestHex);
   map.on('mousemove', onMove);
   map.on('mouseout', clearHover);
+  map.on('dragstart', clearHover);
   map.on('click', onClick);
   map.on('style.load', syncOverlays);
   map.getCanvas().addEventListener('keydown', onKey);
@@ -654,7 +658,27 @@ function listenToPage() {
   cleanups.push(() => document.removeEventListener('astro:after-swap', onSwap));
 }
 
+/**
+ * Resolves once the page shows the map: at once on the map, or on the swap to it.
+ * A visit that starts on /tree (map hidden) then never pays for MapLibre, the basemap or hex tiles.
+ */
+function mapShown(element: HTMLElement): Promise<void> {
+  const isShown = () => element.closest('.app-shell')?.getAttribute('data-map') !== 'hidden';
+  if (isShown()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const onSwap = () => {
+      if (!isShown()) return;
+      document.removeEventListener('astro:after-swap', onSwap);
+      resolve();
+    };
+    document.addEventListener('astro:after-swap', onSwap);
+    cleanups.push(() => document.removeEventListener('astro:after-swap', onSwap));
+  });
+}
+
 onMounted(async () => {
+  if (!container.value) return;
+  await mapShown(container.value);
   const maplibre = await loadMapLibre();
   if (!container.value) return;
   const view = $mapView.get();

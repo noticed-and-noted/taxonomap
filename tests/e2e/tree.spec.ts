@@ -28,3 +28,15 @@ test('layout and metric live in the URL', { tag: '@mobile' }, async ({ page }, i
   await page.reload();
   await expect(page.getByRole('img', { name: chart })).toHaveAttribute('aria-label', /sized by species/);
 });
+
+test('the hidden map waits until the map is shown', async ({ page }) => {
+  const mapLibreRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('maplibre-gl')) mapLibreRequests.push(request.url());
+  });
+  await page.goto('/tree');
+  await expect(page.getByRole('button', { name: /^Animals/ })).toBeVisible();
+  expect(mapLibreRequests).toEqual([]);
+  await page.getByRole('link', { name: 'Map', exact: true }).click();
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+});

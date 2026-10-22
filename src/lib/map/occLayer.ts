@@ -96,6 +96,18 @@ function inside([lng, lat]: LngLat, ring: GeoJSON.Position[]): boolean {
   return hit;
 }
 
+/** A ring's bounding box in degrees (Mercator keeps latitude order, so it bounds the Mercator shape too). */
+function boxOf(ring: GeoJSON.Position[]) {
+  const box = { west: Infinity, east: -Infinity, south: Infinity, north: -Infinity };
+  for (const [lng, lat] of ring as LngLat[]) {
+    box.west = Math.min(box.west, lng);
+    box.east = Math.max(box.east, lng);
+    box.south = Math.min(box.south, lat);
+    box.north = Math.max(box.north, lat);
+  }
+  return box;
+}
+
 /** Normalises MapLibre's accepted coordinate shapes to [lng, lat]. */
 function toLngLat(coord: LngLatLike): LngLat {
   if (Array.isArray(coord)) return [coord[0], coord[1]];
@@ -403,10 +415,16 @@ class OccLayerController {
   }
 
   cellAt([lng, lat]: LngLat): Hex | undefined {
+    // Called on every mouse move over thousands of cells: the box test skips nearly all of them.
     for (const cell of this.#cells.values()) {
       const ring = cell.geometry.coordinates[0]!;
+      const box = boxOf(ring);
+      if (lat < box.south || lat > box.north) continue;
       // Cells by the antimeridian keep their vertices unwrapped (past ±180).
-      if (inside([lng, lat], ring) || inside([lng + 360, lat], ring) || inside([lng - 360, lat], ring)) return cell;
+      const hit = [lng, lng + 360, lng - 360].some(
+        (shifted) => shifted >= box.west && shifted <= box.east && inside([shifted, lat], ring),
+      );
+      if (hit) return cell;
     }
     return undefined;
   }
