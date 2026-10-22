@@ -74,6 +74,23 @@ describe('species endpoints', () => {
     ]);
   });
 
+  it('lists accepted children by search, loading pages after the first from its count', async () => {
+    const calls = stubNetwork((url) => {
+      const offset = Number(url.searchParams.get('offset'));
+      return { count: 2001, results: [{ key: offset }] };
+    });
+    const api = await gbif();
+    const children = await api.getAllChildren(212, 'GENUS');
+    expect(children.map((child) => child.key)).toEqual([0, 1000, 2000]);
+    const params = calls[0]!.searchParams;
+    expect([params.get('highertaxonKey'), params.get('rank'), params.get('status'), params.get('limit')]).toEqual([
+      '212',
+      'GENUS',
+      'ACCEPTED',
+      '1000',
+    ]);
+  });
+
   it('counts species under each descendant from one facet', async () => {
     stubNetwork(() => facets(0, 'HIGHER_TAXON_KEY', [[212, 11000]]));
     const api = await gbif();

@@ -131,11 +131,17 @@ function onKey(event: KeyboardEvent) {
   }
 }
 
-const common = (occurrence: Occurrence) =>
-  (occurrence.speciesKey
-    ? (commonNames.value.get(occurrence.speciesKey) ?? lateNames.value.get(occurrence.speciesKey))
-    : undefined) ?? occurrence.vernacularName;
-const scientificName = (occurrence: Occurrence) => occurrence.species ?? occurrence.scientificName;
+/** Taxon for the about page: the species, else whatever the record was named to (a genus or family). */
+const aboutKey = (occurrence: Occurrence) =>
+  occurrence.speciesKey ?? occurrence.acceptedTaxonKey ?? occurrence.taxonKey;
+
+const common = (occurrence: Occurrence) => {
+  const key = aboutKey(occurrence);
+  return (key ? (commonNames.value.get(key) ?? lateNames.value.get(key)) : undefined) ?? occurrence.vernacularName;
+};
+// The accepted name, so the row matches the about page it links to (a synonym's record shows its accepted taxon).
+const scientificName = (occurrence: Occurrence) =>
+  occurrence.species ?? occurrence.acceptedScientificName ?? occurrence.scientificName;
 const name = (occurrence: Occurrence) => common(occurrence) ?? scientificName(occurrence) ?? 'Unnamed record';
 
 /** Names for species the table hasn't named (cached, as on species pages), a batch at a time; rows show meanwhile. */
@@ -204,10 +210,7 @@ async function load(more = false) {
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
-    void nameSpecies(
-      response.results.map((occurrence) => occurrence.speciesKey),
-      signal,
-    );
+    void nameSpecies(response.results.map(aboutKey), signal);
     total.value = response.count;
   });
 }
@@ -275,10 +278,6 @@ function toggle(occurrence: Occurrence) {
     });
   });
 }
-
-/** Taxon for the about page: the species, else whatever the record was named to (a genus or family). */
-const aboutKey = (occurrence: Occurrence) =>
-  occurrence.speciesKey ?? occurrence.acceptedTaxonKey ?? occurrence.taxonKey;
 
 const institution = (occurrence: Occurrence) =>
   [occurrence.institutionCode, occurrence.catalogNumber].filter(Boolean).join(' ');
