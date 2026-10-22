@@ -10,6 +10,7 @@ import { arc } from 'd3-shape';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import type { TreeNode } from '~/lib/tree/model';
+import ChartTip from './ChartTip.vue';
 import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{
@@ -191,9 +192,7 @@ const labelText = (node: TreeNode) => node.common ?? node.name;
 const tip = ref<{ x: number; y: number; node: TreeNode; value: number } | null>(null);
 function onMove(event: PointerEvent, shape: Shape) {
   if (event.pointerType === 'touch') return;
-  const bounds = box.value?.getBoundingClientRect();
-  if (!bounds) return;
-  tip.value = { x: event.clientX - bounds.left, y: event.clientY - bounds.top, node: shape.node, value: shape.value };
+  tip.value = { x: event.clientX, y: event.clientY, node: shape.node, value: shape.value };
 }
 
 const focusTotal = computed(() => byKey.value.get(props.focus.key)?.value ?? 0);
@@ -321,11 +320,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
       </g>
     </svg>
 
-    <div
-      v-if="tip"
-      class="pointer-events-none absolute z-10 max-w-64 -translate-x-1/2 -translate-y-[115%] rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-panel"
-      :style="{ left: `${tip.x}px`, top: `${tip.y}px` }"
-    >
+    <ChartTip v-if="tip" :x="tip.x" :y="tip.y" @dismiss="tip = null">
       <p v-if="tip.node.common" class="font-medium text-text">{{ tip.node.common }}</p>
       <p class="sci-name text-muted">{{ tip.node.name }}</p>
       <p class="mt-1 text-subtle">
@@ -334,6 +329,6 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
           >({{ ((tip.value / focusTotal) * 100).toFixed(tip.value / focusTotal < 0.01 ? 2 : 1) }}%)</span
         >
       </p>
-    </div>
+    </ChartTip>
   </div>
 </template>

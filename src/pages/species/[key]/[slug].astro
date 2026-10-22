@@ -14,6 +14,7 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/components/PageShell.astro';
 import MiniMap from '~/components/vue/MiniMap.vue';
 import PlotChart from '~/components/vue/PlotChart.vue';
+import RadialSeasonality from '~/components/vue/RadialSeasonality.vue';
 import SimilarSpecies from '~/components/vue/SimilarSpecies.vue';
 import SpeciesGallery from '~/components/vue/SpeciesGallery.vue';
 import SpeciesPage from '~/components/vue/SpeciesPage.vue';
@@ -65,6 +66,7 @@ const jsonLd = {
       )}
       {data.count > 0 && <MiniMap slot="map" client:visible taxonKey={data.key} label={label} />}
       <PlotChart slot="years" client:visible kind="years" title="Records per year" years={data.years} />
+      <RadialSeasonality slot="months" client:visible counts={data.months} size={240} title="Records by month" />
       <PlotChart
         slot="countries"
         client:visible

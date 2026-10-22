@@ -1,18 +1,24 @@
 import { getSpecies, getVernacularNames, occurrenceFacets } from '~/lib/gbif/server';
-import type { NameRow, NamesSnapshot } from '~/lib/data/types';
+import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import { isDev } from '~/lib/env';
 import { resolveInatIds } from '~/lib/photos/taxon-photos';
-import { englishName } from '~/lib/species/names';
+import type { VernacularName } from '~/lib/gbif';
+import { englishName, otherEnglishNames } from '~/lib/species/names';
 import { listAllByRank, lookupLimit, once, rethrowUnlessMissing, snapshotMeta, type NamedUsage } from './cache';
 
 const DEFAULT_INDEX_SIZE = 6000;
 const DEV_INDEX_SIZE = 300;
-const HIGHER_RANK_FIELDS = ['kingdomKey', 'phylumKey', 'classKey', 'orderKey', 'familyKey'] as const;
+const HIGHER_RANK_FIELDS = ['kingdomKey', 'phylumKey', 'classKey', 'orderKey', 'familyKey', 'genusKey'] as const;
 const HIGHER_RANK_FACET_LIMIT = 3000;
 const BULK_NAMED_RANKS = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER'] as const;
 const FAMILIES_IN_INDEX = 400;
 const DEV_FAMILIES_IN_INDEX = 40;
+/** Genera carry everyday names no family or species has ("Seagull" is only Larus's). */
+const GENERA_IN_INDEX = 300;
+const DEV_GENERA_IN_INDEX = 30;
+/** Most other English names a row carries. */
+const OTHER_NAMES_PER_ROW = 4;
 /** Higher taxa with fewer records than this are not worth a search suggestion. */
 const MIN_HIGHER_TAXON_RECORDS = 1000;
 const INAT_LOOKUP_CHUNK = 300;
@@ -67,28 +73,35 @@ async function topSpeciesKeys(total: number): Promise<Map<number, number>> {
   return counts;
 }
 
-/** Record counts for the kingdoms down to the most-recorded families. */
-async function higherRankCounts(): Promise<{ counts: Map<number, number>; familyKeys: number[] }> {
+/** The keys of the `size` most-recorded taxa in one facet. */
+function topKeys(facets: { name: string }[] | undefined, size: number): number[] {
+  return (facets ?? []).slice(0, size).map((facet) => Number(facet.name));
+}
+
+/** Record counts for the kingdoms down to genera, and the busiest families and genera to look up. */
+async function higherRankCounts(): Promise<{ counts: Map<number, number>; lookupKeys: number[] }> {
   const facets = await occurrenceFacets({}, HIGHER_RANK_FIELDS, { facetLimit: HIGHER_RANK_FACET_LIMIT });
   const counts = new Map<number, number>();
   for (const field of HIGHER_RANK_FIELDS) {
     for (const facet of facets.facets[field] ?? []) counts.set(Number(facet.name), facet.count);
   }
-  const familyCount = isDev() ? DEV_FAMILIES_IN_INDEX : FAMILIES_IN_INDEX;
-  const familyKeys = (facets.facets['familyKey'] ?? []).slice(0, familyCount).map((facet) => Number(facet.name));
-  return { counts, familyKeys };
+  const lookupKeys = [
+    ...topKeys(facets.facets['familyKey'], isDev() ? DEV_FAMILIES_IN_INDEX : FAMILIES_IN_INDEX),
+    ...topKeys(facets.facets['genusKey'], isDev() ? DEV_GENERA_IN_INDEX : GENERA_IN_INDEX),
+  ];
+  return { counts, lookupKeys };
 }
 
 /**
  * Usages by key, with their common names, for kingdoms to orders (bulk listed) and the given
- * families (fetched individually, cached).
+ * families and genera (fetched individually, cached).
  */
-async function higherRankUsages(familyKeys: readonly number[]): Promise<Map<number, NamedUsage>> {
+async function higherRankUsages(lookupKeys: readonly number[]): Promise<Map<number, NamedUsage>> {
   const usages = new Map<number, NamedUsage>();
   for (const usage of await listAllByRank(BULK_NAMED_RANKS)) usages.set(usage.key, usage);
   const limit = lookupLimit();
   await Promise.all(
-    familyKeys.map((key) =>
+    lookupKeys.map((key) =>
       limit(async () => {
         try {
           const [usage, vernaculars] = await Promise.all([getSpecies(key), getVernacularNames(key)]);
@@ -102,21 +115,34 @@ async function higherRankUsages(familyKeys: readonly number[]): Promise<Map<numb
   return usages;
 }
 
-/** The usage's English name, by the same rule as everywhere else. */
-function commonNameOf(usage: NamedUsage): string | null {
-  return englishName(usage.vernacularNames ?? []);
+/**
+ * A name-index row: the English name by the same rule as everywhere else, plus the other English
+ * names when there are any (with a null iNaturalist ID before them, filled in later for species).
+ */
+function nameRow(
+  key: number,
+  rank: RankCode,
+  scientificName: string,
+  vernaculars: readonly VernacularName[],
+  count: number,
+): NameRow {
+  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW);
+  const commonName = englishName(vernaculars);
+  return others.length
+    ? [key, rank, scientificName, commonName, count, null, others]
+    : [key, rank, scientificName, commonName, count];
 }
 
-/** Name-index rows for kingdoms down to the busiest families. */
+/** Name-index rows for kingdoms down to the busiest families and genera. */
 async function higherRanks(): Promise<NameRow[]> {
-  const { counts, familyKeys } = await higherRankCounts();
-  const usages = await higherRankUsages(familyKeys);
+  const { counts, lookupKeys } = await higherRankCounts();
+  const usages = await higherRankUsages(lookupKeys);
   const rows: NameRow[] = [];
   for (const [key, count] of counts) {
     const usage = usages.get(key);
     const rank = usage && CODE_BY_RANK[usage.rank];
     if (!usage || !rank || count < MIN_HIGHER_TAXON_RECORDS) continue;
-    rows.push([key, rank, usage.canonicalName ?? usage.scientificName, commonNameOf(usage), count]);
+    rows.push(nameRow(key, rank, usage.canonicalName ?? usage.scientificName, usage.vernacularNames ?? [], count));
   }
   return rows;
 }
@@ -148,7 +174,7 @@ async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
       limit(async (): Promise<NameRow | null> => {
         try {
           const [usage, vernaculars] = await Promise.all([getSpecies(key), getVernacularNames(key)]);
-          return [key, 'S', usage.canonicalName ?? usage.scientificName, englishName(vernaculars.results), count];
+          return nameRow(key, 'S', usage.canonicalName ?? usage.scientificName, vernaculars.results, count);
         } catch (error) {
           return rethrowUnlessMissing(error);
         }
@@ -157,9 +183,13 @@ async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
   );
   const named = rows.filter((row): row is NameRow => row !== null);
   const ids = await inatIds(named);
-  return named.map((row): NameRow =>
-    ids.has(row[0]) ? [row[0], row[1], row[2], row[3], row[4], ids.get(row[0])!] : row,
-  );
+  return named.map((row): NameRow => {
+    const id = ids.get(row[0]);
+    if (id === undefined) return row;
+    const withId: NameRow = [...row];
+    withId[5] = id;
+    return withId;
+  });
 }
 
 /** The search index of taxon names: higher ranks plus the most-recorded species, busiest first. */

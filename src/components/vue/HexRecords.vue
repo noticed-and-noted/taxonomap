@@ -2,7 +2,7 @@
 /**
  * Individual records in the selected cell, a page at a time in GBIF's order,
  * as a table with a short record type code (FOS, SPE…; the full type on hover).
- * A row expands to its photo and details. No column sorts: GBIF's occurrence
+ * A row expands to its photo (opening a lightbox of all its photos) and details. No column sorts: GBIF's occurrence
  * search has no sort parameter. A species search (ARIA 1.2 combobox over the cell's species table) narrows the list.
  * Pass `filter` to list another area's records (near me) instead of the selected cell's.
  */
@@ -10,8 +10,9 @@ import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, full } from '~/lib/format';
 import { normalise } from '~/lib/data/name-index';
-import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter } from '~/lib/gbif';
+import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
+import PhotoLightbox from './PhotoLightbox.vue';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
@@ -19,6 +20,7 @@ import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import UiIcon from './UiIcon.vue';
 import { useCellNameSearch } from './useCellNameSearch';
 import { useLatestLoad } from './useLatestLoad';
 import { useScrollFade } from './useScrollFade';
@@ -231,8 +233,23 @@ const date = (occurrence: Occurrence) =>
   occurrence.eventDate?.slice(0, 10) ?? (occurrence.year ? String(occurrence.year) : undefined);
 const typeLabel = (occurrence: Occurrence) =>
   (occurrence.basisOfRecord && (BASIS_LABELS[occurrence.basisOfRecord] ?? occurrence.basisOfRecord)) || 'Unknown';
-const image = (occurrence: Occurrence) => usableImages(occurrence)[0];
-const broken = ref(new Set<number>());
+/** Photo URLs that failed to load; they drop out of the row and the lightbox. */
+const broken = ref(new Set<string>());
+const photos = (occurrence: Occurrence) => usableImages(occurrence).filter((photo) => !broken.value.has(photo.url));
+const image = (occurrence: Occurrence) => photos(occurrence)[0];
+const markBroken = (photo: UsableImage) => (broken.value = new Set(broken.value).add(photo.url));
+
+const lightbox = ref<InstanceType<typeof PhotoLightbox>>();
+/** Record whose photos the lightbox shows. */
+const lightboxRecord = shallowRef<Occurrence | null>(null);
+const lightboxPhotos = computed(() => (lightboxRecord.value ? photos(lightboxRecord.value) : []));
+
+/** Opens the lightbox on a record's photos, once it has them as props. */
+async function openPhotos(occurrence: Occurrence) {
+  lightboxRecord.value = occurrence;
+  await nextTick();
+  lightbox.value?.open(0);
+}
 const initials = (occurrence: Occurrence) =>
   name(occurrence)
     .split(/\s+/)
@@ -409,11 +426,11 @@ const institution = (occurrence: Occurrence) =>
                     :style="transitionName(occurrence, 'photo')"
                   >
                     <ThumbImage
-                      v-if="image(occurrence) && !broken.has(occurrence.key)"
+                      v-if="image(occurrence)"
                       :image="image(occurrence)!"
                       size="200x"
                       class="size-full object-cover"
-                      @broken="broken = new Set(broken).add(occurrence.key)"
+                      @broken="markBroken(image(occurrence)!)"
                     />
                     <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
                       {{ initials(occurrence) }}
@@ -468,7 +485,7 @@ const institution = (occurrence: Occurrence) =>
                       class="relative aspect-square overflow-hidden rounded bg-photo"
                       :style="transitionName(occurrence, 'photo')"
                     >
-                      <template v-if="image(occurrence) && !broken.has(occurrence.key)">
+                      <template v-if="image(occurrence)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
                         <ThumbImage
                           :image="image(occurrence)!"
@@ -479,7 +496,22 @@ const institution = (occurrence: Occurrence) =>
                           :image="image(occurrence)!"
                           size="400x"
                           class="absolute inset-0 size-full object-cover"
+                          @broken="markBroken(image(occurrence)!)"
                         />
+                        <!-- A sibling of the badge, not its parent: the badge holds a link. -->
+                        <button
+                          type="button"
+                          class="enlarge absolute inset-0 cursor-zoom-in"
+                          :aria-label="`Enlarge photo, 1 of ${photos(occurrence).length}`"
+                          @click="openPhotos(occurrence)"
+                        >
+                          <span
+                            class="absolute right-1 top-1 flex items-center gap-1 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[11px] text-white tabular-nums"
+                            aria-hidden="true"
+                          >
+                            <UiIcon name="photo" size="13" />{{ photos(occurrence).length }}
+                          </span>
+                        </button>
                         <LicenceBadge
                           class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
                           :licence="image(occurrence)!.licence"
@@ -552,6 +584,7 @@ const institution = (occurrence: Occurrence) =>
         </button>
       </div>
     </div>
+    <PhotoLightbox ref="lightbox" :images="lightboxPhotos" :name="lightboxRecord ? name(lightboxRecord) : ''" />
   </div>
 </template>
 
@@ -671,6 +704,10 @@ const institution = (occurrence: Occurrence) =>
   .record-action-icon {
     min-width: 2.5rem;
   }
+}
+.enlarge:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 .head-row {
   overflow-y: hidden;

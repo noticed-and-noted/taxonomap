@@ -168,6 +168,23 @@ describe('bake', () => {
     const common = await baked.bakedCommonNames();
     expect([common(1), common(212)]).toEqual(['Animals', null]);
   });
+
+  it('indexes the busiest genera, and the other English names of each taxon', async () => {
+    (await import('~/lib/gbif/server')).http().clear();
+    gbif((url) => {
+      const facetFields = url.searchParams.getAll('facet');
+      if (url.pathname === '/v1/occurrence/search' && facetFields.includes('genusKey'))
+        return { count: 0, results: [], facets: [{ field: 'GENUS_KEY', counts: [{ name: '50', count: 60_000 }] }] };
+      if (url.pathname === '/v1/species/50') return usage(50, 'GENUS', 'Larus');
+      if (url.pathname === '/v1/species/50/vernacularNames')
+        return {
+          results: ['Gull', 'Gull', 'Gulls', 'Seagull'].map((vernacularName) => ({ vernacularName, language: 'eng' })),
+        };
+      return undefined;
+    });
+    const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
+    expect(names).toContainEqual([50, 'G', 'Larus', 'Gull', 60_000, null, ['Seagull']]);
+  });
 });
 
 /**

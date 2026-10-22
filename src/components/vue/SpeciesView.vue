@@ -15,9 +15,9 @@ import { speciesCharts } from '~/lib/species/charts';
 import MiniMap from './MiniMap.vue';
 import PlotChart from './PlotChart.vue';
 import SimilarSpecies from './SimilarSpecies.vue';
-import SkeletonBlock from './SkeletonBlock.vue';
 import SpeciesGallery from './SpeciesGallery.vue';
 import SpeciesPage from './SpeciesPage.vue';
+import SpeciesSkeleton from './SpeciesSkeleton.vue';
 
 const data = shallowRef<SpeciesData | null>(null);
 const manifest = shallowRef<SpeciesManifest | null>(null);
@@ -104,20 +104,10 @@ onMounted(load);
       Try again
     </button>
     <p class="mt-6 flex justify-center gap-6">
-      <a v-if="key !== null" :href="treeHref(key)" class="text-accent underline-offset-2 hover:underline"
-        >Open in the tree of life</a
-      >
-      <a href="/" class="text-accent underline-offset-2 hover:underline">Back to the map</a>
+      <a v-if="key !== null" :href="treeHref(key)">Open in the tree of life</a>
+      <a href="/">Back to the map</a>
     </p>
   </div>
 
-  <div v-else class="mx-auto max-w-6xl space-y-4 px-4 pt-6 sm:px-6" role="status" aria-label="Loading species">
-    <SkeletonBlock width="40%" height="0.8rem" />
-    <SkeletonBlock width="60%" height="3rem" />
-    <SkeletonBlock width="30%" height="1.2rem" />
-    <div class="grid gap-6 lg:grid-cols-[3fr_2fr]">
-      <SkeletonBlock height="22rem" rounded="lg" />
-      <SkeletonBlock height="22rem" rounded="lg" />
-    </div>
-  </div>
+  <SpeciesSkeleton v-else />
 </template>

@@ -116,3 +116,25 @@ test('the cell panel lists records with their type, expands one and filters them
   await expect(search).toHaveValue(name);
   await expect(rows).toHaveCount(3);
 });
+
+test('the cell tooltip hides while the map is dragged', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'touch has no hover tooltip');
+  await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0');
+  const box = (await page.locator('.maplibregl-canvas').boundingBox())!;
+  const [centreX, centreY] = [box.x + box.width / 2, box.y + box.height / 2];
+  const tooltip = page.getByTestId('map').getByText(/records?$/);
+  // The cells load after the map does; keep nudging the pointer until one is under it.
+  await expect(async () => {
+    await page.mouse.move(centreX, centreY + 1);
+    await page.mouse.move(centreX, centreY);
+    await expect(tooltip).toBeVisible({ timeout: 500 });
+  }).toPass();
+  await page.mouse.down();
+  await page.mouse.move(centreX + 30, centreY, { steps: 5 });
+  await expect(tooltip).toBeHidden();
+  await page.mouse.move(centreX + 40, centreY, { steps: 3 });
+  await expect(tooltip).toBeHidden();
+  await page.mouse.up();
+  await page.mouse.move(centreX + 41, centreY);
+  await expect(tooltip).toBeVisible();
+});

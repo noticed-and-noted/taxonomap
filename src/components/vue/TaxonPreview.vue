@@ -110,7 +110,7 @@ onBeforeUnmount(() => load.cancel());
         <span class="action-icon"><UiIcon :name="select.icon" size="18" /></span>
         <span class="action-caption" aria-hidden="true">{{ select.caption }}</span>
       </button>
-      <a :href="href" class="action about-link" @click="emit('about')">
+      <a :href="href" class="action about-link" @mousedown.prevent @click="emit('about')">
         <span class="action-icon primary"><UiIcon name="info" size="18" /></span>
         <span class="action-caption" aria-hidden="true">{{ aboutLabel }}</span>
         <span class="sr-only">{{ aboutLabel }} {{ name }}</span>

@@ -25,7 +25,7 @@ const englishNames = computed(
 </script>
 
 <template>
-  <article class="species-page mx-auto max-w-6xl px-4 pb-8 pt-6 sm:px-6 sm:pb-16">
+  <article class="species-page mx-auto max-w-6xl px-4 pt-6 sm:px-6">
     <nav aria-label="Classification" class="mb-3 text-xs text-subtle">
       <ol class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <li v-for="(taxon, index) in speciesData.classification" :key="taxon.key" class="flex items-center gap-1.5">
@@ -106,9 +106,11 @@ const englishNames = computed(
     <section v-if="speciesData.count > 0" class="mt-10" aria-labelledby="records-h">
       <h2 id="records-h" class="mb-4 font-display text-2xl">Records</h2>
       <div class="grid gap-8 md:grid-cols-2">
-        <!-- Plot charts hydrate as islands (client:visible); see PlotChart.vue. -->
+        <!-- Charts hydrate as islands (client:visible) for their hover tips; see PlotChart.vue. -->
         <slot name="years" />
-        <RadialSeasonality :counts="speciesData.months" :size="240" title="Records by month" />
+        <slot name="months">
+          <RadialSeasonality :counts="speciesData.months" :size="240" title="Records by month" />
+        </slot>
         <slot name="countries" />
         <slot name="datasets" />
       </div>
@@ -140,12 +142,12 @@ const englishNames = computed(
       </details>
     </section>
 
-    <footer class="mt-12 border-t border-border pt-4 text-xs text-subtle">
-      Occurrence data from <a href="https://www.gbif.org" class="underline">GBIF.org</a> and its data publishers ({{
+    <footer class="page-credit mt-12 border-t border-border pt-4 text-xs text-subtle">
+      Occurrence data from <a href="https://www.gbif.org">GBIF.org</a> and its data publishers ({{
         compact(speciesData.count)
       }}
       records, top datasets listed above). Photos are shown under their stated licences. Snapshot {{ generated }} ·
-      <a :href="`https://www.gbif.org/species/${speciesData.key}`" class="underline" target="_blank" rel="noopener"
+      <a :href="`https://www.gbif.org/species/${speciesData.key}`" target="_blank" rel="noopener"
         >GBIF species page <UiIcon name="external"
       /></a>
     </footer>

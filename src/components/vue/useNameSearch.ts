@@ -24,7 +24,7 @@ export interface NameSearchOptions {
 /** Live scientific matches are mostly noise once the index has answers, so only a few are kept then. */
 const MAX_LIVE_HITS_WITH_INDEX = 3;
 /** Vernacular search ranks poorly, so it is only asked when the index has fewer hits than this. */
-const THIN_INDEX_HITS = 3;
+const THIN_INDEX_HITS = 5;
 const LIVE_DEBOUNCE_MS = 250;
 const INDEX_WAIT_MS = 1500;
 

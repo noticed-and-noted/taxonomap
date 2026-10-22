@@ -51,7 +51,7 @@ describe('useNameSearch', () => {
     // Index hits first; with index answers, only three live hits are kept (one a duplicate).
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564, 1, 2]));
     expect(search.loading.value).toBe(false);
-    // Fewer than three index hits, so vernacular search was asked too (and its failure tolerated).
+    // Fewer than five index hits, so vernacular search was asked too (and its failure tolerated).
     expect(calls.some((url) => url.pathname === '/v1/species/search')).toBe(true);
     expect(search.failed.value).toBe(false);
     search.stop();
