@@ -276,6 +276,17 @@ describe('iNaturalist photo URLs', () => {
     );
   });
 
+  it('sizes iNaturalist photos on GBIF records at iNaturalist, other photos through GBIF’s cache', async () => {
+    const { thumbnailUrl } = await import('~/lib/gbif/images');
+    const record = { licence: 'CC-BY' as const, occurrenceKey: 1, datasetKey: 'dataset' };
+    expect(
+      thumbnailUrl({ ...record, url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg' }, '200x'),
+    ).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpg?x-cors');
+    expect(thumbnailUrl({ ...record, url: 'https://example.org/photo.jpg' }, '200x')).toMatch(
+      /\/v1\/image\/cache\/200x\/occurrence\/1\/media\/[0-9a-f]{32}$/,
+    );
+  });
+
   it('asks for CORS only from hosts that send it (GBIF’s image cache does not)', async () => {
     const { photoCrossOrigin } = await import('~/lib/gbif/images');
     expect(photoCrossOrigin('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg')).toBe('anonymous');
@@ -297,12 +308,18 @@ describe('iNaturalist photo URLs', () => {
 describe('taxon photo edge cases', () => {
   const empty = { records: {}, taxa: {}, voted: {}, gbifInat: {}, gbifAny: {} };
 
-  it('falls back to GBIF photos for unmatched ranks, failed lookups and taxa without an ancestor at the rank', async () => {
+  it('falls back to GBIF photos for unmatched ranks, failed lookups, records above the rank and taxa without an ancestor at it', async () => {
     network({
       ...empty,
-      records: { 3: { taxonID: '30' }, 4: { taxonID: '40' } },
-      taxa: { 30: { id: 30, name: 'No ancestors', rank_level: 5 }, 40: taxon(40, 10, [], [1, 40]) },
-      gbifAny: { 1: [occ(11, 'u.jpg')], 2: [occ(12, 'f.jpg')], 3: [occ(13, 's.jpg')], 4: [occ(14, 'g.jpg')] },
+      records: { 3: { taxonID: '30' }, 4: { taxonID: '40' }, 5: { taxonID: '50' } },
+      taxa: { 30: { id: 30, name: 'No ancestors', rank_level: 5 }, 40: taxon(40, 10, [], [1, 40]), 50: taxon(50, 20) },
+      gbifAny: {
+        1: [occ(11, 'u.jpg')],
+        2: [occ(12, 'f.jpg')],
+        3: [occ(13, 's.jpg')],
+        4: [occ(14, 'g.jpg')],
+        5: [occ(15, 'h.jpg')],
+      },
       fail: { records: [2] },
     });
     const loaded = await load();
@@ -312,14 +329,17 @@ describe('taxon photo edge cases', () => {
         { key: 2, rank: 'SPECIES' },
         { key: 3, rank: 'SPECIES' },
         { key: 4, rank: 'GENUS' },
+        // Its record is only named to genus.
+        { key: 5, rank: 'SPECIES' },
       ],
       { signal: new AbortController().signal },
     );
-    expect([1, 2, 3, 4].map((key) => label(images.get(key)!))).toEqual([
+    expect([1, 2, 3, 4, 5].map((key) => label(images.get(key)!))).toEqual([
       'gbif:u.jpg',
       'gbif:f.jpg',
       'gbif:s.jpg',
       'gbif:g.jpg',
+      'gbif:h.jpg',
     ]);
   });
 

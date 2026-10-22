@@ -42,6 +42,9 @@ function decode([key, code, scientificName, commonName, count, inatId]: NameRow)
 /** Scientific matches score this much lower, so common names win ties. */
 const SCIENTIFIC_DISCOUNT = 1.5;
 
+/** Other English names score this much lower, so a rare alias doesn't tie a taxon's main name. */
+const ALIAS_DISCOUNT = 0.5;
+
 interface Entry {
   name: IndexedName;
   common: string;
@@ -70,17 +73,25 @@ function bestScore(common: string, sci: string, query: string, qWords: string[])
 
 /**
  * How well a hit's names match a query, scored like the index's own search,
- * so live GBIF hits can be ranked the same way.
- * @returns 0 when neither name matches; higher is better.
+ * so live GBIF hits can be ranked the same way. Other English names count too,
+ * slightly discounted, since GBIF often matched on one of those.
+ * @returns `score` (0 when no name matches; higher is better), and `matchedName`
+ *   when another English name matched better than the main ones.
  */
-export function matchScore(hit: Pick<NameHit, 'scientificName' | 'commonName'>, query: string): number {
+export function matchHit(
+  hit: Pick<NameHit, 'scientificName' | 'commonName' | 'englishNames'>,
+  query: string,
+): { score: number; matchedName?: string } {
   const normalisedQuery = normalise(query);
-  return bestScore(
-    normalise(hit.commonName ?? ''),
-    normalise(hit.scientificName),
-    normalisedQuery,
-    normalisedQuery.split(' '),
-  );
+  const qWords = normalisedQuery.split(' ');
+  let best: { score: number; matchedName?: string } = {
+    score: bestScore(normalise(hit.commonName ?? ''), normalise(hit.scientificName), normalisedQuery, qWords),
+  };
+  for (const name of hit.englishNames ?? []) {
+    const aliasScore = score(normalise(name), normalisedQuery, qWords) - ALIAS_DISCOUNT;
+    if (aliasScore > best.score) best = { score: aliasScore, matchedName: name.trim() };
+  }
+  return best;
 }
 
 /** In-memory search over the baked names, matching common and scientific names by word prefix. */

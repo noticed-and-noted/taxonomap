@@ -6,10 +6,11 @@
  */
 import { loadSnapshot } from '~/lib/data/load';
 import { nameIndexWithin } from '~/lib/data/name-index';
-import { CODE_BY_RANK } from '~/lib/data/ranks';
+import { CODE_BY_RANK, RANK_BY_CODE } from '~/lib/data/ranks';
 import type { TreeRank, TreeNodeRow } from '~/lib/data/types';
 import { capitalise } from '~/lib/format';
-import { getChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField } from '~/lib/gbif';
+import { getAllChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField } from '~/lib/gbif';
+import { englishName } from '~/lib/species/names';
 
 export interface TreeNode {
   key: number;
@@ -122,7 +123,7 @@ export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortS
   const childRank = NEXT_RANK[node.rank];
   if (!childRank || node.rank === 'ROOT') return node.children ?? [];
   const [childUsages, occ, species, nameIndex] = await Promise.all([
-    getChildren(node.key, { limit: 1000 }, signal),
+    getAllChildren(node.key, RANK_BY_CODE[childRank], signal),
     occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [FACET_FOR[childRank]], {
       facetLimit: 5000,
       ...(signal && { signal }),
@@ -132,13 +133,13 @@ export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortS
   ]);
   const records = new Map((occ.facets[FACET_FOR[childRank]] ?? []).map((facet) => [Number(facet.name), facet.count]));
   const children: TreeNode[] = [];
-  for (const child of childUsages.results) {
+  for (const child of childUsages) {
     if (CODE_BY_RANK[child.rank] !== childRank) continue;
     if (child.taxonomicStatus && child.taxonomicStatus !== 'ACCEPTED') continue;
     const recordCount = records.get(child.key) ?? 0;
     const speciesCount = childRank === 'S' ? 1 : (species?.get(child.key) ?? 0);
     if (recordCount === 0 && speciesCount === 0) continue;
-    const raw = nameIndex?.get(child.key)?.commonName ?? child.vernacularName;
+    const raw = nameIndex?.get(child.key)?.commonName ?? englishName(child.vernacularNames ?? []);
     const common = raw ? capitalise(raw) : undefined;
     children.push({
       key: child.key,

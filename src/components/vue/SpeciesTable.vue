@@ -4,7 +4,8 @@
  * headers) and name search work on the rows already loaded; the filter popover
  * picks a group (`v-model:group`) and the parent loads that group's rows. The
  * table's own requests are lazy, for rows scrolled into view: photos, and names
- * the baked index lacked (every row's name once you sort by name or search).
+ * the baked index lacked (every row's name once you sort by name). Search matches
+ * names already known, plus rows the shared name search finds by other names.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
@@ -14,8 +15,10 @@ import { debounce } from '~/lib/util/debounce';
 import type { ClassGroup, SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import ListSkeleton from './ListSkeleton.vue';
+import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import { useCellNameSearch } from './useCellNameSearch';
 import { useRowDetails } from './useRowDetails';
 import { useScrollFade } from './useScrollFade';
 import UiIcon from './UiIcon.vue';
@@ -55,12 +58,14 @@ const broken = ref(new Set<number>());
 // Rows currently scrolled into the results box (or just below it); see observeRows.
 const inView = ref(new Set<number>());
 // Photos, and names the index lacked, looked up as rows come into view.
-const { commonName, sciName, pendingName, photoOf, pendingPhoto } = useRowDetails({
+const { commonName, sciName, pendingName, photoOf, pendingPhoto, isLoadingNames } = useRowDetails({
   rows: () => props.rows,
   dataset: () => props.groups,
   inView,
-  needAllNames: () => sortKey.value === 'name' || !!query.value.trim(),
+  needAllNames: () => sortKey.value === 'name',
 });
+const nameSearch = useCellNameSearch({ query, species: () => props.rows });
+const isSearchingNames = computed(() => !!query.value.trim() && (isLoadingNames.value || nameSearch.loading.value));
 const displayName = (row: SpeciesRow) => commonName(row) ?? sciName(row);
 const initials = (row: SpeciesRow) =>
   displayName(row)
@@ -82,7 +87,12 @@ const activeFilters = computed(() => (group.value === null ? 0 : 1));
 
 const filtered = computed(() => {
   const needle = normalise(query.value);
-  return props.rows.filter((row) => !needle || normalise(`${commonName(row) ?? ''} ${sciName(row)}`).includes(needle));
+  return props.rows.filter(
+    (row) =>
+      !needle ||
+      nameSearch.matchedKeys.value.has(row.key) ||
+      normalise(`${commonName(row) ?? ''} ${sciName(row)}`).includes(needle),
+  );
 });
 
 const sorted = computed(() => {
@@ -214,8 +224,10 @@ watch([query, group, sortKey, sortDesc], () => {
             type="search"
             placeholder="Find in results"
             :disabled="pending"
-            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
+            :class="['pr-2', { 'search-spinner-room': isSearchingNames }]"
+            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
           />
+          <SearchSpinner :active="isSearchingNames" class="search-spinner-gap top-1/2" />
         </span>
       </label>
       <button
@@ -383,12 +395,17 @@ watch([query, group, sortKey, sortDesc], () => {
                         {{ initials(row) }}
                       </span>
                     </span>
-                    <span v-if="pendingName(row)" class="min-w-0 flex-1 space-y-1" aria-hidden="true">
+                    <!-- Two lines' height (h-9) whether loading, named or scientific only, so rows never change size. -->
+                    <span
+                      v-if="pendingName(row)"
+                      class="flex h-9 min-w-0 flex-1 flex-col justify-center gap-1"
+                      aria-hidden="true"
+                    >
                       <SkeletonBlock height="0.8rem" width="70%" />
-                      <SkeletonBlock height="0.6rem" width="45%" />
+                      <SkeletonBlock height="0.65rem" width="45%" />
                     </span>
                     <span v-if="pendingName(row)" class="sr-only">Loading name</span>
-                    <span v-else class="min-w-0">
+                    <span v-else class="flex h-9 min-w-0 flex-col justify-center">
                       <span class="block truncate group-hover:underline">{{ displayName(row) }}</span>
                       <span v-if="commonName(row)" class="sci-name block truncate text-xs text-muted">{{
                         sciName(row)

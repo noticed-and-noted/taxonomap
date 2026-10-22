@@ -159,13 +159,14 @@ describe('bake', () => {
     expect(names).toEqual([
       [1, 'K', 'Animalia', 'Animals', 100_000],
       [44, 'P', 'Chordata', null, 90_000],
-      [212, 'C', 'Aves', 'Birds', 80_000],
+      // GBIF's vernacularName alone doesn't name it: names come from englishName() of the full list.
+      [212, 'C', 'Aves', null, 80_000],
       [10, 'S', 'Species number10', 'Some bird', 9000],
       [11, 'S', 'Species number11', 'Some bird', 8000],
       [12, 'S', 'Genusonly', 'Some bird', 7000],
     ]);
     const common = await baked.bakedCommonNames();
-    expect([common(212), common(44)]).toEqual(['Birds', null]);
+    expect([common(1), common(212)]).toEqual(['Animals', null]);
   });
 });
 
@@ -364,9 +365,13 @@ describe('bake to disk', () => {
     try {
       gbif();
       const first = await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '3' });
-      const saved = await first.bakeToDisk();
+      const steps: string[] = [];
+      const saved = await first.bakeToDisk((key) => steps.push(key));
       const list = await first.bakeSpeciesList();
       expect(saved).toEqual(['years', 'names', 'tree', 'species-list']);
+      expect(steps).toEqual(saved);
+      expect(first.lookupProgress.queued).toBeGreaterThan(0);
+      expect(first.lookupProgress.done).toBe(first.lookupProgress.queued);
       const calls = gbif();
       const baked = await bake({ BAKE_DIR: dir });
       expect((await baked.bakeYears()).total).toBe(30);
@@ -375,5 +380,15 @@ describe('bake to disk', () => {
     } finally {
       rmSync(dir, { recursive: true });
     }
+  });
+});
+
+describe('bake directory', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('defaults to .cache/baked when BAKE_DIR is unset', async () => {
+    vi.stubEnv('BAKE_DIR', undefined);
+    const { bakeDir } = await import('~/lib/bake/cache');
+    expect(bakeDir()).toBe('.cache/baked');
   });
 });

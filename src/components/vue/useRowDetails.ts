@@ -1,7 +1,7 @@
 /**
  * Lazy details for species-table rows: each row's lead photo, its name when
  * the baked index lacked it, and its common name when the index had none.
- * Photos and common names are fetched for rows in view; names for rows in
+ * Photos are fetched for rows in view; names and common names for rows in
  * view, or for every row when `needAllNames` (sorting by name, searching).
  * Photos go first because their records carry names too. Each
  * key is asked for once per data set; a new data set (`dataset` changes)
@@ -10,6 +10,9 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import type { UsableImage } from '~/lib/gbif';
 import { commonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
+
+/** Common names looked up per batch, so a search's matches appear as they arrive. */
+const COMMON_NAME_BATCH = 20;
 
 /** Options for `useRowDetails`. */
 export interface RowDetailsOptions {
@@ -37,6 +40,8 @@ function useLookupState(dataset: () => unknown) {
   const photoDone = ref(new Set<number>());
   /** Common names looked up after load, for rows in view the index had none for. */
   const lateCommon = ref(new Map<number, string>());
+  /** Name and common-name lookups in flight. */
+  const namesInFlight = ref(0);
   const asked = { photo: new Set<number>(), name: new Set<number>(), common: new Set<number>() };
   let controller: AbortController | undefined;
   let current: unknown;
@@ -71,6 +76,7 @@ function useLookupState(dataset: () => unknown) {
     latePhotos,
     photoDone,
     lateCommon,
+    namesInFlight,
     asked,
     sync,
     isCurrent: (mine: AbortController | undefined) => mine === controller,
@@ -79,14 +85,31 @@ function useLookupState(dataset: () => unknown) {
 
 type LookupState = ReturnType<typeof useLookupState>;
 
-/** Looks up common names for rows in view that the index had none for. */
+/** Looks up common names the index had none for, a batch at a time so they show as they arrive. */
 async function lookUpCommonNames(keys: number[], state: LookupState) {
   const mine = state.sync();
   const ask = keys.filter((key) => !state.asked.common.has(key));
-  if (!ask.length) return;
   for (const key of ask) state.asked.common.add(key);
-  const found = await commonNames(ask, mine?.signal);
-  if (state.isCurrent(mine)) mergeInto(state.lateCommon, found);
+  if (ask.length) await trackNames(state, () => lookUpCommonNamesInBatches(ask, mine, state));
+}
+
+/** Runs a name lookup, counting it as in flight until it settles. */
+async function trackNames(state: LookupState, lookup: () => Promise<void>) {
+  state.namesInFlight.value++;
+  try {
+    await lookup();
+  } finally {
+    state.namesInFlight.value--;
+  }
+}
+
+/** Merges each batch as it arrives, so a search's matches show early. */
+async function lookUpCommonNamesInBatches(ask: number[], mine: AbortController | undefined, state: LookupState) {
+  for (let start = 0; start < ask.length; start += COMMON_NAME_BATCH) {
+    const found = await commonNames(ask.slice(start, start + COMMON_NAME_BATCH), mine?.signal);
+    if (!state.isCurrent(mine)) return;
+    mergeInto(state.lateCommon, found);
+  }
 }
 
 /** Looks up lead photos (whose records also name species) for rows in view. */
@@ -134,7 +157,7 @@ async function lookUpPhotosAndNames(
     const unnamed = new Set(rows().flatMap((row) => (row.unnamed ? [row.key] : [])));
     names = names.filter((key) => !namedByPhotos.has(key) && unnamed.has(key));
   }
-  if (names.length) await lookUpNames(names, mine, state);
+  if (names.length) await trackNames(state, () => lookUpNames(names, mine, state));
 }
 
 /**
@@ -148,7 +171,9 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
   const needNames = computed(() =>
     (needAllNames() ? rows() : inViewRows.value).filter((row) => row.unnamed).map((row) => row.key),
   );
-  const needCommon = computed(() => inViewRows.value.filter((row) => !row.commonName).map((row) => row.key));
+  const needCommon = computed(() =>
+    (needAllNames() ? rows() : inViewRows.value).filter((row) => !row.commonName).map((row) => row.key),
+  );
 
   // Common names run alongside photos: neither needs the other.
   watch(needCommon, (keys) => lookUpCommonNames(keys, state), { immediate: true });
@@ -156,8 +181,10 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
     immediate: true,
   });
 
-  const { lateCommon, lateNames, noName, latePhotos, photoDone } = state;
+  const { lateCommon, lateNames, noName, latePhotos, photoDone, namesInFlight } = state;
   return {
+    /** Names or common names are being looked up. */
+    isLoadingNames: computed(() => namesInFlight.value > 0),
     /** The common name, from the index or looked up once in view. */
     commonName: (row: SpeciesRow) => row.commonName ?? lateCommon.value.get(row.key),
     /** The scientific name, once known. */

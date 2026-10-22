@@ -104,6 +104,38 @@ describe('useNameSearch', () => {
     search.stop();
   });
 
+  it('ranks live hits by the English alias GBIF matched, below a main-name match', async () => {
+    const taxon = (key: number, scientificName: string, names: string[]) => ({
+      key,
+      scientificName,
+      rank: 'SPECIES',
+      vernacularNames: names.map((vernacularName) => ({ vernacularName, language: 'eng' })),
+    });
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
+      if (url.pathname === '/v1/species/search') {
+        return {
+          results: [
+            taxon(1, 'Ceratophyllus columbae', ['Pigeon Flea', 'Pigeon Flea', 'Feral Pigeon Nest Flea']),
+            taxon(2, 'Columba livia', ['Rock Dove', 'Rock Dove', 'Feral Pigeon']),
+            taxon(3, 'Columba livia domestica', ['Feral Pigeon']),
+          ],
+        };
+      }
+      return snapshots({ names: NAMES })(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('feral pigeon');
+    await vi.advanceTimersByTimeAsync(250);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([3, 2, 1]));
+    expect(search.hits.value.map((hit) => hit.matchedName)).toEqual([
+      undefined,
+      'Feral Pigeon',
+      'Feral Pigeon Nest Flea',
+    ]);
+    search.stop();
+  });
+
   it('asks GBIF nothing for short queries, and clears on reset', async () => {
     const calls = gbif();
     const search = await setup({ max: 8 });

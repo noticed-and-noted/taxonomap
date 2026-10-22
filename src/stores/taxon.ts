@@ -1,10 +1,11 @@
 /**
  * Display info (names + rank) for the selected taxa, derived from
- * $taxonKeys. Uses the baked name index first, then one cached GBIF call.
+ * $taxonKeys. Uses the baked name index first, then cached GBIF calls.
  */
 import { atom, onMount } from 'nanostores';
 import { nameIndexWithin } from '~/lib/data/name-index';
-import { getSpecies, type NameHit, type Rank } from '~/lib/gbif';
+import { getSpecies, getVernacularNames, type NameHit, type Rank } from '~/lib/gbif';
+import { englishName } from '~/lib/species/names';
 import { $taxonKeys, clearHexSelection, MAX_TAXA } from './explorer';
 
 export interface TaxonInfo {
@@ -12,20 +13,27 @@ export interface TaxonInfo {
   scientificName: string;
   commonName?: string;
   rank: Rank;
+  /** A placeholder whose names are still being looked up. */
+  loading?: true;
 }
 
-/** Names for a taxon key: the baked name index first, then one cached GBIF call. */
+/** Names for a taxon key: the baked name index first, then the taxon and its common names from GBIF (cached). */
 export async function lookupTaxon(key: number): Promise<TaxonInfo | null> {
   const nameIndex = await nameIndexWithin();
   const hit = nameIndex?.get(key);
   if (hit) return taxonFromHit(hit);
   try {
-    const usage = await getSpecies(key);
+    const [usage, vernaculars] = await Promise.all([
+      getSpecies(key),
+      // A taxon without its common name still beats no taxon.
+      getVernacularNames(key).catch(() => null),
+    ]);
+    const commonName = englishName(vernaculars?.results ?? []);
     return {
       key,
       scientificName: usage.canonicalName ?? usage.scientificName,
       rank: usage.rank,
-      ...(usage.vernacularName && { commonName: usage.vernacularName }),
+      ...(commonName && { commonName }),
     };
   } catch {
     return null;
@@ -37,19 +45,21 @@ const names = new Map<number, TaxonInfo>();
 /** Display info for $taxonKeys, in key order; placeholders until names resolve (or if lookup fails). */
 export const $taxa = atom<TaxonInfo[]>([]);
 
-function info(key: number): TaxonInfo {
-  return names.get(key) ?? { key, scientificName: `Taxon ${key}`, rank: 'UNRANKED' };
+function info(key: number, isLoading = false): TaxonInfo {
+  return (
+    names.get(key) ?? { key, scientificName: `Taxon ${key}`, rank: 'UNRANKED', ...(isLoading && { loading: true }) }
+  );
 }
 
 async function resolve(keys: readonly number[]): Promise<void> {
   // Placeholders first, so chips render immediately.
-  $taxa.set(keys.map(info));
+  $taxa.set(keys.map((key) => info(key, true)));
   const missing = keys.filter((key) => !names.has(key));
   if (!missing.length) return;
   const found = await Promise.all(missing.map(lookupTaxon));
   for (const taxon of found) if (taxon) names.set(taxon.key, taxon);
   // Only publish if the selection has not moved on meanwhile.
-  if ($taxonKeys.get() === keys) $taxa.set(keys.map(info));
+  if ($taxonKeys.get() === keys) $taxa.set(keys.map((key) => info(key)));
 }
 
 onMount($taxa, () => $taxonKeys.subscribe((keys) => void resolve(keys)));

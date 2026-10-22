@@ -22,7 +22,7 @@ import {
   type MapColors,
 } from '~/lib/map/style';
 import { needsAdhoc } from '~/lib/gbif';
-import { createHoverCounter, fetchCount, knownCount } from '~/lib/map/cellCounts';
+import { checkCells, createHoverCounter, knownCount } from '~/lib/map/cellCounts';
 import type { Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
@@ -390,16 +390,14 @@ function checkSparse(hexes: Hex[]) {
     const [lng, lat] = hex.geometry.coordinates[0]![0]!;
     return lng! >= bounds[0] && lng! <= bounds[2] && lat! >= bounds[1] && lat! <= bounds[3];
   };
-  for (const hex of hexes
+  const wkts = hexes
     .filter((candidate) => candidate.properties.total <= SPARSE_MAX && inView(candidate))
-    .slice(0, MAX_CHECKS)) {
-    const geometry = geometryOf(hex);
-    if (!geometry) continue;
-    fetchCount(filter, geometry.wkt).then(
-      (count) => count === 0 && filter === $occurrenceFilter.get() && occ?.redraw(),
-      () => undefined, // The estimate stays up.
-    );
-  }
+    .slice(0, MAX_CHECKS)
+    .flatMap((hex) => geometryOf(hex)?.wkt ?? []);
+  checkCells(filter, wkts).then(
+    (hasEmpty) => hasEmpty && filter === $occurrenceFilter.get() && occ?.redraw(),
+    () => undefined, // The estimates stay up.
+  );
 }
 
 function clearHover() {

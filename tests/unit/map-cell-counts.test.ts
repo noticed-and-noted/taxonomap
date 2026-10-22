@@ -1,7 +1,8 @@
 /** Exact cell counts for the hover tooltip: debounced, fetched once, cached per filter and cell. */
 export {};
 const occurrenceCount = vi.fn();
-vi.mock('~/lib/gbif', () => ({ occurrenceCount }));
+const searchOccurrences = vi.fn();
+vi.mock('~/lib/gbif', () => ({ occurrenceCount, searchOccurrences }));
 
 async function load() {
   vi.resetModules();
@@ -98,5 +99,40 @@ describe('fetchCount', () => {
     for (let index = 0; index < 501; index++) rememberCount(NONE, `cell${index}`, index);
     expect(knownCount(NONE, 'cell0')).toBeUndefined();
     expect(knownCount(NONE, 'cell500')).toBe(500);
+  });
+});
+
+describe('checkCells', () => {
+  const SQUARE_A = 'POLYGON((0 0,1 0,1 1,0 1,0 0))';
+  const SQUARE_B = 'POLYGON((2 0,3 0,3 1,2 1,2 0))';
+  const recordAt = (decimalLongitude: number, decimalLatitude: number) => ({ decimalLongitude, decimalLatitude });
+
+  it('counts every cell from one search and reports the empty ones', async () => {
+    const { checkCells, knownCount } = await load();
+    searchOccurrences.mockResolvedValue({ count: 2, results: [recordAt(0.5, 0.5), recordAt(0.2, 0.8)] });
+    await expect(checkCells(NONE, [SQUARE_A, SQUARE_B])).resolves.toBe(true);
+    expect(searchOccurrences).toHaveBeenCalledOnce();
+    expect(searchOccurrences.mock.calls[0]![0]).toEqual({ geometry: [SQUARE_A, SQUARE_B] });
+    expect(knownCount(NONE, SQUARE_A)).toBe(2);
+    expect(knownCount(NONE, SQUARE_B)).toBe(0);
+    // Known cells are not asked for again.
+    await checkCells(NONE, [SQUARE_A, SQUARE_B]);
+    expect(searchOccurrences).toHaveBeenCalledOnce();
+  });
+
+  it('records nothing from an incomplete page or a record outside every cell', async () => {
+    const { checkCells, knownCount } = await load();
+    searchOccurrences.mockResolvedValueOnce({ count: 500, results: [recordAt(0.5, 0.5)] });
+    await expect(checkCells(NONE, [SQUARE_A, SQUARE_B])).resolves.toBe(false);
+    searchOccurrences.mockResolvedValueOnce({ count: 1, results: [recordAt(9, 9)] });
+    await expect(checkCells(NONE, [SQUARE_A, SQUARE_B])).resolves.toBe(false);
+    expect(knownCount(NONE, SQUARE_B)).toBeUndefined();
+  });
+
+  it('treats a record with no coordinates as outside every cell', async () => {
+    const { checkCells, knownCount } = await load();
+    searchOccurrences.mockResolvedValueOnce({ count: 1, results: [{}] });
+    await expect(checkCells(NONE, [SQUARE_A])).resolves.toBe(false);
+    expect(knownCount(NONE, SQUARE_A)).toBeUndefined();
   });
 });

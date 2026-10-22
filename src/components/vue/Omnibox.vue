@@ -407,9 +407,12 @@ onBeforeUnmount(() => {
             >
               <template v-if="option.kind === 'taxon'">
                 <span class="min-w-0 flex-1">
-                  <span v-if="option.hit.commonName" class="block truncate font-medium text-text">{{
-                    option.hit.commonName
-                  }}</span>
+                  <span v-if="option.hit.commonName" class="block truncate font-medium text-text"
+                    >{{ option.hit.commonName }}
+                    <span v-if="option.hit.matchedName" class="font-normal text-muted"
+                      >({{ option.hit.matchedName }})</span
+                    ></span
+                  >
                   <span
                     class="sci-name block truncate"
                     :class="option.hit.commonName ? 'text-xs text-muted' : 'text-text'"

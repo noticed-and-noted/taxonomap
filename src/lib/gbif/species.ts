@@ -1,3 +1,5 @@
+import pLimit from 'p-limit';
+
 import { BACKBONE_DATASET_KEY } from './config';
 import { http } from './http';
 import type { NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
@@ -42,11 +44,17 @@ export function listByRank(rank: Rank, offset = 0, limit = 1000) {
   );
 }
 
-/** Common names of a taxon, in all languages, up to `limit`. */
-export function getVernacularNames(key: number, limit = 300, signal?: AbortSignal) {
+/**
+ * Enough to get every common name of even the most-named taxa, so every caller hands
+ * `englishName()` the same full list and picks the same name.
+ */
+const VERNACULAR_NAME_LIMIT = 1000;
+
+/** All common names of a taxon, in all languages. */
+export function getVernacularNames(key: number, signal?: AbortSignal) {
   return http().getJson<Paged<VernacularName>>(
     `/v1/species/${key}/vernacularNames`,
-    { limit },
+    { limit: VERNACULAR_NAME_LIMIT },
     { ttlMs: DAY, ...(signal && { signal }) },
   );
 }
@@ -63,6 +71,38 @@ export function getChildren(key: number, options: { limit?: number; offset?: num
     { limit: options.limit ?? 100, offset: options.offset },
     { ttlMs: DAY, ...(signal && { signal }) },
   );
+}
+
+/** GBIF's page-size cap for species search (larger limits are silently cut to this). */
+const SEARCH_PAGE = 1000;
+/** Stops runaway paging; the largest families have about 6,000 accepted genera. */
+const MAX_SEARCH_PAGES = 20;
+// Bursts of parallel searches trip GBIF's rate limit.
+const PAGE_CONCURRENCY = 2;
+
+export type UsageWithNames = NameUsage & { vernacularNames?: VernacularName[] };
+
+/**
+ * Every accepted taxon of `rank` under `key` (its children, for the next rank down). Search
+ * skips the synonyms that make up a third of the children endpoint, and its count lets the
+ * pages after the first load in parallel.
+ */
+export async function getAllChildren(key: number, rank: Rank, signal?: AbortSignal): Promise<UsageWithNames[]> {
+  const page = (offset: number) =>
+    http().getJson<Paged<UsageWithNames>>(
+      '/v1/species/search',
+      { datasetKey: BACKBONE_DATASET_KEY, highertaxonKey: key, rank, status: 'ACCEPTED', limit: SEARCH_PAGE, offset },
+      { ttlMs: DAY, ...(signal && { signal }) },
+    );
+  const first = await page(0);
+  const pageCount = Math.min(Math.ceil((first.count ?? 0) / SEARCH_PAGE), MAX_SEARCH_PAGES);
+  const limit = pLimit(PAGE_CONCURRENCY);
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(pageCount - 1, 0) }, (_unused, index) =>
+      limit(() => page((index + 1) * SEARCH_PAGE)),
+    ),
+  );
+  return [first, ...rest].flatMap((response) => response.results);
 }
 
 /** A taxon's ancestors, from the kingdom down. */

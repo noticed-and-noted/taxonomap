@@ -67,11 +67,35 @@ describe('species endpoints', () => {
       '/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=Turdus&rank=SPECIES',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=10&q=robin&qField=VERNACULAR&status=ACCEPTED',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=1000&offset=1000&rank=CLASS&status=ACCEPTED',
-      '/v1/species/212/vernacularNames?limit=300',
+      '/v1/species/212/vernacularNames?limit=1000',
       '/v1/species/212/synonyms?limit=100',
       '/v1/species/212/children?limit=100&offset=100',
       '/v1/species/212/parents',
     ]);
+  });
+
+  it('lists accepted children by search, loading pages after the first from its count', async () => {
+    const calls = stubNetwork((url) => {
+      const offset = Number(url.searchParams.get('offset'));
+      return { count: 2001, results: [{ key: offset }] };
+    });
+    const api = await gbif();
+    const children = await api.getAllChildren(212, 'GENUS');
+    expect(children.map((child) => child.key)).toEqual([0, 1000, 2000]);
+    const params = calls[0]!.searchParams;
+    expect([params.get('highertaxonKey'), params.get('rank'), params.get('status'), params.get('limit')]).toEqual([
+      '212',
+      'GENUS',
+      'ACCEPTED',
+      '1000',
+    ]);
+  });
+
+  it('stops after the first page when the search gives no count', async () => {
+    const calls = stubNetwork(() => ({ results: [{ key: 1 }] }));
+    const api = await gbif();
+    await expect(api.getAllChildren(212, 'GENUS')).resolves.toEqual([{ key: 1 }]);
+    expect(calls).toHaveLength(1);
   });
 
   it('counts species under each descendant from one facet', async () => {
@@ -115,6 +139,7 @@ describe('live name providers', () => {
         scientificName: 'Erithacus rubecula',
         rank: 'SPECIES',
         commonName: 'European robin',
+        englishNames: ['European robin'],
         source: 'vernacular',
       },
       { key: 2, scientificName: 'Robinia', rank: 'GENUS', source: 'vernacular' },
@@ -129,7 +154,12 @@ describe('live name providers', () => {
           key: 6065844,
           scientificName: 'Leucophaeus atricilla',
           rank: 'SPECIES',
-          vernacularNames: [english('Laughing Gull'), english('Black-headed Gull'), english('Laughing Gull')],
+          vernacularNames: [
+            english('Laughing Gull'),
+            english('Black-headed Gull'),
+            english('Laughing Gull'),
+            english('Laughing Gull'),
+          ],
         },
       ],
     }));
@@ -138,7 +168,7 @@ describe('live name providers', () => {
     expect(hit?.commonName).toBe('Laughing Gull');
   });
 
-  it('vernacular search falls back to the matching name when there is no English one', async () => {
+  it('vernacular search shows no common name when there is no English one', async () => {
     stubNetwork(() => ({
       results: [
         {
@@ -154,7 +184,7 @@ describe('live name providers', () => {
     }));
     const api = await gbif();
     const [hit] = await api.gbifVernacularProvider.search('mouette');
-    expect(hit?.commonName).toBe('Mouette brune');
+    expect(hit?.commonName).toBeUndefined();
   });
 });
 

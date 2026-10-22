@@ -4,7 +4,7 @@
  *   classes            → 1 facet request (callers fold it into one they make anyway)
  *   top species        → 1 facet request, AND'd with classKey for one group
  *                         (skipped when the caller's request already had the facet)
- *   names              → baked index; then `nameFromRecords`, one batched record search
+ *   names              → baked index; then `nameFromRecords`, up to 10 batched record searches
  *                         for misses, run after the rows are shown; the table calls
  *                         `resolveNames` for any it still needs (cached detail lookups, 2 at a time)
  *                         and `commonNames` for rows in view without a common name
@@ -118,20 +118,39 @@ export async function topSpecies(
   });
 }
 
+/** Most species keys and records one batched search asks for (GBIF's page limit is 300). */
+const RECORD_SEARCH_KEYS = 150;
+const RECORD_SEARCH_LIMIT = 300;
+/** Batched searches per load: each one drops the species already named, so rarer ones get records. */
+const RECORD_SEARCH_ROUNDS = 10;
+
+/** Scientific names from one record search over `keys` (records carry their species name). */
+async function namesInRecords(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
+  const response = await searchOccurrences(
+    { speciesKeys: keys.slice(0, RECORD_SEARCH_KEYS) },
+    { limit: RECORD_SEARCH_LIMIT },
+    signal,
+  ).catch(() => null);
+  const names = new Map<number, string>();
+  for (const occurrence of response?.results ?? [])
+    if (occurrence.speciesKey !== undefined && occurrence.species) names.set(occurrence.speciesKey, occurrence.species);
+  return names;
+}
+
 /**
- * Names for rows the index missed, from one batched record search (records
- * carry their species name). Returns `rows` itself when it names none.
+ * Names for rows the index missed, from a few batched record searches. Common
+ * species fill a search's records, so each round asks only for the species still
+ * unnamed. Returns `rows` itself when it names none.
  */
 export async function nameFromRecords(rows: SpeciesRow[], signal?: AbortSignal): Promise<SpeciesRow[]> {
-  const misses = rows.filter((row) => row.unnamed).map((row) => row.key);
-  if (!misses.length) return rows;
-  const response = await searchOccurrences({ speciesKeys: misses.slice(0, 150) }, { limit: 300 }, signal).catch(
-    () => null,
-  );
   const scientificNames = new Map<number, string>();
-  for (const occurrence of response?.results ?? [])
-    if (occurrence.speciesKey !== undefined && occurrence.species)
-      scientificNames.set(occurrence.speciesKey, occurrence.species);
+  let misses = rows.filter((row) => row.unnamed).map((row) => row.key);
+  for (let round = 0; round < RECORD_SEARCH_ROUNDS && misses.length; round++) {
+    const found = await namesInRecords(misses, signal);
+    if (!found.size) break;
+    for (const [key, name] of found) scientificNames.set(key, name);
+    misses = misses.filter((key) => !found.has(key));
+  }
   if (!scientificNames.size) return rows;
   return rows.map((row) => {
     const name = row.unnamed && scientificNames.get(row.key);
@@ -173,7 +192,7 @@ export async function commonNames(keys: readonly number[], signal?: AbortSignal)
     keys.map((key) =>
       limit(async () => {
         if (signal?.aborted) return;
-        const vernaculars = await getVernacularNames(key, 300, signal).catch(() => null);
+        const vernaculars = await getVernacularNames(key, signal).catch(() => null);
         const name = vernaculars && englishName(vernaculars.results);
         if (name) names.set(key, name);
       }),

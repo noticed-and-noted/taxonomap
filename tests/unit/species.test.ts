@@ -25,7 +25,8 @@ describe('species helpers', () => {
     expect(
       englishName([name('robin'), name('European Robin'), name('european robin'), name('Rouge-gorge', 'fra')]),
     ).toBe('European Robin');
-    expect(englishName([name('Robin'), name('Redbreast', 'eng', true)])).toBe('Redbreast');
+    // Preferred flags don't count: several checklists each flag their own pick.
+    expect(englishName([name('Robin'), name('Robin'), name('Redbreast', 'eng', true)])).toBe('Robin');
     expect(englishName([name('Rouge-gorge', 'fra')])).toBeNull();
     // Equal counts: the capitalised variant, then the shorter name.
     expect(englishName([name('robin'), name('Robin'), name('Redbreast robin'), name('redbreast robin')])).toBe('Robin');
@@ -61,6 +62,15 @@ describe('species helpers', () => {
       names: ['Rouge-gorge', 'Rouge-gorge familier'],
     });
     expect(languageName('cym')).toBe('Welsh');
+  });
+
+  it('drops names that differ only in case, keeping the capitalised one', () => {
+    const groups = groupByLanguage([
+      { vernacularName: 'european robin', language: 'eng' },
+      { vernacularName: 'European Robin', language: 'eng' },
+      { vernacularName: 'European robin', language: 'eng' },
+    ]);
+    expect(groups[0]?.names).toEqual(['European Robin']);
   });
 
   it('derives the classification from higher keys', () => {

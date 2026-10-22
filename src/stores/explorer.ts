@@ -349,11 +349,9 @@ export const $filterPills = computed(filterValues, (values) =>
   ),
 );
 
-/** Filters set per rail group: one per pill (so each IUCN category), or one for taxa. */
 /** How many selections a set filter adds to its group's badge: one per pill, or per taxon (taxa have no pills). */
 function selectionCount(filterDef: Filter, value: unknown): number {
-  if (filterDef.pills) return filterDef.pills(value).length;
-  return Array.isArray(value) ? value.length : 1;
+  return filterDef.pills ? filterDef.pills(value).length : (value as readonly number[]).length;
 }
 
 export const $groupCounts = computed(filterValues, (values) => {

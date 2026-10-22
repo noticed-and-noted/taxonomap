@@ -47,19 +47,21 @@ describe('tree lazy levels', () => {
   function gbif() {
     return stubNetwork((url) => {
       const path = url.pathname;
-      if (path === '/v1/species/729/children')
+      const under = url.searchParams.get('highertaxonKey');
+      const isList = path === '/v1/species/search' && url.searchParams.get('limit') !== '0';
+      if (isList && under === '729')
         return {
+          count: 5,
           results: [
             kid(5264, 'Paridae'),
-            kid(9327, 'Turdidae', 'FAMILY', { vernacularName: 'thrushes' }),
+            kid(9327, 'Turdidae', 'FAMILY', { vernacularNames: [{ vernacularName: 'thrushes', language: 'eng' }] }),
             kid(1, 'Empty'),
             kid(2, 'Old name', 'FAMILY', { taxonomicStatus: 'SYNONYM' }),
             kid(3, 'Wrong rank', 'GENUS'),
           ],
         };
-      if (path === '/v1/species/9327/children') return { results: [kid(2490, 'Turdus', 'GENUS')] };
+      if (isList) return { count: 1, results: [kid(2490, 'Turdus', 'GENUS')] };
       if (path === '/v1/species/search') {
-        const under = url.searchParams.get('highertaxonKey');
         return under === '729'
           ? facets(0, 'HIGHER_TAXON_KEY', [
               [5264, 60],
@@ -116,8 +118,9 @@ describe('tree lazy levels', () => {
 
   it('loads species under a genus, each counting as one, named from the index', async () => {
     stubNetwork((url) => {
-      if (url.pathname === '/v1/species/2490/children')
+      if (url.pathname === '/v1/species/search' && url.searchParams.get('highertaxonKey') === '2490')
         return {
+          count: 3,
           results: [
             { key: 11, scientificName: 'Turdus merula L.', rank: 'SPECIES' },
             { key: 12, scientificName: 'Turdus pilaris', canonicalName: 'Turdus pilaris', rank: 'SPECIES' },
@@ -161,7 +164,6 @@ describe('tree lazy levels', () => {
     stubNetwork((url) => {
       if (url.pathname === '/v1/species/77/parents')
         return [{ key: 1 }, { key: 44 }, { key: 212 }, { key: 729 }, { key: 5 }];
-      if (url.pathname === '/v1/species/729/children') return { results: [] };
       if (url.pathname === '/v1/species/search' || url.pathname === '/v1/occurrence/search') return facets(0, 'X', []);
       return snapshots({ names: [] })(url);
     });

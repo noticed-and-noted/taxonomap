@@ -81,7 +81,9 @@ jobs:
 
   build:
     name: Build
-    needs: verify
+    # Waits for a manual bake so the deploy uses its data; bake is skipped on every other run.
+    needs: [verify, bake]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.bake.result != 'failure' }}
     runs-on: ubuntu-latest
     env:
       PUBLIC_GBIF_API_BASE: ${{ vars.PUBLIC_GBIF_API_BASE || 'https://api.gbif.org' }}

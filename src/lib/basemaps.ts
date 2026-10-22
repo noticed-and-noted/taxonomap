@@ -31,16 +31,23 @@ export interface BasemapDef {
   source: (theme: Theme) => RasterDef | VectorDef;
 }
 
+/**
+ * The plain basemap's vector style for a theme; raster basemaps borrow its labels too.
+ * @param theme The site theme the style should match.
+ * @returns The style URL.
+ */
+export function plainStyleUrl(theme: Theme): string {
+  return (
+    (theme === 'dark' ? env['PUBLIC_BASEMAP_PLAIN_DARK'] : env['PUBLIC_BASEMAP_PLAIN_LIGHT']) ||
+    `https://tiles.openfreemap.org/styles/${theme === 'dark' ? 'dark' : 'positron'}`
+  );
+}
+
 export const BASEMAPS: Record<BasemapId, BasemapDef> = {
   plain: {
     id: 'plain',
     label: 'Plain',
-    source: (theme) => ({
-      kind: 'vector',
-      styleUrl:
-        (theme === 'dark' ? env['PUBLIC_BASEMAP_PLAIN_DARK'] : env['PUBLIC_BASEMAP_PLAIN_LIGHT']) ||
-        `https://tiles.openfreemap.org/styles/${theme === 'dark' ? 'dark' : 'positron'}`,
-    }),
+    source: (theme) => ({ kind: 'vector', styleUrl: plainStyleUrl(theme) }),
   },
   satellite: {
     id: 'satellite',

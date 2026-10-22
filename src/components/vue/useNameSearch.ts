@@ -5,7 +5,7 @@
  * thin) follow after a 250 ms debounce. Each new query aborts the last.
  */
 import { computed, onScopeDispose, ref } from 'vue';
-import { bakedIndexProvider, matchScore, nameIndexWithin } from '~/lib/data/name-index';
+import { bakedIndexProvider, matchHit, nameIndexWithin } from '~/lib/data/name-index';
 import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
 import { debounce } from '~/lib/util/debounce';
 
@@ -47,10 +47,16 @@ function mergeHits(
   return merged;
 }
 
-/** Best name matches first, scored like the index; GBIF's order breaks ties (the sort is stable). */
+/**
+ * Best name matches first, scored like the index; GBIF's order breaks ties (the sort is stable).
+ * Hits that matched on another English name carry it as `matchedName`.
+ */
 function rankByMatch(hits: NameHit[], text: string): NameHit[] {
-  const scores = new Map(hits.map((hit) => [hit, matchScore(hit, text)]));
-  return hits.sort((first, second) => scores.get(second)! - scores.get(first)!);
+  const scored = hits.map((hit) => {
+    const { score, matchedName } = matchHit(hit, text);
+    return { hit: matchedName ? { ...hit, matchedName } : hit, score };
+  });
+  return scored.sort((first, second) => second.score - first.score).map(({ hit }) => hit);
 }
 
 /** Asks GBIF's live providers, best matches first; `failed` is true when every one of them did. */

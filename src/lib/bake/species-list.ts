@@ -1,8 +1,7 @@
-import pLimit from 'p-limit';
 import { getSpecies, occurrenceFacets } from '~/lib/gbif/server';
 import { isDev } from '~/lib/env';
 import { speciesSlug } from '~/lib/species/data';
-import { LOOKUP_CONCURRENCY, once, rethrowUnlessMissing } from './cache';
+import { lookupLimit, once, rethrowUnlessMissing } from './cache';
 
 const DEFAULT_PRERENDER_COUNT = 2000;
 const DEV_PRERENDER_COUNT = 12;
@@ -78,7 +77,7 @@ export function bakeSpeciesList(): Promise<PrerenderSpecies[]> {
     const total = prerenderCount();
     if (total === 0) return [];
     const picked = await pickSpeciesKeys(total);
-    const limit = pLimit(LOOKUP_CONCURRENCY);
+    const limit = lookupLimit();
     const rows = await Promise.all(
       [...picked].map(([key, count]) =>
         limit(async (): Promise<PrerenderSpecies | null> => {

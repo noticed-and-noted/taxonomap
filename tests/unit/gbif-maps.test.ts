@@ -119,7 +119,7 @@ describe('species endpoints with signals', () => {
     const api = await gbif();
     const { signal } = new AbortController();
     await api.getSpecies(1, signal);
-    await api.getVernacularNames(1, 10, signal);
+    await api.getVernacularNames(1, signal);
     await api.getChildren(1, {}, signal);
     await expect(api.speciesCountsUnder(undefined, 10, signal)).resolves.toEqual(new Map());
     expect(calls.map((url) => `${url.pathname}${url.search}`)).toContain('/v1/species/1/children?limit=100');
@@ -203,22 +203,5 @@ describe('polygonToWkt', () => {
     ];
     expect(api.polygonToWkt(ring)).toBe('POLYGON((0 0,1 0,1 1,0 0))');
     expect(api.polygonToWkt([])).toBe('POLYGON(())');
-  });
-});
-
-describe('vernacular search', () => {
-  it('falls back to a matching name in any language', async () => {
-    stubNetwork(() => ({
-      results: [
-        {
-          key: 1,
-          scientificName: 'Erithacus rubecula',
-          rank: 'SPECIES',
-          vernacularNames: [{ vernacularName: 'Rotkehlchen', language: 'deu' }],
-        },
-      ],
-    }));
-    const api = await gbif();
-    expect(await api.gbifVernacularProvider.search('rotkehl')).toMatchObject([{ commonName: 'Rotkehlchen' }]);
   });
 });

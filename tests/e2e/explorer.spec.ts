@@ -106,7 +106,7 @@ test('the cell panel lists records with their type, expands one and filters them
   const rows = page.getByRole('table', { name: 'Records' }).locator('tbody tr');
   await expect(rows.first().getByLabel('Human observation')).toHaveText('OBS');
   await rows.first().getByRole('button').click();
-  await expect(page.getByRole('link', { name: 'View on GBIF' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /GBIF record/ })).toBeVisible();
   const search = page.getByRole('combobox', { name: 'Filter records by species' });
   await search.click();
   const first = page.getByRole('listbox', { name: 'Species in this cell' }).getByRole('option').first();

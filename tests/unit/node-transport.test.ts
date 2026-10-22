@@ -70,6 +70,11 @@ describe('node transport options', () => {
     vi.restoreAllMocks();
   });
 
+  it('takes the version pnpm passes in when there is one', () => {
+    vi.stubEnv('npm_package_version', '9.9.9');
+    expect(userAgent('a@b.c')).toBe('Taxonomap/9.9.9 (contact: a@b.c)');
+  });
+
   it('reads the version from package.json, falling back to 0.0.0', async () => {
     vi.stubEnv('npm_package_version', '');
     vi.stubEnv('GBIF_CONTACT_EMAIL', '');

@@ -110,6 +110,13 @@ describe('loadSpeciesData', () => {
     expect(data.months[4]).toBe(9);
     expect(calls.length).toBeLessThanOrEqual(9);
   });
+
+  it('lists a sibling without a common name when neither the index nor GBIF has one', async () => {
+    gbif();
+    const { loadSpeciesData } = await load();
+    const data = await loadSpeciesData(2492462, () => null);
+    expect(data.siblings).toEqual([{ key: 7, scientificName: 'Erithacus akahige', count: 5 }]);
+  });
 });
 
 describe('loadSpeciesData with sparse answers', () => {
