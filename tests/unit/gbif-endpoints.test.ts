@@ -93,7 +93,7 @@ describe('live name providers', () => {
     ]);
   });
 
-  it('vernacular search shows the matching name, English first', async () => {
+  it('vernacular search shows the English name over other languages', async () => {
     stubNetwork(() => ({
       results: [
         {
@@ -119,6 +119,42 @@ describe('live name providers', () => {
       },
       { key: 2, scientificName: 'Robinia', rank: 'GENUS', source: 'vernacular' },
     ]);
+  });
+
+  it('vernacular search shows the main English name, not a rarer alias that matched', async () => {
+    const english = (vernacularName: string) => ({ vernacularName, language: 'eng' });
+    stubNetwork(() => ({
+      results: [
+        {
+          key: 6065844,
+          scientificName: 'Leucophaeus atricilla',
+          rank: 'SPECIES',
+          vernacularNames: [english('Laughing Gull'), english('Black-headed Gull'), english('Laughing Gull')],
+        },
+      ],
+    }));
+    const api = await gbif();
+    const [hit] = await api.gbifVernacularProvider.search('black headed gull');
+    expect(hit?.commonName).toBe('Laughing Gull');
+  });
+
+  it('vernacular search falls back to the matching name when there is no English one', async () => {
+    stubNetwork(() => ({
+      results: [
+        {
+          key: 1,
+          scientificName: 'Larus fuscus',
+          rank: 'SPECIES',
+          vernacularNames: [
+            { vernacularName: 'Sildemåke', language: 'nob' },
+            { vernacularName: 'Mouette brune', language: 'fra' },
+          ],
+        },
+      ],
+    }));
+    const api = await gbif();
+    const [hit] = await api.gbifVernacularProvider.search('mouette');
+    expect(hit?.commonName).toBe('Mouette brune');
   });
 });
 

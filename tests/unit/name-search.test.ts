@@ -76,6 +76,34 @@ describe('useNameSearch', () => {
     search.stop();
   });
 
+  it('ranks live hits by how well their names match, keeping GBIF order for ties', async () => {
+    const gull = (key: number, scientificName: string, vernacularName: string) => ({
+      key,
+      scientificName,
+      rank: 'SPECIES',
+      vernacularNames: [{ vernacularName, language: 'eng' }],
+    });
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
+      if (url.pathname === '/v1/species/search') {
+        return {
+          results: [
+            gull(1, 'Larus icthyaetus', 'great black-headed gull'),
+            gull(2, 'Chroicocephalus ridibundus', 'Black-headed Gull'),
+            gull(3, 'Ichthyaetus ichthyaetus', 'Great Black-headed Gull'),
+            gull(4, 'Leucophaeus atricilla', 'Black-headed Gull'),
+          ],
+        };
+      }
+      return snapshots({ names: NAMES })(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('black headed gull');
+    await vi.advanceTimersByTimeAsync(250);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2, 4, 1, 3]));
+    search.stop();
+  });
+
   it('asks GBIF nothing for short queries, and clears on reset', async () => {
     const calls = gbif();
     const search = await setup({ max: 8 });
