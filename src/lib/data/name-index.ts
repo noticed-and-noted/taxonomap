@@ -39,6 +39,9 @@ function decode([key, code, scientificName, commonName, count, inatId]: NameRow)
   };
 }
 
+/** Scientific matches score this much lower, so common names win ties. */
+const SCIENTIFIC_DISCOUNT = 1.5;
+
 interface Entry {
   name: IndexedName;
   common: string;
@@ -58,6 +61,26 @@ function score(text: string, query: string, qWords: string[]): number {
   const words = text.split(' ');
   if (qWords.every((queryWord) => words.some((word) => word.startsWith(queryWord)))) return 2;
   return 0;
+}
+
+/** The better of a common-name and a scientific-name score, from normalised text. */
+function bestScore(common: string, sci: string, query: string, qWords: string[]): number {
+  return Math.max(score(common, query, qWords), score(sci, query, qWords) - SCIENTIFIC_DISCOUNT);
+}
+
+/**
+ * How well a hit's names match a query, scored like the index's own search,
+ * so live GBIF hits can be ranked the same way.
+ * @returns 0 when neither name matches; higher is better.
+ */
+export function matchScore(hit: Pick<NameHit, 'scientificName' | 'commonName'>, query: string): number {
+  const normalisedQuery = normalise(query);
+  return bestScore(
+    normalise(hit.commonName ?? ''),
+    normalise(hit.scientificName),
+    normalisedQuery,
+    normalisedQuery.split(' '),
+  );
 }
 
 /** In-memory search over the baked names, matching common and scientific names by word prefix. */
@@ -80,11 +103,8 @@ export class NameIndex {
     const qWords = normalisedQuery.split(' ');
     const hits: { entry: Entry; score: number }[] = [];
     for (const entry of this.#entries) {
-      const bestScore = Math.max(
-        score(entry.common, normalisedQuery, qWords),
-        score(entry.sci, normalisedQuery, qWords) - 1.5,
-      );
-      if (bestScore > 0) hits.push({ entry, score: bestScore });
+      const entryScore = bestScore(entry.common, entry.sci, normalisedQuery, qWords);
+      if (entryScore > 0) hits.push({ entry, score: entryScore });
     }
     // Rows are pre-sorted by count; sort is stable, so ties keep count order.
     hits.sort((left, right) => right.score - left.score);
