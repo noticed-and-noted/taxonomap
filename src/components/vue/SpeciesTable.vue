@@ -4,7 +4,8 @@
  * headers) and name search work on the rows already loaded; the filter popover
  * picks a group (`v-model:group`) and the parent loads that group's rows. The
  * table's own requests are lazy, for rows scrolled into view: photos, and names
- * the baked index lacked (every row's name once you sort by name or search).
+ * the baked index lacked (every row's name once you sort by name). Search matches
+ * names already known, plus rows the shared name search finds by other names.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
@@ -17,9 +18,9 @@ import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import { useCellNameSearch } from './useCellNameSearch';
 import { useRowDetails } from './useRowDetails';
 import { useScrollFade } from './useScrollFade';
-import { useSettledQuery } from './useSettledQuery';
 import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{
@@ -57,15 +58,14 @@ const broken = ref(new Set<number>());
 // Rows currently scrolled into the results box (or just below it); see observeRows.
 const inView = ref(new Set<number>());
 // Photos, and names the index lacked, looked up as rows come into view.
-// Searching names every row, a request each, so it waits for typing to pause.
-const { settled: settledQuery, isSettling } = useSettledQuery(query);
 const { commonName, sciName, pendingName, photoOf, pendingPhoto, isLoadingNames } = useRowDetails({
   rows: () => props.rows,
   dataset: () => props.groups,
   inView,
-  needAllNames: () => sortKey.value === 'name' || !!settledQuery.value.trim(),
+  needAllNames: () => sortKey.value === 'name',
 });
-const isSearchingNames = computed(() => !!query.value.trim() && (isSettling.value || isLoadingNames.value));
+const nameSearch = useCellNameSearch({ query, species: () => props.rows });
+const isSearchingNames = computed(() => !!query.value.trim() && (isLoadingNames.value || nameSearch.loading.value));
 const displayName = (row: SpeciesRow) => commonName(row) ?? sciName(row);
 const initials = (row: SpeciesRow) =>
   displayName(row)
@@ -87,7 +87,12 @@ const activeFilters = computed(() => (group.value === null ? 0 : 1));
 
 const filtered = computed(() => {
   const needle = normalise(query.value);
-  return props.rows.filter((row) => !needle || normalise(`${commonName(row) ?? ''} ${sciName(row)}`).includes(needle));
+  return props.rows.filter(
+    (row) =>
+      !needle ||
+      nameSearch.matchedKeys.value.has(row.key) ||
+      normalise(`${commonName(row) ?? ''} ${sciName(row)}`).includes(needle),
+  );
 });
 
 const sorted = computed(() => {

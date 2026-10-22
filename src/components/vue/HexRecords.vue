@@ -18,6 +18,7 @@ import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
+import { useCellNameSearch } from './useCellNameSearch';
 import { useLatestLoad } from './useLatestLoad';
 import { useScrollFade } from './useScrollFade';
 import { useSettledQuery } from './useSettledQuery';
@@ -76,11 +77,13 @@ const speciesCommonName = (species: SpeciesRow) => species.commonName ?? lateNam
 const speciesScientificName = (species: SpeciesRow) =>
   lateScientificNames.value.get(species.key) ?? species.scientificName;
 const label = (species: SpeciesRow) => speciesCommonName(species) ?? speciesScientificName(species);
-const options = computed(() => {
+// Names already known match as you type; the name search adds species named nowhere here yet.
+const nameSearch = useCellNameSearch({ query, species: () => props.species, area: () => base.value });
+const cellOptions = computed(() => {
   const needle = normalise(query.value);
   return [...props.species]
     .filter((species) => {
-      if (!needle) return true;
+      if (!needle || nameSearch.matchedKeys.value.has(species.key)) return true;
       // Not the "Species 123" placeholder, which would match "sp".
       const hasScientificName = !species.unnamed || lateScientificNames.value.has(species.key);
       return [speciesCommonName(species), hasScientificName ? speciesScientificName(species) : undefined].some(
@@ -90,6 +93,8 @@ const options = computed(() => {
     .sort((left, right) => right.records - left.records)
     .slice(0, MAX_OPTIONS);
 });
+
+const options = computed(() => [...cellOptions.value, ...nameSearch.outside.value].slice(0, MAX_OPTIONS));
 const activeId = computed(() => (active.value >= 0 ? `${uniqueId}-opt-${active.value}` : undefined));
 
 function pick(species: SpeciesRow | undefined) {
@@ -143,8 +148,8 @@ async function nameSpecies(keys: Iterable<number | undefined>, signal?: AbortSig
   }
 }
 
-// The index has common names for few species, so the options look up the rest: the ones shown when the
-// box opens, then (once typing) every species in the cell, most records first, to match on.
+// The index has common names for few species, so the options on show look up the rest. Matching
+// doesn't need them: the name search (see useCellNameSearch) finds species by names not known here.
 const askedNames = new Set<number>();
 /** Keys whose names are being looked up for the options. */
 const pendingNames = shallowRef(new Set<number>());
@@ -171,15 +176,17 @@ async function nameOptions(keys: readonly number[]) {
   }
 }
 
-// Every species is a request each, so typing names them once it pauses.
+// A request each, so typing names the options once it pauses.
 const { settled: settledQuery, isSettling } = useSettledQuery(query);
-watch([() => props.species, settledQuery, open], async ([species, text, isOpen]) => {
+watch([() => props.species, settledQuery, open], async ([, text, isOpen]) => {
   if (!isOpen && !text.trim()) return;
-  await nameOptions(options.value.map((option) => option.key));
-  if (text.trim()) await nameOptions(species.map((row) => row.key));
+  await nameOptions(cellOptions.value.map((option) => option.key));
 });
-const isNaming = computed(() => pendingNames.value.size > 0 || (!!query.value.trim() && isSettling.value));
-const showOptions = computed(() => open.value && options.value.length > 0);
+const isNaming = computed(
+  () => pendingNames.value.size > 0 || nameSearch.loading.value || (!!query.value.trim() && isSettling.value),
+);
+const hasNoResults = computed(() => !!query.value.trim() && !options.value.length && !isNaming.value);
+const showOptions = computed(() => open.value && (options.value.length > 0 || hasNoResults.value));
 
 async function load(more = false) {
   const baseFilter = base.value;
@@ -326,6 +333,7 @@ const institution = (occurrence: Occurrence) =>
           <span class="min-w-0 truncate" :class="{ 'sci-name': !speciesCommonName(option) }">{{ label(option) }}</span>
           <span class="shrink-0 text-[11px] text-subtle tabular-nums">{{ full(option.records) }}</span>
         </li>
+        <li v-if="hasNoResults" role="option" aria-disabled="true" class="option text-muted">No results found</li>
       </ul>
     </div>
 
