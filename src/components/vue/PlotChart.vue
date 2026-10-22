@@ -2,13 +2,14 @@
 /**
  * Observable Plot chart (species pages, client:visible). The data table is
  * rendered at build time, so the information is there without JavaScript;
- * the chart itself draws in the browser, with tooltips, and redraws on resize
+ * the chart itself draws in the browser, with ChartTip tooltips, and redraws on resize
  * and theme change. Plot is loaded only when the chart scrolls into view.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { compact, full } from '~/lib/format';
 import type { PlotBar } from '~/lib/species/charts';
 import ChartFrame from './ChartFrame.vue';
+import ChartTip from './ChartTip.vue';
 
 const props = defineProps<{
   kind: 'years' | 'bars';
@@ -76,10 +77,13 @@ const MIN_YEAR_TICKS = 3;
 const PX_PER_YEAR_TICK = 70;
 const MAX_BAR_LABEL_CHARS = 28;
 const BAR_LABEL_PX_PER_CHAR = 6.4;
+// Bars dim slightly so the hovered one (a pointer-transformed copy) stands out, as on the seasonality wheel.
+const BAR_OPACITY = 0.8;
 const PLOT_STYLE = { background: 'transparent', color: 'var(--text-muted)', fontSize: '11px', overflow: 'visible' };
 
 /** Records-per-year histogram. */
 function yearsChart(Plot: PlotModule, width: number): Element {
+  const yearBars = { x: 'year', y: 'count', interval: 1, fill: 'var(--ramp-4)' } as const;
   return Plot.plot({
     width,
     height: height.value,
@@ -88,13 +92,8 @@ function yearsChart(Plot: PlotModule, width: number): Element {
     x: { label: null, tickFormat: 'd', ticks: Math.max(MIN_YEAR_TICKS, Math.floor(width / PX_PER_YEAR_TICK)) },
     y: { label: 'Records', grid: true, tickFormat: '~s' },
     marks: [
-      Plot.rectY(series.value, {
-        x: 'year',
-        y: 'count',
-        interval: 1,
-        fill: 'var(--ramp-4)',
-        tip: { format: { x: 'd', y: (value: number) => full(value) } },
-      }),
+      Plot.rectY(series.value, { ...yearBars, fillOpacity: BAR_OPACITY }),
+      Plot.rectY(series.value, Plot.pointerX(yearBars)),
       Plot.ruleY([0], { stroke: 'var(--border)' }),
     ],
     ariaLabel: `${props.title}, peaking in ${peak.value.year}`,
@@ -105,6 +104,14 @@ function yearsChart(Plot: PlotModule, width: number): Element {
 function barsChart(Plot: PlotModule, width: number): Element {
   const bars = [...(props.bars ?? [])];
   const longest = Math.max(...bars.map((bar) => bar.label.length), 4);
+  const countBars = {
+    x: 'value',
+    y: 'label',
+    sort: { y: '-x' },
+    fill: 'var(--ramp-4)',
+    href: 'href',
+    target: '_blank',
+  } as const;
   const truncate = (label: string) =>
     label.length > MAX_BAR_LABEL_CHARS ? `${label.slice(0, MAX_BAR_LABEL_CHARS - 1)}…` : label;
   return Plot.plot({
@@ -116,15 +123,8 @@ function barsChart(Plot: PlotModule, width: number): Element {
     x: { axis: null },
     y: { label: null, tickFormat: truncate },
     marks: [
-      Plot.barX(bars, {
-        x: 'value',
-        y: 'label',
-        sort: { y: '-x' },
-        fill: 'var(--ramp-4)',
-        href: 'href',
-        target: '_blank',
-        tip: { format: { x: (value: number) => full(value), y: true } },
-      }),
+      Plot.barX(bars, { ...countBars, fillOpacity: BAR_OPACITY }),
+      Plot.barX(bars, Plot.pointerY(countBars)),
       Plot.text(bars, {
         x: 'value',
         y: 'label',
@@ -138,6 +138,43 @@ function barsChart(Plot: PlotModule, width: number): Element {
   });
 }
 
+type Hovered = { year: number; count: number } | PlotBar | null;
+const hovered = shallowRef<Hovered>(null);
+const pointerAt = ref<{ x: number; y: number } | null>(null);
+const tipText = computed(() => {
+  const datum = hovered.value;
+  if (!datum) return null;
+  return 'year' in datum
+    ? { label: String(datum.year), count: datum.count }
+    : { label: datum.label, count: datum.value };
+});
+
+function onPointerMove(event: PointerEvent) {
+  pointerAt.value = { x: event.clientX, y: event.clientY };
+}
+
+// Touch fires pointerleave as the finger lifts; keep the tapped bar's tip until ChartTip dismisses it.
+function onPointerLeave(event: PointerEvent) {
+  if (event.pointerType !== 'touch') pointerAt.value = null;
+}
+
+let lastPointerType = '';
+let tappedDatum: Hovered = null;
+
+/** Stops Plot pinning ("sticking") its pointer on press, which would freeze the tip's value. */
+function onPointerDown(event: PointerEvent) {
+  event.stopPropagation();
+  lastPointerType = event.pointerType;
+  onPointerMove(event);
+}
+
+/** On touch, the first tap on a linked bar shows its tip; a second tap on the same bar follows the link. */
+function onClick(event: MouseEvent) {
+  if (lastPointerType !== 'touch') return;
+  if (tappedDatum !== hovered.value) event.preventDefault();
+  tappedDatum = hovered.value;
+}
+
 async function draw() {
   const element = box.value;
   if (!element || empty.value) return;
@@ -146,7 +183,10 @@ async function draw() {
   lastWidth = width;
   try {
     const Plot = await import('~/lib/plot');
-    element.replaceChildren(props.kind === 'years' ? yearsChart(Plot, width) : barsChart(Plot, width));
+    const figure = props.kind === 'years' ? yearsChart(Plot, width) : barsChart(Plot, width);
+    // Plot's pointer marks report the hovered datum as the figure's value.
+    figure.addEventListener('input', () => (hovered.value = (figure as Element & { value: unknown }).value as Hovered));
+    element.replaceChildren(figure);
     drawn.value = true;
   } catch {
     failed.value = true;
@@ -173,7 +213,15 @@ onBeforeUnmount(() => {
 
 <template>
   <ChartFrame :title="title" :caption="caption">
-    <div ref="box" class="plot-box w-full" :style="{ minHeight: `${height}px` }">
+    <div
+      ref="box"
+      class="plot-box w-full"
+      :style="{ minHeight: `${height}px` }"
+      @pointermove="onPointerMove"
+      @pointerleave="onPointerLeave"
+      @pointerdown.capture="onPointerDown"
+      @click.capture="onClick"
+    >
       <p v-if="!drawn" class="grid place-items-center text-xs text-subtle" :style="{ height: `${height}px` }">
         {{
           empty
@@ -184,6 +232,10 @@ onBeforeUnmount(() => {
         }}
       </p>
     </div>
+    <ChartTip v-if="pointerAt && tipText" :x="pointerAt.x" :y="pointerAt.y" @dismiss="pointerAt = null">
+      <span class="font-medium text-text">{{ tipText.label }}</span>
+      <span class="whitespace-nowrap text-subtle"> · {{ full(tipText.count) }} records</span>
+    </ChartTip>
     <p v-if="kind === 'years' && earlier" class="mt-1 text-xs text-subtle">
       Plus {{ full(earlier) }} records before {{ series[0]?.year }}.
     </p>
@@ -230,9 +282,5 @@ onBeforeUnmount(() => {
 .plot-box :deep(svg) {
   max-width: 100%;
   height: auto;
-}
-.plot-box :deep([aria-label='tip'] path) {
-  fill: var(--surface);
-  stroke: var(--border-strong);
 }
 </style>

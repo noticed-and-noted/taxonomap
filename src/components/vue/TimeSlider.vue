@@ -6,10 +6,11 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
-import { compact } from '~/lib/format';
+import { compact, full } from '~/lib/format';
 import { MIN_YEAR, rangeYears, yearsRange } from '~/lib/dates';
 import { $dateRange } from '~/stores/explorer';
 import ChartFrame from './ChartFrame.vue';
+import ChartTip from './ChartTip.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import { useYearHistogram } from './useYearHistogram';
 
@@ -82,13 +83,28 @@ function onHighInput(event: Event) {
   high.value = Math.max(Number((event.target as HTMLInputElement).value), low.value);
 }
 
-/** A click on the chart moves the nearer handle to the clicked year's edge. */
-function onTrack(event: PointerEvent) {
-  if (event.button !== 0 || event.target instanceof HTMLInputElement) return;
+/** The bar under the pointer, and the chart's box. */
+function barAt(event: PointerEvent) {
   const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const count = years.value.length;
   const index = Math.min(count - 1, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * count)));
-  const year = years.value[index]!;
+  return { bar: bars.value[index]!, box };
+}
+
+const hover = ref<{ x: number; y: number; year: number; count: number } | null>(null);
+// Touch fires pointerleave as the finger lifts; keep the tapped year's tip until ChartTip dismisses it.
+const onLeave = (event: PointerEvent) => event.pointerType !== 'touch' && (hover.value = null);
+
+function onHover(event: PointerEvent) {
+  if (!counts.value.size) return;
+  const { bar, box } = barAt(event);
+  hover.value = { x: event.clientX, y: box.top, year: bar.y, count: bar.c };
+}
+
+/** A click on the chart moves the nearer handle to the clicked year's edge. */
+function onTrack(event: PointerEvent) {
+  if (event.button !== 0 || event.target instanceof HTMLInputElement) return;
+  const year = barAt(event).bar.y;
   // Edge distances in bars: From marks a bar's left edge, To its right edge.
   const distanceToLow = Math.abs(year - low.value);
   const distanceToHigh = Math.abs(year - high.value);
@@ -110,7 +126,12 @@ const label = computed(() =>
   <!-- Positioned so a menu in the label slot can float below it. -->
   <section class="time-slider relative" aria-label="Year range">
     <ChartFrame title="Records per year" :caption="live ? 'filtered' : undefined" compact>
-      <div class="relative cursor-pointer" @pointerdown="onTrack">
+      <div
+        class="relative cursor-pointer"
+        @pointerdown="(onTrack($event), onHover($event))"
+        @pointermove="onHover"
+        @pointerleave="onLeave"
+      >
         <SkeletonBlock v-if="loading && !counts.size" height="56px" label="Loading year histogram" />
         <p v-else-if="error !== null && !counts.size" class="grid h-14 place-items-center text-xs text-muted">
           Year counts are unavailable right now.
@@ -134,6 +155,10 @@ const label = computed(() =>
             :fill-opacity="bar.inRange ? 0.9 : 0.6"
           />
         </svg>
+        <ChartTip v-if="hover && !dragging" :x="hover.x" :y="hover.y" class="whitespace-nowrap" @dismiss="hover = null">
+          <span class="font-medium text-text">{{ hover.year }}</span>
+          <span class="text-subtle"> · {{ full(hover.count) }} records</span>
+        </ChartTip>
         <div class="range-wrap" :class="{ 'opacity-50': loading }" :style="{ '--n': years.length }">
           <input
             type="range"

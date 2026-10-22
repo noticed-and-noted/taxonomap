@@ -106,9 +106,11 @@ const englishNames = computed(
     <section v-if="speciesData.count > 0" class="mt-10" aria-labelledby="records-h">
       <h2 id="records-h" class="mb-4 font-display text-2xl">Records</h2>
       <div class="grid gap-8 md:grid-cols-2">
-        <!-- Plot charts hydrate as islands (client:visible); see PlotChart.vue. -->
+        <!-- Charts hydrate as islands (client:visible) for their hover tips; see PlotChart.vue. -->
         <slot name="years" />
-        <RadialSeasonality :counts="speciesData.months" :size="240" title="Records by month" />
+        <slot name="months">
+          <RadialSeasonality :counts="speciesData.months" :size="240" title="Records by month" />
+        </slot>
         <slot name="countries" />
         <slot name="datasets" />
       </div>

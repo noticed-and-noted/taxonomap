@@ -5,9 +5,10 @@
  */
 import { arc } from 'd3-shape';
 import { scaleRadial } from 'd3-scale';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { full, MONTHS } from '~/lib/format';
 import ChartFrame from './ChartFrame.vue';
+import ChartTip from './ChartTip.vue';
 
 const props = withDefaults(defineProps<{ counts: readonly number[]; size?: number; title?: string }>(), {
   size: 220,
@@ -20,19 +21,20 @@ const max = computed(() => Math.max(1, ...props.counts));
 const total = computed(() => props.counts.reduce((sum, count) => sum + count, 0));
 const peak = computed(() => props.counts.indexOf(Math.max(...props.counts)));
 
+const MONTH_ANGLE = (2 * Math.PI) / 12;
+
 const wedges = computed(() => {
   const radius = scaleRadial().domain([0, max.value]).range([inner.value, outer.value]);
-  const step = (2 * Math.PI) / 12;
   const arcGenerator = arc<{ index: number; count: number }>()
     .innerRadius(inner.value)
     .outerRadius((slice) => radius(slice.count))
-    .startAngle((slice) => slice.index * step + 0.02)
-    .endAngle((slice) => (slice.index + 1) * step - 0.02)
+    .startAngle((slice) => slice.index * MONTH_ANGLE + 0.02)
+    .endAngle((slice) => (slice.index + 1) * MONTH_ANGLE - 0.02)
     .padAngle(0.01)
     .cornerRadius(2);
   return MONTHS.map((label, index) => {
     const count = props.counts[index] ?? 0;
-    const middleAngle = (index + 0.5) * step;
+    const middleAngle = (index + 0.5) * MONTH_ANGLE;
     return {
       m: label,
       v: count,
@@ -42,6 +44,24 @@ const wedges = computed(() => {
     };
   });
 });
+
+// Touch fires pointerleave as the finger lifts; keep the tapped month's tip until ChartTip dismisses it.
+const onLeave = (event: PointerEvent) => event.pointerType !== 'touch' && (hover.value = null);
+
+// By angle rather than per wedge, so short (or empty) months are as easy to hover as the peak.
+const hover = ref<{ x: number; y: number; index: number } | null>(null);
+function onHover(event: PointerEvent) {
+  const box = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+  const scale = box.width / props.size;
+  const dx = (event.clientX - box.left) / scale - props.size / 2;
+  const dy = (event.clientY - box.top) / scale - props.size / 2;
+  if (Math.hypot(dx, dy) > outer.value) {
+    hover.value = null;
+    return;
+  }
+  const angle = (Math.atan2(dx, -dy) + 2 * Math.PI) % (2 * Math.PI);
+  hover.value = { x: event.clientX, y: event.clientY, index: Math.floor(angle / MONTH_ANGLE) % MONTHS.length };
+}
 </script>
 
 <template>
@@ -53,6 +73,9 @@ const wedges = computed(() => {
       class="mx-auto block max-w-full"
       role="img"
       :aria-label="`Records by month. Peak in ${MONTHS[peak]}.`"
+      @pointerdown="onHover"
+      @pointermove="onHover"
+      @pointerleave="onLeave"
     >
       <circle :r="outer" fill="none" stroke="var(--border)" stroke-dasharray="2 3" />
       <circle :r="inner" fill="none" stroke="var(--border)" />
@@ -61,10 +84,8 @@ const wedges = computed(() => {
         :key="wedge.m"
         :d="wedge.d"
         :fill="index === peak ? 'var(--accent)' : 'var(--ramp-4)'"
-        :fill-opacity="index === peak ? 1 : 0.75"
-      >
-        <title>{{ wedge.m }}: {{ full(wedge.v) }}</title>
-      </path>
+        :fill-opacity="index === peak || index === hover?.index ? 1 : 0.75"
+      />
       <text
         v-for="wedge in wedges"
         :key="`l-${wedge.m}`"
@@ -77,6 +98,10 @@ const wedges = computed(() => {
         {{ wedge.m[0] }}
       </text>
     </svg>
+    <ChartTip v-if="hover" :x="hover.x" :y="hover.y" class="whitespace-nowrap" @dismiss="hover = null">
+      <span class="font-medium text-text">{{ MONTHS[hover.index] }}</span>
+      <span class="text-subtle"> · {{ full(counts[hover.index] ?? 0) }} records</span>
+    </ChartTip>
     <template #table>
       <table>
         <thead>
