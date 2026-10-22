@@ -45,10 +45,28 @@ const SCIENTIFIC_DISCOUNT = 1.5;
 /** Other English names score this much lower, so a rare alias doesn't tie a taxon's main name. */
 const ALIAS_DISCOUNT = 0.5;
 
+/**
+ * Word matches score this. Aliases aren't discounted at this level: so many main names share a
+ * word ("Wood Pigeon") that a discounted alias ("Rock Pigeon") would never surface.
+ */
+const WORD_MATCH = 2;
+
+/** Another English name: normalised for matching, and as shown. */
+interface Alias {
+  text: string;
+  name: string;
+}
+
 interface Entry {
   name: IndexedName;
   common: string;
   sci: string;
+  aliases: Alias[];
+}
+
+interface Match {
+  score: number;
+  matchedName?: string;
 }
 
 /**
@@ -62,13 +80,34 @@ function score(text: string, query: string, qWords: string[]): number {
   if (text === query) return 4;
   if (text.startsWith(query)) return 3;
   const words = text.split(' ');
-  if (qWords.every((queryWord) => words.some((word) => word.startsWith(queryWord)))) return 2;
+  if (qWords.every((queryWord) => words.some((word) => word.startsWith(queryWord)))) return WORD_MATCH;
   return 0;
 }
 
 /** The better of a common-name and a scientific-name score, from normalised text. */
 function bestScore(common: string, sci: string, query: string, qWords: string[]): number {
   return Math.max(score(common, query, qWords), score(sci, query, qWords) - SCIENTIFIC_DISCOUNT);
+}
+
+/** A score for another English name: discounted above word matches, so the main name wins those ties. */
+function aliasScore(text: string, query: string, qWords: string[]): number {
+  const aliasMatch = score(text, query, qWords);
+  return aliasMatch > WORD_MATCH ? aliasMatch - ALIAS_DISCOUNT : aliasMatch;
+}
+
+/** The best of the main names' and the aliases' scores, naming the alias when one matched better. */
+function bestMatch(entry: Omit<Entry, 'name'>, query: string, qWords: string[]): Match {
+  let best: Match = { score: bestScore(entry.common, entry.sci, query, qWords) };
+  for (const alias of entry.aliases) {
+    const candidate = aliasScore(alias.text, query, qWords);
+    if (candidate > best.score) best = { score: candidate, matchedName: alias.name };
+  }
+  return best;
+}
+
+/** Aliases from display names. */
+function toAliases(names: readonly string[]): Alias[] {
+  return names.map((name) => ({ text: normalise(name), name: name.trim() }));
 }
 
 /**
@@ -78,20 +117,14 @@ function bestScore(common: string, sci: string, query: string, qWords: string[])
  * @returns `score` (0 when no name matches; higher is better), and `matchedName`
  *   when another English name matched better than the main ones.
  */
-export function matchHit(
-  hit: Pick<NameHit, 'scientificName' | 'commonName' | 'englishNames'>,
-  query: string,
-): { score: number; matchedName?: string } {
+export function matchHit(hit: Pick<NameHit, 'scientificName' | 'commonName' | 'englishNames'>, query: string): Match {
   const normalisedQuery = normalise(query);
-  const qWords = normalisedQuery.split(' ');
-  let best: { score: number; matchedName?: string } = {
-    score: bestScore(normalise(hit.commonName ?? ''), normalise(hit.scientificName), normalisedQuery, qWords),
+  const names = {
+    common: normalise(hit.commonName ?? ''),
+    sci: normalise(hit.scientificName),
+    aliases: toAliases(hit.englishNames ?? []),
   };
-  for (const name of hit.englishNames ?? []) {
-    const aliasScore = score(normalise(name), normalisedQuery, qWords) - ALIAS_DISCOUNT;
-    if (aliasScore > best.score) best = { score: aliasScore, matchedName: name.trim() };
-  }
-  return best;
+  return bestMatch(names, normalisedQuery, normalisedQuery.split(' '));
 }
 
 /** In-memory search over the baked names, matching common and scientific names by word prefix. */
@@ -100,11 +133,15 @@ export class NameIndex {
   readonly #byKey: Map<number, IndexedName>;
 
   constructor(rows: readonly NameRow[]) {
-    this.#entries = rows.map(decode).map((name) => ({
-      name,
-      common: normalise(name.commonName ?? ''),
-      sci: normalise(name.scientificName),
-    }));
+    this.#entries = rows.map((row) => {
+      const name = decode(row);
+      return {
+        name,
+        common: normalise(name.commonName ?? ''),
+        sci: normalise(name.scientificName),
+        aliases: toAliases(row[6] ?? []),
+      };
+    });
     this.#byKey = new Map(this.#entries.map((entry) => [entry.name.key, entry.name]));
   }
 
@@ -112,14 +149,18 @@ export class NameIndex {
     const normalisedQuery = normalise(query);
     if (normalisedQuery.length < 2) return [];
     const qWords = normalisedQuery.split(' ');
-    const hits: { entry: Entry; score: number }[] = [];
+    const hits: { entry: Entry; match: Match }[] = [];
     for (const entry of this.#entries) {
-      const entryScore = bestScore(entry.common, entry.sci, normalisedQuery, qWords);
-      if (entryScore > 0) hits.push({ entry, score: entryScore });
+      const match = bestMatch(entry, normalisedQuery, qWords);
+      if (match.score > 0) hits.push({ entry, match });
     }
     // Rows are pre-sorted by count; sort is stable, so ties keep count order.
-    hits.sort((left, right) => right.score - left.score);
-    return hits.slice(0, limit).map(({ entry }) => ({ ...entry.name, source: 'index' as const }));
+    hits.sort((left, right) => right.match.score - left.match.score);
+    return hits.slice(0, limit).map(({ entry, match }) => ({
+      ...entry.name,
+      ...(match.matchedName && { matchedName: match.matchedName }),
+      source: 'index' as const,
+    }));
   }
 
   get(key: number): IndexedName | undefined {

@@ -18,20 +18,56 @@ export function isEnglish(name: VernacularName): boolean {
  * same name wherever the list came from.
  */
 export function englishName(names: readonly VernacularName[]): string | null {
-  const eng = names.filter(isEnglish);
+  const best = byFrequency(names.filter(isEnglish).map((name) => name.vernacularName))[0];
+  return best ? tidy(best) : null;
+}
+
+/** Distinct names (case-insensitive), most frequent first, then shortest. */
+function byFrequency(texts: readonly string[]): string[] {
   const tally = new Map<string, { name: string; n: number }>();
-  for (const name of eng) {
-    const lowered = name.vernacularName.trim().toLowerCase();
+  for (const text of texts) {
+    const trimmed = text.trim();
+    const lowered = trimmed.toLowerCase();
     const tallyEntry = tally.get(lowered);
     if (tallyEntry) {
       tallyEntry.n++;
       // Keep the capitalised variant when there is one.
-      if (/^[A-Z]/.test(name.vernacularName) && !/^[A-Z]/.test(tallyEntry.name))
-        tallyEntry.name = name.vernacularName.trim();
-    } else tally.set(lowered, { name: name.vernacularName.trim(), n: 1 });
+      if (/^[A-Z]/.test(trimmed) && !/^[A-Z]/.test(tallyEntry.name)) tallyEntry.name = trimmed;
+    } else tally.set(lowered, { name: trimmed, n: 1 });
   }
-  const best = [...tally.values()].sort((left, right) => right.n - left.n || left.name.length - right.name.length)[0];
-  return best ? tidy(best.name) : null;
+  return [...tally.values()]
+    .sort((left, right) => right.n - left.n || left.name.length - right.name.length)
+    .map((entry) => entry.name);
+}
+
+/** Splits combined names such as "Feral Pigeon/Rock Dove" and "Rock Pigeon (Feral Pigeon)". */
+const COMBINED_NAME_SEPARATORS = /[/()]/;
+
+/** Names with this in them are notes, not names ("Indet. Gull"). */
+const NOTE_MARKER = '.';
+
+/**
+ * The other English names worth searching by, most frequent first, after `englishName`'s pick.
+ * A name that extends one already kept ("Gulls" after "Gull") is dropped, since prefix search finds it anyway.
+ * @param max Most names to return.
+ */
+export function otherEnglishNames(names: readonly VernacularName[], max: number): string[] {
+  const main = englishName(names);
+  if (!main) return [];
+  const parts = names
+    .filter(isEnglish)
+    .flatMap((name) => name.vernacularName.split(COMBINED_NAME_SEPARATORS))
+    .filter((part) => part.trim() && !part.includes(NOTE_MARKER));
+  const kept = [main.toLowerCase()];
+  const others: string[] = [];
+  for (const name of byFrequency(parts)) {
+    if (others.length >= max) break;
+    const lowered = tidy(name).toLowerCase();
+    if (kept.some((keptName) => lowered.startsWith(keptName))) continue;
+    kept.push(lowered);
+    others.push(tidy(name));
+  }
+  return others;
 }
 
 /** URL slug from a scientific name: "Erithacus rubecula" → "erithacus-rubecula". */

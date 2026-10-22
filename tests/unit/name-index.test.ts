@@ -77,6 +77,37 @@ describe('NameIndex scoring', () => {
   });
 });
 
+describe('NameIndex other English names', () => {
+  const nameIndex = new NameIndex([
+    [2495414, 'S', 'Columba livia', 'Rock dove', 9_000_000, null, ['Rock pigeon', 'Feral pigeon']],
+    [2495347, 'S', 'Columba palumbus', 'Common wood pigeon', 5_000_000],
+    [2481126, 'G', 'Larus', 'Gull', 3_000_000, 42, ['Seagull']],
+    [9, 'S', 'Columba oenas', 'Stock dove', 100, null, ['Rock pigeon']],
+  ]);
+
+  it('finds a taxon by another English name, saying which one matched', () => {
+    expect(nameIndex.search('seagul')[0]).toMatchObject({ key: 2481126, rank: 'GENUS', matchedName: 'Seagull' });
+    expect(nameIndex.get(2481126)).toMatchObject({ inatId: 42 });
+    expect(nameIndex.get(2495414)).not.toHaveProperty('inatId');
+  });
+
+  it('ranks word matches on other names with main names, by records', () => {
+    expect(nameIndex.search('pigeon').map((hit) => [hit.key, hit.matchedName])).toEqual([
+      [2495414, 'Rock pigeon'],
+      [2495347, undefined],
+      [9, 'Rock pigeon'],
+    ]);
+  });
+
+  it('ranks an exact main name above an exact other name', () => {
+    const tied = new NameIndex([
+      [1, 'S', 'Columba livia', 'Rock dove', 900, null, ['Stock dove']],
+      [2, 'S', 'Columba oenas', 'Stock dove', 100],
+    ]);
+    expect(tied.search('stock dove').map((hit) => hit.key)).toEqual([2, 1]);
+  });
+});
+
 describe('loading the index', () => {
   async function fresh() {
     vi.resetModules();

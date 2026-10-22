@@ -1,6 +1,6 @@
 import { classificationOf } from '~/lib/species/data';
 import { speciesPath } from '~/lib/species/links';
-import { englishName, groupByLanguage, languageName, slugify } from '~/lib/species/names';
+import { englishName, groupByLanguage, languageName, otherEnglishNames, slugify } from '~/lib/species/names';
 
 describe('species helpers', () => {
   it('slugifies scientific names', () => {
@@ -30,6 +30,22 @@ describe('species helpers', () => {
     expect(englishName([name('Rouge-gorge', 'fra')])).toBeNull();
     // Equal counts: the capitalised variant, then the shorter name.
     expect(englishName([name('robin'), name('Robin'), name('Redbreast robin'), name('redbreast robin')])).toBe('Robin');
+  });
+
+  it('lists the other English names, split, without notes or names that extend one already kept', () => {
+    const english = (...names: string[]) => names.map((vernacularName) => ({ vernacularName, language: 'eng' }));
+    const pigeon = english(
+      'Rock Dove',
+      'Rock Dove',
+      'rock pigeon',
+      'Feral Pigeon/Rock Dove',
+      'Rock Pigeon (Feral Pigeon)',
+      'Common Pigeon',
+    );
+    expect(otherEnglishNames(pigeon, 4)).toEqual(['Rock Pigeon', 'Feral Pigeon', 'Common Pigeon']);
+    expect(otherEnglishNames(pigeon, 1)).toEqual(['Rock Pigeon']);
+    expect(otherEnglishNames(english('Gull', 'Gulls', 'Indet. Gull', 'Seagull', 'Seagulls'), 4)).toEqual(['Seagull']);
+    expect(otherEnglishNames([{ vernacularName: 'Goéland', language: 'fra' }], 4)).toEqual([]);
   });
 
   it('names languages, falling back to the code', () => {
