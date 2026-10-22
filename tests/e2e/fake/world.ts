@@ -265,6 +265,8 @@ function speciesSearch(params: URLSearchParams) {
   let found = TAXA;
   const rank = params.get('rank');
   if (rank) found = found.filter((taxon) => taxon.rank === rank);
+  const under = Number(params.get('highertaxonKey'));
+  if (under) found = found.filter((taxon) => taxon.key !== under && isUnder(taxon, under));
   const text = params.get('q')?.toLowerCase();
   if (text)
     found = found.filter(
