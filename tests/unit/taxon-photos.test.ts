@@ -276,6 +276,17 @@ describe('iNaturalist photo URLs', () => {
     );
   });
 
+  it('sizes iNaturalist photos on GBIF records at iNaturalist, other photos through GBIF’s cache', async () => {
+    const { thumbnailUrl } = await import('~/lib/gbif/images');
+    const record = { licence: 'CC-BY' as const, occurrenceKey: 1, datasetKey: 'dataset' };
+    expect(
+      thumbnailUrl({ ...record, url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg' }, '200x'),
+    ).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpg?x-cors');
+    expect(thumbnailUrl({ ...record, url: 'https://example.org/photo.jpg' }, '200x')).toMatch(
+      /\/v1\/image\/cache\/200x\/occurrence\/1\/media\/[0-9a-f]{32}$/,
+    );
+  });
+
   it('asks for CORS only from hosts that send it (GBIF’s image cache does not)', async () => {
     const { photoCrossOrigin } = await import('~/lib/gbif/images');
     expect(photoCrossOrigin('https://inaturalist-open-data.s3.amazonaws.com/photos/1/small.jpeg')).toBe('anonymous');

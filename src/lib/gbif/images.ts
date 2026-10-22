@@ -74,11 +74,13 @@ const INAT_SIZES = [
 /**
  * Thumbnail URL for a photo. GBIF photos go through GBIF's image cache
  * (verified: ~19 KB vs ~145 KB original), addressed by occurrence key and
- * the MD5 of the media identifier. iNaturalist photos use iNaturalist's own
- * sizes: the smallest at least as wide as the requested width.
+ * the MD5 of the media identifier. iNaturalist photos, including those on
+ * GBIF records, use iNaturalist's own sizes: the smallest at least as wide as
+ * the requested width. GBIF's cache sometimes fails on a miss, which left
+ * photo-filtered rows without their photo.
  */
 export function thumbnailUrl(image: UsableImage, size: ThumbSize = '400x'): string {
-  if (image.source === 'inat') {
+  if (image.source === 'inat' || CORS_PHOTO_HOST.test(image.url)) {
     const want = parseInt(size, 10);
     const name = INAT_SIZES.find(([, px]) => px >= want)?.[0] ?? 'large';
     const url = image.url.replace(/\/(square|thumb|small|medium|large|original)\.(\w+)(\?.*)?$/, `/${name}.$2`);
