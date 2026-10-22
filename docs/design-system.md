@@ -115,6 +115,8 @@ The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehea
 - **The map is the page.** The header, rail, panels and legend float over it as separate pills with gaps (`--header-gap`), never as a solid bar. Wrappers are `pointer-events: none` so the gaps pass clicks through to the map; only the floating pieces are clickable.
 - **Header** (`SiteHeader.astro`): wordmark pill, search, nav pill (Map, Tree of life), theme toggle. Height `--header-height` (44 px).
 - **Left rail** (`FilterRail.vue`): icon buttons with short labels (What, When, Where, How, Source, then Settings after a divider). Each opens a flyout beside the rail. The flyout's heading stays put and only its body scrolls.
+- **Text links**: a plain `<a>` with no class gets the house link style (underlined in `--accent`, accent on hover) from `global.css`. Don't restyle links per page; give a link a class only when it isn't a text link (a button, chip or nav item).
+- **Running text** on content pages (privacy, terms) sits in `.prose`, which restores heading, paragraph and list spacing.
 - **Long scrolling lists** get edge fades: the `.fade-list` class plus `useScrollFade`.
 - **Selected state**: an accent border with an `--accent-soft` fill and a small "Selected" label in accent. Don't add checkmark icons.
 - **Visually hidden radios or checkboxes** inside a label: give the label `position: relative`, so focusing the input doesn't scroll the page.

@@ -12,6 +12,7 @@ import { clearFilters } from '~/stores/explorer';
 import { $tourOpen } from '~/stores/onboarding';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterGroup from './FilterGroup.vue';
+import LegalLinks from './LegalLinks.vue';
 import MapSettings from './MapSettings.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
 
@@ -131,6 +132,7 @@ function label(name: string, count: number) {
         <div v-if="current.id === 'settings'" class="flex min-h-0 flex-1 flex-col px-4 pt-3">
           <MapSettings />
           <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
+          <LegalLinks class="-mx-4 border-t border-border px-4 py-2" />
         </div>
         <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <FilterGroup :group="current.id" />

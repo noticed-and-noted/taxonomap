@@ -1,0 +1,134 @@
+---
+import LegalPage from '~/components/LegalPage.astro';
+import { CONTACT_EMAIL as CONTACT } from '~/lib/contact';
+import { LICENCE_URLS } from '~/lib/gbif/licence';
+---
+
+<LegalPage
+  title="Terms and credits"
+  description="The terms for using Taxonomap, and credits for the data, photos and maps it shows."
+  updated="22 October 2026"
+>
+  <p>
+    Taxonomap is a free, non-commercial way to explore where species have been recorded. By using it you agree to these
+    terms. They are short because the site is simple: there are no accounts and nothing to buy.
+  </p>
+
+  <h2>The data</h2>
+  <p>
+    Occurrence records, species names and map density come from{' '}
+    <a href="https://www.gbif.org" rel="noopener">
+      GBIF.org
+    </a>
+    , the Global Biodiversity Information Facility, and the thousands of institutions, projects and people who publish
+    data through it. Each record is shared by its publisher under{' '}
+    <a href={LICENCE_URLS.CC0} rel="license noopener">
+      CC0
+    </a>
+    ,{' '}
+    <a href={LICENCE_URLS['CC-BY']} rel="license noopener">
+      CC BY
+    </a>{' '}
+    or{' '}
+    <a href={LICENCE_URLS['CC-BY-NC']} rel="license noopener">
+      CC BY-NC
+    </a>
+    , and Taxonomap credits its dataset wherever it shows one.
+  </p>
+  <p>
+    Taxonomap shows the data as it comes from GBIF, live and unchanged apart from summaries such as counts and charts.
+    Records can be wrong, incomplete, out of date or deliberately blurred (GBIF publishers often generalise the
+    locations of sensitive species).{' '}
+    <strong>Don’t rely on Taxonomap for safety, legal, conservation or other important decisions</strong>; check the
+    original record and its publisher.
+  </p>
+
+  <h3>Reusing the data</h3>
+  <p>
+    If you use GBIF data in research, a report or a publication, download it from GBIF.org and cite the download’s DOI,
+    as the{' '}
+    <a href="https://www.gbif.org/terms" rel="noopener">
+      GBIF data user agreement
+    </a>{' '}
+    asks. Charts and counts on Taxonomap are for exploring, not citing.
+  </p>
+
+  <h2>Photos</h2>
+  <p>
+    Photos come from records on GBIF and from{' '}
+    <a href="https://www.inaturalist.org" rel="noopener">
+      iNaturalist
+    </a>
+    . Taxonomap only shows photos under a Creative Commons licence or in the public domain, and shows each one’s licence
+    and creator with it. Copyright stays with the photographer. If you reuse a photo, follow its licence: several only
+    allow non-commercial use, and some don’t allow changes.
+  </p>
+
+  <h2>Maps</h2>
+  <ul>
+    <li>
+      Plain basemap:{' '}
+      <a href="https://openfreemap.org" rel="noopener">
+        OpenFreeMap
+      </a>
+      , using{' '}
+      <a href="https://openmaptiles.org" rel="noopener">
+        OpenMapTiles
+      </a>{' '}
+      and map data ©{' '}
+      <a href="https://www.openstreetmap.org/copyright" rel="noopener">
+        OpenStreetMap
+      </a>{' '}
+      contributors, available under the Open Database Licence.
+    </li>
+    <li>
+      Satellite basemap:{' '}
+      <a href="https://s2maps.eu" rel="noopener">
+        Sentinel-2 cloudless
+      </a>{' '}
+      by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2023), under{' '}
+      <a href={LICENCE_URLS['CC-BY-NC-SA']} rel="license noopener">
+        CC BY-NC-SA 4.0
+      </a>
+      .
+    </li>
+    <li>
+      Place search:{' '}
+      <a href="https://nominatim.org" rel="noopener">
+        Nominatim
+      </a>
+      , with data © OpenStreetMap contributors.
+    </li>
+    <li>
+      Map display:{' '}
+      <a href="https://maplibre.org" rel="noopener">
+        MapLibre GL JS
+      </a>
+      .
+    </li>
+  </ul>
+
+  <h2>Fair use of the site</h2>
+  <p>
+    Taxonomap sends your requests straight to GBIF and the other services above, so please use it as a person would.
+    Don’t scrape it or automate heavy use; to work with data in bulk, use the{' '}
+    <a href="https://techdocs.gbif.org/en/openapi/" rel="noopener">
+      GBIF API
+    </a>{' '}
+    or downloads directly, under GBIF’s terms.
+  </p>
+
+  <h2>No warranty</h2>
+  <p>
+    Taxonomap is provided free and as it is. It may change, break or stop at any time, and we make no promise that it or
+    the data it shows is accurate, complete or available. As far as the law allows, we aren’t liable for any loss from
+    using it. Nothing here limits liability that can’t legally be limited.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    To report a problem, ask about these terms or flag content that shouldn’t be here, email{' '}
+    <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Problems with a record or photo itself are best raised with its
+    publisher, linked from the record. How we handle data is covered in the <a href="/privacy">privacy notice</a>.
+  </p>
+</LegalPage>

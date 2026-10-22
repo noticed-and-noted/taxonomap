@@ -16,6 +16,7 @@ import FilterGroup from './FilterGroup.vue';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterRail from './FilterRail.vue';
 import HexPanel from './HexPanel.vue';
+import LegalLinks from './LegalLinks.vue';
 import MapLegend from './MapLegend.vue';
 import MapProgress from './MapProgress.vue';
 import MapSettings from './MapSettings.vue';
@@ -215,6 +216,7 @@ function closePanel() {
             </div>
             <MapSettings inline />
             <OnboardingSettings />
+            <LegalLinks />
           </div>
           <div v-else role="tabpanel">
             <FilterGroup :group="filterTab" />

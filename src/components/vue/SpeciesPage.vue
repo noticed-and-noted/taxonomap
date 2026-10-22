@@ -141,11 +141,11 @@ const englishNames = computed(
     </section>
 
     <footer class="mt-12 border-t border-border pt-4 text-xs text-subtle">
-      Occurrence data from <a href="https://www.gbif.org" class="underline">GBIF.org</a> and its data publishers ({{
+      Occurrence data from <a href="https://www.gbif.org">GBIF.org</a> and its data publishers ({{
         compact(speciesData.count)
       }}
       records, top datasets listed above). Photos are shown under their stated licences. Snapshot {{ generated }} ·
-      <a :href="`https://www.gbif.org/species/${speciesData.key}`" class="underline" target="_blank" rel="noopener"
+      <a :href="`https://www.gbif.org/species/${speciesData.key}`" target="_blank" rel="noopener"
         >GBIF species page <UiIcon name="external"
       /></a>
     </footer>

@@ -1,0 +1,141 @@
+---
+import LegalPage from '~/components/LegalPage.astro';
+import { CONTACT_EMAIL as CONTACT } from '~/lib/contact';
+---
+
+<LegalPage
+  title="Privacy"
+  description="What Taxonomap stores, what it sends to other services, and your rights."
+  updated="22 October 2026"
+>
+  <p>
+    Taxonomap is a free, non-commercial explorer for biodiversity records. It has no accounts, no cookies, no
+    advertising and no analytics or tracking. This page explains the little that does happen to your data.
+  </p>
+
+  <h2>Who runs it</h2>
+  <p>
+    Taxonomap is run by the Taxonomap project, which is the data controller for this site. Questions or requests about
+    your data go to <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+  </p>
+
+  <h2>What we receive</h2>
+  <p>
+    The site is static: its pages are built in advance and served by <strong>Cloudflare</strong>, our hosting provider.
+    As with any website, Cloudflare receives your IP address, browser details and the pages you request so it can
+    deliver them and protect the site from abuse. It keeps these logs briefly under its own{' '}
+    <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">
+      privacy policy
+    </a>
+    . We don’t combine them with anything or use them to identify you.
+  </p>
+  <p>We have no database, so there is nothing about you stored on our side.</p>
+
+  <h2>What stays in your browser</h2>
+  <p>
+    A few settings you choose are saved in your browser’s local storage, so they are still there next time. They never
+    leave your device, and you can clear them at any time in your browser’s settings.
+  </p>
+  <ul>
+    <li>
+      <strong>Theme</strong>: light, dark or automatic.
+    </li>
+    <li>
+      <strong>Map colours</strong>: the colour ramp you picked for the map.
+    </li>
+    <li>
+      <strong>Getting started</strong>: whether you’ve seen the tour, and your progress through “Try this”.
+    </li>
+    <li>
+      <strong>Request meter</strong>: whether you’ve hidden it.
+    </li>
+    <li>
+      <strong>Photo lookups</strong>: which iNaturalist entry matches which species, so photos load faster.
+    </li>
+  </ul>
+  <p>
+    A service worker also keeps copies of pages, map tiles and data you’ve viewed, so the site is quicker and works
+    offline. These copies contain no personal data. Because all of this is only what the site needs to do what you ask,
+    it doesn’t need a consent banner.
+  </p>
+
+  <h2>Services your browser talks to</h2>
+  <p>
+    To show maps, records and photos, your browser fetches them straight from the services below. Each one receives your
+    IP address and the request itself (for example, which species or map area you’re looking at), and handles it under
+    its own privacy policy.
+  </p>
+  <ul>
+    <li>
+      <strong>GBIF</strong> (Global Biodiversity Information Facility): occurrence records, species information, map
+      density tiles and record photos.{' '}
+      <a href="https://www.gbif.org/terms/privacy-policy" rel="noopener">
+        Privacy policy
+      </a>
+      .
+    </li>
+    <li>
+      <strong>iNaturalist</strong>: extra species photos, loaded from iNaturalist’s photo storage on Amazon Web
+      Services.{' '}
+      <a href="https://www.inaturalist.org/pages/privacy" rel="noopener">
+        Privacy policy
+      </a>
+      .
+    </li>
+    <li>
+      <strong>OpenFreeMap</strong>: the plain basemap.{' '}
+      <a href="https://openfreemap.org/privacy/" rel="noopener">
+        Privacy policy
+      </a>
+      .
+    </li>
+    <li>
+      <strong>EOX IT Services</strong>: the satellite basemap, only when you switch to it.{' '}
+      <a href="https://eox.at/privacy-policy/" rel="noopener">
+        Privacy policy
+      </a>
+      .
+    </li>
+    <li>
+      <strong>Nominatim</strong>, run by the OpenStreetMap Foundation: place search. Only what you type into a place
+      search is sent, and only when you submit it.{' '}
+      <a href="https://osmfoundation.org/wiki/Privacy_Policy" rel="noopener">
+        Privacy policy
+      </a>
+      .
+    </li>
+  </ul>
+  <p>Fonts are served from our own site, not from Google or another font service.</p>
+
+  <h2>Your location</h2>
+  <p>
+    “What’s near me” can use your device’s location, but only if you press the button and your browser asks you and you
+    agree. The location is rounded to about 100 metres before it is used. It is then:
+  </p>
+  <ul>
+    <li>sent to GBIF to find records nearby, and implied by the map tiles your browser loads around it;</li>
+    <li>
+      written into the page address (<code>?at=</code>) so the page can be bookmarked.{' '}
+      <strong>If you share that link, you share that rounded location.</strong>
+    </li>
+  </ul>
+  <p>It is not stored anywhere else. You can pick a place on the map or search for one instead.</p>
+
+  <h2>Your rights</h2>
+  <p>
+    Under UK and EU data protection law (UK GDPR and GDPR) you can ask what personal data we hold about you, and ask us
+    to correct or delete it. In practice we hold none outside Cloudflare’s short-lived logs. Where we rely on our
+    legitimate interest in running a secure, working site, you can object. Email{' '}
+    <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. If you’re unhappy with our answer, you can complain to the{' '}
+    <a href="https://ico.org.uk/make-a-complaint/" rel="noopener">
+      Information Commissioner’s Office
+    </a>{' '}
+    or your local data protection authority.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    If what the site does with data changes, this page changes first, with a new date at the top. See also the{' '}
+    <a href="/terms">terms and credits</a>.
+  </p>
+</LegalPage>

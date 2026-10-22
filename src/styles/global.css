@@ -90,6 +90,18 @@
   a {
     color: inherit;
   }
+
+  /* A link without classes is a text link; styled links (buttons, chips, nav) opt out by having a class. */
+  a:not([class]) {
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 2px;
+    transition: color var(--dur-fast) var(--ease);
+  }
+
+  a:not([class]):hover {
+    color: var(--accent);
+  }
 }
 
 @layer components {
@@ -119,6 +131,46 @@
   }
   .name-in-enter-from {
     opacity: 0;
+  }
+
+  /* Running text on content pages (privacy, terms): Tailwind's reset strips element spacing, so it comes back here. */
+  .prose h2 {
+    margin-top: 2.5rem;
+    font-size: 1.5rem;
+  }
+
+  .prose h3 {
+    margin-top: 1.5rem;
+    font-size: 1.125rem;
+  }
+
+  .prose p,
+  .prose ul {
+    margin-top: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.65;
+  }
+
+  .prose ul {
+    padding-left: 1.25rem;
+    list-style: disc;
+  }
+
+  .prose li + li {
+    margin-top: 0.375rem;
+  }
+
+  .prose strong,
+  .prose a:not([class]) {
+    color: var(--text);
+  }
+
+  .prose strong {
+    font-weight: 600;
+  }
+
+  .prose a:not([class]):hover {
+    color: var(--accent);
   }
 
   .sci-name {

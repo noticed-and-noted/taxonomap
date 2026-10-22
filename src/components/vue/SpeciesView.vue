@@ -104,10 +104,8 @@ onMounted(load);
       Try again
     </button>
     <p class="mt-6 flex justify-center gap-6">
-      <a v-if="key !== null" :href="treeHref(key)" class="text-accent underline-offset-2 hover:underline"
-        >Open in the tree of life</a
-      >
-      <a href="/" class="text-accent underline-offset-2 hover:underline">Back to the map</a>
+      <a v-if="key !== null" :href="treeHref(key)">Open in the tree of life</a>
+      <a href="/">Back to the map</a>
     </p>
   </div>
 
