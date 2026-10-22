@@ -31,6 +31,15 @@ describe('species helpers', () => {
     expect(englishName([name('robin'), name('Robin'), name('Redbreast robin'), name('redbreast robin')])).toBe('Robin');
   });
 
+  it('picks a wanted English name only when it is at least half as common as the top one', () => {
+    const english = (vernacularName: string) => ({ vernacularName, language: 'eng' });
+    const isPigeon = (text: string) => text.toLowerCase().includes('pigeon');
+    const names = [english('Rock dove'), english('Rock dove'), english('Rock dove'), english('Rock pigeon')];
+    expect(englishName(names, isPigeon)).toBe('Rock dove');
+    expect(englishName([...names, english('Rock pigeon')], isPigeon)).toBe('Rock pigeon');
+    expect(englishName([english('Redbreast')], isPigeon)).toBe('Redbreast');
+  });
+
   it('names languages, falling back to the code', () => {
     expect(languageName(undefined)).toBe('Other');
     expect(languageName('qqq')).toBe('qqq');

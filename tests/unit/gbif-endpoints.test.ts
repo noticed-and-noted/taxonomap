@@ -129,13 +129,35 @@ describe('live name providers', () => {
           key: 6065844,
           scientificName: 'Leucophaeus atricilla',
           rank: 'SPECIES',
-          vernacularNames: [english('Laughing Gull'), english('Black-headed Gull'), english('Laughing Gull')],
+          vernacularNames: [
+            english('Laughing Gull'),
+            english('Black-headed Gull'),
+            english('Laughing Gull'),
+            english('Laughing Gull'),
+          ],
         },
       ],
     }));
     const api = await gbif();
     const [hit] = await api.gbifVernacularProvider.search('black headed gull');
     expect(hit?.commonName).toBe('Laughing Gull');
+  });
+
+  it('vernacular search shows the matching English name when it is as common as the main one', async () => {
+    const english = (vernacularName: string) => ({ vernacularName, language: 'eng' });
+    stubNetwork(() => ({
+      results: [
+        {
+          key: 2495414,
+          scientificName: 'Columba livia',
+          rank: 'SPECIES',
+          vernacularNames: [english('Rock Dove'), english('Rock Pigeon'), english('Rock Dove'), english('Rock Pigeon')],
+        },
+      ],
+    }));
+    const api = await gbif();
+    const [hit] = await api.gbifVernacularProvider.search('rock pigeon');
+    expect(hit?.commonName).toBe('Rock Pigeon');
   });
 
   it('vernacular search falls back to the matching name when there is no English one', async () => {

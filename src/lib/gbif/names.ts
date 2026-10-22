@@ -45,12 +45,13 @@ export const gbifVernacularProvider: NameSearchProvider = {
   async search(query, signal) {
     const response = await searchVernacular(query, { limit: 10 }, signal);
     const needle = normalise(query);
+    const matchesQuery = (name: string) => normalise(name).includes(needle);
     return response.results.map((hit) => {
       const names = hit.vernacularNames ?? [];
-      // The main English name, not the alias that matched: one old alias shouldn't relabel a species.
+      // The matching English name only when it is a common one: one old alias shouldn't relabel a species.
       const common =
-        englishName(names) ??
-        names.find((vernacular) => normalise(vernacular.vernacularName).includes(needle))?.vernacularName;
+        englishName(names, matchesQuery) ??
+        names.find((vernacular) => matchesQuery(vernacular.vernacularName))?.vernacularName;
       return {
         key: hit.key,
         scientificName: hit.canonicalName ?? hit.scientificName,
