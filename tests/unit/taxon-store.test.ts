@@ -1,7 +1,7 @@
 /** The What filter's taxa: names for display, and adding, replacing and removing taxa. */
 import type { NameRow } from '~/lib/data/types';
 import type { NameHit } from '~/lib/gbif';
-import { snapshots, stubNetwork } from './helpers/network';
+import { json, snapshots, stubNetwork } from './helpers/network';
 
 const NAMES: NameRow[] = [[212, 'C', 'Aves', 'Birds', 10]];
 
@@ -47,6 +47,16 @@ describe('lookupTaxon', () => {
       commonName: 'Mammals',
     });
     await expect(lookupTaxon(1)).resolves.toBeNull();
+  });
+
+  it('keeps a taxon whose common names fail to load', async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/44') return { key: 44, scientificName: 'Chordata', rank: 'PHYLUM' };
+      if (url.pathname === '/v1/species/44/vernacularNames') return json({ message: 'down' }, 500);
+      return snapshots({ names: NAMES })(url);
+    });
+    const { lookupTaxon } = await load();
+    await expect(lookupTaxon(44)).resolves.toEqual({ key: 44, scientificName: 'Chordata', rank: 'PHYLUM' });
   });
 });
 

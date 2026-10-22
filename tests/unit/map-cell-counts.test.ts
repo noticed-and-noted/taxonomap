@@ -128,4 +128,11 @@ describe('checkCells', () => {
     await expect(checkCells(NONE, [SQUARE_A, SQUARE_B])).resolves.toBe(false);
     expect(knownCount(NONE, SQUARE_B)).toBeUndefined();
   });
+
+  it('treats a record with no coordinates as outside every cell', async () => {
+    const { checkCells, knownCount } = await load();
+    searchOccurrences.mockResolvedValueOnce({ count: 1, results: [{}] });
+    await expect(checkCells(NONE, [SQUARE_A])).resolves.toBe(false);
+    expect(knownCount(NONE, SQUARE_A)).toBeUndefined();
+  });
 });

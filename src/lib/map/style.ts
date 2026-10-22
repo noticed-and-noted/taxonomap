@@ -4,7 +4,7 @@
  * MapCanvas island only gathers inputs and wires events.
  */
 import type { ExpressionSpecification, LayerSpecification, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
-import { BASEMAPS, type BasemapId, type RasterDef, type Theme } from '~/lib/basemaps';
+import { BASEMAPS, plainStyleUrl, type BasemapId, type RasterDef, type Theme } from '~/lib/basemaps';
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
@@ -259,8 +259,7 @@ export async function buildStyle(
     return base ? spliceOverlay(base, colors, data) : plainStyle(null, colors, data);
   }
   // Raster basemaps borrow the plain map's labels, so place names read the same on both.
-  const plain = BASEMAPS.plain.source(theme);
-  const labels = plain.kind === 'vector' ? await loadStyle(plain.styleUrl) : null;
+  const labels = await loadStyle(plainStyleUrl(theme));
   return labels ? spliceOverlay(rasterUnderLabels(labels, source), colors, data) : plainStyle(source, colors, data);
 }
 

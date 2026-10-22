@@ -382,3 +382,13 @@ describe('bake to disk', () => {
     }
   });
 });
+
+describe('bake directory', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('defaults to .cache/baked when BAKE_DIR is unset', async () => {
+    vi.stubEnv('BAKE_DIR', undefined);
+    const { bakeDir } = await import('~/lib/bake/cache');
+    expect(bakeDir()).toBe('.cache/baked');
+  });
+});

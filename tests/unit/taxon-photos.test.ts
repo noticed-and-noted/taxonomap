@@ -308,12 +308,18 @@ describe('iNaturalist photo URLs', () => {
 describe('taxon photo edge cases', () => {
   const empty = { records: {}, taxa: {}, voted: {}, gbifInat: {}, gbifAny: {} };
 
-  it('falls back to GBIF photos for unmatched ranks, failed lookups and taxa without an ancestor at the rank', async () => {
+  it('falls back to GBIF photos for unmatched ranks, failed lookups, records above the rank and taxa without an ancestor at it', async () => {
     network({
       ...empty,
-      records: { 3: { taxonID: '30' }, 4: { taxonID: '40' } },
-      taxa: { 30: { id: 30, name: 'No ancestors', rank_level: 5 }, 40: taxon(40, 10, [], [1, 40]) },
-      gbifAny: { 1: [occ(11, 'u.jpg')], 2: [occ(12, 'f.jpg')], 3: [occ(13, 's.jpg')], 4: [occ(14, 'g.jpg')] },
+      records: { 3: { taxonID: '30' }, 4: { taxonID: '40' }, 5: { taxonID: '50' } },
+      taxa: { 30: { id: 30, name: 'No ancestors', rank_level: 5 }, 40: taxon(40, 10, [], [1, 40]), 50: taxon(50, 20) },
+      gbifAny: {
+        1: [occ(11, 'u.jpg')],
+        2: [occ(12, 'f.jpg')],
+        3: [occ(13, 's.jpg')],
+        4: [occ(14, 'g.jpg')],
+        5: [occ(15, 'h.jpg')],
+      },
       fail: { records: [2] },
     });
     const loaded = await load();
@@ -323,14 +329,17 @@ describe('taxon photo edge cases', () => {
         { key: 2, rank: 'SPECIES' },
         { key: 3, rank: 'SPECIES' },
         { key: 4, rank: 'GENUS' },
+        // Its record is only named to genus.
+        { key: 5, rank: 'SPECIES' },
       ],
       { signal: new AbortController().signal },
     );
-    expect([1, 2, 3, 4].map((key) => label(images.get(key)!))).toEqual([
+    expect([1, 2, 3, 4, 5].map((key) => label(images.get(key)!))).toEqual([
       'gbif:u.jpg',
       'gbif:f.jpg',
       'gbif:s.jpg',
       'gbif:g.jpg',
+      'gbif:h.jpg',
     ]);
   });
 

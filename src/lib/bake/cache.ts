@@ -17,8 +17,6 @@ export type NamedUsage = NameUsage & { vernacularNames?: VernacularName[] };
 
 const memo = new Map<string, Promise<unknown>>();
 let isReadingFiles = true;
-// The default is only used outside the tests, which always set BAKE_DIR.
-/* v8 ignore next */
 /** Directory of the snapshots `pnpm bake` writes (`BAKE_DIR`, default `.cache/baked`). */
 export const bakeDir = () => process.env['BAKE_DIR'] ?? '.cache/baked';
 
