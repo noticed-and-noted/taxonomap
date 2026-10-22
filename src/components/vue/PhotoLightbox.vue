@@ -94,6 +94,7 @@ function show(imageIndex: number) {
  */
 function open(imageIndex: number) {
   isOpen.value = true;
+  areControlsHidden.value = false;
   dialog.value?.showModal();
   show(imageIndex);
 }
@@ -106,6 +107,32 @@ function step(delta: number) {
 function onKey(event: KeyboardEvent) {
   if (event.key === 'ArrowRight') step(1);
   else if (event.key === 'ArrowLeft') step(-1);
+}
+
+/** Tapping the photo hides everything over it, for an unobstructed look; tapping again brings it back. */
+const areControlsHidden = ref(false);
+const toggleControls = () => (areControlsHidden.value = !areControlsHidden.value);
+
+/** Horizontal travel, in px, that makes a touch a swipe rather than a tap. */
+const SWIPE_DISTANCE = 50;
+let swipeStart: { x: number; y: number } | null = null;
+
+function onPointerDown(event: PointerEvent) {
+  swipeStart = event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : null;
+}
+
+/** The browser took the gesture over (say, scrolling the filmstrip), so it isn't a swipe. */
+function onPointerCancel() {
+  swipeStart = null;
+}
+
+/** A mostly sideways swipe steps through the photos: left for the next, right for the previous. */
+function onPointerUp(event: PointerEvent) {
+  if (!swipeStart || props.images.length < 2) return;
+  const deltaX = event.clientX - swipeStart.x;
+  const deltaY = event.clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(deltaX) >= SWIPE_DISTANCE && Math.abs(deltaX) > Math.abs(deltaY)) step(deltaX < 0 ? 1 : -1);
 }
 
 function onBackdrop(event: MouseEvent) {
@@ -125,7 +152,15 @@ defineExpose({ open });
     @click="onBackdrop"
     @close="isOpen = false"
   >
-    <div v-if="current && isOpen" class="relative size-full">
+    <div
+      v-if="current && isOpen"
+      class="stage absolute inset-0"
+      :class="{ 'controls-hidden': areControlsHidden }"
+      @click.self="toggleControls"
+      @pointerdown="onPointerDown"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerCancel"
+    >
       <SkeletonBlock
         v-if="currentSrc && !settled.has(currentSrc)"
         class="absolute inset-0"
@@ -151,10 +186,11 @@ defineExpose({ open });
         :class="settled.has(currentSrc) ? 'opacity-100' : 'opacity-0'"
         @load="settle(currentSrc, true)"
         @error="onLightboxError(currentSrc)"
+        @click="toggleControls"
       />
 
       <!-- The credit rides with the count, clear of the close button and the strip. -->
-      <div class="absolute left-2 top-2 flex min-h-11 max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5">
+      <div class="overlay absolute left-2 top-2 flex min-h-11 max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5">
         <span class="chip tabular-nums">{{ index + 1 }} / {{ images.length }}</span>
         <LicenceBadge :licence="current.licence" :creator="current.creator" :rights-holder="current.rightsHolder" />
         <p class="chip m-0 flex items-center gap-2">
@@ -181,12 +217,13 @@ defineExpose({ open });
         </button>
       </template>
 
-      <div class="absolute inset-x-2 bottom-2 flex justify-center">
+      <!-- Clicks pass through the full-width band, so taps beside the strip still reach the photo. -->
+      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center">
         <!-- Padded inside the scroller so the thumbnails' focus rings aren't clipped. -->
         <div
           v-if="images.length > 1"
           ref="strip"
-          class="flex max-w-full scroll-px-1 gap-1.5 overflow-x-auto p-1"
+          class="overlay pointer-events-auto flex max-w-full scroll-px-1 gap-1.5 overflow-x-auto p-1"
           role="group"
           :aria-label="`Photos of ${name}`"
         >
@@ -227,7 +264,6 @@ defineExpose({ open });
   background: rgb(0 0 0 / 0.55);
   backdrop-filter: blur(8px);
   color: white;
-  transition: background-color var(--dur-fast) var(--ease);
 }
 .overlay-button:hover {
   background: rgb(0 0 0 / 0.8);
@@ -267,6 +303,26 @@ defineExpose({ open });
 }
 .lightbox[open] {
   animation: pop var(--dur) var(--ease);
+}
+/* Sideways drags are swipes (see onPointerUp); the browser keeps vertical panning and pinch-zoom. */
+.stage {
+  touch-action: pan-y pinch-zoom;
+}
+/* Visibility as well as opacity, so hidden controls can't be tabbed to or tapped. */
+.overlay,
+.overlay-button {
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    visibility var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+.controls-hidden :is(.overlay, .overlay-button) {
+  opacity: 0;
+  visibility: hidden;
+}
+/* Safari focuses the dialog itself on open; it's a container, not a control, so it gets no ring. */
+.lightbox:focus-visible {
+  outline: none;
 }
 @keyframes pop {
   from {
