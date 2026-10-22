@@ -91,6 +91,13 @@ describe('species endpoints', () => {
     ]);
   });
 
+  it('stops after the first page when the search gives no count', async () => {
+    const calls = stubNetwork(() => ({ results: [{ key: 1 }] }));
+    const api = await gbif();
+    await expect(api.getAllChildren(212, 'GENUS')).resolves.toEqual([{ key: 1 }]);
+    expect(calls).toHaveLength(1);
+  });
+
   it('counts species under each descendant from one facet', async () => {
     stubNetwork(() => facets(0, 'HIGHER_TAXON_KEY', [[212, 11000]]));
     const api = await gbif();
