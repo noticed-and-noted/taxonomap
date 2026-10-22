@@ -45,6 +45,11 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* A modal <dialog> makes the page inert but still lets it scroll. */
+  html:has(dialog:modal) {
+    overflow: hidden;
+  }
+
   /* Tailwind v4 leaves buttons on the default cursor. */
   button:not(:disabled),
   [role='button'],

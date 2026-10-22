@@ -14,6 +14,8 @@ const PATHS = {
   // The header's Tree of life sprout.
   tree: 'M12 21V11M12 11c0-4 3-6 7-6 0 4-3 6-7 6zM12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 1 1 0-18zM12 11v5M12 8h.01',
+  // A picture frame: mountain and sun.
+  photo: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM4 16l5-5 6 6m-1-3 2-2 4 4M15 8h.01',
 } as const;
 
 const { name, size = '1em' } = defineProps<{ name: keyof typeof PATHS; size?: string | number }>();
