@@ -14,10 +14,12 @@ import { debounce } from '~/lib/util/debounce';
 import type { ClassGroup, SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import ListSkeleton from './ListSkeleton.vue';
+import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import { useRowDetails } from './useRowDetails';
 import { useScrollFade } from './useScrollFade';
+import { useSettledQuery } from './useSettledQuery';
 import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{
@@ -55,12 +57,15 @@ const broken = ref(new Set<number>());
 // Rows currently scrolled into the results box (or just below it); see observeRows.
 const inView = ref(new Set<number>());
 // Photos, and names the index lacked, looked up as rows come into view.
-const { commonName, sciName, pendingName, photoOf, pendingPhoto } = useRowDetails({
+// Searching names every row, a request each, so it waits for typing to pause.
+const { settled: settledQuery, isSettling } = useSettledQuery(query);
+const { commonName, sciName, pendingName, photoOf, pendingPhoto, isLoadingNames } = useRowDetails({
   rows: () => props.rows,
   dataset: () => props.groups,
   inView,
-  needAllNames: () => sortKey.value === 'name' || !!query.value.trim(),
+  needAllNames: () => sortKey.value === 'name' || !!settledQuery.value.trim(),
 });
+const isSearchingNames = computed(() => !!query.value.trim() && (isSettling.value || isLoadingNames.value));
 const displayName = (row: SpeciesRow) => commonName(row) ?? sciName(row);
 const initials = (row: SpeciesRow) =>
   displayName(row)
@@ -214,8 +219,10 @@ watch([query, group, sortKey, sortDesc], () => {
             type="search"
             placeholder="Find in results"
             :disabled="pending"
-            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
+            :class="['pr-2', { 'search-spinner-room': isSearchingNames }]"
+            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
           />
+          <SearchSpinner :active="isSearchingNames" class="search-spinner-gap top-1/2" />
         </span>
       </label>
       <button
@@ -383,12 +390,17 @@ watch([query, group, sortKey, sortDesc], () => {
                         {{ initials(row) }}
                       </span>
                     </span>
-                    <span v-if="pendingName(row)" class="min-w-0 flex-1 space-y-1" aria-hidden="true">
+                    <!-- Two lines' height (h-9) whether loading, named or scientific only, so rows never change size. -->
+                    <span
+                      v-if="pendingName(row)"
+                      class="flex h-9 min-w-0 flex-1 flex-col justify-center gap-1"
+                      aria-hidden="true"
+                    >
                       <SkeletonBlock height="0.8rem" width="70%" />
-                      <SkeletonBlock height="0.6rem" width="45%" />
+                      <SkeletonBlock height="0.65rem" width="45%" />
                     </span>
                     <span v-if="pendingName(row)" class="sr-only">Loading name</span>
-                    <span v-else class="min-w-0">
+                    <span v-else class="flex h-9 min-w-0 flex-col justify-center">
                       <span class="block truncate group-hover:underline">{{ displayName(row) }}</span>
                       <span v-if="commonName(row)" class="sci-name block truncate text-xs text-muted">{{
                         sciName(row)

@@ -27,9 +27,9 @@ const tab = ref<'species' | 'records'>('species');
 </script>
 
 <template>
-  <div v-if="!geometry" class="space-y-3" role="status" aria-label="Finding the selected cell">
-    <SkeletonBlock height="2rem" width="50%" />
-    <p class="text-xs text-subtle">Finding the selected cell on the map…</p>
+  <div v-if="!geometry" role="status" aria-label="Finding the selected cell">
+    <SkeletonBlock height="1.875rem" width="50%" />
+    <p class="mt-1 text-sm text-subtle">Finding the selected cell on the map…</p>
   </div>
 
   <div v-else class="hex-panel space-y-5">
@@ -44,7 +44,13 @@ const tab = ref<'species' | 'records'>('species');
 
     <template v-else>
       <section aria-live="polite">
-        <SkeletonBlock v-if="loading && count === null" height="2rem" width="50%" />
+        <!-- The count's size: a text-3xl number over a text-sm line. -->
+        <div v-if="loading && count === null">
+          <SkeletonBlock height="1.875rem" width="50%" label="Loading record count" />
+          <div class="mt-1 flex h-5 items-center" aria-hidden="true">
+            <SkeletonBlock height="0.75rem" width="8rem" />
+          </div>
+        </div>
         <template v-else-if="count !== null">
           <p class="font-display text-3xl leading-none tabular-nums">{{ full(count) }}</p>
           <p class="mt-1 text-sm text-muted">

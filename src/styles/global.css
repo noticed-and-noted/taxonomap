@@ -168,3 +168,12 @@
     font-size: max(16px, 1em) !important;
   }
 }
+
+/* Room left of the browser's clear button for a SearchSpinner, and the spinner placed in it. */
+input[type='search'].search-spinner-room::-webkit-search-cancel-button {
+  margin-left: 1.5rem;
+}
+
+.search-spinner-gap {
+  right: 2rem;
+}

@@ -9,18 +9,23 @@
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, full } from '~/lib/format';
+import { normalise } from '~/lib/data/name-index';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
-import { commonNames as lookupCommonNames, type SpeciesRow } from '~/lib/species/groups';
+import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
+import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import { useLatestLoad } from './useLatestLoad';
 import { useScrollFade } from './useScrollFade';
+import { useSettledQuery } from './useSettledQuery';
 
 const PAGE = 20;
 const MAX_OPTIONS = 8;
+/** Common names looked up per request batch, so they appear as they arrive. */
+const NAME_BATCH = 20;
 
 const TYPE_CODES: Record<string, string> = {
   HUMAN_OBSERVATION: 'OBS',
@@ -53,20 +58,35 @@ const scroller = ref<HTMLElement>();
 const { fadeBottom, update: updateFade } = useScrollFade(scroller);
 watch(records, () => void nextTick(updateFade));
 
+// The species' name, as everywhere else: the cell's species table's, else looked up (see nameSpecies). The
+// name a recorder typed on the record is only a fallback, so one species doesn't show under several names.
+const commonNames = computed(
+  () =>
+    new Map(props.species.filter((species) => species.commonName).map((species) => [species.key, species.commonName!])),
+);
+const lateNames = shallowRef(new Map<number, string>());
+/** Scientific names looked up for species the index didn't name ("Species 123"). */
+const lateScientificNames = shallowRef(new Map<number, string>());
+
 const uniqueId = useId();
 const query = ref('');
 const open = ref(false);
 const active = ref(-1);
-const label = (species: SpeciesRow) => species.commonName ?? species.scientificName;
+const speciesCommonName = (species: SpeciesRow) => species.commonName ?? lateNames.value.get(species.key);
+const speciesScientificName = (species: SpeciesRow) =>
+  lateScientificNames.value.get(species.key) ?? species.scientificName;
+const label = (species: SpeciesRow) => speciesCommonName(species) ?? speciesScientificName(species);
 const options = computed(() => {
-  const needle = query.value.trim().toLowerCase();
+  const needle = normalise(query.value);
   return [...props.species]
-    .filter(
-      (species) =>
-        !needle ||
-        label(species).toLowerCase().includes(needle) ||
-        species.scientificName.toLowerCase().includes(needle),
-    )
+    .filter((species) => {
+      if (!needle) return true;
+      // Not the "Species 123" placeholder, which would match "sp".
+      const hasScientificName = !species.unnamed || lateScientificNames.value.has(species.key);
+      return [speciesCommonName(species), hasScientificName ? speciesScientificName(species) : undefined].some(
+        (name) => name !== undefined && normalise(name).includes(needle),
+      );
+    })
     .sort((left, right) => right.records - left.records)
     .slice(0, MAX_OPTIONS);
 });
@@ -104,13 +124,6 @@ function onKey(event: KeyboardEvent) {
   }
 }
 
-// The species' name, as everywhere else: the cell's species table's, else looked up (see load). The
-// name a recorder typed on the record is only a fallback, so one species doesn't show under several names.
-const commonNames = computed(
-  () =>
-    new Map(props.species.filter((species) => species.commonName).map((species) => [species.key, species.commonName!])),
-);
-const lateNames = shallowRef(new Map<number, string>());
 const common = (occurrence: Occurrence) =>
   (occurrence.speciesKey
     ? (commonNames.value.get(occurrence.speciesKey) ?? lateNames.value.get(occurrence.speciesKey))
@@ -118,15 +131,55 @@ const common = (occurrence: Occurrence) =>
 const scientificName = (occurrence: Occurrence) => occurrence.species ?? occurrence.scientificName;
 const name = (occurrence: Occurrence) => common(occurrence) ?? scientificName(occurrence) ?? 'Unnamed record';
 
-/** Names for a page's species the table hasn't named (cached, as on species pages); rows show meanwhile. */
-async function nameSpecies(page: readonly Occurrence[], signal: AbortSignal) {
-  const missing = [...new Set(page.map((occurrence) => occurrence.speciesKey))].filter(
+/** Names for species the table hasn't named (cached, as on species pages), a batch at a time; rows show meanwhile. */
+async function nameSpecies(keys: Iterable<number | undefined>, signal?: AbortSignal) {
+  const missing = [...new Set(keys)].filter(
     (key): key is number => key !== undefined && !commonNames.value.has(key) && !lateNames.value.has(key),
   );
-  if (!missing.length) return;
-  const found = await lookupCommonNames(missing, signal);
-  if (!signal.aborted && found.size) lateNames.value = new Map([...lateNames.value, ...found]);
+  for (let start = 0; start < missing.length; start += NAME_BATCH) {
+    const found = await lookupCommonNames(missing.slice(start, start + NAME_BATCH), signal);
+    if (signal?.aborted) return;
+    if (found.size) lateNames.value = new Map([...lateNames.value, ...found]);
+  }
 }
+
+// The index has common names for few species, so the options look up the rest: the ones shown when the
+// box opens, then (once typing) every species in the cell, most records first, to match on.
+const askedNames = new Set<number>();
+/** Keys whose names are being looked up for the options. */
+const pendingNames = shallowRef(new Set<number>());
+
+/** Names for unnamed species ("Species 123"), so their options show a real name. */
+async function nameUnnamed(keys: readonly number[]) {
+  const unnamed = new Set(props.species.flatMap((species) => (species.unnamed ? [species.key] : [])));
+  const found = await resolveNames(keys.filter((key) => unnamed.has(key)));
+  if (found.size) lateScientificNames.value = new Map([...lateScientificNames.value, ...found]);
+}
+
+/** Looks up names for the options a batch at a time, marking each batch pending until it's back. */
+async function nameOptions(keys: readonly number[]) {
+  const fresh = keys.filter((key) => !askedNames.has(key));
+  for (const key of fresh) askedNames.add(key);
+  pendingNames.value = new Set([...pendingNames.value, ...fresh]);
+  for (let start = 0; start < fresh.length; start += NAME_BATCH) {
+    const batch = new Set(fresh.slice(start, start + NAME_BATCH));
+    try {
+      await Promise.all([nameSpecies(batch), nameUnnamed([...batch])]);
+    } finally {
+      pendingNames.value = new Set([...pendingNames.value].filter((key) => !batch.has(key)));
+    }
+  }
+}
+
+// Every species is a request each, so typing names them once it pauses.
+const { settled: settledQuery, isSettling } = useSettledQuery(query);
+watch([() => props.species, settledQuery, open], async ([species, text, isOpen]) => {
+  if (!isOpen && !text.trim()) return;
+  await nameOptions(options.value.map((option) => option.key));
+  if (text.trim()) await nameOptions(species.map((row) => row.key));
+});
+const isNaming = computed(() => pendingNames.value.size > 0 || (!!query.value.trim() && isSettling.value));
+const showOptions = computed(() => open.value && options.value.length > 0);
 
 async function load(more = false) {
   const baseFilter = base.value;
@@ -142,7 +195,10 @@ async function load(more = false) {
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
-    void nameSpecies(response.results, signal);
+    void nameSpecies(
+      response.results.map((occurrence) => occurrence.speciesKey),
+      signal,
+    );
     total.value = response.count;
   });
 }
@@ -234,12 +290,13 @@ const institution = (occurrence: Occurrence) =>
         :id="`${uniqueId}-input`"
         v-model="query"
         type="search"
-        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
+        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
+        :class="isNaming && !query ? 'pr-8' : ['pr-2', { 'search-spinner-room': isNaming }]"
         role="combobox"
         autocomplete="off"
         placeholder="Filter by species"
         :disabled="!species.length"
-        :aria-expanded="open && options.length > 0"
+        :aria-expanded="showOptions"
         :aria-controls="`${uniqueId}-list`"
         aria-autocomplete="list"
         :aria-activedescendant="activeId"
@@ -248,8 +305,9 @@ const institution = (occurrence: Occurrence) =>
         @input="onInput"
         @keydown="onKey"
       />
+      <SearchSpinner :active="isNaming" class="top-[1.0625rem]" :class="query ? 'search-spinner-gap' : 'right-2.5'" />
       <ul
-        v-show="open && options.length"
+        v-show="showOptions"
         :id="`${uniqueId}-list`"
         role="listbox"
         class="options absolute inset-x-0 z-10 shadow"
@@ -265,7 +323,7 @@ const institution = (occurrence: Occurrence) =>
           :aria-selected="option.key === speciesKey"
           @mousedown.prevent="pick(option)"
         >
-          <span class="min-w-0 truncate" :class="{ 'sci-name': !option.commonName }">{{ label(option) }}</span>
+          <span class="min-w-0 truncate" :class="{ 'sci-name': !speciesCommonName(option) }">{{ label(option) }}</span>
           <span class="shrink-0 text-[11px] text-subtle tabular-nums">{{ full(option.records) }}</span>
         </li>
       </ul>
@@ -355,9 +413,10 @@ const institution = (occurrence: Occurrence) =>
                   class="py-1.5 pr-2"
                   :class="{ 'pl-4': expanded === occurrence.key }"
                 >
+                  <!-- Two lines' height (h-9) so the row doesn't grow when a common name arrives. -->
                   <button
                     type="button"
-                    class="block w-full min-w-0 cursor-pointer text-left"
+                    class="flex h-9 w-full min-w-0 cursor-pointer items-center text-left"
                     :aria-expanded="expanded === occurrence.key"
                     :aria-controls="`${uniqueId}-rec-${occurrence.key}`"
                     @click.stop="toggle(occurrence)"

@@ -173,6 +173,24 @@ describe('nameFromRecords', () => {
     }));
     await expect(nameFromRecords(rows)).resolves.toBe(rows);
   });
+
+  it('asks again for the species the first search left unnamed', async () => {
+    const unnamed = [1, 3].map((key) => ({
+      key,
+      scientificName: `Species ${key}`,
+      records: 1,
+      unnamed: true as const,
+    }));
+    const calls = stubNetwork((url) =>
+      url.searchParams.getAll('speciesKey').includes('1')
+        ? { count: 1, results: [{ key: 9, speciesKey: 1, species: 'Turdus merula' }] }
+        : { count: 1, results: [{ key: 10, speciesKey: 3, species: 'Pica pica' }] },
+    );
+    const { nameFromRecords } = await load();
+    const named = await nameFromRecords(unnamed);
+    expect(named.map((row) => row.scientificName)).toEqual(['Turdus merula', 'Pica pica']);
+    expect(calls.map((url) => url.searchParams.getAll('speciesKey'))).toEqual([['1', '3'], ['3']]);
+  });
 });
 
 describe('commonNames', () => {
