@@ -57,8 +57,8 @@ export interface OccurrenceFilter extends Refinements {
   month?: number | undefined;
   basisOfRecord?: readonly BasisOfRecord[] | undefined;
   country?: string | undefined;
-  /** WKT polygon (already rounded via params helpers). */
-  geometry?: string | undefined;
+  /** WKT polygon (already rounded via params helpers); several are OR'd. */
+  geometry?: string | readonly string[] | undefined;
   datasetKey?: string | undefined;
   /** Restrict to records with usable coordinates (matches what the map shows). */
   georeferenced?: boolean | undefined;
