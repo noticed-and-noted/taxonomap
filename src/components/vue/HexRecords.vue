@@ -13,6 +13,7 @@ import { normalise } from '~/lib/data/name-index';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
+import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
@@ -44,6 +45,7 @@ const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceF
 
 const geometry = useStore($hexGeometry);
 const storeFilter = useStore($occurrenceFilter);
+const manifest = useStore($speciesManifest);
 const { loading, error, run } = useLatestLoad();
 const base = computed(
   () => props.filter ?? (geometry.value ? { ...storeFilter.value, geometry: geometry.value.wkt } : null),
@@ -274,6 +276,10 @@ function toggle(occurrence: Occurrence) {
   });
 }
 
+/** Taxon for the about page: the species, else whatever the record was named to (a genus or family). */
+const aboutKey = (occurrence: Occurrence) =>
+  occurrence.speciesKey ?? occurrence.acceptedTaxonKey ?? occurrence.taxonKey;
+
 const institution = (occurrence: Occurrence) =>
   [occurrence.institutionCode, occurrence.catalogNumber].filter(Boolean).join(' ');
 </script>
@@ -486,7 +492,8 @@ const institution = (occurrence: Occurrence) =>
                         {{ initials(occurrence) }}
                       </span>
                     </div>
-                    <dl class="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]">
+                    <!-- Stretched to the photo's height so the buttons line up with its bottom edge. -->
+                    <dl class="flex min-w-0 flex-col gap-1 self-stretch text-xs [overflow-wrap:anywhere]">
                       <div v-if="occurrence.recordedBy">
                         <dt class="text-subtle">Recorded by</dt>
                         <dd>{{ occurrence.recordedBy }}</dd>
@@ -499,14 +506,30 @@ const institution = (occurrence: Occurrence) =>
                         <dt class="text-subtle">Source</dt>
                         <dd>{{ occurrence.datasetName ?? occurrence.publisher }}</dd>
                       </div>
-                      <dd>
+                      <dd class="mt-auto flex gap-1.5">
+                        <a
+                          v-if="aboutKey(occurrence)"
+                          :href="speciesPath(aboutKey(occurrence)!, manifest)"
+                          class="record-action record-action-icon"
+                          :aria-label="`About ${name(occurrence)}`"
+                          :title="`About ${name(occurrence)}`"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 11v5M12 8h.01" />
+                          </svg>
+                        </a>
                         <a
                           :href="`https://www.gbif.org/occurrence/${occurrence.key}`"
                           target="_blank"
                           rel="noopener"
-                          class="underline"
-                          >View on GBIF</a
+                          class="record-action"
                         >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+                          </svg>
+                          GBIF<span class="sr-only"> record (opens in a new tab)</span>
+                        </a>
                       </dd>
                     </dl>
                   </div>
@@ -605,6 +628,50 @@ const institution = (occurrence: Occurrence) =>
 .type-code:hover::after,
 .type-code:focus-visible::after {
   opacity: 1;
+}
+.record-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.record-action-icon {
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0;
+}
+.record-action:hover {
+  background: var(--surface-3);
+}
+.record-action:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.record-action svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.record-action-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+@media (max-width: 767px) {
+  .record-action {
+    min-height: 2.5rem;
+  }
+  .record-action-icon {
+    min-width: 2.5rem;
+  }
 }
 .head-row {
   overflow-y: hidden;
