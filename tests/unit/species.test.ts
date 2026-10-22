@@ -64,6 +64,15 @@ describe('species helpers', () => {
     expect(languageName('cym')).toBe('Welsh');
   });
 
+  it('drops names that differ only in case, keeping the capitalised one', () => {
+    const groups = groupByLanguage([
+      { vernacularName: 'european robin', language: 'eng' },
+      { vernacularName: 'European Robin', language: 'eng' },
+      { vernacularName: 'European robin', language: 'eng' },
+    ]);
+    expect(groups[0]?.names).toEqual(['European Robin']);
+  });
+
   it('derives the classification from higher keys', () => {
     expect(
       classificationOf({

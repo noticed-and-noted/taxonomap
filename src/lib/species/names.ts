@@ -153,18 +153,22 @@ export interface NamesByLanguage {
 
 /** Group vernacular names by language: English first, then by name count. */
 export function groupByLanguage(names: readonly VernacularName[], max = 40): NamesByLanguage[] {
-  const groups = new Map<string, Set<string>>();
+  // Keyed by lower case so "Robin" and "robin" show once, keeping the capitalised variant.
+  const groups = new Map<string, Map<string, string>>();
   for (const name of names) {
     const code = name.language || 'und';
-    const set = groups.get(code) ?? new Set<string>();
-    set.add(name.vernacularName.trim());
-    groups.set(code, set);
+    const variants = groups.get(code) ?? new Map<string, string>();
+    const trimmed = name.vernacularName.trim();
+    const lowered = trimmed.toLowerCase();
+    const seen = variants.get(lowered);
+    if (!seen || (/^[A-Z]/.test(trimmed) && !/^[A-Z]/.test(seen))) variants.set(lowered, trimmed);
+    groups.set(code, variants);
   }
   return [...groups]
-    .map(([code, set]) => ({
+    .map(([code, variants]) => ({
       code,
       language: languageName(code === 'und' ? undefined : code),
-      names: [...set].slice(0, 6),
+      names: [...variants.values()].slice(0, 6),
     }))
     .sort((left, right) =>
       left.code === 'eng'
