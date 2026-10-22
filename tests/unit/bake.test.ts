@@ -159,13 +159,14 @@ describe('bake', () => {
     expect(names).toEqual([
       [1, 'K', 'Animalia', 'Animals', 100_000],
       [44, 'P', 'Chordata', null, 90_000],
-      [212, 'C', 'Aves', 'Birds', 80_000],
+      // GBIF's vernacularName alone doesn't name it: names come from englishName() of the full list.
+      [212, 'C', 'Aves', null, 80_000],
       [10, 'S', 'Species number10', 'Some bird', 9000],
       [11, 'S', 'Species number11', 'Some bird', 8000],
       [12, 'S', 'Genusonly', 'Some bird', 7000],
     ]);
     const common = await baked.bakedCommonNames();
-    expect([common(212), common(44)]).toEqual(['Birds', null]);
+    expect([common(1), common(212)]).toEqual(['Animals', null]);
   });
 });
 

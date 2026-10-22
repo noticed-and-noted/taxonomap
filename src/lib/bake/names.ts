@@ -3,7 +3,6 @@ import { getSpecies, getVernacularNames, occurrenceFacets } from '~/lib/gbif/ser
 import type { NameRow, NamesSnapshot } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import { isDev } from '~/lib/env';
-import { capitalise } from '~/lib/format';
 import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { englishName } from '~/lib/species/names';
 import { listAllByRank, LOOKUP_CONCURRENCY, once, rethrowUnlessMissing, snapshotMeta, type NamedUsage } from './cache';
@@ -17,7 +16,6 @@ const FAMILIES_IN_INDEX = 400;
 const DEV_FAMILIES_IN_INDEX = 40;
 /** Higher taxa with fewer records than this are not worth a search suggestion. */
 const MIN_HIGHER_TAXON_RECORDS = 1000;
-const SPECIES_VERNACULAR_LIMIT = 100;
 const INAT_LOOKUP_CHUNK = 300;
 
 /**
@@ -82,7 +80,10 @@ async function higherRankCounts(): Promise<{ counts: Map<number, number>; family
   return { counts, familyKeys };
 }
 
-/** Usages by key for kingdoms to orders (bulk listed) and the given families (fetched individually, cached). */
+/**
+ * Usages by key, with their common names, for kingdoms to orders (bulk listed) and the given
+ * families (fetched individually, cached).
+ */
 async function higherRankUsages(familyKeys: readonly number[]): Promise<Map<number, NamedUsage>> {
   const usages = new Map<number, NamedUsage>();
   for (const usage of await listAllByRank(BULK_NAMED_RANKS)) usages.set(usage.key, usage);
@@ -91,7 +92,8 @@ async function higherRankUsages(familyKeys: readonly number[]): Promise<Map<numb
     familyKeys.map((key) =>
       limit(async () => {
         try {
-          usages.set(key, await getSpecies(key));
+          const [usage, vernaculars] = await Promise.all([getSpecies(key), getVernacularNames(key)]);
+          usages.set(key, { ...usage, vernacularNames: vernaculars.results });
         } catch (error) {
           rethrowUnlessMissing(error);
         }
@@ -101,12 +103,9 @@ async function higherRankUsages(familyKeys: readonly number[]): Promise<Map<numb
   return usages;
 }
 
-/** The common name GBIF lists for a usage, capitalised, if any. */
+/** The usage's English name, by the same rule as everywhere else. */
 function commonNameOf(usage: NamedUsage): string | null {
-  return (
-    (usage.vernacularNames && englishName(usage.vernacularNames)) ??
-    (usage.vernacularName ? capitalise(usage.vernacularName) : null)
-  );
+  return englishName(usage.vernacularNames ?? []);
 }
 
 /** Name-index rows for kingdoms down to the busiest families. */
@@ -149,10 +148,7 @@ async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
     [...counts].map(([key, count]) =>
       limit(async (): Promise<NameRow | null> => {
         try {
-          const [usage, vernaculars] = await Promise.all([
-            getSpecies(key),
-            getVernacularNames(key, SPECIES_VERNACULAR_LIMIT),
-          ]);
+          const [usage, vernaculars] = await Promise.all([getSpecies(key), getVernacularNames(key)]);
           return [key, 'S', usage.canonicalName ?? usage.scientificName, englishName(vernaculars.results), count];
         } catch (error) {
           return rethrowUnlessMissing(error);

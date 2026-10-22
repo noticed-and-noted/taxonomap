@@ -24,7 +24,6 @@ import {
 } from '~/lib/gbif';
 import { englishName, groupByLanguage, slugify, type NamesByLanguage } from './names';
 
-const VERNACULAR_LIMIT = 300;
 const SYNONYM_LIMIT = 30;
 const SIBLING_LIMIT = 8;
 
@@ -110,7 +109,7 @@ async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promi
     top.map(async (sibling) => {
       const siblingCommonName =
         commonName(sibling.key) ??
-        englishName((await getVernacularNames(sibling.key, VERNACULAR_LIMIT).catch(() => ({ results: [] }))).results);
+        englishName((await getVernacularNames(sibling.key).catch(() => ({ results: [] }))).results);
       return {
         key: sibling.key,
         scientificName: names.get(sibling.key) as string,
@@ -140,7 +139,7 @@ function namedDatasets(counts: { name: string; count: number }[]) {
 export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
   const usage = await getSpecies(key);
   const [vernaculars, synonyms, facets, siblings] = await Promise.all([
-    getVernacularNames(key, VERNACULAR_LIMIT).catch(() => ({ results: [] })),
+    getVernacularNames(key).catch(() => ({ results: [] })),
     getSynonyms(key, SYNONYM_LIMIT).catch(() => ({ results: [] })),
     occurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
       limits: { year: 700, month: MONTHS_IN_YEAR, country: 10, datasetKey: 5 },

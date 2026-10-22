@@ -1,4 +1,3 @@
-import { normalise } from '~/lib/data/name-index';
 import { englishName } from '~/lib/species/names';
 
 import { searchVernacular, suggestSpecies } from './species';
@@ -44,14 +43,8 @@ export const gbifVernacularProvider: NameSearchProvider = {
   id: 'gbif-vernacular',
   async search(query, signal) {
     const response = await searchVernacular(query, { limit: 10 }, signal);
-    const needle = normalise(query);
-    const matchesQuery = (name: string) => normalise(name).includes(needle);
     return response.results.map((hit) => {
-      const names = hit.vernacularNames ?? [];
-      // The matching English name only when it is a common one: one old alias shouldn't relabel a species.
-      const common =
-        englishName(names, matchesQuery) ??
-        names.find((vernacular) => matchesQuery(vernacular.vernacularName))?.vernacularName;
+      const common = englishName(hit.vernacularNames ?? []);
       return {
         key: hit.key,
         scientificName: hit.canonicalName ?? hit.scientificName,

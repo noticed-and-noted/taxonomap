@@ -104,17 +104,17 @@ function onKey(event: KeyboardEvent) {
   }
 }
 
-// Records rarely carry a common name: take the cell's species table's, else look it up (see load).
+// The species' name, as everywhere else: the cell's species table's, else looked up (see load). The
+// name a recorder typed on the record is only a fallback, so one species doesn't show under several names.
 const commonNames = computed(
   () =>
     new Map(props.species.filter((species) => species.commonName).map((species) => [species.key, species.commonName!])),
 );
 const lateNames = shallowRef(new Map<number, string>());
 const common = (occurrence: Occurrence) =>
-  occurrence.vernacularName ??
   (occurrence.speciesKey
     ? (commonNames.value.get(occurrence.speciesKey) ?? lateNames.value.get(occurrence.speciesKey))
-    : undefined);
+    : undefined) ?? occurrence.vernacularName;
 const scientificName = (occurrence: Occurrence) => occurrence.species ?? occurrence.scientificName;
 const name = (occurrence: Occurrence) => common(occurrence) ?? scientificName(occurrence) ?? 'Unnamed record';
 

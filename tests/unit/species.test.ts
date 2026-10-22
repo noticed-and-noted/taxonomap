@@ -25,19 +25,11 @@ describe('species helpers', () => {
     expect(
       englishName([name('robin'), name('European Robin'), name('european robin'), name('Rouge-gorge', 'fra')]),
     ).toBe('European Robin');
-    expect(englishName([name('Robin'), name('Redbreast', 'eng', true)])).toBe('Redbreast');
+    // Preferred flags don't count: several checklists each flag their own pick.
+    expect(englishName([name('Robin'), name('Robin'), name('Redbreast', 'eng', true)])).toBe('Robin');
     expect(englishName([name('Rouge-gorge', 'fra')])).toBeNull();
     // Equal counts: the capitalised variant, then the shorter name.
     expect(englishName([name('robin'), name('Robin'), name('Redbreast robin'), name('redbreast robin')])).toBe('Robin');
-  });
-
-  it('picks a wanted English name only when it is at least half as common as the top one', () => {
-    const english = (vernacularName: string) => ({ vernacularName, language: 'eng' });
-    const isPigeon = (text: string) => text.toLowerCase().includes('pigeon');
-    const names = [english('Rock dove'), english('Rock dove'), english('Rock dove'), english('Rock pigeon')];
-    expect(englishName(names, isPigeon)).toBe('Rock dove');
-    expect(englishName([...names, english('Rock pigeon')], isPigeon)).toBe('Rock pigeon');
-    expect(englishName([english('Redbreast')], isPigeon)).toBe('Redbreast');
   });
 
   it('names languages, falling back to the code', () => {

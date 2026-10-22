@@ -175,7 +175,7 @@ describe('species', () => {
   });
 
   it('vernacularNames', async () => {
-    const result = await getVernacularNames(SPARROW, 50);
+    const result = await getVernacularNames(SPARROW);
     expect(result.results[0]).toMatchObject({ vernacularName: expect.any(String), language: expect.any(String) });
   });
 

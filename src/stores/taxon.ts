@@ -1,10 +1,11 @@
 /**
  * Display info (names + rank) for the selected taxa, derived from
- * $taxonKeys. Uses the baked name index first, then one cached GBIF call.
+ * $taxonKeys. Uses the baked name index first, then cached GBIF calls.
  */
 import { atom, onMount } from 'nanostores';
 import { nameIndexWithin } from '~/lib/data/name-index';
-import { getSpecies, type NameHit, type Rank } from '~/lib/gbif';
+import { getSpecies, getVernacularNames, type NameHit, type Rank } from '~/lib/gbif';
+import { englishName } from '~/lib/species/names';
 import { $taxonKeys, clearHexSelection, MAX_TAXA } from './explorer';
 
 export interface TaxonInfo {
@@ -14,18 +15,23 @@ export interface TaxonInfo {
   rank: Rank;
 }
 
-/** Names for a taxon key: the baked name index first, then one cached GBIF call. */
+/** Names for a taxon key: the baked name index first, then the taxon and its common names from GBIF (cached). */
 export async function lookupTaxon(key: number): Promise<TaxonInfo | null> {
   const nameIndex = await nameIndexWithin();
   const hit = nameIndex?.get(key);
   if (hit) return taxonFromHit(hit);
   try {
-    const usage = await getSpecies(key);
+    const [usage, vernaculars] = await Promise.all([
+      getSpecies(key),
+      // A taxon without its common name still beats no taxon.
+      getVernacularNames(key).catch(() => null),
+    ]);
+    const commonName = englishName(vernaculars?.results ?? []);
     return {
       key,
       scientificName: usage.canonicalName ?? usage.scientificName,
       rank: usage.rank,
-      ...(usage.vernacularName && { commonName: usage.vernacularName }),
+      ...(commonName && { commonName }),
     };
   } catch {
     return null;

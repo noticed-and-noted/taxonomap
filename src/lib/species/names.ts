@@ -7,43 +7,26 @@ function tidy(text: string): string {
   return capitalise(text.trim().replace(/\s+/g, ' '));
 }
 
-/** A matching name is shown instead of the main one when it is at least this share as common. */
-const COMMON_MATCH_SHARE = 0.5;
-
-interface NameTally {
-  name: string;
-  count: number;
-}
-
-/** Distinct names (case-insensitive) with how often each appears, most frequent then shortest first. */
-function tallyNames(names: readonly VernacularName[]): NameTally[] {
-  const tally = new Map<string, NameTally>();
-  for (const name of names) {
+/**
+ * Most frequent English name (case-insensitive). `preferred` flags are ignored: many checklists
+ * each flag their own pick, and search results carry no flags, so counting is what gives the
+ * same name wherever the list came from.
+ */
+export function englishName(names: readonly VernacularName[]): string | null {
+  const eng = names.filter((name) => name.language && ENGLISH.has(name.language) && name.vernacularName.trim());
+  const tally = new Map<string, { name: string; n: number }>();
+  for (const name of eng) {
     const lowered = name.vernacularName.trim().toLowerCase();
     const tallyEntry = tally.get(lowered);
     if (tallyEntry) {
-      tallyEntry.count++;
+      tallyEntry.n++;
       // Keep the capitalised variant when there is one.
       if (/^[A-Z]/.test(name.vernacularName) && !/^[A-Z]/.test(tallyEntry.name))
         tallyEntry.name = name.vernacularName.trim();
-    } else tally.set(lowered, { name: name.vernacularName.trim(), count: 1 });
+    } else tally.set(lowered, { name: name.vernacularName.trim(), n: 1 });
   }
-  return [...tally.values()].sort((left, right) => right.count - left.count || left.name.length - right.name.length);
-}
-
-/**
- * Most frequent English name (case-insensitive); a `preferred` flag wins.
- * @param isWanted Picks a name to show instead (e.g. one matching a search) when it is about as common
- *   as the top name, so "Rock pigeon" beats an equally common "Rock dove" but one old alias doesn't win.
- */
-export function englishName(names: readonly VernacularName[], isWanted?: (name: string) => boolean): string | null {
-  const eng = names.filter((name) => name.language && ENGLISH.has(name.language) && name.vernacularName.trim());
-  const tally = tallyNames(eng);
-  const wanted = isWanted && tally.find((entry) => isWanted(entry.name));
-  if (wanted && tally[0] && wanted.count >= tally[0].count * COMMON_MATCH_SHARE) return tidy(wanted.name);
-  const preferred = eng.find((name) => name.preferred);
-  if (preferred) return tidy(preferred.vernacularName);
-  return tally[0] ? tidy(tally[0].name) : null;
+  const best = [...tally.values()].sort((left, right) => right.n - left.n || left.name.length - right.name.length)[0];
+  return best ? tidy(best.name) : null;
 }
 
 /** URL slug from a scientific name: "Erithacus rubecula" → "erithacus-rubecula". */

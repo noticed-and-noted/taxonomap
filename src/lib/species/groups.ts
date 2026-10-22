@@ -173,7 +173,7 @@ export async function commonNames(keys: readonly number[], signal?: AbortSignal)
     keys.map((key) =>
       limit(async () => {
         if (signal?.aborted) return;
-        const vernaculars = await getVernacularNames(key, 300, signal).catch(() => null);
+        const vernaculars = await getVernacularNames(key, signal).catch(() => null);
         const name = vernaculars && englishName(vernaculars.results);
         if (name) names.set(key, name);
       }),

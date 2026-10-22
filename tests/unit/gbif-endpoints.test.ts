@@ -67,7 +67,7 @@ describe('species endpoints', () => {
       '/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=Turdus&rank=SPECIES',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=10&q=robin&qField=VERNACULAR&status=ACCEPTED',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=1000&offset=1000&rank=CLASS&status=ACCEPTED',
-      '/v1/species/212/vernacularNames?limit=300',
+      '/v1/species/212/vernacularNames?limit=1000',
       '/v1/species/212/synonyms?limit=100',
       '/v1/species/212/children?limit=100&offset=100',
       '/v1/species/212/parents',
@@ -143,24 +143,7 @@ describe('live name providers', () => {
     expect(hit?.commonName).toBe('Laughing Gull');
   });
 
-  it('vernacular search shows the matching English name when it is as common as the main one', async () => {
-    const english = (vernacularName: string) => ({ vernacularName, language: 'eng' });
-    stubNetwork(() => ({
-      results: [
-        {
-          key: 2495414,
-          scientificName: 'Columba livia',
-          rank: 'SPECIES',
-          vernacularNames: [english('Rock Dove'), english('Rock Pigeon'), english('Rock Dove'), english('Rock Pigeon')],
-        },
-      ],
-    }));
-    const api = await gbif();
-    const [hit] = await api.gbifVernacularProvider.search('rock pigeon');
-    expect(hit?.commonName).toBe('Rock Pigeon');
-  });
-
-  it('vernacular search falls back to the matching name when there is no English one', async () => {
+  it('vernacular search shows no common name when there is no English one', async () => {
     stubNetwork(() => ({
       results: [
         {
@@ -176,7 +159,7 @@ describe('live name providers', () => {
     }));
     const api = await gbif();
     const [hit] = await api.gbifVernacularProvider.search('mouette');
-    expect(hit?.commonName).toBe('Mouette brune');
+    expect(hit?.commonName).toBeUndefined();
   });
 });
 

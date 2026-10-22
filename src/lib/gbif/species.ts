@@ -42,11 +42,17 @@ export function listByRank(rank: Rank, offset = 0, limit = 1000) {
   );
 }
 
-/** Common names of a taxon, in all languages, up to `limit`. */
-export function getVernacularNames(key: number, limit = 300, signal?: AbortSignal) {
+/**
+ * Enough to get every common name of even the most-named taxa, so every caller hands
+ * `englishName()` the same full list and picks the same name.
+ */
+const VERNACULAR_NAME_LIMIT = 1000;
+
+/** All common names of a taxon, in all languages. */
+export function getVernacularNames(key: number, signal?: AbortSignal) {
   return http().getJson<Paged<VernacularName>>(
     `/v1/species/${key}/vernacularNames`,
-    { limit },
+    { limit: VERNACULAR_NAME_LIMIT },
     { ttlMs: DAY, ...(signal && { signal }) },
   );
 }

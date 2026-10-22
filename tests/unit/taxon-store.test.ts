@@ -20,7 +20,17 @@ describe('lookupTaxon', () => {
   it('uses the name index, then GBIF, then gives up', async () => {
     stubNetwork((url) => {
       if (url.pathname === '/v1/species/359')
-        return { key: 359, scientificName: 'Mammalia', rank: 'CLASS', vernacularName: 'Mammals' };
+        return { key: 359, scientificName: 'Mammalia', rank: 'CLASS', vernacularName: 'Mammal class' };
+      // Named by englishName(), like everywhere else, not by GBIF's own vernacularName.
+      if (url.pathname === '/v1/species/359/vernacularNames') {
+        return {
+          results: [
+            { vernacularName: 'Mammals', language: 'eng' },
+            { vernacularName: 'Mammals', language: 'eng' },
+            { vernacularName: 'Mammifères', language: 'fra' },
+          ],
+        };
+      }
       return snapshots({ names: NAMES })(url);
     });
     const { lookupTaxon } = await load();
