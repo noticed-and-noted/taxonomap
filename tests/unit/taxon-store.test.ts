@@ -94,8 +94,10 @@ describe('taxon selection', () => {
     const seen: string[][] = [];
     const off = store.$taxa.subscribe((list) => seen.push(list.map((taxon) => taxon.scientificName)));
     store.$taxonKeys.set([212]);
+    expect(store.$taxa.get()[0]?.loading).toBe(true);
     await vi.waitFor(() => expect(store.$taxa.get()[0]?.scientificName).toBe('Aves'));
     expect(seen).toContainEqual(['Taxon 212']);
+    expect(store.$taxa.get()[0]?.loading).toBeUndefined();
     off();
   });
 

@@ -11,20 +11,23 @@ import { bakeTree } from './tree';
 import { bakeYears } from './years';
 
 export { bakedCommonNames, bakeNames } from './names';
+export { lookupProgress } from './cache';
 export { bakeSpeciesList, bakeSpeciesManifest, prerenderCount, type PrerenderSpecies } from './species-list';
 export { bakeTree } from './tree';
 export { bakeYears } from './years';
 
 /**
  * The `pnpm bake` command: fetch everything the build bakes and save it for later builds.
+ * @param onStep Called with each snapshot's name as it starts.
  * @returns The names of the snapshots written.
  */
-export async function bakeToDisk(): Promise<string[]> {
+export async function bakeToDisk(onStep?: (key: string) => void): Promise<string[]> {
   startFreshBake();
   const dir = bakeDir();
   await mkdir(dir, { recursive: true });
   const snapshots = { years: bakeYears, names: bakeNames, tree: bakeTree, 'species-list': bakeSpeciesList };
   for (const [key, bake] of Object.entries(snapshots)) {
+    onStep?.(key);
     await writeFile(join(dir, `${key}.json`), JSON.stringify(await bake()));
   }
   return Object.keys(snapshots);

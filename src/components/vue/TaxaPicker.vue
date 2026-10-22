@@ -15,6 +15,7 @@ import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
 import { markDone } from '~/stores/onboarding';
 import { $taxa, addTaxon, removeTaxon, taxonFromHit } from '~/stores/taxon';
+import SkeletonBlock from './SkeletonBlock.vue';
 import UiIcon from './UiIcon.vue';
 import { useNameSearch } from './useNameSearch';
 
@@ -107,16 +108,19 @@ function onKey(event: KeyboardEvent) {
       :aria-label="`Selected taxa (${taxa.length})`"
     >
       <li v-for="taxon in taxa" :key="taxon.key" :data-key="taxon.key" class="selected-row">
-        <span class="min-w-0 truncate">
-          <a
-            :href="speciesPath(taxon.key, manifest)"
-            class="taxon-link"
-            :class="taxon.commonName ? 'font-medium' : 'sci-name'"
-            :title="`About ${taxon.commonName ?? taxon.scientificName}`"
-            >{{ taxon.commonName ?? taxon.scientificName }}</a
-          >
-          <span v-if="taxon.commonName" class="sci-name ml-1 text-xs text-muted">{{ taxon.scientificName }}</span>
-        </span>
+        <Transition name="name-in" @leave="(_element, done) => done()">
+          <SkeletonBlock v-if="taxon.loading" width="8rem" height="0.75rem" rounded="full" label="Loading taxon name" />
+          <span v-else class="min-w-0 truncate">
+            <a
+              :href="speciesPath(taxon.key, manifest)"
+              class="taxon-link"
+              :class="taxon.commonName ? 'font-medium' : 'sci-name'"
+              :title="`About ${taxon.commonName ?? taxon.scientificName}`"
+              >{{ taxon.commonName ?? taxon.scientificName }}</a
+            >
+            <span v-if="taxon.commonName" class="sci-name ml-1 text-xs text-muted">{{ taxon.scientificName }}</span>
+          </span>
+        </Transition>
         <span class="ml-auto shrink-0 text-[11px] text-subtle">{{ rankLabel(taxon.rank) }}</span>
         <button
           type="button"

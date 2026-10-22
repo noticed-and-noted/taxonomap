@@ -112,6 +112,15 @@
     --fade-bottom: 1.5rem;
   }
 
+  /* A loaded name fading in where its skeleton was (<Transition name="name-in">). The skeleton's leave hook ends at once:
+     left to CSS, Vue would wait out its endless shimmer and show both. */
+  .name-in-enter-active {
+    transition: opacity var(--dur) var(--ease);
+  }
+  .name-in-enter-from {
+    opacity: 0;
+  }
+
   .sci-name {
     font-family: var(--font-serif);
     font-style: italic;

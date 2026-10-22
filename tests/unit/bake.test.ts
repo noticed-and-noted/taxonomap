@@ -365,9 +365,13 @@ describe('bake to disk', () => {
     try {
       gbif();
       const first = await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '3' });
-      const saved = await first.bakeToDisk();
+      const steps: string[] = [];
+      const saved = await first.bakeToDisk((key) => steps.push(key));
       const list = await first.bakeSpeciesList();
       expect(saved).toEqual(['years', 'names', 'tree', 'species-list']);
+      expect(steps).toEqual(saved);
+      expect(first.lookupProgress.queued).toBeGreaterThan(0);
+      expect(first.lookupProgress.done).toBe(first.lookupProgress.queued);
       const calls = gbif();
       const baked = await bake({ BAKE_DIR: dir });
       expect((await baked.bakeYears()).total).toBe(30);

@@ -9,6 +9,7 @@ import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $filterPills, type FilterGroupId } from '~/stores/explorer';
 import { $taxa, removeTaxon } from '~/stores/taxon';
 import { FILTER_GROUPS } from './filterGroups';
+import SkeletonBlock from './SkeletonBlock.vue';
 import UiIcon from './UiIcon.vue';
 import { useDragScroll } from './useDragScroll';
 import { useScrollFade } from './useScrollFade';
@@ -49,13 +50,24 @@ onBeforeUnmount(() => resize.disconnect());
   >
     <span v-for="taxon in shown" :key="taxon.key" class="chip max-w-[18rem]">
       <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf('what')" /></svg>
-      <a
-        :href="speciesPath(taxon.key, manifest)"
-        class="chip-link min-w-0 truncate"
-        :class="{ 'sci-name': !taxon.commonName, 'font-medium': taxon.commonName }"
-        :title="`About ${nameOf(taxon)}`"
-        >{{ nameOf(taxon) }}</a
-      >
+      <Transition name="name-in" @leave="(_element, done) => done()">
+        <SkeletonBlock
+          v-if="taxon.loading"
+          width="6rem"
+          height="0.75rem"
+          rounded="full"
+          label="Loading taxon name"
+          class="chip-skeleton"
+        />
+        <a
+          v-else
+          :href="speciesPath(taxon.key, manifest)"
+          class="chip-link min-w-0 truncate"
+          :class="{ 'sci-name': !taxon.commonName, 'font-medium': taxon.commonName }"
+          :title="`About ${nameOf(taxon)}`"
+          >{{ nameOf(taxon) }}</a
+        >
+      </Transition>
       <button
         type="button"
         class="chip-x"
@@ -172,6 +184,16 @@ onBeforeUnmount(() => resize.disconnect());
   border-radius: 50%;
   font-size: 1rem;
   line-height: 1;
+}
+
+/* The default surface shimmer vanishes on the accent-tinted chip in the paper theme. */
+.chip .chip-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 20%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 40%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 20%, transparent) 100%
+  );
 }
 
 .chip-link:hover {

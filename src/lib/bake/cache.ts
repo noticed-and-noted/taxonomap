@@ -5,10 +5,11 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import pLimit from 'p-limit';
 import { GbifNotFoundError, listByRank, type NameUsage, type VernacularName } from '~/lib/gbif/server';
 
 /** How many GBIF lookups the bakers run at once. */
-export const LOOKUP_CONCURRENCY = 5;
+const LOOKUP_CONCURRENCY = 5;
 const RANK_PAGE_SIZE = 1000;
 
 /** A backbone name usage, with its vernacular names when the listing included them. */
@@ -40,6 +41,24 @@ export function once<T>(key: string, callback: () => Promise<T>): Promise<T> {
 export function startFreshBake(): void {
   isReadingFiles = false;
   memo.clear();
+  lookupProgress.queued = 0;
+  lookupProgress.done = 0;
+}
+
+/** GBIF lookups queued and finished in this bake, for the `pnpm bake` progress bar. */
+export const lookupProgress = { queued: 0, done: 0 };
+
+/** A queue running LOOKUP_CONCURRENCY lookups at once, counted in `lookupProgress`. */
+export function lookupLimit(): <T>(task: () => Promise<T>) => Promise<T> {
+  const limit = pLimit(LOOKUP_CONCURRENCY);
+  return async (task) => {
+    lookupProgress.queued++;
+    try {
+      return await limit(task);
+    } finally {
+      lookupProgress.done++;
+    }
+  };
 }
 
 /** Skip taxa GBIF doesn't know; any other failure fails the build, so a GBIF outage can't deploy a smaller site. */

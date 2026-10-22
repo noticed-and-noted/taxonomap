@@ -1,11 +1,10 @@
-import pLimit from 'p-limit';
 import { getSpecies, getVernacularNames, occurrenceFacets } from '~/lib/gbif/server';
 import type { NameRow, NamesSnapshot } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import { isDev } from '~/lib/env';
 import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { englishName } from '~/lib/species/names';
-import { listAllByRank, LOOKUP_CONCURRENCY, once, rethrowUnlessMissing, snapshotMeta, type NamedUsage } from './cache';
+import { listAllByRank, lookupLimit, once, rethrowUnlessMissing, snapshotMeta, type NamedUsage } from './cache';
 
 const DEFAULT_INDEX_SIZE = 6000;
 const DEV_INDEX_SIZE = 300;
@@ -87,7 +86,7 @@ async function higherRankCounts(): Promise<{ counts: Map<number, number>; family
 async function higherRankUsages(familyKeys: readonly number[]): Promise<Map<number, NamedUsage>> {
   const usages = new Map<number, NamedUsage>();
   for (const usage of await listAllByRank(BULK_NAMED_RANKS)) usages.set(usage.key, usage);
-  const limit = pLimit(LOOKUP_CONCURRENCY);
+  const limit = lookupLimit();
   await Promise.all(
     familyKeys.map((key) =>
       limit(async () => {
@@ -143,7 +142,7 @@ async function inatIds(rows: readonly NameRow[]): Promise<Map<number, number>> {
 
 /** Name-index rows for the given species, with iNaturalist IDs where found. Species GBIF doesn't know are skipped. */
 async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
-  const limit = pLimit(LOOKUP_CONCURRENCY);
+  const limit = lookupLimit();
   const rows = await Promise.all(
     [...counts].map(([key, count]) =>
       limit(async (): Promise<NameRow | null> => {
