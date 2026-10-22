@@ -14,7 +14,7 @@
     "node": "^22.22.3 || ^24.16.0 || >=26.3.0"
   },
   "scripts": {
-    "dev": "astro dev",
+    "dev": "astro dev --host",
     "bake": "tsx scripts/bake.ts",
     "build": "astro build",
     "preview": "astro preview",
