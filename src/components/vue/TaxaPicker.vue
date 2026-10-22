@@ -164,6 +164,7 @@ function onKey(event: KeyboardEvent) {
         >
           <span class="min-w-0 truncate">
             <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
+            <span v-if="hit.matchedName" class="ml-1 text-muted">({{ hit.matchedName }})</span>
             <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': hit.commonName }">{{
               hit.scientificName
             }}</span>

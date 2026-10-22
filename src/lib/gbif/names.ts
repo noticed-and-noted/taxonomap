@@ -1,4 +1,4 @@
-import { englishName } from '~/lib/species/names';
+import { englishName, isEnglish } from '~/lib/species/names';
 
 import { searchVernacular, suggestSpecies } from './species';
 import type { Rank } from './types';
@@ -16,6 +16,10 @@ export interface NameHit {
   rank: Rank;
   /** Occurrence count when known (baked index), used for ranking. */
   count?: number;
+  /** Every English name (live vernacular hits), so a hit can be ranked by the alias GBIF matched. */
+  englishNames?: string[];
+  /** The other English name that matched the query, shown beside the main one. */
+  matchedName?: string;
   source: 'index' | 'suggest' | 'vernacular';
 }
 
@@ -44,12 +48,15 @@ export const gbifVernacularProvider: NameSearchProvider = {
   async search(query, signal) {
     const response = await searchVernacular(query, { limit: 10 }, signal);
     return response.results.map((hit) => {
-      const common = englishName(hit.vernacularNames ?? []);
+      const names = hit.vernacularNames ?? [];
+      const common = englishName(names);
+      const englishNames = names.filter(isEnglish).map((name) => name.vernacularName);
       return {
         key: hit.key,
         scientificName: hit.canonicalName ?? hit.scientificName,
         rank: hit.rank,
         ...(common && { commonName: common }),
+        ...(englishNames.length && { englishNames }),
         source: 'vernacular' as const,
       };
     });

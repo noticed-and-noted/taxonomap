@@ -115,6 +115,7 @@ describe('live name providers', () => {
         scientificName: 'Erithacus rubecula',
         rank: 'SPECIES',
         commonName: 'European robin',
+        englishNames: ['European robin'],
         source: 'vernacular',
       },
       { key: 2, scientificName: 'Robinia', rank: 'GENUS', source: 'vernacular' },

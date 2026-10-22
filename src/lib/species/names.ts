@@ -7,13 +7,18 @@ function tidy(text: string): string {
   return capitalise(text.trim().replace(/\s+/g, ' '));
 }
 
+/** True for a non-blank English name. */
+export function isEnglish(name: VernacularName): boolean {
+  return Boolean(name.language && ENGLISH.has(name.language) && name.vernacularName.trim());
+}
+
 /**
  * Most frequent English name (case-insensitive). `preferred` flags are ignored: many checklists
  * each flag their own pick, and search results carry no flags, so counting is what gives the
  * same name wherever the list came from.
  */
 export function englishName(names: readonly VernacularName[]): string | null {
-  const eng = names.filter((name) => name.language && ENGLISH.has(name.language) && name.vernacularName.trim());
+  const eng = names.filter(isEnglish);
   const tally = new Map<string, { name: string; n: number }>();
   for (const name of eng) {
     const lowered = name.vernacularName.trim().toLowerCase();
