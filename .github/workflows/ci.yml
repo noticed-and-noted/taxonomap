@@ -148,7 +148,9 @@ jobs:
   deploy:
     name: Deploy to Cloudflare Pages
     needs: build
+    # A skipped bake upstream would skip this job under the default success() check.
     if: >-
+      !cancelled() && needs.build.result == 'success' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
