@@ -8,6 +8,7 @@
  * (overlay, omnibox, panel) drive it without importing it.
  */
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useStore } from '@nanostores/vue';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact, full } from '~/lib/format';
@@ -29,6 +30,7 @@ import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
+import WebglNotice from './WebglNotice.vue';
 import {
   $basemap,
   $busiestHexBox,
@@ -38,6 +40,7 @@ import {
   $hexGeometry,
   $mapBounds,
   $mapLoad,
+  $mapUnsupported,
   $mapMode,
   $mapView,
   $occurrenceFilter,
@@ -50,12 +53,16 @@ import {
 
 const container = ref<HTMLDivElement>();
 const failed = ref(false);
+const unsupported = useStore($mapUnsupported);
 const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
 let map: MlMap | undefined;
 let occ: OccLayer | undefined;
 const cleanups: (() => void)[] = [];
 let pendingHexRestore = false;
+
+// MapLibre 6 renders with WebGL2 only; without it the constructor throws.
+const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
@@ -679,6 +686,11 @@ function mapShown(element: HTMLElement): Promise<void> {
 onMounted(async () => {
   if (!container.value) return;
   await mapShown(container.value);
+  if (!hasWebgl2()) {
+    $mapUnsupported.set(true);
+    $mapLoad.set({ loading: false, done: 0, total: 0 });
+    return;
+  }
   const maplibre = await loadMapLibre();
   if (!container.value) return;
   const view = $mapView.get();
@@ -723,8 +735,9 @@ onBeforeUnmount(() => {
     >
       {{ tooltip.text }}
     </div>
+    <WebglNotice v-if="unsupported" />
     <p
-      v-if="failed"
+      v-else-if="failed"
       class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
     >
       Occurrence tiles are unavailable right now. The basemap still works.

@@ -174,6 +174,9 @@ export const $gridLevel = atom(0);
 /** Hex tile loading for the current burst, published by the map (`total` 0: nothing counted yet). */
 export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>({ loading: true, done: 0, total: 0 });
 
+/** Set by the map when the browser has no WebGL2, so the map can't draw at all. */
+export const $mapUnsupported = atom(false);
+
 /** One-shot camera requests (place search, taxon extent). */
 export const $flyTo = atom<FlyRequest | null>(null);
 
