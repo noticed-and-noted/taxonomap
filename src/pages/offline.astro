@@ -20,8 +20,13 @@ import BaseLayout from '~/layouts/BaseLayout.astro';
 </BaseLayout>
 
 <script>
+  // Once the page is being left, the new page must win: Chromium can fire a stray "online" as this one unloads,
+  // and reloading then would replace the navigation in flight.
+  let isLeaving = false;
+  window.addEventListener('beforeunload', () => (isLeaving = true));
+
   const tryAgain = () => {
-    if (document.querySelector('[data-offline-page]')) window.location.reload();
+    if (!isLeaving && document.querySelector('[data-offline-page]')) window.location.reload();
   };
 
   document.querySelector('[data-try-again]')?.addEventListener('click', tryAgain);

@@ -50,6 +50,7 @@ test('without WebGL2 the map shows how to fix it, and Try again brings the map b
   await page.goto('/');
   const notice = webglNotice(page);
   await expect(notice).toBeVisible();
+  await expect(notice.getByText('In Chrome')).toBeVisible();
   await expect(page.locator('.maplibregl-canvas')).toHaveCount(0);
 
   await page.evaluate(() => sessionStorage.setItem('webgl-restored', '1'));

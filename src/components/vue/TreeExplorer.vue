@@ -317,6 +317,13 @@ const share = (node: TreeNode) => {
         <div v-if="detail" class="flex gap-3">
           <div class="size-20 shrink-0 overflow-hidden rounded-md bg-photo">
             <ThumbImage v-if="photo" :key="photo.url" :image="photo" size="200x" class="size-full object-cover" />
+            <img
+              v-else-if="detail.rank === 'ROOT'"
+              src="/images/blue-marble.webp"
+              alt=""
+              title="The Blue Marble, Apollo 17 (NASA, public domain)"
+              class="size-full object-cover"
+            />
           </div>
           <div class="min-w-0">
             <p class="text-[11px] uppercase tracking-wide text-subtle">{{ RANK_LABELS[detail.rank] ?? 'All life' }}</p>

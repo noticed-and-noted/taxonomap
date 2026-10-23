@@ -1,14 +1,22 @@
 <script setup lang="ts">
 /**
  * Stands in for the map when the browser can't give MapLibre a WebGL2 context:
- * says how to turn graphics acceleration back on, and points to the pages that work without it.
+ * shows this browser's steps for turning graphics acceleration back on (others behind a disclosure),
+ * and points to the pages that work without it.
  */
+import { detectBrowser, WEBGL_HELP } from '~/lib/map/webglHelp';
+import UiIcon from './UiIcon.vue';
+
+const browserId = detectBrowser(navigator.userAgent);
+const help = WEBGL_HELP.find((entry) => entry.id === browserId)!;
+const otherHelp = WEBGL_HELP.filter((entry) => entry.id !== browserId && entry.id !== 'other');
 const retry = () => window.location.reload();
 </script>
 
 <template>
-  <div class="absolute inset-0 flex items-center justify-center bg-bg p-4" role="alert">
-    <div class="w-full max-w-md text-center">
+  <div class="webgl-notice absolute inset-0 flex justify-center overflow-y-auto bg-bg px-4" role="alert">
+    <!-- my-auto, not items-center, so a notice taller than the screen scrolls instead of losing its top. -->
+    <div class="my-auto w-full max-w-md text-center">
       <svg viewBox="16 7 32 53" class="mx-auto mb-3 h-14" aria-hidden="true">
         <path
           d="M40 58C40 48 40 37 32 37"
@@ -32,27 +40,16 @@ const retry = () => window.location.reload();
       </svg>
       <h2 class="text-xl">The map can’t draw on this device</h2>
       <p class="mt-1 text-sm text-muted">
-        It needs WebGL, which this browser has turned off or doesn’t support. The tree of life and species pages still
-        work.
+        It needs WebGL, which {{ help.name }} has turned off or doesn’t support. The tree of life and species pages
+        still work.
       </p>
 
       <div class="mt-4 rounded-lg border border-border bg-surface p-4 text-left text-sm shadow-panel">
-        <p class="font-medium text-text">To turn it back on</p>
-        <ul class="mt-2 space-y-1.5 text-muted">
-          <li>
-            <span class="text-text">Chrome or Edge:</span> Settings › System › “Use graphics acceleration when
-            available”, then relaunch.
-          </li>
-          <li>
-            <span class="text-text">Firefox:</span> Settings › General › Performance › “Use hardware acceleration when
-            available”.
-          </li>
-          <li>
-            <span class="text-text">Safari, or still not working:</span> update the browser and your graphics drivers,
-            or try another browser.
-          </li>
-        </ul>
-        <div class="mt-4 flex flex-wrap gap-2">
+        <p class="font-medium text-text">{{ browserId === 'other' ? 'To turn it back on' : `In ${help.name}` }}</p>
+        <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-muted marker:text-subtle">
+          <li v-for="step in help.steps" :key="step">{{ step }}</li>
+        </ol>
+        <div class="mt-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
             class="min-h-11 rounded-md border border-border-strong bg-surface-2 px-3 font-medium text-text transition-colors duration-(--dur-fast) ease-field hover:bg-surface-3 sm:min-h-9"
@@ -67,7 +64,31 @@ const retry = () => window.location.reload();
             Tree of life
           </a>
         </div>
+        <details class="mt-4 border-t border-border pt-3">
+          <summary class="text-muted hover:text-text">
+            <UiIcon name="chevron-right" class="chevron" /> Other browsers
+          </summary>
+          <dl class="mt-2 space-y-2">
+            <div v-for="entry in otherHelp" :key="entry.id">
+              <dt class="text-text">{{ entry.name }}</dt>
+              <dd class="text-muted">{{ entry.steps.join(' ') }}</dd>
+            </div>
+          </dl>
+        </details>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Clear the floating header above and the legend (on phones, the taller dock) below, so every line scrolls into view. */
+.webgl-notice {
+  padding-top: calc(var(--header-offset) + 2rem + 2 * var(--header-gap));
+  padding-bottom: 7rem;
+}
+@media (max-width: 639.98px) {
+  .webgl-notice {
+    padding-bottom: 12rem;
+  }
+}
+</style>

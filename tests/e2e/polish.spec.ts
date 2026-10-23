@@ -15,8 +15,6 @@ test.describe(() => {
     await context.setOffline(true);
     // The page that was open reloads into the offline page.
     await expect(page.getByRole('heading', { name: 'You’re offline' })).toBeVisible();
-    // Chromium can still have that reload in flight, which would cancel the next navigation.
-    await page.waitForLoadState('networkidle');
     await page.goto('/tree/?focus=1');
     await expect(page.getByRole('heading', { name: 'You’re offline' })).toBeVisible();
     await expect(page).toHaveURL('/tree/?focus=1');
