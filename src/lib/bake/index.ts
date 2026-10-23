@@ -4,14 +4,14 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { bakeDir, startFreshBake } from './cache';
+import { bakeDir, bakeProgress, startFreshBake } from './cache';
 import { bakeNames } from './names';
 import { bakeSpeciesList } from './species-list';
 import { bakeTree } from './tree';
 import { bakeYears } from './years';
 
 export { bakedCommonNames, bakeNames } from './names';
-export { lookupProgress } from './cache';
+export { bakeProgress } from './cache';
 export { bakeSpeciesList, bakeSpeciesManifest, prerenderCount, type PrerenderSpecies } from './species-list';
 export { bakeTree } from './tree';
 export { bakeYears } from './years';
@@ -27,6 +27,8 @@ export async function bakeToDisk(onStep?: (key: string) => void): Promise<string
   await mkdir(dir, { recursive: true });
   const snapshots = { years: bakeYears, names: bakeNames, tree: bakeTree, 'species-list': bakeSpeciesList };
   for (const [key, bake] of Object.entries(snapshots)) {
+    // Each step's progress bar starts from zero.
+    bakeProgress.clear();
     onStep?.(key);
     await writeFile(join(dir, `${key}.json`), JSON.stringify(await bake()));
   }

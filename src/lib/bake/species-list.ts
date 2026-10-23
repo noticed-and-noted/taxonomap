@@ -1,7 +1,7 @@
-import { getSpecies, occurrenceFacets } from '~/lib/gbif/server';
+import { getSpecies } from '~/lib/gbif/server';
 import { isDev } from '~/lib/env';
 import { speciesSlug } from '~/lib/species/data';
-import { lookupLimit, once, rethrowUnlessMissing } from './cache';
+import { countedFacets, lookupLimit, once, rethrowUnlessMissing } from './cache';
 
 const DEFAULT_PRERENDER_COUNT = 2000;
 const DEV_PRERENDER_COUNT = 12;
@@ -61,11 +61,11 @@ async function pickSpeciesKeys(total: number): Promise<Map<number, number>> {
   for (const classGroup of PRERENDER_CLASSES) {
     const want = Math.ceil(total * classGroup.share);
     const facetLimit = want + CLASS_FACET_HEADROOM;
-    const result = await occurrenceFacets({ taxonKey: classGroup.key }, ['speciesKey'], { facetLimit });
+    const result = await countedFacets({ taxonKey: classGroup.key }, ['speciesKey'], { facetLimit });
     take(result.facets['speciesKey'], want);
   }
   if (picked.size < total) {
-    const result = await occurrenceFacets({}, ['speciesKey'], { facetLimit: total * 2 });
+    const result = await countedFacets({}, ['speciesKey'], { facetLimit: total * 2 });
     take(result.facets['speciesKey'], total - picked.size);
   }
   return picked;
