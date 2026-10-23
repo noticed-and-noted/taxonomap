@@ -13,6 +13,7 @@ import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
+import { useScrollFade } from './useScrollFade';
 
 /** `href`, when given, links the name (to the species' about page). */
 // `onStepRow` is a prop rather than an emit so the legend can tell whether anyone handles it.
@@ -87,13 +88,15 @@ function preloadAround(imageIndex: number) {
 }
 
 const strip = ref<HTMLElement>();
+const { fadeLeft, fadeRight, update: updateFade } = useScrollFade(strip);
 
 function show(imageIndex: number) {
   index.value = imageIndex;
   preloadAround(imageIndex);
-  void nextTick(() =>
-    strip.value?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }),
-  );
+  void nextTick(() => {
+    strip.value?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    updateFade();
+  });
 }
 
 /**
@@ -182,7 +185,7 @@ defineExpose({ open });
       </p>
       <SkeletonBlock
         v-else-if="currentSrc && !settled.has(currentSrc)"
-        class="absolute inset-0"
+        class="photo-skeleton absolute inset-0"
         width="100%"
         height="100%"
         rounded="sm"
@@ -238,9 +241,11 @@ defineExpose({ open });
         <div
           v-if="images.length > 1"
           ref="strip"
-          class="overlay pointer-events-auto flex max-w-full scroll-px-1 gap-1.5 self-center overflow-x-auto p-1"
+          class="filmstrip overlay pointer-events-auto flex max-w-full gap-1.5 self-center overflow-x-auto overflow-y-hidden p-1"
+          :class="{ 'fade-left': fadeLeft, 'fade-right': fadeRight }"
           role="group"
           :aria-label="`Photos of ${name}`"
+          @scroll.passive="updateFade"
         >
           <button
             v-for="(image, position) in images"
@@ -256,8 +261,13 @@ defineExpose({ open });
         </div>
         <div class="overlay flex flex-wrap items-center justify-between gap-1.5">
           <div v-if="current" class="pointer-events-auto flex max-w-full flex-wrap items-center gap-1.5">
-            <LicenceBadge :licence="current.licence" :creator="current.creator" :rights-holder="current.rightsHolder" />
-            <p class="chip m-0 flex items-center gap-2">
+            <LicenceBadge
+              class="bottom-pill"
+              :licence="current.licence"
+              :creator="current.creator"
+              :rights-holder="current.rightsHolder"
+            />
+            <p class="chip bottom-pill m-0 flex items-center gap-2">
               <span v-if="current.publisher">via {{ current.publisher }}</span>
               <a
                 :href="sourceOf(current).href"
@@ -270,7 +280,7 @@ defineExpose({ open });
             </p>
           </div>
           <!-- ml-auto keeps it right when there's no credit beside it (no photo). -->
-          <p class="chip key-hints m-0 ml-auto gap-3" aria-hidden="true">
+          <p class="chip bottom-pill key-hints m-0 ml-auto gap-3" aria-hidden="true">
             <span v-if="images.length > 1"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
             <span v-if="onStepRow"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
             <span><kbd>Esc</kbd> Close</span>
@@ -290,6 +300,10 @@ defineExpose({ open });
   backdrop-filter: blur(8px);
   font-size: 11px;
   line-height: 1.25;
+}
+/* After .chip, and scoped so it also beats LicenceBadge's own padding. */
+.bottom-pill {
+  padding-block: 4px;
 }
 /* The count and name lead the credit, so they read first. */
 /* 1.75rem tall, so with the overlay at top-4 it centres on the 2.75rem close button at top-2. */
@@ -342,7 +356,29 @@ kbd {
   translate: 0 -50%;
 }
 /* 44 px so they work as touch targets; the current photo gets the accent border. */
+/* Snaps to a whole thumbnail. The scroll padding matches the fade, so the snapped and current thumbnails sit clear of it. */
+.filmstrip {
+  --fade: 1.5rem;
+  --fade-left: 0px;
+  --fade-right: 0px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--fade);
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade-left),
+    #000 calc(100% - var(--fade-right)),
+    transparent 100%
+  );
+}
+.filmstrip.fade-left {
+  --fade-left: var(--fade);
+}
+.filmstrip.fade-right {
+  --fade-right: var(--fade);
+}
 .filmstrip-thumb {
+  scroll-snap-align: start;
   flex: none;
   width: 2.75rem;
   height: 2.75rem;
@@ -389,6 +425,21 @@ kbd {
 .lightbox:focus-visible {
   outline: none;
 }
+/* Pulses up from the black stage rather than shimmering grey, so a photo that loads quickly doesn't flash.
+   .stage raises it above SkeletonBlock's own shimmer. */
+.stage .photo-skeleton {
+  background: rgb(255 255 255 / 0.08);
+  animation: pulse-in 1.4s var(--ease) infinite;
+}
+@keyframes pulse-in {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 @keyframes pop {
   from {
     opacity: 0;
@@ -396,7 +447,8 @@ kbd {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lightbox[open] {
+  .lightbox[open],
+  .stage .photo-skeleton {
     animation: none;
   }
 }
