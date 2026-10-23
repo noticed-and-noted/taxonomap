@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "astro dev --host",
     "bake": "tsx scripts/bake.ts",
+    "ioc-names": "tsx scripts/ioc-names.ts",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check && vue-tsc --noEmit -p tsconfig.json",

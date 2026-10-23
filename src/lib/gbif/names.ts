@@ -49,7 +49,7 @@ export const gbifVernacularProvider: NameSearchProvider = {
     const response = await searchVernacular(query, { limit: 10 }, signal);
     return response.results.map((hit) => {
       const names = hit.vernacularNames ?? [];
-      const common = englishName(names);
+      const common = englishName(names, hit.key);
       const englishNames = names.filter(isEnglish).map((name) => name.vernacularName);
       return {
         key: hit.key,

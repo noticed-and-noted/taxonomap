@@ -126,8 +126,8 @@ function nameRow(
   vernaculars: readonly VernacularName[],
   count: number,
 ): NameRow {
-  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW);
-  const commonName = englishName(vernaculars);
+  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW, key);
+  const commonName = englishName(vernaculars, key);
   return others.length
     ? [key, rank, scientificName, commonName, count, null, others]
     : [key, rank, scientificName, commonName, count];

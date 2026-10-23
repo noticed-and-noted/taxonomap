@@ -45,7 +45,7 @@ function toTreeRow(usage: NamedUsage, records: ReadonlyMap<number, number>, spec
   if (!rank || (recordCount === 0 && speciesCount === 0)) return null;
 
   const parent = parentKeyOf(usage);
-  const common = usage.vernacularNames ? englishName(usage.vernacularNames) : null;
+  const common = englishName(usage.vernacularNames ?? [], usage.key);
   const row: TreeNodeRow = {
     k: usage.key,
     n: usage.canonicalName ?? usage.scientificName,

@@ -28,7 +28,7 @@ export async function lookupTaxon(key: number): Promise<TaxonInfo | null> {
       // A taxon without its common name still beats no taxon.
       getVernacularNames(key).catch(() => null),
     ]);
-    const commonName = englishName(vernaculars?.results ?? []);
+    const commonName = englishName(vernaculars?.results ?? [], key);
     return {
       key,
       scientificName: usage.canonicalName ?? usage.scientificName,

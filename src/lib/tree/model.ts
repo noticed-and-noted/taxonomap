@@ -139,7 +139,7 @@ export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortS
     const recordCount = records.get(child.key) ?? 0;
     const speciesCount = childRank === 'S' ? 1 : (species?.get(child.key) ?? 0);
     if (recordCount === 0 && speciesCount === 0) continue;
-    const raw = nameIndex?.get(child.key)?.commonName ?? englishName(child.vernacularNames ?? []);
+    const raw = nameIndex?.get(child.key)?.commonName ?? englishName(child.vernacularNames ?? [], child.key);
     const common = raw ? capitalise(raw) : undefined;
     children.push({
       key: child.key,
