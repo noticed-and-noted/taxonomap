@@ -393,6 +393,7 @@ describe('bake to disk', () => {
       const baked = await bake({ BAKE_DIR: dir });
       expect((await baked.bakeYears()).total).toBe(30);
       expect(await baked.bakeSpeciesList()).toEqual(list);
+      expect(await (await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '0' })).bakeSpeciesList()).toEqual([]);
       expect(calls).toHaveLength(0);
     } finally {
       rmSync(dir, { recursive: true });

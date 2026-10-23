@@ -72,7 +72,14 @@ async function pickSpeciesKeys(total: number): Promise<Map<number, number>> {
 }
 
 /** The species that get static pages (memoised; shared by pages, OG images and the manifest). */
-export function bakeSpeciesList(): Promise<PrerenderSpecies[]> {
+export async function bakeSpeciesList(): Promise<PrerenderSpecies[]> {
+  const list = await pickedSpecies();
+  // A baked list may hold more than this build's count (baked without the same env): keep the most-recorded.
+  // shortcut: trimming drops the per-class balance, re-bake with the same count to get it back.
+  return list.slice(0, prerenderCount());
+}
+
+function pickedSpecies(): Promise<PrerenderSpecies[]> {
   return once('species-list', async () => {
     const total = prerenderCount();
     if (total === 0) return [];
