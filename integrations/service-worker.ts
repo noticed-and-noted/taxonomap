@@ -16,15 +16,13 @@
 import type { AstroIntegration } from 'astro';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { generateSW } from 'workbox-build';
+import { generateSW, type ManifestTransform } from 'workbox-build';
 
 type RuntimeCaching = NonNullable<Parameters<typeof generateSW>[0]['runtimeCaching']>;
 
 const SECONDS_PER_DAY = 24 * 3600;
 const MAX_PRECACHED_FILE_BYTES = 3 * 1024 * 1024;
 const PAGE_NETWORK_TIMEOUT_SECONDS = 4;
-/** Pages that exist as static shells: the query string is client-side state, so one shell serves them all. */
-const SHELL_PAGES = ['tree', 'near', 'species/view', 'offline'];
 const SHELL_FILES = [
   'index.html',
   'tree/index.html',
@@ -35,6 +33,12 @@ const SHELL_FILES = [
 ];
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+/** The URL Cloudflare Pages serves a built file at, so precaching doesn't follow a redirect. */
+const servedUrl = (path: string) => `/${path.replace(/(^|\/)index\.html$/, '$1').replace(/\.html$/, '')}`;
+const toServedUrls: ManifestTransform = async (entries) => ({
+  manifest: entries.map((entry) => ({ ...entry, url: servedUrl(entry.url) })),
+  warnings: [],
+});
 const trimTrailingSlashes = (text: string) => text.replace(/\/+$/, '');
 
 // An opaque copy (cached from a no-cors load) fails a crossorigin <img>; refetch so the CORS copy replaces it.
@@ -57,16 +61,12 @@ function precacheOptions(outDir: string) {
     ],
     globIgnores: ['_astro/*-latin-ext-*'],
     maximumFileSizeToCacheInBytes: MAX_PRECACHED_FILE_BYTES,
-    // Astro hashes everything in _astro/, so the URL is the revision.
-    dontCacheBustURLsMatching: /\/_astro\//,
-    // Serve page shells for "/tree", "/species/view" etc.: for pages the
-    // query string is client-side state, and precached assets are hashed.
-    templatedURLs: Object.fromEntries(
-      SHELL_PAGES.filter((pageDir) => exists(`${pageDir}/index.html`)).map((pageDir) => [
-        `/${pageDir}`,
-        [`${pageDir}/index.html`],
-      ]),
-    ),
+    // Astro hashes everything in _astro/, so the URL is the revision and the HTTP cache copy can be reused.
+    // Manifest URLs have no leading slash.
+    dontCacheBustURLsMatching: /^_astro\//,
+    // Precache shells under the URLs Pages serves them at ("tree/", "404"), not the 308s from "tree/index.html".
+    manifestTransforms: [toServedUrls],
+    // For pages the query string is client-side state, so one shell serves them all.
     ignoreURLParametersMatching: [/.*/],
   };
 }
@@ -94,7 +94,7 @@ function ownContentRules(): RuntimeCaching {
         cacheName: 'pages',
         networkTimeoutSeconds: PAGE_NETWORK_TIMEOUT_SECONDS,
         expiration: { maxEntries: 50, maxAgeSeconds: 7 * SECONDS_PER_DAY },
-        precacheFallback: { fallbackURL: '/offline/index.html' },
+        precacheFallback: { fallbackURL: '/offline/' },
       },
     },
   ];

@@ -61,7 +61,7 @@ const retry = () => window.location.reload();
             Try again
           </button>
           <a
-            href="/tree"
+            href="/tree/"
             class="inline-flex min-h-11 items-center rounded-md border border-border px-3 text-text transition-colors duration-(--dur-fast) ease-field hover:bg-surface-2 sm:min-h-9"
           >
             Tree of life
