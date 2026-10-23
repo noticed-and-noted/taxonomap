@@ -9,9 +9,9 @@
  *  - Map tiles:  CacheFirst, 7 days, 2000 entries (empty 204 tiles too)
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
  *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX)
- *  - Pages:      NetworkFirst (4 s timeout), 50 entries; offline fallback page
+ *  - Pages:      NetworkOnly; the offline page whenever the network fails
  *  - Baked data: StaleWhileRevalidate (/data/*.json, on demand)
- *  - App shell:  precached (main routes, offline/404 pages, JS/CSS, Latin font subsets)
+ *  - Precached:  the offline page and what it needs (JS/CSS, Latin font subsets)
  */
 import type { AstroIntegration } from 'astro';
 import { existsSync } from 'node:fs';
@@ -22,15 +22,8 @@ type RuntimeCaching = NonNullable<Parameters<typeof generateSW>[0]['runtimeCachi
 
 const SECONDS_PER_DAY = 24 * 3600;
 const MAX_PRECACHED_FILE_BYTES = 3 * 1024 * 1024;
-const PAGE_NETWORK_TIMEOUT_SECONDS = 4;
-const SHELL_FILES = [
-  'index.html',
-  'tree/index.html',
-  'near/index.html',
-  'species/view/index.html',
-  'offline/index.html',
-  '404.html',
-];
+const NETWORK_TIMEOUT_SECONDS = 4;
+const OFFLINE_PAGE = 'offline/index.html';
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 /** The URL Cloudflare Pages serves a built file at, so precaching doesn't follow a redirect. */
@@ -47,13 +40,12 @@ const noOpaqueForCors = {
     request.mode === 'cors' && cachedResponse?.type === 'opaque' ? null : cachedResponse,
 };
 
-/** What gets precached: the app shell, built JS/CSS and the Latin font subsets (only what the build produced). */
+/** What gets precached: the offline page, built JS/CSS and the Latin font subsets (only what the build produced). */
 function precacheOptions(outDir: string) {
-  const exists = (path: string) => existsSync(`${outDir}/${path}`);
   return {
     globDirectory: outDir,
     globPatterns: [
-      ...SHELL_FILES.filter(exists),
+      ...(existsSync(`${outDir}/${OFFLINE_PAGE}`) ? [OFFLINE_PAGE] : []),
       '_astro/*.{js,css}',
       '_astro/*-latin-*-normal*.woff2',
       'favicon.svg',
@@ -64,10 +56,8 @@ function precacheOptions(outDir: string) {
     // Astro hashes everything in _astro/, so the URL is the revision and the HTTP cache copy can be reused.
     // Manifest URLs have no leading slash.
     dontCacheBustURLsMatching: /^_astro\//,
-    // Precache shells under the URLs Pages serves them at ("tree/", "404"), not the 308s from "tree/index.html".
+    // Precache the offline page under the URL Pages serves it at ("offline/"), not the 308 from "offline/index.html".
     manifestTransforms: [toServedUrls],
-    // For pages the query string is client-side state, so one shell serves them all.
-    ignoreURLParametersMatching: [/.*/],
   };
 }
 
@@ -78,7 +68,7 @@ function ownContentRules(): RuntimeCaching {
       // The species manifest must match the deployed pages; a stale copy links to 404s.
       urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname === '/data/species-manifest.json',
       handler: 'NetworkFirst',
-      options: { cacheName: 'baked-data', networkTimeoutSeconds: PAGE_NETWORK_TIMEOUT_SECONDS },
+      options: { cacheName: 'baked-data', networkTimeoutSeconds: NETWORK_TIMEOUT_SECONDS },
     },
     {
       // Baked snapshots: fetched on demand (not precached, to keep installs light).
@@ -87,15 +77,10 @@ function ownContentRules(): RuntimeCaching {
       options: { cacheName: 'baked-data', expiration: { maxEntries: 20, maxAgeSeconds: 7 * SECONDS_PER_DAY } },
     },
     {
-      // Pages: fresh when online, last copy (or the offline page) when not.
+      // Pages: never a saved copy; offline, every page is the offline page.
       urlPattern: ({ request }) => request.mode === 'navigate',
-      handler: 'NetworkFirst',
-      options: {
-        cacheName: 'pages',
-        networkTimeoutSeconds: PAGE_NETWORK_TIMEOUT_SECONDS,
-        expiration: { maxEntries: 50, maxAgeSeconds: 7 * SECONDS_PER_DAY },
-        precacheFallback: { fallbackURL: '/offline/' },
-      },
+      handler: 'NetworkOnly',
+      options: { precacheFallback: { fallbackURL: '/offline/' } },
     },
   ];
 }

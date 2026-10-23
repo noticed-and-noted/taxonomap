@@ -1,43 +1,22 @@
 <script setup lang="ts">
 /**
- * Quiet notes: "data may be out of date" when a stale cache was served, an
- * offline notice while the browser has no connection, and a reload offer when
- * a new version has been deployed.
+ * Quiet notes: "data may be out of date" when a stale cache was served, and a
+ * reload offer when a new version has been deployed. Offline, the service
+ * worker shows the offline page instead (BaseLayout).
  */
 import { useStore } from '@nanostores/vue';
-import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { $gbifStale } from '~/lib/gbif';
 import { $applyUpdate } from '~/stores/app-update';
 
 const stale = useStore($gbifStale);
 const applyUpdate = useStore($applyUpdate);
-const offline = ref(false);
 const dismiss = () => $gbifStale.set(false);
-const update = () => (offline.value = !navigator.onLine);
-
-onMounted(() => {
-  update();
-  window.addEventListener('online', update);
-  window.addEventListener('offline', update);
-});
-onBeforeUnmount(() => {
-  window.removeEventListener('online', update);
-  window.removeEventListener('offline', update);
-});
 </script>
 
 <template>
   <Transition name="fade">
     <div
-      v-if="offline"
-      role="status"
-      class="fixed bottom-3 left-3 z-30 flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
-    >
-      <span class="size-1.5 rounded-full bg-danger" aria-hidden="true"></span>
-      You’re offline. Showing data saved on this device.
-    </div>
-    <div
-      v-else-if="applyUpdate"
+      v-if="applyUpdate"
       role="status"
       class="update-notice fixed inset-x-3 z-30 flex items-center gap-2 rounded-md border border-border bg-surface py-1.5 pr-1.5 pl-3 text-xs text-muted shadow-panel sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
     >

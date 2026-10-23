@@ -45,9 +45,9 @@ pnpm dev             # http://localhost:4321
 
 - **Decade animation.** The play button on the time slider steps through 1900s → 2020s. While it plays, URL writes use `replaceState` (`withHistoryMode`), so Back isn't flooded.
 - **Offline.**
-  - Pages are network-first, falling back to the last copy, or to `/offline` for pages never visited.
-  - Page shells (`/tree`, `/species/view/{key}`) are served from the precache whatever the query string.
-  - A notice shows while offline. `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
+  - Pages are network-only: offline, every page shows the `/offline` page at its own URL. Only the offline page and its assets are precached.
+  - A page that's open when the connection drops reloads into the offline page; the offline page reloads when the connection returns, or on "Try again".
+  - `/data/*.json` is cached on demand rather than precached, to keep the service worker install light.
   - There's a 404 page.
 - **Performance.** The two Latin variable fonts are preloaded, and the basemap host is preconnected. `lighthouserc.json` sets the budget: accessibility ≥ 95 on every audited page; on species pages, performance ≥ 90 and ≤ 160 KB of script. Map pages only warn below 90, because MapLibre alone is about 430 KB gzipped. Run it with `pnpm dlx @lhci/cli autorun` after a build. **Not yet measured locally.**
 - **Unit tests** (`tests/unit/`). `src/lib`, `src/stores`, `src/pages` endpoints and `functions/` are held at 100% line, branch, function and statement coverage (`pnpm test:coverage` fails below it); Vue components are covered by the journeys instead.

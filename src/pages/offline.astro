@@ -1,27 +1,45 @@
 ---
-import PageShell from '~/components/PageShell.astro';
+import Wordmark from '~/components/Wordmark.astro';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Offline" noindex>
-  <PageShell>
-    <section class="mx-auto max-w-xl px-4 py-16 text-center">
-      <h1 class="font-display text-4xl">You’re offline</h1>
-      <p class="mt-4 text-muted">
-        This page hasn’t been saved on this device yet. Pages and map areas you’ve already visited still work, using the
-        data saved when you last viewed them.
-      </p>
-      <p class="mt-8 flex flex-wrap justify-center gap-3 text-sm">
-        <a href="/" class="rounded-md bg-accent px-4 py-2 font-medium text-accent-contrast">
-          Open the map
-        </a>
-        <a href="/tree/" class="rounded-md border border-border px-4 py-2 hover:border-accent">
-          Tree of life
-        </a>
-        <a href="/?near=1" class="rounded-md border border-border px-4 py-2 hover:border-accent">
-          Near me
-        </a>
-      </p>
-    </section>
-  </PageShell>
+  {/* The service worker serves this at whatever URL was asked for, so reloading tries that page again. */}
+  <main id="main" class="offline-page" data-offline-page>
+    <Wordmark fernOnly />
+    <h1 class="mt-8 font-display text-4xl">You’re offline</h1>
+    <p class="mt-3 text-muted">
+      Taxonomap needs a connection.
+      <br />
+      This page reloads when you’re back online.
+    </p>
+    <button type="button" class="mt-8 rounded-md bg-accent px-5 py-2.5 font-medium text-accent-contrast" data-try-again>
+      Try again
+    </button>
+  </main>
 </BaseLayout>
+
+<script>
+  const tryAgain = () => {
+    if (document.querySelector('[data-offline-page]')) window.location.reload();
+  };
+
+  document.querySelector('[data-try-again]')?.addEventListener('click', tryAgain);
+  window.addEventListener('online', tryAgain);
+</script>
+
+<style>
+  .offline-page {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  .offline-page :global(.wordmark) {
+    font-size: 6rem;
+  }
+</style>
