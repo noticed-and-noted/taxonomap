@@ -243,12 +243,26 @@ const lightbox = ref<InstanceType<typeof PhotoLightbox>>();
 /** Record whose photos the lightbox shows. */
 const lightboxRecord = shallowRef<Occurrence | null>(null);
 const lightboxPhotos = computed(() => (lightboxRecord.value ? photos(lightboxRecord.value) : []));
+const lightboxAbout = computed(() => {
+  const key = lightboxRecord.value && aboutKey(lightboxRecord.value);
+  return key ? speciesPath(key, manifest.value) : undefined;
+});
 
 /** Opens the lightbox on a record's photos, once it has them as props. */
 async function openPhotos(occurrence: Occurrence) {
   lightboxRecord.value = occurrence;
   await nextTick();
   lightbox.value?.open(0);
+}
+
+/** Moves the lightbox to the next or previous record in the list, opening that row behind it. */
+async function stepRecord(delta: number) {
+  const position = records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+  const next = records.value[position + delta];
+  if (position < 0 || !next) return;
+  expanded.value = next.key;
+  await openPhotos(next);
+  revealInList(document.getElementById(`${uniqueId}-rec-${next.key}`));
 }
 const initials = (occurrence: Occurrence) =>
   name(occurrence)
@@ -584,7 +598,13 @@ const institution = (occurrence: Occurrence) =>
         </button>
       </div>
     </div>
-    <PhotoLightbox ref="lightbox" :images="lightboxPhotos" :name="lightboxRecord ? name(lightboxRecord) : ''" />
+    <PhotoLightbox
+      ref="lightbox"
+      :images="lightboxPhotos"
+      :name="lightboxRecord ? name(lightboxRecord) : ''"
+      :href="lightboxAbout"
+      @step-row="stepRecord"
+    />
   </div>
 </template>
 

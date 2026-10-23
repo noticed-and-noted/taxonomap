@@ -4,7 +4,8 @@
  * filmstrip when there are several. Every photo shows its licence and creator,
  * and links to where it came from. Photos swap immediately, showing a skeleton
  * until the new one loads, and neighbours are preloaded so stepping through is
- * usually instant. Open it with the exposed `open(index)`.
+ * usually instant. Open it with the exposed `open(index)`. Up and down arrows call `onStepRow` (`@step-row`),
+ * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
 import { computed, nextTick, reactive, ref } from 'vue';
 import { countRequest, photoCrossOrigin, retryWithoutCors, thumbnailUrl, type UsableImage } from '~/lib/gbif';
@@ -13,7 +14,14 @@ import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
 
-const props = defineProps<{ images: readonly UsableImage[]; name: string }>();
+/** `href`, when given, links the name (to the species' about page). */
+// `onStepRow` is a prop rather than an emit so the legend can tell whether anyone handles it.
+const props = defineProps<{
+  images: readonly UsableImage[];
+  name: string;
+  href?: string | undefined;
+  onStepRow?: ((delta: number) => void) | undefined;
+}>();
 
 /** Where a photo came from: its GBIF record, or its iNaturalist observation (or photo page). */
 function sourceOf(image: UsableImage): { href: string; label: string } {
@@ -95,18 +103,26 @@ function show(imageIndex: number) {
 function open(imageIndex: number) {
   isOpen.value = true;
   areControlsHidden.value = false;
-  dialog.value?.showModal();
+  // Already open when a list steps to its next record.
+  if (!dialog.value?.open) dialog.value?.showModal();
   show(imageIndex);
 }
 
 function step(delta: number) {
   const count = props.images.length;
+  if (count < 2) return;
   show((index.value + delta + count) % count);
 }
+
+const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
 
 function onKey(event: KeyboardEvent) {
   if (event.key === 'ArrowRight') step(1);
   else if (event.key === 'ArrowLeft') step(-1);
+  else if (event.key in ROW_KEYS) {
+    event.preventDefault();
+    props.onStepRow?.(ROW_KEYS[event.key]!);
+  }
 }
 
 /** Tapping the photo hides everything over it, for an unobstructed look; tapping again brings it back. */
@@ -153,7 +169,7 @@ defineExpose({ open });
     @close="isOpen = false"
   >
     <div
-      v-if="current && isOpen"
+      v-if="isOpen"
       class="stage absolute inset-0"
       :class="{ 'controls-hidden': areControlsHidden }"
       @click.self="toggleControls"
@@ -161,8 +177,11 @@ defineExpose({ open });
       @pointerup="onPointerUp"
       @pointercancel="onPointerCancel"
     >
+      <p v-if="!current" class="absolute inset-0 m-0 grid place-items-center text-sm text-white/70">
+        No image recorded
+      </p>
       <SkeletonBlock
-        v-if="currentSrc && !settled.has(currentSrc)"
+        v-else-if="currentSrc && !settled.has(currentSrc)"
         class="absolute inset-0"
         width="100%"
         height="100%"
@@ -189,21 +208,16 @@ defineExpose({ open });
         @click="toggleControls"
       />
 
-      <!-- The credit rides with the count, clear of the close button and the strip. -->
-      <div class="overlay absolute left-2 top-2 flex min-h-11 max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5">
-        <span class="chip tabular-nums">{{ index + 1 }} / {{ images.length }}</span>
-        <LicenceBadge :licence="current.licence" :creator="current.creator" :rights-holder="current.rightsHolder" />
-        <p class="chip m-0 flex items-center gap-2">
-          <span v-if="current.publisher">via {{ current.publisher }}</span>
-          <a
-            :href="sourceOf(current).href"
-            target="_blank"
-            rel="noopener"
-            class="text-white underline decoration-white/60 underline-offset-2 hover:decoration-white"
-          >
-            {{ sourceOf(current).label }} <UiIcon name="external" />
-          </a>
-        </p>
+      <!-- Count and name, level with the close button. The name stays with no photo. -->
+      <div class="overlay absolute left-2 top-4 flex max-w-[calc(100%-4.5rem)] items-center gap-1.5">
+        <span v-if="current" class="chip chip-title tabular-nums">{{ index + 1 }} / {{ images.length }}</span>
+        <a
+          v-if="name && href"
+          :href="href"
+          class="chip chip-title truncate text-white no-underline underline-offset-2 hover:underline focus-visible:underline"
+          >{{ name }}</a
+        >
+        <span v-else-if="name" class="chip chip-title truncate">{{ name }}</span>
       </div>
       <form method="dialog">
         <button class="overlay-button right-2 top-2" aria-label="Close"><UiIcon name="close" size="20" /></button>
@@ -217,13 +231,14 @@ defineExpose({ open });
         </button>
       </template>
 
-      <!-- Clicks pass through the full-width band, so taps beside the strip still reach the photo. -->
-      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center">
+      <!-- The strip, centred, with the credit and key hints beneath it.
+           Clicks pass through the band, so taps beside them still reach the photo. -->
+      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col gap-1.5">
         <!-- Padded inside the scroller so the thumbnails' focus rings aren't clipped. -->
         <div
           v-if="images.length > 1"
           ref="strip"
-          class="overlay pointer-events-auto flex max-w-full scroll-px-1 gap-1.5 overflow-x-auto p-1"
+          class="overlay pointer-events-auto flex max-w-full scroll-px-1 gap-1.5 self-center overflow-x-auto p-1"
           role="group"
           :aria-label="`Photos of ${name}`"
         >
@@ -239,6 +254,28 @@ defineExpose({ open });
             <ThumbImage :image="image" size="200x" class="size-full object-cover" />
           </button>
         </div>
+        <div class="overlay flex flex-wrap items-center justify-between gap-1.5">
+          <div v-if="current" class="pointer-events-auto flex max-w-full flex-wrap items-center gap-1.5">
+            <LicenceBadge :licence="current.licence" :creator="current.creator" :rights-holder="current.rightsHolder" />
+            <p class="chip m-0 flex items-center gap-2">
+              <span v-if="current.publisher">via {{ current.publisher }}</span>
+              <a
+                :href="sourceOf(current).href"
+                target="_blank"
+                rel="noopener"
+                class="text-white underline decoration-white/60 underline-offset-2 hover:decoration-white"
+              >
+                {{ sourceOf(current).label }} <UiIcon name="external" />
+              </a>
+            </p>
+          </div>
+          <!-- ml-auto keeps it right when there's no credit beside it (no photo). -->
+          <p class="chip key-hints m-0 ml-auto gap-3" aria-hidden="true">
+            <span v-if="images.length > 1"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
+            <span v-if="onStepRow"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
+            <span><kbd>Esc</kbd> Close</span>
+          </p>
+        </div>
       </div>
     </div>
   </dialog>
@@ -253,6 +290,34 @@ defineExpose({ open });
   backdrop-filter: blur(8px);
   font-size: 11px;
   line-height: 1.25;
+}
+/* The count and name lead the credit, so they read first. */
+/* 1.75rem tall, so with the overlay at top-4 it centres on the 2.75rem close button at top-2. */
+.chip-title {
+  padding: 0 0.5rem;
+  font-size: 14px;
+  line-height: 1.75rem;
+}
+/* Keyboard hints only where there's likely a keyboard, as in the Omnibox. */
+.key-hints {
+  display: none;
+  color: rgb(255 255 255 / 0.75);
+}
+@media (min-width: 640px) and (hover: hover) {
+  .key-hints {
+    display: flex;
+  }
+}
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  font-family: inherit;
+  font-size: 0.625rem;
 }
 .overlay-button {
   position: absolute;
