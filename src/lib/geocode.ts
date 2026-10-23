@@ -1,7 +1,8 @@
 /**
- * Place search. Called on submit only, never as you type: Nominatim's usage
- * policy forbids autocomplete. The provider is configurable
- * (PUBLIC_GEOCODER = nominatim | photon, PUBLIC_GEOCODER_URL).
+ * Place search, called as you type (debounced, see usePlaceSearch). The
+ * provider is configurable (PUBLIC_GEOCODER = photon | nominatim,
+ * PUBLIC_GEOCODER_URL). Nominatim's public server forbids autocomplete, so
+ * use nominatim only with your own instance.
  */
 import { env } from '~/lib/env';
 
@@ -14,7 +15,7 @@ export interface Place {
   bbox?: [number, number, number, number];
 }
 
-const PROVIDER = (env['PUBLIC_GEOCODER'] || 'nominatim') as 'nominatim' | 'photon';
+const PROVIDER = (env['PUBLIC_GEOCODER'] || 'photon') as 'nominatim' | 'photon';
 const BASE =
   env['PUBLIC_GEOCODER_URL'] ||
   (PROVIDER === 'photon' ? 'https://photon.komoot.io/api/' : 'https://nominatim.openstreetmap.org/search');

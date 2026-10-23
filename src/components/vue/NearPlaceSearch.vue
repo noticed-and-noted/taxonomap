@@ -1,18 +1,16 @@
 <script setup lang="ts">
 /**
- * Place search for the near-me panel: searches on submit only (Nominatim
- * policy, see geocode.ts); one match moves the pin straight away, several
- * are listed to pick from.
+ * Place search for the near-me panel: searched as you type (usePlaceSearch),
+ * matches listed to pick from; Enter or Go picks the first.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { searchPlaces, type Place } from '~/lib/geocode';
+import type { Place } from '~/lib/geocode';
 import { setNearLocation } from '~/stores/near';
+import { usePlaceSearch } from './usePlaceSearch';
 
 const query = ref('');
-const results = ref<Place[] | null>(null);
-const state = ref<'idle' | 'searching' | 'failed'>('idle');
 const root = ref<HTMLElement>();
-let abort: AbortController | undefined;
+const { places, loading, failed, answered, search, flush, reset } = usePlaceSearch();
 
 const open = ref(true);
 
@@ -34,32 +32,23 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey);
 });
 
-async function submit() {
-  const trimmed = query.value.trim();
-  if (!trimmed) return;
-  abort?.abort();
-  abort = new AbortController();
-  state.value = 'searching';
+/** Enter or Go: the first match once results are in; otherwise search now. */
+function submit() {
   open.value = true;
-  try {
-    const found = await searchPlaces(trimmed, abort.signal);
-    state.value = 'idle';
-    if (found.length === 1) pick(found[0]!);
-    else results.value = found;
-  } catch (error) {
-    if ((error as Error).name !== 'AbortError') state.value = 'failed';
-  }
+  const [first] = places.value;
+  if (!loading.value && first) pick(first);
+  else flush();
 }
 
 function pick(place: Place) {
   setNearLocation(place.lat, place.lng);
-  results.value = null;
+  reset();
   query.value = place.name;
 }
 
 function onInput() {
-  results.value = null;
-  state.value = 'idle';
+  open.value = true;
+  search(query.value);
 }
 </script>
 
@@ -95,17 +84,17 @@ function onInput() {
       <button
         type="submit"
         class="shrink-0 rounded-md border border-border px-3 text-sm hover:border-accent disabled:opacity-60"
-        :disabled="state === 'searching' || !query.trim()"
+        :disabled="!query.trim()"
       >
-        {{ state === 'searching' ? 'Searching…' : 'Go' }}
+        {{ loading ? 'Searching…' : 'Go' }}
       </button>
     </form>
     <ul
-      v-if="open && results?.length"
+      v-if="open && places.length"
       class="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-surface text-sm shadow-panel"
       aria-label="Places"
     >
-      <li v-for="(place, index) in results" :key="index">
+      <li v-for="(place, index) in places" :key="index">
         <button type="button" class="block w-full px-3 py-2 text-left hover:bg-surface-2" @click="pick(place)">
           <span class="block truncate text-text">{{ place.name }}</span>
           <span v-if="place.detail" class="block truncate text-xs text-muted">{{ place.detail }}</span>
@@ -113,14 +102,14 @@ function onInput() {
       </li>
     </ul>
     <p
-      v-else-if="open && results"
+      v-else-if="open && answered && !loading && !failed"
       class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
       role="status"
     >
       No places found.
     </p>
     <p
-      v-if="open && state === 'failed'"
+      v-if="open && failed"
       class="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
       role="status"
     >
