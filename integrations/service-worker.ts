@@ -172,7 +172,8 @@ export default function serviceWorker(): AstroIntegration {
           ...precacheOptions(outDir),
           cleanupOutdatedCaches: true,
           clientsClaim: true,
-          skipWaiting: true,
+          // A new deploy waits for the reader to choose "Reload" (BaseLayout) rather than reloading under them.
+          skipWaiting: false,
           sourcemap: false,
           runtimeCaching: runtimeCaching(apiBase, tileBase),
         });

@@ -90,13 +90,43 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
     <slot />
 
     <script>
+      import { MINUTE } from '~/lib/util/time';
+      import { $applyUpdate } from '~/stores/app-update';
+
+      const UPDATE_CHECK_INTERVAL_MS = 5 * MINUTE;
+      const MIN_UPDATE_CHECK_GAP_MS = MINUTE;
+
       if (import.meta.env.PROD && 'serviceWorker' in navigator) {
         void import('workbox-window').then(({ Workbox }) => {
           const wb = new Workbox('/sw.js');
-          // A new deploy took over: reload once so the page matches the new shell.
-          wb.addEventListener('controlling', (event) => {
-            if (event.isUpdate) window.location.reload();
+          let isUpdateRequested = false;
+          wb.addEventListener('waiting', () =>
+            $applyUpdate.set(() => {
+              isUpdateRequested = true;
+              wb.messageSkipWaiting();
+            }),
+          );
+          // Workbox's isUpdate stays false for a page first opened without a worker, so track it here:
+          // the first worker to take control on a first visit isn't an update.
+          let hasWorker = Boolean(navigator.serviceWorker.controller);
+          // This tab asked for the update: reload into it. Another tab did: offer the reload here too.
+          wb.addEventListener('controlling', () => {
+            if (isUpdateRequested) window.location.reload();
+            else if (hasWorker) $applyUpdate.set(() => window.location.reload());
+            hasWorker = true;
           });
+          // Browsers only check for a new worker on full page loads; ClientRouter swaps aren't, so check here too,
+          // and on a timer so an open tab hears about a deploy (sw.js is no-cache, so a check is a cheap 304).
+          // Registering already checked, so the clock starts now; quick tab flips then don't each ask again.
+          let lastCheckedAt = Date.now();
+          const checkForUpdate = () => {
+            if (document.visibilityState !== 'visible' || Date.now() - lastCheckedAt < MIN_UPDATE_CHECK_GAP_MS) return;
+            lastCheckedAt = Date.now();
+            void wb.update();
+          };
+          document.addEventListener('astro:after-swap', checkForUpdate);
+          document.addEventListener('visibilitychange', checkForUpdate);
+          setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
           void wb.register();
         });
       }
