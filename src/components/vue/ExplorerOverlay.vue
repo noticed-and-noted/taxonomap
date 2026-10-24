@@ -131,24 +131,20 @@ function closePanel() {
 
     <!-- Stays in Near me too, on wider screens; phones hide it under Near me's sheet (see the styles). -->
     <div
-      class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg border border-border bg-surface/95 p-3 shadow-panel backdrop-blur"
+      class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg p-3"
       :class="{ stashed: dockStashed }"
     >
+      <!-- Same edge tab as SidePanel's: tucked under the dock so its shadow falls across the join. -->
       <button
         v-if="!near"
         type="button"
-        class="stash-toggle"
+        class="stash-toggle absolute -z-10 left-full [clip-path:inset(-30px_-30px_-30px_0)] top-1/2 grid h-10 w-6 -translate-y-1/2 place-items-center rounded-r-md border border-l-0 border-border bg-surface text-muted shadow-panel hover:text-text"
         :aria-label="dockStashed ? 'Show legend' : 'Slide legend away'"
         :aria-expanded="!dockStashed"
         @click="dockStashed = !dockStashed"
       >
-        <svg viewBox="0 0 12 12" class="size-3" aria-hidden="true">
-          <path
-            :d="dockStashed ? 'M4.5 3l3 3-3 3' : 'M7.5 3l-3 3 3 3'"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          />
+        <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path :d="dockStashed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'" />
         </svg>
       </button>
       <TryThis />
@@ -281,6 +277,19 @@ function closePanel() {
 
 .bottom-dock {
   width: 15.5rem; /* the legend's 14rem plus padding */
+  isolation: isolate;
+}
+/* The dock's surface sits on its own layer, above the stash tab (z -10) but below the legend. */
+.bottom-dock::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid var(--border);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
 }
 
 /* Phone: a tab on the dock's right edge slides it off-screen, leaving the tab visible. */
@@ -289,21 +298,6 @@ function closePanel() {
 }
 .bottom-dock.stashed {
   transform: translateX(calc(-100% - 0.75rem));
-}
-.stash-toggle {
-  position: absolute;
-  left: 100%;
-  top: 50%;
-  translate: 0 -50%;
-  display: grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 2.5rem;
-  border: 1px solid var(--border);
-  border-left: 0;
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: inherit; /* match the dock so the tab reads as part of it */
-  color: var(--text-muted);
 }
 @media (prefers-reduced-motion: reduce) {
   .bottom-dock {
