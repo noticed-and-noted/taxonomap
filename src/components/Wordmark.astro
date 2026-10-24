@@ -6,12 +6,14 @@
 interface Props {
   /** Below 640 px show the fern alone, as the header does. */
   compact?: boolean;
+  /** Show the fern alone at every width. */
+  fernOnly?: boolean;
 }
 
-const { compact = false } = Astro.props;
+const { compact = false, fernOnly = false } = Astro.props;
 ---
 
-<span class:list={['wordmark', { compact }]} aria-hidden="true">
+<span class:list={['wordmark', { compact, 'fern-only': fernOnly }]} aria-hidden="true">
   <span class="letters">tax</span>
   {/* The fern stands in for the first "o"; its stem and leaflets hang below the baseline. */}
   <svg viewBox="16 7 32 53" class="fern">
@@ -56,6 +58,10 @@ const { compact = false } = Astro.props;
     margin: 0 0.02em;
     overflow: visible;
     transform: translateY(0.308em);
+  }
+
+  .fern-only .letters {
+    display: none;
   }
 
   @media (max-width: 639.98px) {

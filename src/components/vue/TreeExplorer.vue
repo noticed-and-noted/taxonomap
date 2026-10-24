@@ -43,6 +43,8 @@ const version = ref(0);
 const loadingKey = ref<number | null>(null);
 const error = ref<UiErrorKind | 'no-data' | null>(null);
 const photo = shallowRef<UsableImage | null>(null);
+/** From the click until the photo has drawn (or there turns out to be none): shows the skeleton. */
+const isPhotoLoading = ref(false);
 const narrow = ref(false);
 let mediaQuery: MediaQueryList | undefined;
 
@@ -138,12 +140,16 @@ function goTo(node: TreeNode) {
 // Photo for the selected node: fetched on click, never on hover.
 watch(selected, async (node) => {
   photo.value = null;
+  isPhotoLoading.value = Boolean(node && node.rank !== 'ROOT');
   if (!node || node.rank === 'ROOT') return;
   try {
     const image = await leadPhoto({ key: node.key, rank: RANK_BY_CODE[node.rank] });
-    if (selected.value === node) photo.value = image ?? null;
+    if (selected.value !== node) return;
+    photo.value = image ?? null;
+    if (!image) isPhotoLoading.value = false;
   } catch {
     /* optional */
+    if (selected.value === node) isPhotoLoading.value = false;
   }
 });
 
@@ -315,8 +321,24 @@ const share = (node: TreeNode) => {
         aria-label="Details"
       >
         <div v-if="detail" class="flex gap-3">
-          <div class="size-20 shrink-0 overflow-hidden rounded-md bg-photo">
-            <ThumbImage v-if="photo" :key="photo.url" :image="photo" size="200x" class="size-full object-cover" />
+          <div class="relative size-20 shrink-0 overflow-hidden rounded-md bg-photo">
+            <SkeletonBlock v-if="isPhotoLoading" height="100%" class="absolute inset-0" label="Loading photo" />
+            <ThumbImage
+              v-if="photo"
+              :key="photo.url"
+              :image="photo"
+              size="200x"
+              class="relative size-full object-cover"
+              @loaded="isPhotoLoading = false"
+              @broken="isPhotoLoading = false"
+            />
+            <img
+              v-else-if="detail.rank === 'ROOT'"
+              src="/images/blue-marble.webp"
+              alt=""
+              title="The Blue Marble, Apollo 17 (NASA, public domain)"
+              class="size-full object-cover"
+            />
           </div>
           <div class="min-w-0">
             <p class="text-[11px] uppercase tracking-wide text-subtle">{{ RANK_LABELS[detail.rank] ?? 'All life' }}</p>

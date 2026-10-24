@@ -53,7 +53,7 @@ async function load() {
   }
 }
 
-const treeHref = (taxonKey: number) => `/tree?focus=${taxonKey}`;
+const treeHref = (taxonKey: number) => `/tree/?focus=${taxonKey}`;
 
 onMounted(load);
 </script>

@@ -1,7 +1,7 @@
 /** Place search, for both supported providers. */
 import { json, stubNetwork } from './helpers/network';
 
-async function geocode(provider?: 'photon') {
+async function geocode(provider?: 'nominatim' | 'photon') {
   vi.resetModules();
   vi.unstubAllEnvs();
   if (provider) vi.stubEnv('PUBLIC_GEOCODER', provider);
@@ -31,7 +31,7 @@ describe('searchPlaces', () => {
       },
       { display_name: 'Nowhere', name: 'Nowhere Farm', lat: '1', lon: '2' },
     ]);
-    const { searchPlaces } = await geocode();
+    const { searchPlaces } = await geocode('nominatim');
     expect(await searchPlaces(' edinburgh ')).toEqual([
       {
         name: 'Edinburgh',
@@ -56,7 +56,7 @@ describe('searchPlaces', () => {
         { geometry: { coordinates: [1, 2] }, properties: {} },
       ],
     }));
-    const { searchPlaces } = await geocode('photon');
+    const { searchPlaces } = await geocode();
     expect(await searchPlaces('edinburgh')).toEqual([
       { name: 'Edinburgh', detail: 'Scotland, UK', lng: -3.19, lat: 55.95, bbox: [-3.4, 55.8, -3.0, 56.0] },
       { name: 'edinburgh', lng: 1, lat: 2 },
@@ -66,7 +66,7 @@ describe('searchPlaces', () => {
 
   it('throws on a failed response', async () => {
     stubNetwork(() => json({}, 503));
-    const { searchPlaces } = await geocode();
+    const { searchPlaces } = await geocode('nominatim');
     await expect(searchPlaces('x')).rejects.toThrow('geocoder 503');
   });
 
@@ -77,7 +77,7 @@ describe('searchPlaces', () => {
       return url.host === 'photon.komoot.io' ? { features: [] } : [{ display_name: '', lat: '1', lon: '2' }];
     });
     const { signal } = new AbortController();
-    const nominatim = await geocode();
+    const nominatim = await geocode('nominatim');
     expect(await nominatim.searchPlaces('somewhere', signal)).toMatchObject([{ name: 'somewhere' }]);
     const photon = await geocode('photon');
     await photon.searchPlaces('somewhere', signal);

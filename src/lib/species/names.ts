@@ -1,9 +1,12 @@
 import { capitalise } from '~/lib/format';
 import type { VernacularName } from '~/lib/gbif';
 
+import iocNames from './ioc-names.json';
+
 const ENGLISH = new Set(['eng', 'en']);
 
-function tidy(text: string): string {
+/** A name as shown: trimmed, single-spaced, first letter capitalised. */
+export function tidy(text: string): string {
   return capitalise(text.trim().replace(/\s+/g, ' '));
 }
 
@@ -13,11 +16,26 @@ export function isEnglish(name: VernacularName): boolean {
 }
 
 /**
+ * IOC World Bird List names by GBIF key, only for birds whose most frequent name differs.
+ * Keyed rather than read from each name's source, because search results carry no sources.
+ * Rebuilt by `pnpm ioc-names` from GBIF's backbone archive.
+ */
+const IOC_NAMES: Readonly<Record<string, string>> = iocNames;
+
+/**
+ * The English name shown everywhere: IOC's for birds, otherwise the most frequent.
+ * @param key GBIF taxon key the names belong to.
+ */
+export function englishName(names: readonly VernacularName[], key: number): string | null {
+  return IOC_NAMES[key] ?? mostFrequentEnglishName(names);
+}
+
+/**
  * Most frequent English name (case-insensitive). `preferred` flags are ignored: many checklists
  * each flag their own pick, and search results carry no flags, so counting is what gives the
  * same name wherever the list came from.
  */
-export function englishName(names: readonly VernacularName[]): string | null {
+export function mostFrequentEnglishName(names: readonly VernacularName[]): string | null {
   const best = byFrequency(names.filter(isEnglish).map((name) => name.vernacularName))[0];
   return best ? tidy(best) : null;
 }
@@ -50,9 +68,10 @@ const NOTE_MARKER = '.';
  * The other English names worth searching by, most frequent first, after `englishName`'s pick.
  * A name that extends one already kept ("Gulls" after "Gull") is dropped, since prefix search finds it anyway.
  * @param max Most names to return.
+ * @param key GBIF taxon key the names belong to.
  */
-export function otherEnglishNames(names: readonly VernacularName[], max: number): string[] {
-  const main = englishName(names);
+export function otherEnglishNames(names: readonly VernacularName[], max: number, key: number): string[] {
+  const main = englishName(names, key);
   if (!main) return [];
   const parts = names
     .filter(isEnglish)

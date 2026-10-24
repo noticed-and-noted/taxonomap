@@ -6,7 +6,14 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pLimit from 'p-limit';
-import { GbifNotFoundError, listByRank, type NameUsage, type VernacularName } from '~/lib/gbif/server';
+import {
+  GbifNotFoundError,
+  listByRank,
+  occurrenceFacets,
+  speciesCountsUnder,
+  type NameUsage,
+  type VernacularName,
+} from '~/lib/gbif/server';
 
 /** How many GBIF lookups the bakers run at once. */
 const LOOKUP_CONCURRENCY = 5;
@@ -39,25 +46,49 @@ export function once<T>(key: string, callback: () => Promise<T>): Promise<T> {
 export function startFreshBake(): void {
   isReadingFiles = false;
   memo.clear();
-  lookupProgress.queued = 0;
-  lookupProgress.done = 0;
+  bakeProgress.clear();
 }
 
-/** GBIF lookups queued and finished in this bake, for the `pnpm bake` progress bar. */
-export const lookupProgress = { queued: 0, done: 0 };
+/** Requests to each service ("GBIF", "iNaturalist") queued and finished, for the `pnpm bake` progress bar. */
+export const bakeProgress = new Map<string, { queued: number; done: number }>();
 
-/** A queue running LOOKUP_CONCURRENCY lookups at once, counted in `lookupProgress`. */
-export function lookupLimit(): <T>(task: () => Promise<T>) => Promise<T> {
-  const limit = pLimit(LOOKUP_CONCURRENCY);
-  return async (task) => {
-    lookupProgress.queued++;
-    try {
-      return await limit(task);
-    } finally {
-      lookupProgress.done++;
-    }
+const GBIF = 'GBIF';
+
+/**
+ * Counts `count` more requests to `service` as queued.
+ * @returns Call it once as each of them finishes.
+ */
+export function queueRequests(service: string, count = 1): () => void {
+  const counter = bakeProgress.get(service) ?? { queued: 0, done: 0 };
+  bakeProgress.set(service, counter);
+  counter.queued += count;
+  return () => {
+    counter.done++;
   };
 }
+
+/** Runs one GBIF request, counted in `bakeProgress`. */
+async function countedGbif<T>(task: () => Promise<T>): Promise<T> {
+  const finish = queueRequests(GBIF);
+  try {
+    return await task();
+  } finally {
+    finish();
+  }
+}
+
+/** A queue running LOOKUP_CONCURRENCY lookups at once, counted in `bakeProgress`. */
+export function lookupLimit(): <T>(task: () => Promise<T>) => Promise<T> {
+  const limit = pLimit(LOOKUP_CONCURRENCY);
+  return (task) => countedGbif(() => limit(task));
+}
+
+/** `occurrenceFacets`, counted in `bakeProgress`. */
+export const countedFacets: typeof occurrenceFacets = (...args) => countedGbif(() => occurrenceFacets(...args));
+
+/** `speciesCountsUnder`, counted in `bakeProgress`. */
+export const countedSpeciesCounts: typeof speciesCountsUnder = (...args) =>
+  countedGbif(() => speciesCountsUnder(...args));
 
 /** Skip taxa GBIF doesn't know; any other failure fails the build, so a GBIF outage can't deploy a smaller site. */
 export function rethrowUnlessMissing(error: unknown): null {
@@ -73,7 +104,7 @@ export async function listAllByRank(ranks: readonly Parameters<typeof listByRank
   const usages: NamedUsage[] = [];
   for (const rank of ranks) {
     for (let offset = 0; ; offset += RANK_PAGE_SIZE) {
-      const page = await listByRank(rank, offset, RANK_PAGE_SIZE);
+      const page = await countedGbif(() => listByRank(rank, offset, RANK_PAGE_SIZE));
       usages.push(...page.results);
       if (page.endOfRecords || page.results.length === 0) break;
     }

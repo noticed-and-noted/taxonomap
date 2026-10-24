@@ -1,16 +1,23 @@
 /** Fetch the data the build bakes into the site and save it to .cache/baked: `pnpm bake`. */
-import { bakeToDisk, lookupProgress } from '~/lib/bake';
+import { bakeProgress, bakeToDisk } from '~/lib/bake';
 
 const BAR_WIDTH = 30;
 const REDRAW_MS = 200;
 
 let step = '';
 
-/** One line: the snapshot being baked and how many of its queued GBIF lookups are done. */
+/** The counter the bar follows: the first service with requests still running, else the last one. */
+function activeCounter(): { queued: number; done: number } {
+  const counters = [...bakeProgress.values()];
+  return counters.find((counter) => counter.done < counter.queued) ?? counters.at(-1) ?? { queued: 0, done: 0 };
+}
+
+/** One line: the snapshot being baked and each service's finished and queued requests. */
 function progressLine(): string {
-  const { queued, done } = lookupProgress;
+  const { queued, done } = activeCounter();
   const filled = queued ? Math.round((done / queued) * BAR_WIDTH) : 0;
-  return `[${'#'.repeat(filled)}${'-'.repeat(BAR_WIDTH - filled)}] ${done}/${queued} lookups · ${step}`;
+  const counts = [...bakeProgress].map(([service, counter]) => `${service} ${counter.done}/${counter.queued}`);
+  return `[${'#'.repeat(filled)}${'-'.repeat(BAR_WIDTH - filled)}] ${[...counts, step].join(' · ')}`;
 }
 
 /** Redraws the bar in place on a terminal; piped output gets one line per snapshot instead. */

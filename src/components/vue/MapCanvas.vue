@@ -8,6 +8,7 @@
  * (overlay, omnibox, panel) drive it without importing it.
  */
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useStore } from '@nanostores/vue';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact, full } from '~/lib/format';
@@ -23,12 +24,13 @@ import {
 } from '~/lib/map/style';
 import { needsAdhoc } from '~/lib/gbif';
 import { checkCells, createHoverCounter, knownCount } from '~/lib/map/cellCounts';
-import type { Hex } from '~/lib/map/occGrid';
+import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
+import WebglNotice from './WebglNotice.vue';
 import {
   $basemap,
   $busiestHexBox,
@@ -38,6 +40,7 @@ import {
   $hexGeometry,
   $mapBounds,
   $mapLoad,
+  $mapUnsupported,
   $mapMode,
   $mapView,
   $occurrenceFilter,
@@ -50,12 +53,16 @@ import {
 
 const container = ref<HTMLDivElement>();
 const failed = ref(false);
+const unsupported = useStore($mapUnsupported);
 const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
 let map: MlMap | undefined;
 let occ: OccLayer | undefined;
 const cleanups: (() => void)[] = [];
 let pendingHexRestore = false;
+
+// MapLibre 6 renders with WebGL2 only; without it the constructor throws.
+const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
@@ -213,13 +220,6 @@ const BUSIEST_MARGIN = 120;
 /** The same with the bottom sheet, which leaves a short band of map; the tip moves itself off the hex there. */
 const SHEET_MARGIN = 40;
 
-/** A cell's centre: the mean of its vertices (the ring repeats the first one at the end). */
-function centreOf(hex: Hex): [number, number] {
-  const vertices = hex.geometry.coordinates[0]!.slice(0, -1);
-  const sum = (index: 0 | 1) => vertices.reduce((total, vertex) => total + (vertex[index] as number), 0);
-  return [sum(0) / vertices.length, sum(1) / vertices.length];
-}
-
 /** cos of the widest angle from the map's centre a tour hex may sit at (60°), so it faces the viewer on the globe. */
 const FACING_COS = 0.5;
 
@@ -255,7 +255,7 @@ function busiestInView(): Hex | undefined {
   const covered = coveredWithPanel(box);
   let busiest: Hex | undefined;
   for (const hex of occ.collection().features as Hex[]) {
-    const centre = centreOf(hex);
+    const centre = hexCentre(hex);
     const point = map.project(centre);
     const isClear =
       point.x > covered.left + covered.margin &&
@@ -276,7 +276,7 @@ function findBusiestHex(shouldSelect: boolean) {
   const geometry = hex && geometryOf(hex);
   pointedRing = geometry ? geometry.ring : null;
   if (hex && geometry && shouldSelect) {
-    const [lng, lat] = centreOf(hex);
+    const [lng, lat] = hexCentre(hex);
     $hexGeometry.set(geometry);
     $selectedHex.set([Number(lng.toFixed(4)), Number(lat.toFixed(4))]);
   }
@@ -321,38 +321,47 @@ const FIT_MAX_ZOOM = 9;
 const FIT_DURATION_MS = 1200;
 const FLIGHT_DURATION_MS = 1400;
 
+/** Fit a box clear of the floating chrome, or fly to a chosen centre at the zoom that fits it. */
+function flyToBounds(request: Extract<FlyRequest, { kind: 'bounds' }>) {
+  if (!map) return;
+  const covered = coveredEdges();
+  const [west, south, east, north] = request.bbox;
+  const bounds: [[number, number], [number, number]] = [
+    [west, south],
+    [east, north],
+  ];
+  const fit = {
+    padding: {
+      top: covered.top + FIT_PADDING,
+      bottom: covered.bottom + FIT_PADDING,
+      left: covered.left + FIT_PADDING,
+      right: covered.right + FIT_PADDING,
+    },
+    maxZoom: request.maxZoom ?? FIT_MAX_ZOOM,
+  };
+  if (!request.centre) {
+    map.fitBounds(bounds, { ...fit, duration: reducedMotion() ? 0 : FIT_DURATION_MS });
+    return;
+  }
+  const zoom = map.cameraForBounds(bounds, fit)?.zoom ?? map.getZoom();
+  fly({ kind: 'point', lng: request.centre[0], lat: request.centre[1], zoom });
+}
+
 function fly(request: FlyRequest) {
   if (!map) return;
-  const animate = !reducedMotion();
-  const covered = coveredEdges();
   if (request.kind === 'bounds') {
-    const [west, south, east, north] = request.bbox;
-    map.fitBounds(
-      [
-        [west, south],
-        [east, north],
-      ],
-      {
-        padding: {
-          top: covered.top + FIT_PADDING,
-          bottom: covered.bottom + FIT_PADDING,
-          left: covered.left + FIT_PADDING,
-          right: covered.right + FIT_PADDING,
-        },
-        maxZoom: request.maxZoom ?? FIT_MAX_ZOOM,
-        duration: animate ? FIT_DURATION_MS : 0,
-      },
-    );
-  } else {
-    // An offset, not camera padding: MapLibre keeps padding after the move.
-    map.flyTo({
-      center: [request.lng, request.lat],
-      zoom: request.zoom,
-      offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
-      duration: animate ? FLIGHT_DURATION_MS : 0,
-      essential: false,
-    });
+    flyToBounds(request);
+    return;
   }
+  const covered = coveredEdges();
+  // An offset, not camera padding: MapLibre keeps padding after the move.
+  map.flyTo({
+    center: [request.lng, request.lat],
+    zoom: request.zoom,
+    offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
+    duration: reducedMotion() ? 0 : FLIGHT_DURATION_MS,
+    essential: false,
+  });
 }
 
 const records = (count: number, text: string) => `${text} record${count === 1 ? '' : 's'}`;
@@ -679,6 +688,11 @@ function mapShown(element: HTMLElement): Promise<void> {
 onMounted(async () => {
   if (!container.value) return;
   await mapShown(container.value);
+  if (!hasWebgl2()) {
+    $mapUnsupported.set(true);
+    $mapLoad.set({ loading: false, done: 0, total: 0 });
+    return;
+  }
   const maplibre = await loadMapLibre();
   if (!container.value) return;
   const view = $mapView.get();
@@ -723,8 +737,9 @@ onBeforeUnmount(() => {
     >
       {{ tooltip.text }}
     </div>
+    <WebglNotice v-if="unsupported" />
     <p
-      v-if="failed"
+      v-else-if="failed"
       class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
     >
       Occurrence tiles are unavailable right now. The basemap still works.

@@ -9,8 +9,8 @@ interface Snapshots {
 const cache = new Map<string, Promise<unknown>>();
 
 /**
- * Load a baked snapshot from /data/<name>.json (same origin, precached by
- * the service worker). Resolves null if unavailable so callers can go live.
+ * Load a baked snapshot from /data/<name>.json (same origin, cached on demand
+ * by the service worker). Resolves null if unavailable so callers can go live.
  */
 export function loadSnapshot<K extends keyof Snapshots>(name: K): Promise<Snapshots[K] | null> {
   let pending = cache.get(name) as Promise<Snapshots[K] | null> | undefined;

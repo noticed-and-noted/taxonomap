@@ -14,7 +14,7 @@ import { userAgent } from '~/lib/gbif/node-transport';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
-const VERSION = 1; // bump to re-render every card
+const VERSION = 2; // bump to re-render every card
 const CACHE = join(process.cwd(), '.cache');
 
 export interface SpeciesCardInput {
@@ -37,6 +37,8 @@ const element = (
 
 /** Fonts for satori, read from the installed @fontsource packages once. */
 let fonts: Promise<{ name: string; data: Buffer; weight: 400 | 600; style: 'normal' | 'italic' }[]> | undefined;
+/** The dark-theme fern from docs/brand, as a data URI, read once. */
+let fernMark: Promise<string> | undefined;
 function loadFonts() {
   const fontFile = (packageName: string, file: string) =>
     readFile(join(process.cwd(), 'node_modules', packageName, 'files', file));
@@ -65,8 +67,21 @@ function loadFonts() {
       weight: 400 as const,
       style: 'italic' as const,
     })),
+    fontFile('@fontsource/patrick-hand', 'patrick-hand-latin-400-normal.woff').then((data) => ({
+      name: 'Hand',
+      data,
+      weight: 400 as const,
+      style: 'normal' as const,
+    })),
   ]);
   return fonts;
+}
+
+function loadFernMark() {
+  fernMark ??= readFile(join(process.cwd(), 'docs', 'brand', 'fern-mark-dark.svg')).then(
+    (svg) => `data:image/svg+xml;base64,${svg.toString('base64')}`,
+  );
+  return fernMark;
 }
 
 const sha1 = (text: string) => createHash('sha1').update(text).digest('hex');
@@ -95,13 +110,46 @@ async function photoDataUri(image: UsableImage): Promise<string | null> {
 }
 
 /** Satori cannot read CSS variables, so these mirror the dark theme in src/styles/tokens.css. */
-const COLOURS = { bg: '#0e1813', text: '#f2ede2', accent: '#f0b443', muted: '#a8b8ae', subtle: '#84998c' };
+const COLOURS = {
+  bg: '#0e1813',
+  text: '#f2ede2',
+  muted: '#a8b8ae',
+  subtle: '#93a79b',
+  ramp4: '#45916a',
+};
 const PHOTO_SIZE = 630;
 const TEXT_PANEL_WIDTH = WIDTH - PHOTO_SIZE;
 const LONG_TITLE_LENGTH = 24;
 const INITIALS_COUNT = 2;
+const WORDMARK_SIZE = 40;
+/*
+ * The fern as the first "o", sized as Wordmark.astro does (0.474em wide over its 32-unit viewBox). The brand
+ * file's viewBox is 40×56 units starting 2 units further left and up, and ending 6 right and 1 lower, so
+ * margins and drop absorb the difference to keep the coil in the same place.
+ */
+const FERN_EM_PER_UNIT = 0.474 / 32;
+const fernStyle = (fontSize: number) => ({
+  width: 40 * FERN_EM_PER_UNIT * fontSize,
+  height: 56 * FERN_EM_PER_UNIT * fontSize,
+  marginLeft: (0.02 - 2 * FERN_EM_PER_UNIT) * fontSize,
+  marginRight: (0.02 - 6 * FERN_EM_PER_UNIT) * fontSize,
+  transform: `translateY(${(0.308 + FERN_EM_PER_UNIT) * fontSize}px)`,
+});
 
-/** The card's left half: the photo, or the name's initials on a ramp-coloured tile when there is none. */
+/** The taxonomap wordmark: lowercase Patrick Hand with the fern as the first "o". */
+function wordmark(fern: string): El {
+  return element(
+    'div',
+    { display: 'flex', alignItems: 'baseline', fontFamily: 'Hand', fontSize: WORDMARK_SIZE, marginBottom: 24 },
+    [
+      element('div', {}, 'tax'),
+      element('img', fernStyle(WORDMARK_SIZE), undefined, { src: fern }),
+      element('div', {}, 'nomap'),
+    ],
+  );
+}
+
+/** The card's left half: the photo, or the name's initials on a flat ramp-coloured tile when there is none. */
 function photoPanel(title: string, photo: string | null): El {
   if (photo) {
     return element('img', { width: PHOTO_SIZE, height: PHOTO_SIZE, objectFit: 'cover' }, undefined, {
@@ -123,7 +171,7 @@ function photoPanel(title: string, photo: string | null): El {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #277f8e, #1fa187 50%, #a0da39)',
+      background: COLOURS.ramp4,
       fontFamily: 'Serif',
       fontSize: 160,
       color: COLOURS.bg,
@@ -133,7 +181,7 @@ function photoPanel(title: string, photo: string | null): El {
 }
 
 /** The names block: title, with the scientific name beneath when the title is a common name. */
-function namesBlock(input: SpeciesCardInput, title: string): El {
+function namesBlock(input: SpeciesCardInput, title: string, fern: string): El {
   const scientificName = input.commonName
     ? element(
         'div',
@@ -142,10 +190,17 @@ function namesBlock(input: SpeciesCardInput, title: string): El {
       )
     : element('div', {}, '');
   return element('div', { display: 'flex', flexDirection: 'column' }, [
-    element('div', { fontSize: 22, color: COLOURS.accent, letterSpacing: 1, marginBottom: 28 }, 'TAXONOMAP'),
+    wordmark(fern),
     element(
       'div',
-      { fontFamily: 'Serif', fontWeight: 600, fontSize: title.length > LONG_TITLE_LENGTH ? 54 : 66, lineHeight: 1.05 },
+      {
+        fontFamily: 'Serif',
+        fontWeight: input.commonName ? 600 : 400,
+        // Latin binomials are always italic; the italic is only loaded at 400.
+        fontStyle: input.commonName ? 'normal' : 'italic',
+        fontSize: title.length > LONG_TITLE_LENGTH ? 54 : 66,
+        lineHeight: 1.05,
+      },
       title,
     ),
     scientificName,
@@ -153,7 +208,7 @@ function namesBlock(input: SpeciesCardInput, title: string): El {
 }
 
 /** The card's right half: wordmark and names above, record count and photo credit below. */
-function textPanel(input: SpeciesCardInput, title: string): El {
+function textPanel(input: SpeciesCardInput, title: string, fern: string): El {
   const credit = input.image
     ? `Photo © ${input.image.creator ?? input.image.rightsHolder ?? 'unknown'} · ${input.image.licence}`
     : '';
@@ -167,7 +222,7 @@ function textPanel(input: SpeciesCardInput, title: string): El {
       justifyContent: 'space-between',
     },
     [
-      namesBlock(input, title),
+      namesBlock(input, title, fern),
       element('div', { display: 'flex', flexDirection: 'column' }, [
         element('div', { display: 'flex', alignItems: 'baseline' }, [
           element('div', { fontSize: 64, fontWeight: 600 }, compact(input.count)),
@@ -180,7 +235,7 @@ function textPanel(input: SpeciesCardInput, title: string): El {
 }
 
 /** The card's element tree: photo on the left, text on the right. */
-function card(input: SpeciesCardInput, photo: string | null): El {
+function card(input: SpeciesCardInput, photo: string | null, fern: string): El {
   const title = input.commonName ?? input.scientificName;
   return element(
     'div',
@@ -192,7 +247,7 @@ function card(input: SpeciesCardInput, photo: string | null): El {
       color: COLOURS.text,
       fontFamily: 'Lexend',
     },
-    [photoPanel(title, photo), textPanel(input, title)],
+    [photoPanel(title, photo), textPanel(input, title, fern)],
   );
 }
 
@@ -218,7 +273,7 @@ export async function renderSpeciesCard(input: SpeciesCardInput): Promise<Buffer
     /* render */
   }
   const photo = input.image ? await photoDataUri(input.image) : null;
-  const svg = await satori(card(input, photo) as unknown as Parameters<typeof satori>[0], {
+  const svg = await satori(card(input, photo, await loadFernMark()) as unknown as Parameters<typeof satori>[0], {
     width: WIDTH,
     height: HEIGHT,
     fonts: await loadFonts(),

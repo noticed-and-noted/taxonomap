@@ -387,12 +387,15 @@ describe('bake to disk', () => {
       const list = await first.bakeSpeciesList();
       expect(saved).toEqual(['years', 'names', 'tree', 'species-list']);
       expect(steps).toEqual(saved);
-      expect(first.lookupProgress.queued).toBeGreaterThan(0);
-      expect(first.lookupProgress.done).toBe(first.lookupProgress.queued);
+      // The last step's GBIF requests, all counted and all finished.
+      const gbifProgress = first.bakeProgress.get('GBIF');
+      expect(gbifProgress?.queued).toBeGreaterThan(0);
+      expect(gbifProgress?.done).toBe(gbifProgress?.queued);
       const calls = gbif();
       const baked = await bake({ BAKE_DIR: dir });
       expect((await baked.bakeYears()).total).toBe(30);
       expect(await baked.bakeSpeciesList()).toEqual(list);
+      expect(await (await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '0' })).bakeSpeciesList()).toEqual([]);
       expect(calls).toHaveLength(0);
     } finally {
       rmSync(dir, { recursive: true });

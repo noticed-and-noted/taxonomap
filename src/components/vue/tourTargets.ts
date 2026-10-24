@@ -71,7 +71,7 @@ export const HINTS: Record<ChecklistId, Hint> = {
   },
   tree: {
     body: 'Open Tree of life, then click a group to go down a rank.',
-    targets: () => [boxOf('[data-tour="nav"] a[href="/tree"]')],
+    targets: () => [boxOf('[data-tour="nav"] a[href="/tree/"]')],
   },
   style: {
     body: 'Change the map colours in Settings, or switch between light and dark here.',

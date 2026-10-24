@@ -1,8 +1,7 @@
-import { occurrenceFacets, speciesCountsUnder } from '~/lib/gbif/server';
 import type { TreeNodeRow, TreeSnapshot } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import { englishName } from '~/lib/species/names';
-import { listAllByRank, once, snapshotMeta, type NamedUsage } from './cache';
+import { countedFacets, countedSpeciesCounts, listAllByRank, once, snapshotMeta, type NamedUsage } from './cache';
 
 const TREE_RANKS = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER'] as const;
 const TREE_FIELDS = ['kingdomKey', 'phylumKey', 'classKey', 'orderKey'] as const;
@@ -11,7 +10,7 @@ const SPECIES_COUNT_FACET_LIMIT = 20_000;
 
 /** Record counts by taxon key for every tree rank, from one occurrence facet request. */
 async function recordCounts(): Promise<Map<number, number>> {
-  const occurrences = await occurrenceFacets({}, TREE_FIELDS, { limits: TREE_FACET_LIMITS });
+  const occurrences = await countedFacets({}, TREE_FIELDS, { limits: TREE_FACET_LIMITS });
   const records = new Map<number, number>();
   for (const field of TREE_FIELDS) {
     for (const facet of occurrences.facets[field] ?? []) records.set(Number(facet.name), facet.count);
@@ -23,7 +22,7 @@ async function recordCounts(): Promise<Map<number, number>> {
 async function speciesCounts(kingdoms: readonly NamedUsage[]): Promise<Map<number, number>> {
   const species = new Map<number, number>();
   for (const kingdom of kingdoms) {
-    const counts = await speciesCountsUnder(kingdom.key, SPECIES_COUNT_FACET_LIMIT);
+    const counts = await countedSpeciesCounts(kingdom.key, SPECIES_COUNT_FACET_LIMIT);
     for (const [key, count] of counts) species.set(key, count);
   }
   return species;
@@ -45,7 +44,7 @@ function toTreeRow(usage: NamedUsage, records: ReadonlyMap<number, number>, spec
   if (!rank || (recordCount === 0 && speciesCount === 0)) return null;
 
   const parent = parentKeyOf(usage);
-  const common = usage.vernacularNames ? englishName(usage.vernacularNames) : null;
+  const common = englishName(usage.vernacularNames ?? [], usage.key);
   const row: TreeNodeRow = {
     k: usage.key,
     n: usage.canonicalName ?? usage.scientificName,

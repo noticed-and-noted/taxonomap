@@ -15,6 +15,7 @@ import FilterGroup from './FilterGroup.vue';
 import LegalLinks from './LegalLinks.vue';
 import MapSettings from './MapSettings.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
+import SearchFitSetting from './SearchFitSetting.vue';
 
 type PanelId = FilterGroupId | 'settings';
 
@@ -131,6 +132,7 @@ function label(name: string, count: number) {
         <!-- Settings scrolls its own option list, so its body doesn't scroll. -->
         <div v-if="current.id === 'settings'" class="flex min-h-0 flex-1 flex-col px-4 pt-3">
           <MapSettings />
+          <SearchFitSetting class="-mx-4 border-t border-border px-4 py-3" />
           <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
           <LegalLinks class="-mx-4 border-t border-border px-4 py-2" />
         </div>

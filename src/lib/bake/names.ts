@@ -1,11 +1,20 @@
-import { getSpecies, getVernacularNames, occurrenceFacets } from '~/lib/gbif/server';
+import { getSpecies, getVernacularNames } from '~/lib/gbif/server';
 import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import { isDev } from '~/lib/env';
 import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import type { VernacularName } from '~/lib/gbif';
 import { englishName, otherEnglishNames } from '~/lib/species/names';
-import { listAllByRank, lookupLimit, once, rethrowUnlessMissing, snapshotMeta, type NamedUsage } from './cache';
+import {
+  countedFacets,
+  listAllByRank,
+  lookupLimit,
+  once,
+  queueRequests,
+  rethrowUnlessMissing,
+  snapshotMeta,
+  type NamedUsage,
+} from './cache';
 
 const DEFAULT_INDEX_SIZE = 6000;
 const DEV_INDEX_SIZE = 300;
@@ -62,12 +71,12 @@ async function topSpeciesKeys(total: number): Promise<Map<number, number>> {
       counts.set(key, row.count);
     }
   };
-  const global = await occurrenceFacets({}, ['speciesKey'], { facetLimit: Math.ceil(total * globalShare) });
+  const global = await countedFacets({}, ['speciesKey'], { facetLimit: Math.ceil(total * globalShare) });
   add(global.facets['speciesKey'], Number.POSITIVE_INFINITY);
   for (const group of SPECIES_GROUPS) {
     const want = Math.ceil(total * group.share);
     // Over-fetch so overlap with the global list still yields `want` new keys.
-    const result = await occurrenceFacets({ taxonKey: group.key }, ['speciesKey'], { facetLimit: want * 2 });
+    const result = await countedFacets({ taxonKey: group.key }, ['speciesKey'], { facetLimit: want * 2 });
     add(result.facets['speciesKey'], want);
   }
   return counts;
@@ -80,7 +89,7 @@ function topKeys(facets: { name: string }[] | undefined, size: number): number[]
 
 /** Record counts for the kingdoms down to genera, and the busiest families and genera to look up. */
 async function higherRankCounts(): Promise<{ counts: Map<number, number>; lookupKeys: number[] }> {
-  const facets = await occurrenceFacets({}, HIGHER_RANK_FIELDS, { facetLimit: HIGHER_RANK_FACET_LIMIT });
+  const facets = await countedFacets({}, HIGHER_RANK_FIELDS, { facetLimit: HIGHER_RANK_FACET_LIMIT });
   const counts = new Map<number, number>();
   for (const field of HIGHER_RANK_FIELDS) {
     for (const facet of facets.facets[field] ?? []) counts.set(Number(facet.name), facet.count);
@@ -126,8 +135,8 @@ function nameRow(
   vernaculars: readonly VernacularName[],
   count: number,
 ): NameRow {
-  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW);
-  const commonName = englishName(vernaculars);
+  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW, key);
+  const commonName = englishName(vernaculars, key);
   return others.length
     ? [key, rank, scientificName, commonName, count, null, others]
     : [key, rank, scientificName, commonName, count];
@@ -153,6 +162,8 @@ async function higherRanks(): Promise<NameRow[]> {
  */
 async function inatIds(rows: readonly NameRow[]): Promise<Map<number, number>> {
   const ids = new Map<number, number>();
+  // Counted per chunk, all queued up front, so the progress bar shows how far through it is.
+  const finishChunk = queueRequests('iNaturalist', Math.ceil(rows.length / INAT_LOOKUP_CHUNK));
   for (let offset = 0; offset < rows.length; offset += INAT_LOOKUP_CHUNK) {
     const chunk = rows
       .slice(offset, offset + INAT_LOOKUP_CHUNK)
@@ -161,6 +172,8 @@ async function inatIds(rows: readonly NameRow[]): Promise<Map<number, number>> {
       for (const [key, id] of await resolveInatIds(chunk)) ids.set(key, id);
     } catch (error) {
       console.warn(`iNaturalist IDs skipped for species ${offset}-${offset + chunk.length}:`, error);
+    } finally {
+      finishChunk();
     }
   }
   return ids;

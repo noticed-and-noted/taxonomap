@@ -4,7 +4,8 @@
  * the page (`mode`): on the map it adds it to the What filter's taxa (records
  * of any are shown); on the tree it moves the tree there (the filter is left
  * alone); on other pages it opens that result's About page. Species: see
- * useNameSearch. Places: geocoder on submit only (Nominatim policy).
+ * useNameSearch. Places: once you switch to them, typing stays on places,
+ * searched as you type (usePlaceSearch), until you switch back to species.
  * The first result is highlighted until you arrow, so Enter picks it. The
  * highlighted species result is previewed beside the list, with a link to its
  * About page; Cmd/Ctrl-Enter opens that page, and Cmd/Ctrl-Shift-Enter
@@ -15,10 +16,12 @@ import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
-import { searchPlaces, type Place } from '~/lib/geocode';
-import { mapCapabilities, sortByRank, type NameHit } from '~/lib/gbif';
+import type { Place } from '~/lib/geocode';
+import { sortByRank, type NameHit } from '~/lib/gbif';
+import { boundsAround, recordsView } from '~/lib/map/taxonView';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
-import { $flyTo, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { $fitOnSearch } from '~/stores/fit-search';
 import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
@@ -26,6 +29,7 @@ import { hrefWith } from '~/stores/url-sync';
 import SkeletonBlock from './SkeletonBlock.vue';
 import TaxonPreview from './TaxonPreview.vue';
 import { useNameSearch } from './useNameSearch';
+import { usePlaceSearch } from './usePlaceSearch';
 
 /** What picking a species or group does: add it to the map, move the tree there, or open its About page. */
 export type SearchMode = 'map' | 'tree' | 'about';
@@ -34,6 +38,7 @@ const props = defineProps<{ mode: SearchMode }>();
 type Option =
   | { kind: 'taxon'; id: string; hit: NameHit }
   | { kind: 'place-search'; id: string }
+  | { kind: 'species-search'; id: string }
   | { kind: 'place'; id: string; place: Place };
 
 /** Species and group results shown at once. */
@@ -55,9 +60,17 @@ const {
 } = useNameSearch({
   max: MAX_RESULTS,
 });
-const places = ref<Place[] | null>(null);
-const placeLoading = ref(false);
-const placeFailed = ref(false);
+/** Showing place results rather than species and groups; typing keeps it. */
+const inPlaces = ref(false);
+const {
+  places,
+  loading: placeLoading,
+  failed: placeFailed,
+  answered: placesAnswered,
+  search: searchPlaces,
+  flush: flushPlaces,
+  reset: resetPlaces,
+} = usePlaceSearch();
 const input = ref<HTMLInputElement>();
 
 /* Short note shown under the box when a pick could not be applied (the What list is full). */
@@ -71,30 +84,35 @@ function announce(text: string) {
 
 /** What is loading, if anything: shown in the place row's spot. */
 const searching = computed(() =>
-  placeLoading.value ? 'places' : liveLoading.value && !places.value ? 'species' : null,
+  placeLoading.value ? 'places' : liveLoading.value && !inPlaces.value ? 'species' : null,
 );
 
 /** Placeholder rows to show while results load: enough to make three rows with what's in. */
 const placeholderRows = computed(() => (searching.value ? Math.max(0, 3 - listOptions.value.length) : 0));
 
 const options = computed<Option[]>(() => {
-  if (places.value) return places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }));
-  const suggestions: Option[] = sortByRank(taxa.value).map((hit) => ({
-    kind: 'taxon',
-    id: `omni-taxon-${hit.key}`,
-    hit,
-  }));
-  if (query.value.trim().length >= 2) suggestions.push({ kind: 'place-search', id: 'omni-place-search' });
-  return suggestions;
+  const rows: Option[] = inPlaces.value
+    ? places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }))
+    : sortByRank(taxa.value).map((hit) => ({ kind: 'taxon', id: `omni-taxon-${hit.key}`, hit }));
+  if (query.value.trim().length >= 2) {
+    rows.push(
+      inPlaces.value
+        ? { kind: 'species-search', id: 'omni-species-search' }
+        : { kind: 'place-search', id: 'omni-place-search' },
+    );
+  }
+  return rows;
 });
 
-/* "Search places" is always last, so the scrolling rows keep their indexes into `options`. */
-const listOptions = computed(() => options.value.filter((option) => option.kind !== 'place-search'));
+const isSwitchOption = (option: Option) => option.kind === 'place-search' || option.kind === 'species-search';
+
+/* The switch to places (or back to species) is always last, so the scrolling rows keep their indexes into `options`. */
+const listOptions = computed(() => options.value.filter((option) => !isSwitchOption(option)));
 
 /** Whether the scrolling list has anything in it; an empty one would leave stray padding above the place row. */
 const hasRows = computed(() => listOptions.value.length > 0 || placeholderRows.value > 0);
 
-const placeSearchOption = computed(() => options.value.find((option) => option.kind === 'place-search'));
+const switchOption = computed(() => options.value.find(isSwitchOption));
 
 const activeId = computed(() => options.value[active.value]?.id);
 
@@ -105,7 +123,7 @@ watch(activeId, (id) => {
 
 /** The result to preview: the highlighted species/group (the first, if the highlight's row has gone). */
 const previewHit = computed<NameHit | null>(() => {
-  if (places.value) return null;
+  if (inPlaces.value) return null;
   const option = options.value[active.value] ?? options.value[0];
   return option?.kind === 'taxon' ? option.hit : null;
 });
@@ -124,13 +142,15 @@ const enterLabel = computed(() => {
   const option = options.value[active.value];
   if (option?.kind === 'taxon') return selectLabel() ?? 'About';
   if (option?.kind === 'place') return 'Go to place';
+  if (option?.kind === 'species-search') return 'Search species';
   return 'Search places';
 });
 
 /** Empty the box and put the list away once a result is picked. */
 function finishPick() {
   query.value = '';
-  places.value = null;
+  inPlaces.value = false;
+  resetPlaces();
   resetSearch();
   close();
   input.value?.blur();
@@ -143,11 +163,10 @@ function openAbout(hit: NameHit) {
 }
 
 function onInput() {
-  places.value = null;
-  placeFailed.value = false;
   open.value = true;
   active.value = 0;
-  search(query.value);
+  if (inPlaces.value) searchPlaces(query.value);
+  else search(query.value);
 }
 
 function onFocus() {
@@ -161,37 +180,23 @@ function close() {
   active.value = 0;
 }
 
-async function runPlaceSearch() {
-  const trimmed = query.value.trim();
-  if (!trimmed) return;
-  placeLoading.value = true;
-  placeFailed.value = false;
-  // Switch to the (empty) places list now, so its placeholder rows show while the geocoder answers.
-  places.value = [];
-  active.value = 0;
-  try {
-    const found = await searchPlaces(trimmed);
-    // Gone back to species, or typed, while the geocoder answered.
-    if (!places.value) return;
-    places.value = found;
-    open.value = true;
-    active.value = 0;
-  } catch {
-    if (!places.value) return;
-    placeFailed.value = true;
-    places.value = [];
-  } finally {
-    placeLoading.value = false;
-  }
-}
-
-/** Leave the places list for the species and group results still behind it. */
-function showSpecies() {
-  places.value = null;
-  placeLoading.value = false;
-  placeFailed.value = false;
+/** Switch to places for what's typed, searching now rather than after the debounce. */
+function showPlaces() {
+  if (!query.value.trim()) return;
+  inPlaces.value = true;
   open.value = true;
   active.value = 0;
+  searchPlaces(query.value);
+  flushPlaces();
+}
+
+/** Switch back to species and groups for what's typed. */
+function showSpecies() {
+  inPlaces.value = false;
+  resetPlaces();
+  open.value = true;
+  active.value = 0;
+  search(query.value);
 }
 
 /** Picking a result in place, per page; none where a pick opens its About page. */
@@ -222,15 +227,23 @@ async function pickTaxon(hit: NameHit) {
     return;
   }
   markDone('search');
+  if ($fitOnSearch.get()) void flyToTaxon(hit.key);
+}
+
+/** Closest the map zooms in on a picked taxon, so a species known from one spot still shows its surroundings. */
+const TAXON_MAX_ZOOM = 6;
+
+/** Zoom out to all of a taxon's records under the other filters, centred on the place with the most. */
+async function flyToTaxon(taxonKey: number) {
   try {
-    const capabilities = await mapCapabilities({ taxonKey: hit.key });
-    if (capabilities.total > 0) {
-      $flyTo.set({
-        kind: 'bounds',
-        bbox: [capabilities.minLng, capabilities.minLat, capabilities.maxLng, capabilities.maxLat],
-        maxZoom: 6,
-      });
-    }
+    const view = await recordsView({ ...$occurrenceFilter.get(), taxonKeys: [taxonKey] });
+    if (!view) return;
+    $flyTo.set({
+      kind: 'bounds',
+      bbox: boundsAround(view.busiest, view.extent),
+      centre: view.busiest,
+      maxZoom: TAXON_MAX_ZOOM,
+    });
   } catch {
     /* stay where we are */
   }
@@ -253,7 +266,8 @@ function choose(option: Option | undefined) {
   if (!option) return;
   if (option.kind === 'taxon') void pickTaxon(option.hit);
   else if (option.kind === 'place') pickPlace(option.place);
-  else void runPlaceSearch();
+  else if (option.kind === 'place-search') showPlaces();
+  else showSpecies();
 }
 
 /* Set on pointerdown: Safari's click events don't say whether a finger or a mouse made them. */
@@ -277,12 +291,13 @@ function onKeydown(event: KeyboardEvent) {
   } else if (event.key === 'Enter') {
     event.preventDefault();
     if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
-      if (places.value) showSpecies();
-      else void runPlaceSearch();
+      if (inPlaces.value) showSpecies();
+      else showPlaces();
     } else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
     else if (options.value[active.value]) choose(options.value[active.value]);
-    // Nothing to pick yet (still loading, or no matches): look for a place.
-    else void runPlaceSearch();
+    // Nothing to pick yet (still loading, or no matches): look for a place now.
+    else if (inPlaces.value) flushPlaces();
+    else showPlaces();
   } else if (event.key === 'Escape') {
     if (open.value) close();
     else query.value = '';
@@ -300,7 +315,8 @@ const dropdown = ref<HTMLDivElement>();
 const fitHeight = ref<number | null>(null);
 const isShown = computed(
   () =>
-    open.value && (options.value.length > 0 || !!searching.value || placeFailed.value || places.value?.length === 0),
+    open.value &&
+    (options.value.length > 0 || !!searching.value || (inPlaces.value && (placeFailed.value || placesAnswered.value))),
 );
 function fit() {
   // Hidden (v-show) it measures at top 0, which would size it past the keyboard.
@@ -384,11 +400,11 @@ onBeforeUnmount(() => {
     >
       <!-- Only the list shrinks when space is short, so the preview stays in view. -->
       <div :class="{ 'with-preview': previewHit }" class="results flex min-h-0 flex-col">
-        <!-- "Search places" sits below the scrolling rows, so it never moves as they scroll. -->
+        <!-- The switch to places (or species) sits below the scrolling rows, so it never moves as they scroll. -->
         <div
           id="omnibox-listbox"
           role="listbox"
-          :aria-label="places ? 'Places' : 'Species and places'"
+          :aria-label="inPlaces ? 'Places' : 'Species and places'"
           class="flex min-h-0 min-w-0 flex-col"
         >
           <ul v-if="hasRows" role="presentation" class="max-h-[60vh] min-h-0 overflow-auto overscroll-contain py-1">
@@ -456,14 +472,14 @@ onBeforeUnmount(() => {
             </template>
           </ul>
           <div
-            v-if="placeSearchOption"
-            :id="placeSearchOption.id"
+            v-if="switchOption"
+            :id="switchOption.id"
             role="option"
             :aria-selected="active === options.length - 1"
             :class="{ 'border-t': hasRows }"
             class="mt-auto flex shrink-0 cursor-pointer items-center gap-3 border-border px-3 py-2.5 text-sm aria-selected:bg-accent-soft"
             @mousedown.prevent
-            @click="choose(placeSearchOption)"
+            @click="choose(switchOption)"
             @pointermove="$event.pointerType === 'mouse' && (active = options.length - 1)"
           >
             <svg
@@ -474,10 +490,18 @@ onBeforeUnmount(() => {
               stroke-width="2"
               aria-hidden="true"
             >
-              <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
-              <circle cx="12" cy="10" r="2.5" />
+              <template v-if="switchOption.kind === 'place-search'">
+                <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11Z" />
+                <circle cx="12" cy="10" r="2.5" />
+              </template>
+              <template v-else>
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </template>
             </svg>
-            <span class="text-muted">Search places for “{{ query.trim() }}”</span>
+            <span class="text-muted"
+              >Search {{ switchOption.kind === 'place-search' ? 'places' : 'species' }} for “{{ query.trim() }}”</span
+            >
           </div>
           <span v-if="searching" role="none" class="sr-only">Searching {{ searching }}…</span>
         </div>
@@ -491,11 +515,14 @@ onBeforeUnmount(() => {
           @about="close"
         />
       </div>
-      <p v-if="places && !places.length && !placeFailed && !placeLoading" class="px-3 py-2 text-sm text-muted">
+      <p
+        v-if="inPlaces && placesAnswered && !places.length && !placeFailed && !placeLoading"
+        class="px-3 py-2 text-sm text-muted"
+      >
         No places found.
       </p>
-      <p v-if="placeFailed" class="px-3 py-2 text-sm text-muted">Place search is unavailable right now.</p>
-      <p v-if="liveFailed && !places" class="border-t border-border px-3 py-1.5 text-xs text-subtle">
+      <p v-if="inPlaces && placeFailed" class="px-3 py-2 text-sm text-muted">Place search is unavailable right now.</p>
+      <p v-if="liveFailed && !inPlaces" class="border-t border-border px-3 py-1.5 text-xs text-subtle">
         Live species search is busy; showing saved names only.
       </p>
       <p v-if="options.length" class="hint-bar" aria-hidden="true">
@@ -503,8 +530,8 @@ onBeforeUnmount(() => {
         <span v-if="previewHit && selectLabel()"
           ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
         >
-        <span v-if="places || enterLabel !== 'Search places'"
-          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> {{ places ? 'Species' : 'Places' }}</span
+        <span v-if="enterLabel !== 'Search places' && enterLabel !== 'Search species'"
+          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> {{ inPlaces ? 'Species' : 'Places' }}</span
         >
         <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
       </p>

@@ -159,7 +159,13 @@ export interface HexGeometry {
 export const $hexGeometry = atom<HexGeometry | null>(null);
 
 export type FlyRequest =
-  | { kind: 'bounds'; bbox: readonly [number, number, number, number]; maxZoom?: number }
+  | {
+      kind: 'bounds';
+      bbox: readonly [number, number, number, number];
+      maxZoom?: number;
+      /** Fly here at the zoom that fits `bbox`, rather than to the box's own centre. */
+      centre?: readonly [number, number];
+    }
   | { kind: 'point'; lng: number; lat: number; zoom: number };
 
 /** What a click on the map does: select a hex (explorer) or drop a pin (near me). */
@@ -173,6 +179,9 @@ export const $gridLevel = atom(0);
 
 /** Hex tile loading for the current burst, published by the map (`total` 0: nothing counted yet). */
 export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>({ loading: true, done: 0, total: 0 });
+
+/** Set by the map when the browser has no WebGL2, so the map can't draw at all. */
+export const $mapUnsupported = atom(false);
 
 /** One-shot camera requests (place search, taxon extent). */
 export const $flyTo = atom<FlyRequest | null>(null);

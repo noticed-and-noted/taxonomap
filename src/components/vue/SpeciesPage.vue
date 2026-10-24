@@ -30,7 +30,7 @@ const englishNames = computed(
       <ol class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <li v-for="(taxon, index) in speciesData.classification" :key="taxon.key" class="flex items-center gap-1.5">
           <a
-            :href="`/tree?focus=${taxon.key}`"
+            :href="`/tree/?focus=${taxon.key}`"
             class="hover:text-text hover:underline"
             :title="RANK_LABELS[taxon.rank] ?? taxon.rank"
           >
@@ -68,7 +68,7 @@ const englishNames = computed(
           >View on map</a
         >
         <a
-          :href="`/tree?focus=${speciesData.key}`"
+          :href="`/tree/?focus=${speciesData.key}`"
           class="rounded-md border border-border px-3 py-2 hover:border-accent"
           >Tree of life</a
         >

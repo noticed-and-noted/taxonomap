@@ -4,7 +4,8 @@
  * filmstrip when there are several. Every photo shows its licence and creator,
  * and links to where it came from. Photos swap immediately, showing a skeleton
  * until the new one loads, and neighbours are preloaded so stepping through is
- * usually instant. Open it with the exposed `open(index)`.
+ * usually instant. Open it with the exposed `open(index)`. Up and down arrows call `onStepRow` (`@step-row`),
+ * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
 import { computed, nextTick, reactive, ref } from 'vue';
 import { countRequest, photoCrossOrigin, retryWithoutCors, thumbnailUrl, type UsableImage } from '~/lib/gbif';
@@ -12,8 +13,16 @@ import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
+import { useScrollFade } from './useScrollFade';
 
-const props = defineProps<{ images: readonly UsableImage[]; name: string }>();
+/** `href`, when given, links the name (to the species' about page). */
+// `onStepRow` is a prop rather than an emit so the legend can tell whether anyone handles it.
+const props = defineProps<{
+  images: readonly UsableImage[];
+  name: string;
+  href?: string | undefined;
+  onStepRow?: ((delta: number) => void) | undefined;
+}>();
 
 /** Where a photo came from: its GBIF record, or its iNaturalist observation (or photo page). */
 function sourceOf(image: UsableImage): { href: string; label: string } {
@@ -79,13 +88,15 @@ function preloadAround(imageIndex: number) {
 }
 
 const strip = ref<HTMLElement>();
+const { fadeLeft, fadeRight, update: updateFade } = useScrollFade(strip);
 
 function show(imageIndex: number) {
   index.value = imageIndex;
   preloadAround(imageIndex);
-  void nextTick(() =>
-    strip.value?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }),
-  );
+  void nextTick(() => {
+    strip.value?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    updateFade();
+  });
 }
 
 /**
@@ -95,18 +106,26 @@ function show(imageIndex: number) {
 function open(imageIndex: number) {
   isOpen.value = true;
   areControlsHidden.value = false;
-  dialog.value?.showModal();
+  // Already open when a list steps to its next record.
+  if (!dialog.value?.open) dialog.value?.showModal();
   show(imageIndex);
 }
 
 function step(delta: number) {
   const count = props.images.length;
+  if (count < 2) return;
   show((index.value + delta + count) % count);
 }
+
+const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
 
 function onKey(event: KeyboardEvent) {
   if (event.key === 'ArrowRight') step(1);
   else if (event.key === 'ArrowLeft') step(-1);
+  else if (event.key in ROW_KEYS) {
+    event.preventDefault();
+    props.onStepRow?.(ROW_KEYS[event.key]!);
+  }
 }
 
 /** Tapping the photo hides everything over it, for an unobstructed look; tapping again brings it back. */
@@ -153,7 +172,7 @@ defineExpose({ open });
     @close="isOpen = false"
   >
     <div
-      v-if="current && isOpen"
+      v-if="isOpen"
       class="stage absolute inset-0"
       :class="{ 'controls-hidden': areControlsHidden }"
       @click.self="toggleControls"
@@ -161,9 +180,12 @@ defineExpose({ open });
       @pointerup="onPointerUp"
       @pointercancel="onPointerCancel"
     >
+      <p v-if="!current" class="absolute inset-0 m-0 grid place-items-center text-sm text-white/70">
+        No image recorded
+      </p>
       <SkeletonBlock
-        v-if="currentSrc && !settled.has(currentSrc)"
-        class="absolute inset-0"
+        v-else-if="currentSrc && !settled.has(currentSrc)"
+        class="photo-skeleton absolute inset-0"
         width="100%"
         height="100%"
         rounded="sm"
@@ -189,21 +211,16 @@ defineExpose({ open });
         @click="toggleControls"
       />
 
-      <!-- The credit rides with the count, clear of the close button and the strip. -->
-      <div class="overlay absolute left-2 top-2 flex min-h-11 max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5">
-        <span class="chip tabular-nums">{{ index + 1 }} / {{ images.length }}</span>
-        <LicenceBadge :licence="current.licence" :creator="current.creator" :rights-holder="current.rightsHolder" />
-        <p class="chip m-0 flex items-center gap-2">
-          <span v-if="current.publisher">via {{ current.publisher }}</span>
-          <a
-            :href="sourceOf(current).href"
-            target="_blank"
-            rel="noopener"
-            class="text-white underline decoration-white/60 underline-offset-2 hover:decoration-white"
-          >
-            {{ sourceOf(current).label }} <UiIcon name="external" />
-          </a>
-        </p>
+      <!-- Count and name, level with the close button. The name stays with no photo. -->
+      <div class="overlay absolute left-2 top-4 flex max-w-[calc(100%-4.5rem)] items-center gap-1.5">
+        <span v-if="current" class="chip chip-title tabular-nums">{{ index + 1 }} / {{ images.length }}</span>
+        <a
+          v-if="name && href"
+          :href="href"
+          class="chip chip-title truncate text-white no-underline underline-offset-2 hover:underline focus-visible:underline"
+          >{{ name }}</a
+        >
+        <span v-else-if="name" class="chip chip-title truncate">{{ name }}</span>
       </div>
       <form method="dialog">
         <button class="overlay-button right-2 top-2" aria-label="Close"><UiIcon name="close" size="20" /></button>
@@ -217,27 +234,65 @@ defineExpose({ open });
         </button>
       </template>
 
-      <!-- Clicks pass through the full-width band, so taps beside the strip still reach the photo. -->
-      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center">
+      <!-- The strip, from the left, with the credit and key hints beneath it.
+           Clicks pass through the band, so taps beside them still reach the photo. -->
+      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col gap-1.5">
         <!-- Padded inside the scroller so the thumbnails' focus rings aren't clipped. -->
         <div
           v-if="images.length > 1"
           ref="strip"
-          class="overlay pointer-events-auto flex max-w-full scroll-px-1 gap-1.5 overflow-x-auto p-1"
+          class="filmstrip overlay pointer-events-auto flex max-w-full gap-1.5 self-start overflow-x-auto overflow-y-hidden p-1"
+          :class="{ 'fade-left': fadeLeft, 'fade-right': fadeRight }"
           role="group"
           :aria-label="`Photos of ${name}`"
+          @scroll.passive="updateFade"
         >
           <button
             v-for="(image, position) in images"
             :key="image.url"
             type="button"
-            class="filmstrip-thumb bg-photo"
+            class="filmstrip-thumb"
             :aria-pressed="position === index"
             :aria-label="`Photo ${position + 1} of ${images.length}`"
             @click="show(position)"
           >
             <ThumbImage :image="image" size="200x" class="size-full object-cover" />
           </button>
+        </div>
+        <!-- Side by side at any width; when space runs short both sides stack (see .bottom-row). -->
+        <div class="bottom-row overlay flex items-end justify-between gap-1.5">
+          <div v-if="current" class="credit pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5">
+            <LicenceBadge
+              class="bottom-pill"
+              :licence="current.licence"
+              :creator="current.creator"
+              :rights-holder="current.rightsHolder"
+            />
+            <p class="chip bottom-pill m-0 flex items-center gap-2">
+              <span v-if="current.publisher">via {{ current.publisher }}</span>
+              <a
+                :href="sourceOf(current).href"
+                target="_blank"
+                rel="noopener"
+                class="text-white underline decoration-white/60 underline-offset-2 hover:decoration-white"
+              >
+                {{ sourceOf(current).label }} <UiIcon name="external" />
+              </a>
+            </p>
+          </div>
+          <!-- ml-auto keeps it right when there's no credit beside it (no photo). -->
+          <p
+            class="chip bottom-pill key-hints m-0 ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1"
+            aria-hidden="true"
+          >
+            <span v-if="images.length > 1" class="keys-only"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
+            <span v-if="onStepRow" class="keys-only"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
+            <span class="keys-only"><kbd>Esc</kbd> Close</span>
+            <span class="flex items-center gap-1">
+              <UiIcon name="mouse" size="14" class="keys-only" /><UiIcon name="touch" size="14" class="touch-only" />
+              Hide UI
+            </span>
+          </p>
         </div>
       </div>
     </div>
@@ -253,6 +308,60 @@ defineExpose({ open });
   backdrop-filter: blur(8px);
   font-size: 11px;
   line-height: 1.25;
+}
+/* After .chip, and scoped so it also beats LicenceBadge's own padding. */
+.bottom-pill {
+  padding-block: 4px;
+}
+/* The count and name lead the credit, so they read first. */
+/* 1.75rem tall, so with the overlay at top-4 it centres on the 2.75rem close button at top-2. */
+.chip-title {
+  padding: 0 0.5rem;
+  font-size: 14px;
+  line-height: 1.75rem;
+}
+/* Keyboard hints and the mouse icon only where there's likely a keyboard, as in the Omnibox; touch screens get the
+   touch icon. */
+.key-hints {
+  color: rgb(255 255 255 / 0.75);
+}
+.keys-only {
+  display: none;
+}
+/* Once the row is too narrow for the credit and all the hints on one line, both sides stack together: the credit
+   pills one above the other, the hints two by two rather than wrapping three and one.
+   shortcut: the width is a typical credit plus four hints; measure the row if long credits wrap them early. */
+.bottom-row {
+  container-type: inline-size;
+}
+@container (max-width: 42rem) {
+  .credit {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .key-hints {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+  }
+}
+@media (min-width: 640px) and (hover: hover) {
+  .keys-only {
+    display: inline;
+  }
+  .touch-only {
+    display: none;
+  }
+}
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  font-family: inherit;
+  font-size: 0.625rem;
 }
 .overlay-button {
   position: absolute;
@@ -277,22 +386,52 @@ defineExpose({ open });
   translate: 0 -50%;
 }
 /* 44 px so they work as touch targets; the current photo gets the accent border. */
+/* Snaps to a whole thumbnail. The scroll padding matches the fade, so the snapped and current thumbnails sit clear of it. */
+.filmstrip {
+  --fade: 1.5rem;
+  --fade-left: 0px;
+  --fade-right: 0px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--fade);
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--fade-left),
+    #000 calc(100% - var(--fade-right)),
+    transparent 100%
+  );
+}
+.filmstrip.fade-left {
+  --fade-left: var(--fade);
+}
+.filmstrip.fade-right {
+  --fade-right: var(--fade);
+}
 .filmstrip-thumb {
+  scroll-snap-align: start;
   flex: none;
   width: 2.75rem;
   height: 2.75rem;
   overflow: hidden;
-  border: 2px solid transparent;
+  /* A themed frame around each thumbnail; the backing stops inside it, so the selected outline is accent alone. */
+  --thumb-backing: rgb(0 0 0 / 0.3);
+  --thumb-border: rgb(0 0 0 / 0.3);
+  border: 2px solid var(--thumb-border);
   border-radius: var(--radius-sm);
+  background: var(--thumb-backing) padding-box;
+  backdrop-filter: blur(8px);
   cursor: pointer;
 }
-/* The others are dimmed too: Rust alone barely shows on the black stage in the light theme. */
-.filmstrip-thumb:not([aria-pressed='true']) {
-  opacity: 0.6;
+:root[data-theme='light'] .filmstrip-thumb {
+  --thumb-border: rgb(255 255 255 / 0.3);
+}
+/* The others are dimmed too: Rust alone barely shows on the black stage in the light theme.
+   The image dims, not the button, so the blurred backing behind it shows through like the nav buttons'. */
+.filmstrip-thumb > * {
   transition: opacity var(--dur-fast) var(--ease);
 }
-.filmstrip-thumb:hover {
-  opacity: 1;
+.filmstrip-thumb:not([aria-pressed='true'], :hover) > * {
+  opacity: 0.6;
 }
 .filmstrip-thumb[aria-pressed='true'] {
   border-color: var(--accent);
@@ -324,6 +463,21 @@ defineExpose({ open });
 .lightbox:focus-visible {
   outline: none;
 }
+/* Pulses up from the black stage rather than shimmering grey, so a photo that loads quickly doesn't flash.
+   .stage raises it above SkeletonBlock's own shimmer. */
+.stage .photo-skeleton {
+  background: rgb(255 255 255 / 0.08);
+  animation: pulse-in 1.4s var(--ease) infinite;
+}
+@keyframes pulse-in {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 @keyframes pop {
   from {
     opacity: 0;
@@ -331,7 +485,8 @@ defineExpose({ open });
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lightbox[open] {
+  .lightbox[open],
+  .stage .photo-skeleton {
     animation: none;
   }
 }

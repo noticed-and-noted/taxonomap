@@ -48,6 +48,9 @@ test('a place search moves the map there', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('combobox', { name: 'Search species or places' }).fill('london');
   await page.getByRole('option', { name: /Search places for/ }).click();
+  // Typing more stays on places, with a way back to species.
+  await page.getByRole('combobox', { name: 'Search species or places' }).pressSequentially(' city');
+  await expect(page.getByRole('option', { name: /Search species for “london city”/ })).toBeVisible();
   await page.getByRole('option', { name: /^London/ }).click();
   // The view follows the camera (rounded, replace-throttled).
   await expect(page).toHaveURL(/view=-0\.\d+%2C51\.\d+/);

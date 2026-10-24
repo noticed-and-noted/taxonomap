@@ -7,7 +7,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref } from 'vue';
-import { $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
+import { $mapUnsupported, $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
 import { $checklistHint, $tourSeen } from '~/stores/onboarding';
 import BasemapSwitcher from './BasemapSwitcher.vue';
@@ -24,6 +24,7 @@ import NearExplorer from './NearExplorer.vue';
 import OnboardingTour from './OnboardingTour.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
+import SearchFitSetting from './SearchFitSetting.vue';
 import TaxonChip from './TaxonChip.vue';
 import ThemePicker from './ThemePicker.vue';
 import TryThis from './TryThis.vue';
@@ -37,6 +38,7 @@ const groupCounts = useStore($groupCounts);
 /* Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
 const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
+const mapUnsupported = useStore($mapUnsupported);
 
 /* Phone only: slide the dock off to the left to see the map behind it. */
 const dockStashed = ref(false);
@@ -74,7 +76,7 @@ function closePanel() {
     :class="{ 'panel-open': panelOpen && !near, near }"
   >
     <NearExplorer v-if="near" />
-    <OnboardingTour v-if="!tourSeen && !near" />
+    <OnboardingTour v-if="!tourSeen && !near && !mapUnsupported" />
     <ChecklistHint v-if="hintId && !near" :id="hintId" :key="hintId" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
@@ -215,6 +217,7 @@ function closePanel() {
               <ThemePicker />
             </div>
             <MapSettings inline />
+            <SearchFitSetting />
             <OnboardingSettings />
             <LegalLinks />
           </div>

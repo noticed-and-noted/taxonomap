@@ -193,7 +193,7 @@ export async function commonNames(keys: readonly number[], signal?: AbortSignal)
       limit(async () => {
         if (signal?.aborted) return;
         const vernaculars = await getVernacularNames(key, signal).catch(() => null);
-        const name = vernaculars && englishName(vernaculars.results);
+        const name = vernaculars && englishName(vernaculars.results, key);
         if (name) names.set(key, name);
       }),
     ),

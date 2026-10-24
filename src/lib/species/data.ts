@@ -109,7 +109,7 @@ async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promi
     top.map(async (sibling) => {
       const siblingCommonName =
         commonName(sibling.key) ??
-        englishName((await getVernacularNames(sibling.key).catch(() => ({ results: [] }))).results);
+        englishName((await getVernacularNames(sibling.key).catch(() => ({ results: [] }))).results, sibling.key);
       return {
         key: sibling.key,
         scientificName: names.get(sibling.key) as string,
@@ -147,7 +147,7 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     siblingsOf(usage, commonName).catch(() => []),
   ]);
 
-  const common = englishName(vernaculars.results) ?? commonName(key) ?? undefined;
+  const common = englishName(vernaculars.results, key) ?? commonName(key) ?? undefined;
   return {
     key,
     slug: speciesSlug(usage),
