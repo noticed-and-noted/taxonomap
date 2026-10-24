@@ -4,7 +4,6 @@
  *   detail · vernacular names · synonyms · one facet request (years, months,
  *   countries, datasets) · one facet request for the genus (siblings ranked
  *   by records) · children of the genus (names) · dataset titles for the top 5.
- * Plus three to Wikidata and Wikipedia for the intro (see ./wikipedia).
  * Photos are not part of it: the gallery and cards fetch them in the browser
  * (see ~/lib/photos/taxon-photos).
  *
@@ -27,7 +26,6 @@ import {
 } from '~/lib/gbif';
 import { summariseDistributions, type DistributionSummary } from './distribution';
 import { englishName, groupByLanguage, slugify, type NamesByLanguage } from './names';
-import { wikipediaIntro, type WikipediaIntro } from './wikipedia';
 
 const SYNONYM_LIMIT = 30;
 const SIBLING_LIMIT = 8;
@@ -69,8 +67,6 @@ export interface SpeciesData {
   redList?: RedListStatus;
   /** Countries checklists say it was introduced to; absent when none say. */
   distribution?: DistributionSummary;
-  /** The opening of its English Wikipedia article; absent when it has none, or Wikipedia failed. */
-  wikipedia?: WikipediaIntro;
   classification: TaxonRef[];
   vernacular: NamesByLanguage[];
   synonyms: string[];
@@ -177,7 +173,7 @@ function namedDatasets(counts: { name: string; count: number }[]) {
  */
 export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
   const usage = await getSpecies(key);
-  const [vernaculars, synonyms, facets, siblings, redList, distribution, wikipedia] = await Promise.all([
+  const [vernaculars, synonyms, facets, siblings, redList, distribution] = await Promise.all([
     getVernacularNames(key).catch(() => ({ results: [] })),
     getSynonyms(key, SYNONYM_LIMIT).catch(() => ({ results: [] })),
     occurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
@@ -186,8 +182,6 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     siblingsOf(usage, commonName).catch(() => []),
     redListOf(usage),
     distributionOf(usage),
-    // The page reads fine without an intro, so a failed lookup just leaves it out.
-    wikipediaIntro(key).catch(() => null),
   ]);
 
   const common = englishName(vernaculars.results, key) ?? commonName(key) ?? undefined;
@@ -202,7 +196,6 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     ...(common && { commonName: common }),
     ...(redList && { redList }),
     ...(distribution && { distribution }),
-    ...(wikipedia && { wikipedia }),
     classification: classificationOf(usage),
     vernacular: groupByLanguage(vernaculars.results),
     synonyms: [...new Set(synonyms.results.map((synonym) => synonym.scientificName))].slice(0, SYNONYM_LIMIT),

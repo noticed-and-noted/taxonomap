@@ -9,11 +9,17 @@ import { computed } from 'vue';
 import { compact, countryName, full, IUCN_LABELS, RANK_LABELS } from '~/lib/format';
 import { LICENCE_URLS } from '~/lib/gbif/licence';
 import type { SpeciesData } from '~/lib/species/data';
-import { nameRuns } from '~/lib/species/wikipedia';
+import { nameRuns, type WikipediaIntro } from '~/lib/species/wikipedia';
+import IntroSkeleton from './IntroSkeleton.vue';
 import RadialSeasonality from './RadialSeasonality.vue';
 import UiIcon from './UiIcon.vue';
 
-const props = defineProps<{ data: SpeciesData }>();
+const props = defineProps<{
+  data: SpeciesData;
+  /** Its Wikipedia intro, loaded apart from the data so the page needn't wait for it. */
+  intro?: WikipediaIntro | null;
+  isIntroLoading?: boolean;
+}>();
 
 // Introduced lists run to dozens of countries; the rest sit behind a disclosure.
 const INTRODUCED_SHOWN = 5;
@@ -45,7 +51,7 @@ const range = computed(() => {
   };
 });
 const intro = computed(() => {
-  const wikipedia = speciesData.value.wikipedia;
+  const wikipedia = props.intro;
   if (!wikipedia) return null;
   return {
     ...wikipedia,
@@ -154,6 +160,7 @@ const englishNames = computed(
             <a :href="LICENCE_URLS['CC-BY-SA']" rel="license noopener">CC BY-SA 4.0</a>.
           </p>
         </section>
+        <IntroSkeleton v-else-if="isIntroLoading" />
       </div>
       <div class="space-y-4">
         <slot name="map" />

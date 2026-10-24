@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * Loading placeholder for /species/view. It copies SpeciesPage's classes and the
- * usual content (photos, names, ten countries, five datasets) so nothing moves when the data lands.
+ * usual content (photos, intro, names, ten countries, five datasets) so nothing moves when the data lands.
  */
+import IntroSkeleton from './IntroSkeleton.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import SkeletonLine from './SkeletonLine.vue';
 
@@ -38,11 +39,14 @@ const BUTTON_HEIGHT = 'calc(2.25rem + 2px)';
     </div>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <div class="grid gap-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <SkeletonBlock class="aspect-[4/3]" height="auto" rounded="lg" aria-hidden="true" />
-        <div class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
-          <SkeletonBlock v-for="slot in 4" :key="slot" class="aspect-square" height="auto" aria-hidden="true" />
+      <div>
+        <div class="grid gap-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <SkeletonBlock class="aspect-[4/3]" height="auto" rounded="lg" aria-hidden="true" />
+          <div class="grid grid-cols-4 content-start gap-1.5 sm:grid-cols-2">
+            <SkeletonBlock v-for="slot in 4" :key="slot" class="aspect-square" height="auto" aria-hidden="true" />
+          </div>
         </div>
+        <IntroSkeleton aria-hidden="true" />
       </div>
       <div class="space-y-4">
         <div>
