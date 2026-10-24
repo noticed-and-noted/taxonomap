@@ -7,7 +7,9 @@
  */
 import { computed } from 'vue';
 import { compact, countryName, full, IUCN_LABELS, RANK_LABELS } from '~/lib/format';
+import { LICENCE_URLS } from '~/lib/gbif/licence';
 import type { SpeciesData } from '~/lib/species/data';
+import { nameRuns } from '~/lib/species/wikipedia';
 import RadialSeasonality from './RadialSeasonality.vue';
 import UiIcon from './UiIcon.vue';
 
@@ -40,6 +42,14 @@ const range = computed(() => {
     moreIntroduced: introduced.slice(INTRODUCED_SHOWN),
     invasive: countryNames(distribution.invasive),
     sources: distribution.sources === 1 ? 'one checklist' : `${distribution.sources} checklists`,
+  };
+});
+const intro = computed(() => {
+  const wikipedia = speciesData.value.wikipedia;
+  if (!wikipedia) return null;
+  return {
+    ...wikipedia,
+    paragraphs: wikipedia.paragraphs.map((paragraph) => nameRuns(paragraph, speciesData.value.canonicalName)),
   };
 });
 const generated = computed(() => speciesData.value.generated.slice(0, 10));
@@ -124,25 +134,45 @@ const englishNames = computed(
             No openly licensed photos yet
           </div>
         </slot>
+        <section v-if="intro" class="about mt-5 max-w-prose space-y-3 leading-relaxed" aria-label="About this species">
+          <!-- No JS on the pre-rendered page: every paragraph is rendered, and CSS shows the rest while the toggle is open. -->
+          <p v-for="(paragraph, index) in intro.paragraphs" :key="index" :class="{ more: index > 0 }">
+            <template v-for="(run, runIndex) in paragraph" :key="runIndex">
+              <i v-if="run.isName" class="sci-name">{{ run.text }}</i>
+              <template v-else>{{ run.text }}</template>
+            </template>
+          </p>
+          <details v-if="intro.paragraphs.length > 1" class="text-sm">
+            <summary class="cursor-pointer text-muted hover:text-text">
+              <UiIcon name="chevron-right" class="chevron" />
+              <span class="when-closed">Read more</span>
+              <span class="when-open">Show less</span>
+            </summary>
+          </details>
+          <p class="text-xs text-subtle">
+            From <a :href="intro.url" rel="noopener">“{{ intro.title }}” on Wikipedia</a>, under
+            <a :href="LICENCE_URLS['CC-BY-SA']" rel="license noopener">CC BY-SA 4.0</a>.
+          </p>
+        </section>
       </div>
       <div class="space-y-4">
         <slot name="map" />
         <section v-if="range" aria-labelledby="range-h">
           <h2 id="range-h" class="mb-2 font-display text-xl">Introduced range</h2>
           <div class="space-y-1.5 text-sm">
-            <div class="flex gap-2">
-              <span class="mt-1.5 size-2 shrink-0 rounded-full bg-(--range-introduced)" aria-hidden="true"></span>
-              <div>
-                Introduced to {{ range.introduced.join(' · ') }}
-                <details v-if="range.moreIntroduced.length" class="mt-1">
-                  <summary class="cursor-pointer text-muted hover:text-text">
-                    <UiIcon name="chevron-right" class="chevron" /> {{ range.moreIntroduced.length }} more
-                  </summary>
-                  <p class="fade-list fade-scroll mt-1 max-h-[8lh] overflow-y-auto">
-                    {{ range.moreIntroduced.join(' · ') }}
-                  </p>
-                </details>
-              </div>
+            <div class="introduced">
+              <!-- No JS on the pre-rendered page: the extra countries are always rendered, and CSS shows them while the toggle is open. -->
+              <p class="fade-list fade-scroll max-h-[8lh] overflow-y-auto">
+                Introduced to {{ range.introduced.join(' · ')
+                }}<span v-if="range.moreIntroduced.length" class="more"> · {{ range.moreIntroduced.join(' · ') }}</span>
+              </p>
+              <details v-if="range.moreIntroduced.length" class="mt-1">
+                <summary class="cursor-pointer text-muted hover:text-text">
+                  <UiIcon name="chevron-right" class="chevron" />
+                  <span class="when-closed">{{ range.moreIntroduced.length }} more</span>
+                  <span class="when-open">Show less</span>
+                </summary>
+              </details>
             </div>
             <p v-if="range.invasive.length" class="flex gap-2">
               <span class="mt-1.5 size-2 shrink-0 rounded-full bg-(--range-invasive)" aria-hidden="true"></span>
@@ -224,3 +254,20 @@ const englishNames = computed(
     </footer>
   </article>
 </template>
+
+<style scoped>
+.introduced:not(:has(details[open])) .more,
+.introduced details[open] .when-closed,
+.introduced details:not([open]) .when-open,
+.about:not(:has(details[open])) .more,
+.about details[open] .when-closed,
+.about details:not([open]) .when-open {
+  display: none;
+}
+
+/* Once open, the toggle sits under the text, so its chevron points back up. */
+.introduced details[open] .chevron,
+.about details[open] .chevron {
+  transform: rotate(-90deg);
+}
+</style>

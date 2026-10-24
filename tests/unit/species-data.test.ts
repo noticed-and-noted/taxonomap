@@ -65,6 +65,10 @@ function gbif(usage: Record<string, unknown> = ROBIN, redListCode = 'LC') {
     if (path === '/v1/species/2492462/distributions')
       return { results: [{ country: 'IE', establishmentMeans: 'INTRODUCED', source: 'GRIIS - Ireland' }] };
     if (path === '/v1/dataset/ds1') return { key: 'ds1', title: 'Garden birds' };
+    if (params.get('list') === 'search') return { query: { search: [{ title: 'Q25334' }] } };
+    if (params.get('action') === 'wbgetentities')
+      return { entities: { Q25334: { sitelinks: { enwiki: { title: 'European robin', url: 'https://w/robin' } } } } };
+    if (params.get('prop') === 'extracts') return { query: { pages: [{ extract: 'The European robin is a bird.' }] } };
     return undefined;
   });
 }
@@ -111,9 +115,10 @@ describe('loadSpeciesData', () => {
       ],
       // The species itself and unnamed keys are left out.
       siblings: [{ key: 7, scientificName: 'Erithacus akahige', commonName: 'Japanese robin', count: 5 }],
+      wikipedia: { title: 'European robin', url: 'https://w/robin', paragraphs: ['The European robin is a bird.'] },
     });
     expect(data.months[4]).toBe(9);
-    expect(calls.length).toBeLessThanOrEqual(11);
+    expect(calls.filter((call) => call.host === 'api.gbif.org').length).toBeLessThanOrEqual(11);
   });
 
   it('lists a sibling without a common name when neither the index nor GBIF has one', async () => {

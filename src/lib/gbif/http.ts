@@ -277,6 +277,11 @@ export function http(): Http {
   return current;
 }
 
+/** The shared client's transport, for clients of other APIs: at build time, the Node one (User-Agent, disk cache). */
+export function sharedTransport(): Transport {
+  return current.options.transport;
+}
+
 /** Swap transport/options (build time uses the Node disk-cache transport). */
 export function configureHttp(overrides: Partial<HttpOptions>): Http {
   current = createHttp(overrides);
