@@ -88,6 +88,12 @@
     outline-offset: 2px;
   }
 
+  /* The skip-link target, not a control. Safari hands it focus back when a dialog closes, and its ring showed as a
+     line under the header. */
+  main[tabindex='-1']:focus-visible {
+    outline: none;
+  }
+
   ::selection {
     background: var(--accent-soft);
   }
