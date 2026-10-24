@@ -138,6 +138,8 @@ export interface Occurrence extends HigherKeys {
   decimalLatitude?: number;
   decimalLongitude?: number;
   coordinateUncertaintyInMeters?: number;
+  /** Why the source held data back, e.g. iNaturalist's note when the observer blurred the location. */
+  informationWithheld?: string;
   eventDate?: string;
   year?: number;
   month?: number;

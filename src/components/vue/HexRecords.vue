@@ -8,7 +8,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
-import { BASIS_LABELS, full } from '~/lib/format';
+import { BASIS_LABELS, distance, full } from '~/lib/format';
 import { normalise } from '~/lib/data/name-index';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
@@ -325,6 +325,16 @@ function toggle(occurrence: Occurrence) {
 
 const institution = (occurrence: Occurrence) =>
   [occurrence.institutionCode, occurrence.catalogNumber].filter(Boolean).join(' ');
+
+// iNaturalist's wording when the observer, not a threatened-taxon rule, blurred the point.
+const OBSERVER_BLURRED = /request of the observer/i;
+
+const accuracy = (occurrence: Occurrence) => {
+  const metres = occurrence.coordinateUncertaintyInMeters;
+  if (!metres) return '';
+  const blurred = OBSERVER_BLURRED.test(occurrence.informationWithheld ?? '') ? ' · blurred by observer' : '';
+  return `Within ${distance(metres)}${blurred}`;
+};
 </script>
 
 <template>
@@ -540,7 +550,7 @@ const institution = (occurrence: Occurrence) =>
                           </span>
                         </button>
                         <LicenceBadge
-                          class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
+                          class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]!"
                           :licence="image(occurrence)!.licence"
                           :creator="image(occurrence)!.creator"
                           :rights-holder="image(occurrence)!.rightsHolder"
@@ -556,7 +566,13 @@ const institution = (occurrence: Occurrence) =>
                         <dt class="text-subtle">Recorded by</dt>
                         <dd>{{ occurrence.recordedBy }}</dd>
                       </div>
-                      <div v-if="institution(occurrence)">
+                      <template v-if="occurrence.basisOfRecord === 'HUMAN_OBSERVATION'">
+                        <div v-if="accuracy(occurrence)">
+                          <dt class="text-subtle">Accuracy</dt>
+                          <dd>{{ accuracy(occurrence) }}</dd>
+                        </div>
+                      </template>
+                      <div v-else-if="institution(occurrence)">
                         <dt class="text-subtle">Institution</dt>
                         <dd>{{ institution(occurrence) }}</dd>
                       </div>

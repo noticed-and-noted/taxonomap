@@ -22,6 +22,6 @@ const credit = computed(() => props.creator ?? props.rightsHolder);
       class="whitespace-nowrap font-semibold tracking-wide hover:underline"
       >{{ licence }}</a
     >
-    <span v-if="credit" class="truncate">© {{ credit }}</span>
+    <span v-if="credit" class="min-w-0 truncate">© {{ credit }}</span>
   </span>
 </template>

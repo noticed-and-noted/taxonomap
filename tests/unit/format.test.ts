@@ -15,5 +15,6 @@ describe('format', () => {
   it('shows distances in metres or kilometres', () => {
     expect(distance(100)).toBe('100 m');
     expect(distance(10_000)).toBe('10 km');
+    expect(distance(26_293)).toBe('26.3 km');
   });
 });
