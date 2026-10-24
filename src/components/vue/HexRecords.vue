@@ -8,13 +8,14 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
-import { BASIS_LABELS, full } from '~/lib/format';
+import { BASIS_LABELS, distance, full } from '~/lib/format';
 import { normalise } from '~/lib/data/name-index';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import PhotoLightbox from './PhotoLightbox.vue';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
+import { tidy } from '~/lib/species/names';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
@@ -139,7 +140,10 @@ const aboutKey = (occurrence: Occurrence) =>
 
 const common = (occurrence: Occurrence) => {
   const key = aboutKey(occurrence);
-  return (key ? (commonNames.value.get(key) ?? lateNames.value.get(key)) : undefined) ?? occurrence.vernacularName;
+  return (
+    (key ? (commonNames.value.get(key) ?? lateNames.value.get(key)) : undefined) ??
+    (occurrence.vernacularName && tidy(occurrence.vernacularName))
+  );
 };
 // The accepted name, so the row matches the about page it links to (a synonym's record shows its accepted taxon).
 const scientificName = (occurrence: Occurrence) =>
@@ -255,9 +259,22 @@ async function openPhotos(occurrence: Occurrence) {
   lightbox.value?.open(0);
 }
 
-/** Moves the lightbox to the next or previous record in the list, opening that row behind it. */
+const hasMore = computed(() => total.value !== null && records.value.length < total.value);
+const lightboxPosition = () => records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+/** The next record's first photo, for the lightbox to preload. */
+const nextRecordPhoto = computed(() => {
+  const next = lightboxRecord.value && records.value[lightboxPosition() + 1];
+  return next ? image(next) : undefined;
+});
+
+/**
+ * Moves the lightbox to the next or previous record in the list, opening that row behind it.
+ * Stepping down past the last loaded record loads the next page first.
+ */
 async function stepRecord(delta: number) {
-  const position = records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+  const isPastEnd = delta > 0 && lightboxPosition() + delta >= records.value.length;
+  if (isPastEnd && hasMore.value && !loading.value) await load(true);
+  const position = lightboxPosition();
   const next = records.value[position + delta];
   if (position < 0 || !next) return;
   expanded.value = next.key;
@@ -312,6 +329,16 @@ function toggle(occurrence: Occurrence) {
 
 const institution = (occurrence: Occurrence) =>
   [occurrence.institutionCode, occurrence.catalogNumber].filter(Boolean).join(' ');
+
+// iNaturalist's wording when the observer, not a threatened-taxon rule, blurred the point.
+const OBSERVER_BLURRED = /request of the observer/i;
+
+const accuracy = (occurrence: Occurrence) => {
+  const metres = occurrence.coordinateUncertaintyInMeters;
+  if (!metres) return '';
+  const blurred = OBSERVER_BLURRED.test(occurrence.informationWithheld ?? '') ? ' · blurred by observer' : '';
+  return `Within ${distance(metres)}${blurred}`;
+};
 </script>
 
 <template>
@@ -527,7 +554,7 @@ const institution = (occurrence: Occurrence) =>
                           </span>
                         </button>
                         <LicenceBadge
-                          class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]"
+                          class="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)]!"
                           :licence="image(occurrence)!.licence"
                           :creator="image(occurrence)!.creator"
                           :rights-holder="image(occurrence)!.rightsHolder"
@@ -543,7 +570,13 @@ const institution = (occurrence: Occurrence) =>
                         <dt class="text-subtle">Recorded by</dt>
                         <dd>{{ occurrence.recordedBy }}</dd>
                       </div>
-                      <div v-if="institution(occurrence)">
+                      <template v-if="occurrence.basisOfRecord === 'HUMAN_OBSERVATION'">
+                        <div v-if="accuracy(occurrence)">
+                          <dt class="text-subtle">Accuracy</dt>
+                          <dd>{{ accuracy(occurrence) }}</dd>
+                        </div>
+                      </template>
+                      <div v-else-if="institution(occurrence)">
                         <dt class="text-subtle">Institution</dt>
                         <dd>{{ institution(occurrence) }}</dd>
                       </div>
@@ -603,6 +636,7 @@ const institution = (occurrence: Occurrence) =>
       :images="lightboxPhotos"
       :name="lightboxRecord ? name(lightboxRecord) : ''"
       :href="lightboxAbout"
+      :next-row-image="nextRecordPhoto"
       @step-row="stepRecord"
     />
   </div>

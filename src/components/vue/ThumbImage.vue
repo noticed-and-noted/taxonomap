@@ -5,8 +5,8 @@
  * applies once mounted, and images that finished loading before hydration
  * are detected on mount.
  */
-import { onMounted, ref, toRef } from 'vue';
-import { photoCrossOrigin, retryWithoutCors, type ThumbSize, type UsableImage } from '~/lib/gbif';
+import { onBeforeUnmount, onMounted, ref, toRef } from 'vue';
+import { GBIF_API_BASE, photoCrossOrigin, retryWithoutCors, type ThumbSize, type UsableImage } from '~/lib/gbif';
 import { useThumbnail } from './useThumbnail';
 
 const props = withDefaults(defineProps<{ image: UsableImage; size?: ThumbSize; alt?: string }>(), {
@@ -21,6 +21,18 @@ const mounted = ref(false);
 const attempt = ref(0);
 const { src, loaded, broken, onLoad, onError } = useThumbnail(toRef(props, 'image'), props.size);
 
+/** GBIF's image cache sometimes fails on a miss and serves the photo moments later. */
+const CACHE_RETRY_MS = 1500;
+let cacheRetried = false;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+function retryCacheMiss(url: string): boolean {
+  if (cacheRetried || !url.startsWith(`${GBIF_API_BASE}/v1/image/cache/`)) return false;
+  cacheRetried = true;
+  retryTimer = setTimeout(() => attempt.value++, CACHE_RETRY_MS);
+  return true;
+}
+
 function handleLoad() {
   onLoad();
   emit('loaded');
@@ -31,6 +43,7 @@ function handleError() {
     attempt.value++;
     return;
   }
+  if (src.value && retryCacheMiss(src.value)) return;
   onError();
   if (broken.value) emit('broken');
 }
@@ -43,6 +56,8 @@ onMounted(() => {
   }
   mounted.value = true;
 });
+
+onBeforeUnmount(() => clearTimeout(retryTimer));
 </script>
 
 <template>

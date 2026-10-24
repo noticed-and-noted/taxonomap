@@ -67,9 +67,9 @@ export const IUCN_LABELS: Record<string, string> = {
   DD: 'Data deficient',
 };
 
-/** "10 m", "1 km". */
+/** "10 m", "1 km", "26.3 km". */
 export function distance(metres: number): string {
-  return metres >= 1000 ? `${metres / 1000} km` : `${metres} m`;
+  return metres >= 1000 ? `${Math.round(metres / 100) / 10} km` : `${Math.round(metres)} m`;
 }
 
 export const BASIS_LABELS: Record<string, string> = {

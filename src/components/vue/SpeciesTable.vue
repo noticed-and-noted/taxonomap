@@ -52,7 +52,7 @@ const filterBtn = ref<HTMLButtonElement>();
 const popover = ref<HTMLElement>();
 const scroller = ref<HTMLElement>();
 const groupList = ref<HTMLElement>();
-const { fadeBottom: groupFade, update: updateGroupFade } = useScrollFade(groupList);
+const { fadeTop: groupFadeTop, fadeBottom: groupFade, update: updateGroupFade } = useScrollFade(groupList);
 const broken = ref(new Set<number>());
 
 // Rows currently scrolled into the results box (or just below it); see observeRows.
@@ -264,7 +264,7 @@ watch([query, group, sortKey, sortDesc], () => {
           <div
             ref="groupList"
             class="fade-list -mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1"
-            :class="{ 'fade-bottom': groupFade }"
+            :class="{ 'fade-top': groupFadeTop, 'fade-bottom': groupFade }"
             @scroll.passive="updateGroupFade"
           >
             <label class="group-opt">

@@ -41,6 +41,7 @@ describe('species helpers', () => {
     expect(
       englishName([name('robin'), name('Robin'), name('Redbreast robin'), name('redbreast robin')], ROBIN_KEY),
     ).toBe('Robin');
+    expect(englishName([name('VESPER BATS')], ROBIN_KEY)).toBe('Vesper bats');
   });
 
   it('uses the IOC name for birds where it differs from the most frequent one', () => {
@@ -87,6 +88,14 @@ describe('species helpers', () => {
       { vernacularName: 'Mystery' } as never,
     ]);
     expect(groups.map((group) => group.language)).toEqual(['English', 'German', 'Other', 'Spanish']);
+  });
+
+  it('sentence-cases names written all in capitals', () => {
+    const groups = groupByLanguage([
+      { vernacularName: 'VESPER BATS', language: 'eng' },
+      { vernacularName: 'Glattnasen', language: 'deu' },
+    ]);
+    expect(groups.map((group) => group.names)).toEqual([['Vesper bats'], ['Glattnasen']]);
   });
 
   it('groups names by language with English first', () => {
