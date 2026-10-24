@@ -64,6 +64,14 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 
 **Accent rules.** The accent marks what is selected, active or focused, plus the fern in the logo. It is not a decoration colour and not a second button style. Text on an accent fill uses `--accent-contrast`.
 
+### IUCN Red List
+
+`--iucn-{lc,nt,vu,en,cr,ew,ex}` fill the code square in the species page's Red List chip, each with a matching `-text` colour (4.5:1 or better). Threat levels rise in hue and lightness from Lichen-green to coral in forest, and to brick red on paper. Extinct uses the text colour. The chip always shows the category name too, so the colour is never the only cue. Species GBIF lists as "not evaluated" or "data deficient" get no chip.
+
+### Range dots
+
+`--range-introduced` (the `--iucn-en` orange) and `--range-invasive` (the `--iucn-cr` coral) mark the rows of the species page's "Introduced range" list. They sit beside a text label, so they never carry meaning alone.
+
 ### Map density ramps
 
 The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. The map bins use stops 1 to 7. Charts that want a single data colour use `var(--ramp-4)`.
@@ -99,8 +107,9 @@ The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehea
 
 ### Icons
 
-- **Favicon** (`public/favicon.svg`): the simplified fern on a Forest rounded square (rx 14 of 64). It has no leaflets and a larger coil, so it reads at 16 px. The web app manifest uses it too.
-- **App icon** (`docs/brand/app-icon.svg`): the full fern with leaflets on the tile, for 32 px and up (social avatars, home screens).
+- **Favicon** (`public/favicon.svg`): the app icon as is (the full fern with leaflets on a Forest rounded square, rx 14 of 64), so the browser tab matches the logo. At 16 px the leaflets blur to a hint of grey; that is accepted.
+- **App icon** (`docs/brand/app-icon.svg`): the full fern with leaflets on the tile, for 32 px and up (social avatars, home screens). `src/pages/icons/[name].png.ts` renders the PNG cuts from it at build: 192 and 512 px for the web app manifest, a full-bleed 180 px `apple-touch-icon` (iOS rounds the corners itself), and a full-bleed maskable 512 px with the fern shrunk into Android's safe zone.
+- **Browser bar**: `theme-color` follows the chosen theme (`--bg`: Forest or Paper). Its two values sit on the meta tag in `BaseLayout.astro`.
 - Don't add other logo variants; derive from these files.
 
 ## Shape, depth and motion
@@ -118,7 +127,7 @@ The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehea
 - **Left rail** (`FilterRail.vue`): icon buttons with short labels (What, When, Where, How, Source, then Settings after a divider). Each opens a flyout beside the rail. The flyout's heading stays put and only its body scrolls.
 - **Text links**: a plain `<a>` with no class gets the house link style (underlined in `--accent`, accent on hover) from `global.css`. Don't restyle links per page; give a link a class only when it isn't a text link (a button, chip or nav item).
 - **Running text** on content pages (privacy, terms) sits in `.prose`, which restores heading, paragraph and list spacing.
-- **Long scrolling lists** get edge fades: the `.fade-list` class plus `useScrollFade`.
+- **Long scrolling lists** get edge fades: the `.fade-list` class plus `useScrollFade`. In markup that never hydrates (the pre-rendered species page), add `.fade-scroll` instead of the composable; it drives the same fades from CSS.
 - **Selected state**: an accent border with an `--accent-soft` fill and a small "Selected" label in accent. Don't add checkmark icons.
 - **Visually hidden radios or checkboxes** inside a label: give the label `position: relative`, so focusing the input doesn't scroll the page.
 - **Icons**: 24×24 stroke icons, `stroke-width` 1.7, `currentColor`, round caps and joins. Mark them `aria-hidden`; the control carries the label.

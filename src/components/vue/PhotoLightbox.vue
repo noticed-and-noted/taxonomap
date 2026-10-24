@@ -321,11 +321,11 @@ defineExpose({ open });
   line-height: 1.75rem;
 }
 /* Keyboard hints and the mouse icon only where there's likely a keyboard, as in the Omnibox; touch screens get the
-   touch icon. */
+   touch icon. Scoped under .key-hints to beat UiIcon's own display. */
 .key-hints {
   color: rgb(255 255 255 / 0.75);
 }
-.keys-only {
+.key-hints .keys-only {
   display: none;
 }
 /* Once the row is too narrow for the credit and all the hints on one line, both sides stack together: the credit
@@ -345,10 +345,10 @@ defineExpose({ open });
   }
 }
 @media (min-width: 640px) and (hover: hover) {
-  .keys-only {
+  .key-hints .keys-only {
     display: inline;
   }
-  .touch-only {
+  .key-hints .touch-only {
     display: none;
   }
 }

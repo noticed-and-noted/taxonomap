@@ -2,7 +2,7 @@ import pLimit from 'p-limit';
 
 import { BACKBONE_DATASET_KEY } from './config';
 import { http } from './http';
-import type { NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
+import type { Distribution, NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
 
 import { DAY, HOUR } from '~/lib/util/time';
 
@@ -103,6 +103,25 @@ export async function getAllChildren(key: number, rank: Rank, signal?: AbortSign
     ),
   );
   return [first, ...rest].flatMap((response) => response.results);
+}
+
+/** A taxon's global IUCN Red List category; `code` is "NE" when it was never assessed. */
+export function getRedListCategory(key: number) {
+  return http().getJson<{ code?: string; iucnTaxonID?: string }>(`/v1/species/${key}/iucnRedListCategory`, undefined, {
+    ttlMs: DAY,
+  });
+}
+
+// Widespread species run to a few hundred rows; one page covers them.
+const DISTRIBUTION_LIMIT = 1000;
+
+/** Where checklists say a taxon occurs, and whether it is native or introduced there. */
+export function getDistributions(key: number) {
+  return http().getJson<Paged<Distribution>>(
+    `/v1/species/${key}/distributions`,
+    { limit: DISTRIBUTION_LIMIT },
+    { ttlMs: DAY },
+  );
 }
 
 /** A taxon's ancestors, from the kingdom down. */

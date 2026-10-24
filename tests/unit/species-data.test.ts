@@ -16,11 +16,11 @@ const ROBIN = {
   genus: 'Erithacus',
 };
 
-function gbif() {
+function gbif(usage: Record<string, unknown> = ROBIN, redListCode = 'LC') {
   return stubNetwork((url) => {
     const path = url.pathname;
     const params = url.searchParams;
-    if (path === '/v1/species/2492462') return ROBIN;
+    if (path === '/v1/species/2492462') return usage;
     if (path === '/v1/species/2492462/vernacularNames')
       return { results: [{ vernacularName: 'European Robin', language: 'eng' }] };
     if (path === '/v1/species/2492462/synonyms')
@@ -61,6 +61,9 @@ function gbif() {
           },
         ],
       };
+    if (path === '/v1/species/2492462/iucnRedListCategory') return { code: redListCode, iucnTaxonID: '22710' };
+    if (path === '/v1/species/2492462/distributions')
+      return { results: [{ country: 'IE', establishmentMeans: 'INTRODUCED', source: 'GRIIS - Ireland' }] };
     if (path === '/v1/dataset/ds1') return { key: 'ds1', title: 'Garden birds' };
     return undefined;
   });
@@ -88,6 +91,8 @@ describe('loadSpeciesData', () => {
       authorship: '(Linnaeus, 1758)',
       status: 'ACCEPTED',
       commonName: 'European Robin',
+      redList: { code: 'LC', iucnTaxonId: '22710' },
+      distribution: { introduced: ['IE'], invasive: [], sources: 1 },
       classification: [
         { key: 1, name: 'Animalia', rank: 'KINGDOM' },
         { key: 212, name: 'Aves', rank: 'CLASS' },
@@ -108,7 +113,7 @@ describe('loadSpeciesData', () => {
       siblings: [{ key: 7, scientificName: 'Erithacus akahige', commonName: 'Japanese robin', count: 5 }],
     });
     expect(data.months[4]).toBe(9);
-    expect(calls.length).toBeLessThanOrEqual(9);
+    expect(calls.length).toBeLessThanOrEqual(11);
   });
 
   it('lists a sibling without a common name when neither the index nor GBIF has one', async () => {
@@ -116,6 +121,21 @@ describe('loadSpeciesData', () => {
     const { loadSpeciesData } = await load();
     const data = await loadSpeciesData(2492462, () => null);
     expect(data.siblings).toEqual([{ key: 7, scientificName: 'Erithacus akahige', count: 5 }]);
+  });
+
+  it('leaves out a data-deficient Red List category', async () => {
+    gbif(ROBIN, 'DD');
+    const { loadSpeciesData } = await load();
+    expect((await loadSpeciesData(2492462)).redList).toBeUndefined();
+  });
+
+  it('leaves out the Red List and range for higher ranks without asking GBIF', async () => {
+    const calls = gbif({ ...ROBIN, rank: 'GENUS' });
+    const { loadSpeciesData } = await load();
+    const data = await loadSpeciesData(2492462);
+    expect(data.redList).toBeUndefined();
+    expect(data.distribution).toBeUndefined();
+    expect(calls.some((call) => /iucnRedListCategory|distributions/.test(call.pathname))).toBe(false);
   });
 });
 

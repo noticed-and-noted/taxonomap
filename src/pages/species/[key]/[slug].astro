@@ -9,6 +9,7 @@ import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/ba
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData } from '~/lib/species/data';
 import { similarItems } from '~/lib/species/links';
+import { wikipediaIntro } from '~/lib/species/wikipedia';
 import { full } from '~/lib/format';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/components/PageShell.astro';
@@ -27,6 +28,8 @@ export async function getStaticPaths() {
 const key = Number(Astro.params.key);
 const [names, manifest] = await Promise.all([bakedCommonNames(), bakeSpeciesManifest()]);
 const data = await loadSpeciesData(key, names);
+// The page reads fine without an intro, so a failed lookup just leaves it out.
+const intro = await wikipediaIntro(key).catch(() => null);
 
 const label = data.commonName ?? data.canonicalName;
 const charts = speciesCharts(data);
@@ -59,7 +62,7 @@ const jsonLd = {
 <BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, '\\u003c')} />
   <PageShell>
-    <SpeciesPage data={data}>
+    <SpeciesPage data={data} intro={intro}>
       <SpeciesGallery slot="gallery" client:load taxonKey={data.key} rank={data.rank} name={label} />
       {data.siblings.length > 0 && (
         <SimilarSpecies slot="similar" client:visible species={similarItems(data.siblings, manifest)} />

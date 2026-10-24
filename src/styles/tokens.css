@@ -24,6 +24,14 @@
   --overlay: rgb(6 12 9 / 0.72);
   --shadow: 0 8px 28px rgb(0 0 0 / 0.45);
   --photo-placeholder: #1f3329;
+  /* IUCN Red List fills; each pairs with its -text colour at 4.5:1 or better. */
+  --iucn-lc: #2c4437;
+  --iucn-lc-text: #f2ede2;
+  --iucn-nt: #b7c46a;
+  --iucn-vu: #f0d060;
+  --iucn-en: #f39a5b;
+  --iucn-cr: #ff8a7a;
+  --iucn-threat-text: #1d1404;
 }
 
 :root[data-theme='light'] {
@@ -45,6 +53,13 @@
   --overlay: rgb(245 239 227 / 0.8);
   --shadow: 0 8px 24px rgb(60 45 20 / 0.16);
   --photo-placeholder: #e2d8c4;
+  --iucn-lc: #3f5c4c;
+  --iucn-lc-text: #fffaf0;
+  --iucn-nt: #5f6e12;
+  --iucn-vu: #8a6a00;
+  --iucn-en: #b35a00;
+  --iucn-cr: #b3261e;
+  --iucn-threat-text: #fffaf0;
 }
 
 :root {
@@ -61,6 +76,19 @@
   --ramp-5: #237563;
   --ramp-6: #105958;
   --ramp-7: #0b3c48;
+
+  /* Extinct reads as the text colour. */
+  --iucn-nt-text: var(--iucn-threat-text);
+  --iucn-vu-text: var(--iucn-threat-text);
+  --iucn-en-text: var(--iucn-threat-text);
+  --iucn-cr-text: var(--iucn-threat-text);
+  --iucn-ew: var(--text);
+  --iucn-ew-text: var(--bg);
+  --iucn-ex: var(--text);
+  --iucn-ex-text: var(--bg);
+  /* Species-page range dots; the row label carries the meaning. */
+  --range-introduced: var(--iucn-en);
+  --range-invasive: var(--iucn-cr);
 
   --radius-sm: 6px;
   --radius: 10px;

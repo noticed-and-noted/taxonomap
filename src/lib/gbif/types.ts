@@ -89,6 +89,14 @@ export interface VernacularName {
   preferred?: boolean;
 }
 
+/** One checklist's statement of where a taxon occurs. */
+export interface Distribution {
+  country?: string;
+  locality?: string;
+  establishmentMeans?: string;
+  source?: string;
+}
+
 export interface FacetCount {
   name: string;
   count: number;

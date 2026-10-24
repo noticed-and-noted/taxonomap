@@ -12,6 +12,7 @@ import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
 import { loadSpeciesManifest, similarItems, speciesPath, type SpeciesManifest } from '~/lib/species/links';
 import { speciesCharts } from '~/lib/species/charts';
+import { wikipediaIntro, type WikipediaIntro } from '~/lib/species/wikipedia';
 import MiniMap from './MiniMap.vue';
 import PlotChart from './PlotChart.vue';
 import SimilarSpecies from './SimilarSpecies.vue';
@@ -23,6 +24,16 @@ const data = shallowRef<SpeciesData | null>(null);
 const manifest = shallowRef<SpeciesManifest | null>(null);
 const error = ref<UiErrorKind | 'missing-key' | null>(null);
 const key = ref<number | null>(null);
+const intro = shallowRef<WikipediaIntro | null>(null);
+const isIntroLoading = ref(false);
+
+/** The Wikipedia intro, alongside the species data so the page needn't wait for it. */
+async function loadIntro(speciesKey: number) {
+  isIntroLoading.value = true;
+  // The page reads fine without an intro, so a failed lookup just leaves it out.
+  intro.value = await wikipediaIntro(speciesKey).catch(() => null);
+  isIntroLoading.value = false;
+}
 
 async function load() {
   error.value = null;
@@ -38,6 +49,7 @@ async function load() {
     window.location.replace(speciesPath(speciesKey, loadedManifest));
     return;
   }
+  void loadIntro(speciesKey);
   try {
     const nameIndex = await loadNameIndex();
     data.value = await loadSpeciesData(speciesKey, (taxonKey) => nameIndex?.get(taxonKey)?.commonName ?? null);
@@ -59,7 +71,7 @@ onMounted(load);
 </script>
 
 <template>
-  <SpeciesPage v-if="data" :data="data">
+  <SpeciesPage v-if="data" :data="data" :intro="intro" :is-intro-loading="isIntroLoading">
     <template #gallery>
       <SpeciesGallery :taxon-key="data.key" :rank="data.rank" :name="data.commonName ?? data.canonicalName" />
     </template>

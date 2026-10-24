@@ -40,3 +40,18 @@ test('the hidden map waits until the map is shown', async ({ page }) => {
   await page.getByRole('link', { name: 'Map', exact: true }).click();
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
 });
+
+test('the groups list filters by common or scientific name', async ({ page }) => {
+  await page.goto('/tree?focus=729');
+  const details = page.getByRole('complementary', { name: 'Details' });
+  const filter = details.getByRole('searchbox', { name: 'Filter groups' });
+  await expect(details.getByRole('button', { name: /Corvidae/ })).toBeVisible();
+  await filter.fill('thrush');
+  await expect(details.getByRole('button', { name: /Turdidae/ })).toBeVisible();
+  await expect(details.getByRole('button', { name: /Corvidae/ })).toHaveCount(0);
+  await filter.fill('corvid');
+  await expect(details.getByRole('button', { name: /Corvidae/ })).toBeVisible();
+  await filter.fill('zzzz');
+  await details.getByRole('button', { name: 'Clear filter' }).click();
+  await expect(details.getByRole('button', { name: /Turdidae/ })).toBeVisible();
+});

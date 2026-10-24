@@ -7,7 +7,7 @@ import { LICENCE_URLS } from '~/lib/gbif/licence';
 <LegalPage
   title="Terms and credits"
   description="The terms for using Taxonomap, and credits for the data, photos and maps it shows."
-  updated="22 October 2026"
+  updated="24 October 2026"
 >
   <p>
     Taxonomap is a free, non-commercial way to explore where species have been recorded. By using it you agree to these
@@ -62,6 +62,23 @@ import { LICENCE_URLS } from '~/lib/gbif/licence';
     . Taxonomap only shows photos under a Creative Commons licence or in the public domain, and shows each one’s licence
     and creator with it. Copyright stays with the photographer. If you reuse a photo, follow its licence: several only
     allow non-commercial use, and some don’t allow changes.
+  </p>
+
+  <h2>Species descriptions</h2>
+  <p>
+    The introduction under a species’ photos is the opening section of its English{' '}
+    <a href="https://en.wikipedia.org" rel="noopener">
+      Wikipedia
+    </a>{' '}
+    article, matched to the species through{' '}
+    <a href="https://www.wikidata.org" rel="noopener">
+      Wikidata
+    </a>
+    . It is available under{' '}
+    <a href={LICENCE_URLS['CC-BY-SA']} rel="license noopener">
+      CC BY-SA 4.0
+    </a>
+    , and each one links to its article.
   </p>
 
   <h2>Maps</h2>

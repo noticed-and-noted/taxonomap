@@ -266,7 +266,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
       role="img"
       :aria-label="`Icicle chart of ${centreLabel}, sized by ${metric}. Use the list beside the chart to navigate.`"
     >
-      <g v-if="narrow" class="cursor-pointer" @click="emit('up')">
+      <g v-if="narrow" class="cursor-pointer" @pointerenter="tip = null" @click="emit('up')">
         <rect :width="width - 2" :height="HEAD - 4" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
         <UiIcon v-if="focus.parent" name="arrow-left" :size="12" x="10" y="15" class="text-[var(--text)]" />
         <text :x="focus.parent ? 26 : 10" :y="25" class="fill-[var(--text)] font-display text-sm">
@@ -276,7 +276,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
           {{ compact(focusTotal) }} {{ metric }}
         </text>
       </g>
-      <g v-else class="cursor-pointer" @click="emit('up')">
+      <g v-else class="cursor-pointer" @pointerenter="tip = null" @click="emit('up')">
         <rect :width="columnWidth - 2" :height="height - 1" rx="4" fill="var(--surface-2)" stroke="var(--border)" />
         <text :x="10" :y="20" class="fill-[var(--text)] font-display text-sm">{{ centreLabel }}</text>
         <text :x="10" :y="38" class="fill-[var(--text-subtle)] text-xs">{{ compact(focusTotal) }} {{ metric }}</text>

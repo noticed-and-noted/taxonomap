@@ -10,6 +10,7 @@ import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import { classifyError, type UiErrorKind, type UsableImage } from '~/lib/gbif';
+import { normalise } from '~/lib/data/name-index';
 import { RANK_BY_CODE } from '~/lib/data/ranks';
 import { leadPhoto } from '~/lib/photos/taxon-photos';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
@@ -29,6 +30,7 @@ import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import TreeChart from './TreeChart.vue';
 import UiIcon from './UiIcon.vue';
+import { useScrollFade } from './useScrollFade';
 
 const focusKey = useStore($treeFocus);
 const layoutPref = useStore($treeLayout);
@@ -58,6 +60,19 @@ const children = computed(() => {
   return [...(focus.value?.children ?? [])].sort((left, right) => metricOf(right) - metricOf(left));
 });
 const metricOf = (node: TreeNode) => (metric.value === 'records' ? node.records : node.species);
+
+const groupQuery = ref('');
+const visibleChildren = computed(() => {
+  const needle = normalise(groupQuery.value);
+  if (!needle) return children.value;
+  return children.value.filter((child) => normalise(`${child.common ?? ''} ${child.name}`).includes(needle));
+});
+// A filter typed for one group means nothing in the next.
+watch(focus, () => (groupQuery.value = ''));
+
+const groupList = ref<HTMLElement>();
+const { fadeTop: groupFadeTop, fadeBottom: groupFadeBottom, update: updateGroupFade } = useScrollFade(groupList);
+watch(visibleChildren, updateGroupFade, { flush: 'post' });
 
 async function build() {
   error.value = null;
@@ -372,10 +387,25 @@ const share = (node: TreeNode) => {
 
         <div class="flex flex-col md:min-h-0 md:flex-1">
           <h3 class="mb-1.5 text-sm font-medium">
+            <template v-if="visibleChildren.length !== children.length">{{ visibleChildren.length }} of </template>
             {{ children.length }} {{ children.length === 1 ? 'group' : 'groups' }} in {{ focus.common ?? focus.name }}
           </h3>
-          <ol class="max-h-[50dvh] space-y-0.5 overflow-y-auto pr-1 text-sm md:max-h-none md:min-h-0 md:flex-1">
-            <li v-for="child in children" :key="child.key">
+          <input
+            v-if="children.length > 1"
+            v-model="groupQuery"
+            type="search"
+            placeholder="Filter groups"
+            aria-label="Filter groups"
+            class="mb-2 w-full rounded-md border border-border-strong bg-surface-2 px-2.5 py-1.5 text-sm placeholder:text-subtle focus-visible:outline-offset-[-1px]"
+          />
+          <!-- Padding gives the rows' focus ring room inside the scroll box. -->
+          <ol
+            ref="groupList"
+            class="fade-list -mx-1 max-h-[50dvh] space-y-0.5 overflow-y-auto p-1 text-sm md:max-h-none md:min-h-0 md:flex-1"
+            :class="{ 'fade-top': groupFadeTop, 'fade-bottom': groupFadeBottom }"
+            @scroll.passive="updateGroupFade"
+          >
+            <li v-for="child in visibleChildren" :key="child.key">
               <button
                 type="button"
                 class="grid min-h-11 w-full grid-cols-[1fr_auto] items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-2 md:min-h-0"
@@ -393,6 +423,10 @@ const share = (node: TreeNode) => {
             </li>
           </ol>
           <p v-if="!children.length" class="text-xs text-subtle">No sub-groups with records.</p>
+          <p v-else-if="!visibleChildren.length" class="text-xs text-subtle">
+            No groups match “{{ groupQuery }}”.
+            <button type="button" class="text-text underline" @click="groupQuery = ''">Clear filter</button>
+          </p>
         </div>
       </aside>
     </div>
