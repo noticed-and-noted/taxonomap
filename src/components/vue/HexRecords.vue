@@ -15,6 +15,7 @@ import LicenceBadge from './LicenceBadge.vue';
 import PhotoLightbox from './PhotoLightbox.vue';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
+import { tidy } from '~/lib/species/names';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
@@ -139,7 +140,10 @@ const aboutKey = (occurrence: Occurrence) =>
 
 const common = (occurrence: Occurrence) => {
   const key = aboutKey(occurrence);
-  return (key ? (commonNames.value.get(key) ?? lateNames.value.get(key)) : undefined) ?? occurrence.vernacularName;
+  return (
+    (key ? (commonNames.value.get(key) ?? lateNames.value.get(key)) : undefined) ??
+    (occurrence.vernacularName && tidy(occurrence.vernacularName))
+  );
 };
 // The accepted name, so the row matches the about page it links to (a synonym's record shows its accepted taxon).
 const scientificName = (occurrence: Occurrence) =>

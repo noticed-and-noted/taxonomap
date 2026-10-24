@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { getSpecies, getVernacularNames } from '~/lib/gbif/server';
 import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
@@ -6,6 +8,7 @@ import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import type { VernacularName } from '~/lib/gbif';
 import { englishName, otherEnglishNames } from '~/lib/species/names';
 import {
+  bakeDir,
   countedFacets,
   listAllByRank,
   lookupLimit,
@@ -157,15 +160,31 @@ async function higherRanks(): Promise<NameRow[]> {
 }
 
 /**
+ * The iNaturalist IDs the last `pnpm bake` found. Matches are stable and iNaturalist allows about one
+ * request a second, so a re-bake only looks up species without one. `INAT_IDS_REFRESH=1` looks up all.
+ */
+async function previousInatIds(): Promise<Map<number, number>> {
+  if (process.env['INAT_IDS_REFRESH'] === '1') return new Map();
+  try {
+    const { names } = JSON.parse(await readFile(join(bakeDir(), 'names.json'), 'utf8')) as NamesSnapshot;
+    return new Map(names.flatMap((row): [number, number][] => (row[5] ? [[row[0], row[5]]] : [])));
+  } catch {
+    // No earlier bake, or one we can't read: look every species up.
+    return new Map();
+  }
+}
+
+/**
  * iNaturalist's taxon for each species, so the browser skips the search that finds it.
  * A chunk that fails is left without IDs; the browser finds those itself.
  */
 async function inatIds(rows: readonly NameRow[]): Promise<Map<number, number>> {
-  const ids = new Map<number, number>();
+  const ids = await previousInatIds();
+  const unmatched = rows.filter((row) => !ids.has(row[0]));
   // Counted per chunk, all queued up front, so the progress bar shows how far through it is.
-  const finishChunk = queueRequests('iNaturalist', Math.ceil(rows.length / INAT_LOOKUP_CHUNK));
-  for (let offset = 0; offset < rows.length; offset += INAT_LOOKUP_CHUNK) {
-    const chunk = rows
+  const finishChunk = queueRequests('iNaturalist', Math.ceil(unmatched.length / INAT_LOOKUP_CHUNK));
+  for (let offset = 0; offset < unmatched.length; offset += INAT_LOOKUP_CHUNK) {
+    const chunk = unmatched
       .slice(offset, offset + INAT_LOOKUP_CHUNK)
       .map((row) => ({ key: row[0], rank: 'SPECIES' as const, name: row[2] }));
     try {

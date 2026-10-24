@@ -283,13 +283,13 @@ defineExpose({ open });
           </div>
           <!-- ml-auto keeps it right when there's no credit beside it (no photo). -->
           <p
-            class="chip bottom-pill key-hints m-0 ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1"
+            class="chip bottom-pill key-hints m-0 ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1"
             aria-hidden="true"
           >
             <span v-if="images.length > 1" class="keys-only"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
             <span v-if="onStepRow" class="keys-only"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
             <span class="keys-only"><kbd>Esc</kbd> Close</span>
-            <span class="flex items-center gap-1">
+            <span class="flex items-center gap-1 whitespace-nowrap">
               <UiIcon name="mouse" size="14" class="keys-only" /><UiIcon name="touch" size="14" class="touch-only" />
               Hide UI
             </span>

@@ -2,9 +2,10 @@
  * Build-time baking. The Node transport (disk cache, User-Agent) is swapped
  * for the plain client so these tests never touch .cache/.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { NamesSnapshot } from '~/lib/data/types';
 import { facets, json, stubNetwork } from './helpers/network';
 
 vi.mock('~/lib/gbif/server', () => import('~/lib/gbif'));
@@ -281,6 +282,24 @@ describe('bake with iNaturalist IDs', () => {
     gbif(inat);
     const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
     expect(names.filter((row) => row.length === 6).map((row) => [row[0], row[5]])).toEqual([[10, 777]]);
+  });
+
+  it('keeps the IDs the last bake found, looking up only the species without one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baked-'));
+    try {
+      writeFileSync(join(dir, 'names.json'), JSON.stringify({ names: [[11, 'S', 'Species number11', null, 1, 555]] }));
+      const calls = gbif(inat);
+      await (await bake({ BAKE_DIR: dir, NAME_INDEX_SIZE: '3' })).bakeToDisk();
+      const { names } = JSON.parse(readFileSync(join(dir, 'names.json'), 'utf8')) as NamesSnapshot;
+      expect(names.filter((row) => row.length === 6).map((row) => [row[0], row[5]])).toEqual([
+        [10, 777],
+        [11, 555],
+      ]);
+      const recordSearches = calls.filter((url) => url.searchParams.has('datasetKey'));
+      expect(recordSearches.flatMap((url) => url.searchParams.getAll('speciesKey'))).not.toContain('11');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 
   it('leaves a chunk without IDs when iNaturalist fails, rather than failing the build', async () => {

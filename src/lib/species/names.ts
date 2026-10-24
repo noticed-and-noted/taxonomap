@@ -5,9 +5,15 @@ import iocNames from './ioc-names.json';
 
 const ENGLISH = new Set(['eng', 'en']);
 
-/** A name as shown: trimmed, single-spaced, first letter capitalised. */
+/** A name as shown: trimmed, single-spaced, first letter capitalised, shouted names ("VESPER BATS") lowered. */
 export function tidy(text: string): string {
-  return capitalise(text.trim().replace(/\s+/g, ' '));
+  return capitalise(unshout(text.trim().replace(/\s+/g, ' ')));
+}
+
+/** Sentence-cases a name written all in capitals ("VESPER BATS"); other names are left as they are. */
+function unshout(text: string): string {
+  const isShouted = text === text.toUpperCase() && text !== text.toLowerCase();
+  return isShouted ? capitalise(text.toLowerCase()) : text;
 }
 
 /** True for a non-blank English name. */
@@ -213,7 +219,7 @@ export function groupByLanguage(names: readonly VernacularName[], max = 40): Nam
   for (const name of names) {
     const code = name.language || 'und';
     const variants = groups.get(code) ?? new Map<string, string>();
-    const trimmed = name.vernacularName.trim();
+    const trimmed = unshout(name.vernacularName.trim());
     const lowered = trimmed.toLowerCase();
     const seen = variants.get(lowered);
     if (!seen || (/^[A-Z]/.test(trimmed) && !/^[A-Z]/.test(seen))) variants.set(lowered, trimmed);
