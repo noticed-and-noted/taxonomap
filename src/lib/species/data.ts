@@ -13,6 +13,8 @@
 import {
   getChildren,
   getDataset,
+  getDistributions,
+  getRedListCategory,
   getSpecies,
   getSynonyms,
   getVernacularNames,
@@ -22,10 +24,15 @@ import {
   type NameUsage,
   type Rank,
 } from '~/lib/gbif';
+import { summariseDistributions, type DistributionSummary } from './distribution';
 import { englishName, groupByLanguage, slugify, type NamesByLanguage } from './names';
 
 const SYNONYM_LIMIT = 30;
 const SIBLING_LIMIT = 8;
+// Red List and checklist distributions cover species and below; higher ranks only get empty answers.
+const SPECIES_RANKS: readonly Rank[] = ['SPECIES', 'SUBSPECIES', 'VARIETY'];
+// Not evaluated and data deficient say nothing about threat, so the page shows no chip for them.
+const UNRATED_CODES = new Set(['NE', 'DD']);
 
 /** A taxon on a species' lineage. */
 export interface TaxonRef {
@@ -41,6 +48,12 @@ export interface SiblingSpecies {
   count: number;
 }
 
+/** A species' global IUCN Red List category. */
+export interface RedListStatus {
+  code: string;
+  iucnTaxonId?: string;
+}
+
 export interface SpeciesData {
   key: number;
   slug: string;
@@ -50,6 +63,10 @@ export interface SpeciesData {
   rank: Rank;
   status?: string;
   commonName?: string;
+  /** IUCN Red List code (LC, NT, … EX) and IUCN's own taxon ID; absent when not evaluated, data deficient or unknown. */
+  redList?: RedListStatus;
+  /** Countries checklists say it was introduced to; absent when none say. */
+  distribution?: DistributionSummary;
   classification: TaxonRef[];
   vernacular: NamesByLanguage[];
   synonyms: string[];
@@ -120,6 +137,24 @@ async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promi
   );
 }
 
+/** The IUCN category for an assessed rank, or null (not evaluated, or GBIF failed: the page just omits the chip). */
+async function redListOf(usage: NameUsage): Promise<RedListStatus | null> {
+  if (!SPECIES_RANKS.includes(usage.rank)) return null;
+  const { code, iucnTaxonID } = await getRedListCategory(usage.key).catch(() => ({
+    code: undefined,
+    iucnTaxonID: undefined,
+  }));
+  if (!code || UNRATED_CODES.has(code)) return null;
+  return { code, ...(iucnTaxonID && { iucnTaxonId: iucnTaxonID }) };
+}
+
+/** Introduced countries for a species rank, or null (none listed, or GBIF failed: the section is left out). */
+async function distributionOf(usage: NameUsage): Promise<DistributionSummary | null> {
+  if (!SPECIES_RANKS.includes(usage.rank)) return null;
+  const { results } = await getDistributions(usage.key).catch(() => ({ results: [] }));
+  return summariseDistributions(results);
+}
+
 /** The top datasets with their titles (GBIF is asked per dataset; one it can't find is "Unnamed dataset"). */
 function namedDatasets(counts: { name: string; count: number }[]) {
   return Promise.all(
@@ -138,13 +173,15 @@ function namedDatasets(counts: { name: string; count: number }[]) {
  */
 export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
   const usage = await getSpecies(key);
-  const [vernaculars, synonyms, facets, siblings] = await Promise.all([
+  const [vernaculars, synonyms, facets, siblings, redList, distribution] = await Promise.all([
     getVernacularNames(key).catch(() => ({ results: [] })),
     getSynonyms(key, SYNONYM_LIMIT).catch(() => ({ results: [] })),
     occurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
       limits: { year: 700, month: MONTHS_IN_YEAR, country: 10, datasetKey: 5 },
     }),
     siblingsOf(usage, commonName).catch(() => []),
+    redListOf(usage),
+    distributionOf(usage),
   ]);
 
   const common = englishName(vernaculars.results, key) ?? commonName(key) ?? undefined;
@@ -157,6 +194,8 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     rank: usage.rank,
     ...(usage.taxonomicStatus && { status: usage.taxonomicStatus }),
     ...(common && { commonName: common }),
+    ...(redList && { redList }),
+    ...(distribution && { distribution }),
     classification: classificationOf(usage),
     vernacular: groupByLanguage(vernaculars.results),
     synonyms: [...new Set(synonyms.results.map((synonym) => synonym.scientificName))].slice(0, SYNONYM_LIMIT),

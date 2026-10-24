@@ -6,15 +6,42 @@
  * pre-rendered page can hydrate just those as islands.
  */
 import { computed } from 'vue';
-import { compact, full, RANK_LABELS } from '~/lib/format';
+import { compact, countryName, full, IUCN_LABELS, RANK_LABELS } from '~/lib/format';
 import type { SpeciesData } from '~/lib/species/data';
 import RadialSeasonality from './RadialSeasonality.vue';
 import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ data: SpeciesData }>();
 
+// Introduced lists run to dozens of countries; the rest sit behind a disclosure.
+const INTRODUCED_SHOWN = 5;
+
 const speciesData = computed(() => props.data);
 const displayName = computed(() => speciesData.value.commonName ?? speciesData.value.canonicalName);
+const redList = computed(() => {
+  const status = speciesData.value.redList;
+  if (!status) return null;
+  const code = status.code.toLowerCase();
+  return {
+    code: status.code,
+    label: IUCN_LABELS[status.code] ?? status.code,
+    colours: { background: `var(--iucn-${code})`, color: `var(--iucn-${code}-text)` },
+    // IUCN redirects a bare taxon ID to its latest assessment.
+    href: status.iucnTaxonId && `https://www.iucnredlist.org/species/${status.iucnTaxonId}`,
+  };
+});
+const countryNames = (codes: string[]) => codes.map(countryName).sort((left, right) => left.localeCompare(right));
+const range = computed(() => {
+  const distribution = speciesData.value.distribution;
+  if (!distribution) return null;
+  const introduced = countryNames(distribution.introduced);
+  return {
+    introduced: introduced.slice(0, INTRODUCED_SHOWN),
+    moreIntroduced: introduced.slice(INTRODUCED_SHOWN),
+    invasive: countryNames(distribution.invasive),
+    sources: distribution.sources === 1 ? 'one checklist' : `${distribution.sources} checklists`,
+  };
+});
 const generated = computed(() => speciesData.value.generated.slice(0, 10));
 const otherNames = computed(() =>
   speciesData.value.vernacular.filter((group) => group.code !== 'eng' && group.code !== 'en'),
@@ -50,7 +77,22 @@ const englishNames = computed(
           <span class="sci-name text-text">{{ speciesData.canonicalName }}</span>
           <span v-if="speciesData.authorship" class="ml-1.5 text-sm">{{ speciesData.authorship }}</span>
         </p>
-        <p class="mt-2 flex flex-wrap gap-2 text-xs">
+        <div class="mt-2 flex flex-wrap gap-2 text-xs">
+          <component
+            :is="redList.href ? 'a' : 'span'"
+            v-if="redList"
+            :href="redList.href || undefined"
+            :target="redList.href ? '_blank' : undefined"
+            :rel="redList.href ? 'noopener' : undefined"
+            class="relative inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 py-0.5 pr-2.5 pl-0.5 before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
+            :class="{ group: redList.href }"
+          >
+            <span class="rounded-full px-1.5 font-medium" :style="redList.colours" aria-hidden="true">{{
+              redList.code
+            }}</span>
+            <span class="sr-only">IUCN Red List:</span>
+            <span class="underline-offset-2 group-hover:underline">{{ redList.label }}</span>
+          </component>
           <span class="rounded-full border border-border px-2.5 py-0.5 text-muted">{{
             RANK_LABELS[speciesData.rank] ?? speciesData.rank
           }}</span>
@@ -61,7 +103,7 @@ const englishNames = computed(
             {{ speciesData.status.toLowerCase() }}
           </span>
           <span class="rounded-full bg-accent-soft px-2.5 py-0.5 text-text">{{ full(speciesData.count) }} records</span>
-        </p>
+        </div>
       </div>
       <div class="flex gap-2 text-sm">
         <a :href="`/?taxon=${speciesData.key}`" class="rounded-md bg-accent px-3 py-2 font-medium text-accent-contrast"
@@ -85,6 +127,30 @@ const englishNames = computed(
       </div>
       <div class="space-y-4">
         <slot name="map" />
+        <section v-if="range" aria-labelledby="range-h">
+          <h2 id="range-h" class="mb-2 font-display text-xl">Introduced range</h2>
+          <div class="space-y-1.5 text-sm">
+            <div class="flex gap-2">
+              <span class="mt-1.5 size-2 shrink-0 rounded-full bg-(--range-introduced)" aria-hidden="true"></span>
+              <div>
+                Introduced to {{ range.introduced.join(' · ') }}
+                <details v-if="range.moreIntroduced.length" class="mt-1">
+                  <summary class="cursor-pointer text-muted hover:text-text">
+                    <UiIcon name="chevron-right" class="chevron" /> {{ range.moreIntroduced.length }} more
+                  </summary>
+                  <p class="fade-list fade-scroll mt-1 max-h-[8lh] overflow-y-auto">
+                    {{ range.moreIntroduced.join(' · ') }}
+                  </p>
+                </details>
+              </div>
+            </div>
+            <p v-if="range.invasive.length" class="flex gap-2">
+              <span class="mt-1.5 size-2 shrink-0 rounded-full bg-(--range-invasive)" aria-hidden="true"></span>
+              <span>Invasive in {{ range.invasive.join(' · ') }}</span>
+            </p>
+          </div>
+          <p class="mt-2 text-xs text-subtle">From {{ range.sources }} published to GBIF.</p>
+        </section>
         <section v-if="englishNames.length || speciesData.vernacular.length" aria-labelledby="names-h">
           <h2 id="names-h" class="mb-2 font-display text-xl">Common names</h2>
           <p v-if="englishNames.length" class="text-sm">{{ englishNames.join(' · ') }}</p>
@@ -92,7 +158,9 @@ const englishNames = computed(
             <summary class="cursor-pointer text-muted hover:text-text">
               <UiIcon name="chevron-right" class="chevron" /> {{ otherNames.length }} other languages
             </summary>
-            <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <dl
+              class="fade-list fade-scroll mt-2 grid max-h-[8lh] grid-cols-[auto_1fr] gap-x-3 gap-y-1 overflow-y-auto"
+            >
               <template v-for="group in otherNames" :key="group.code">
                 <dt class="text-subtle">{{ group.language }}</dt>
                 <dd>{{ group.names.join(' · ') }}</dd>
@@ -146,7 +214,10 @@ const englishNames = computed(
       Occurrence data from <a href="https://www.gbif.org">GBIF.org</a> and its data publishers ({{
         compact(speciesData.count)
       }}
-      records, top datasets listed above). Photos are shown under their stated licences. Snapshot {{ generated }} ·
+      records, top datasets listed above).<template v-if="speciesData.redList">
+        Red List category from the <a href="https://www.iucnredlist.org">IUCN Red List</a> via GBIF.</template
+      >
+      Photos are shown under their stated licences. Snapshot {{ generated }} ·
       <a :href="`https://www.gbif.org/species/${speciesData.key}`" target="_blank" rel="noopener"
         >GBIF species page <UiIcon name="external"
       /></a>

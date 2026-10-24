@@ -115,6 +115,19 @@
   }
 }
 
+/* Registered so the scroll-driven fade can animate them. */
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 @layer components {
   /* Soft fades on a scroll box's edges while more is beyond them (see useScrollFade). */
   .fade-list {
@@ -133,6 +146,29 @@
   }
   .fade-list.fade-bottom {
     --fade-bottom: 1.5rem;
+  }
+  /* The same fades with no script, driven by the box's own scroll position, for pre-rendered pages that don't
+     hydrate. Browsers without scroll-driven animations show no fade. */
+  @supports (animation-timeline: scroll()) {
+    .fade-list.fade-scroll {
+      animation: fade-scroll linear both;
+      animation-timeline: scroll(self);
+    }
+  }
+  @keyframes fade-scroll {
+    0% {
+      --fade-top: 0px;
+      --fade-bottom: 1.5rem;
+    }
+    10%,
+    90% {
+      --fade-top: 1.5rem;
+      --fade-bottom: 1.5rem;
+    }
+    100% {
+      --fade-top: 1.5rem;
+      --fade-bottom: 0px;
+    }
   }
 
   /* A loaded name fading in where its skeleton was (<Transition name="name-in">). The skeleton's leave hook ends at once:
