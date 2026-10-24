@@ -19,12 +19,21 @@ export interface RecordsView {
   busiest: LngLat;
 }
 
-/** Bounding box of the cells' outlines, clipped to the world's longitudes. */
+/**
+ * Bounding box of the cells' outlines, clipped to the world's longitudes.
+ * A loop, not Math.min(...points): a busy group has more points than Safari allows as arguments.
+ */
 function extentOf(hexes: Hex[]): Bbox {
-  const points = hexes.flatMap((hex) => hex.geometry.coordinates[0]!);
-  const lngs = points.map((point) => point[0]!);
-  const lats = points.map((point) => point[1]!);
-  return [Math.max(-180, Math.min(...lngs)), Math.min(...lats), Math.min(180, Math.max(...lngs)), Math.max(...lats)];
+  let [west, south, east, north] = [180, 90, -180, -90];
+  for (const hex of hexes) {
+    for (const [lng = 0, lat = 0] of hex.geometry.coordinates[0]!) {
+      west = Math.min(west, lng);
+      east = Math.max(east, lng);
+      south = Math.min(south, lat);
+      north = Math.max(north, lat);
+    }
+  }
+  return [Math.max(-180, west), south, Math.min(180, east), north];
 }
 
 /**
