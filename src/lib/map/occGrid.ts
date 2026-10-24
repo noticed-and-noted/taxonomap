@@ -243,6 +243,13 @@ export function hexesOf(tile: VectorTile, tileId: TileId, level: number): Hex[] 
   return out;
 }
 
+/** A cell's centre: the mean of its vertices (the ring repeats the first one at the end). */
+export function hexCentre(hex: Hex): LngLat {
+  const vertices = hex.geometry.coordinates[0]!.slice(0, -1);
+  const sum = (index: 0 | 1) => vertices.reduce((total, vertex) => total + (vertex[index] as number), 0);
+  return [sum(0) / vertices.length, sum(1) / vertices.length];
+}
+
 /** Decode a GBIF density tile (MVT bytes) to hexes. */
 export async function decodeHexes(data: ArrayBuffer, tile: TileId, level: number): Promise<Hex[]> {
   if (!data.byteLength) return [];

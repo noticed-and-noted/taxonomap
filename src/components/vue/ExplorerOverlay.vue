@@ -24,6 +24,7 @@ import NearExplorer from './NearExplorer.vue';
 import OnboardingTour from './OnboardingTour.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
+import SearchFitSetting from './SearchFitSetting.vue';
 import TaxonChip from './TaxonChip.vue';
 import ThemePicker from './ThemePicker.vue';
 import TryThis from './TryThis.vue';
@@ -216,6 +217,7 @@ function closePanel() {
               <ThemePicker />
             </div>
             <MapSettings inline />
+            <SearchFitSetting />
             <OnboardingSettings />
             <LegalLinks />
           </div>

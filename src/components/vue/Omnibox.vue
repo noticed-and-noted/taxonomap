@@ -17,9 +17,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import type { Place } from '~/lib/geocode';
-import { mapCapabilities, sortByRank, type NameHit } from '~/lib/gbif';
+import { sortByRank, type NameHit } from '~/lib/gbif';
+import { boundsAround, recordsView } from '~/lib/map/taxonView';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
-import { $flyTo, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { $fitOnSearch } from '~/stores/fit-search';
 import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
@@ -225,15 +227,23 @@ async function pickTaxon(hit: NameHit) {
     return;
   }
   markDone('search');
+  if ($fitOnSearch.get()) void flyToTaxon(hit.key);
+}
+
+/** Closest the map zooms in on a picked taxon, so a species known from one spot still shows its surroundings. */
+const TAXON_MAX_ZOOM = 6;
+
+/** Zoom out to all of a taxon's records under the other filters, centred on the place with the most. */
+async function flyToTaxon(taxonKey: number) {
   try {
-    const capabilities = await mapCapabilities({ taxonKey: hit.key });
-    if (capabilities.total > 0) {
-      $flyTo.set({
-        kind: 'bounds',
-        bbox: [capabilities.minLng, capabilities.minLat, capabilities.maxLng, capabilities.maxLat],
-        maxZoom: 6,
-      });
-    }
+    const view = await recordsView({ ...$occurrenceFilter.get(), taxonKeys: [taxonKey] });
+    if (!view) return;
+    $flyTo.set({
+      kind: 'bounds',
+      bbox: boundsAround(view.busiest, view.extent),
+      centre: view.busiest,
+      maxZoom: TAXON_MAX_ZOOM,
+    });
   } catch {
     /* stay where we are */
   }

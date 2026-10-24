@@ -159,7 +159,13 @@ export interface HexGeometry {
 export const $hexGeometry = atom<HexGeometry | null>(null);
 
 export type FlyRequest =
-  | { kind: 'bounds'; bbox: readonly [number, number, number, number]; maxZoom?: number }
+  | {
+      kind: 'bounds';
+      bbox: readonly [number, number, number, number];
+      maxZoom?: number;
+      /** Fly here at the zoom that fits `bbox`, rather than to the box's own centre. */
+      centre?: readonly [number, number];
+    }
   | { kind: 'point'; lng: number; lat: number; zoom: number };
 
 /** What a click on the map does: select a hex (explorer) or drop a pin (near me). */
