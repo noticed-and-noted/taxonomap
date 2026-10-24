@@ -96,6 +96,19 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
       const UPDATE_CHECK_INTERVAL_MS = 5 * MINUTE;
       const MIN_UPDATE_CHECK_GAP_MS = MINUTE;
 
+      // ClientRouter waits for the next page's HTML before swapping; on a slow link that looks like a dead click.
+      // Show the loading bar and move the header's current-page mark straight away instead.
+      const trimSlash = (pathname: string) => pathname.replace(/\/$/, '') || '/';
+      document.addEventListener('astro:before-preparation', (event) => {
+        document.documentElement.dataset.navigating = '';
+        const target = trimSlash(event.to.pathname);
+        for (const link of document.querySelectorAll<HTMLAnchorElement>('.nav-link')) {
+          if (trimSlash(link.pathname) === target) link.setAttribute('aria-current', 'page');
+          else link.removeAttribute('aria-current');
+        }
+      });
+      document.addEventListener('astro:after-preparation', () => delete document.documentElement.dataset.navigating);
+
       if (import.meta.env.PROD && 'serviceWorker' in navigator) {
         void import('workbox-window').then(({ Workbox }) => {
           const wb = new Workbox('/sw.js');

@@ -39,6 +39,7 @@ const nav = [
         <li>
           <a
             href={item.href}
+            data-astro-prefetch
             class="nav-link relative flex items-center gap-1.5 rounded-[calc(var(--radius)-4px)] px-2.5 py-1.5 text-muted transition-colors duration-200 hover:bg-surface-2 hover:text-text aria-[current=page]:text-text"
             aria-current={path === trimSlash(item.href) ? 'page' : undefined}
           >
