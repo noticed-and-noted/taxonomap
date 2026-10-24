@@ -9,7 +9,10 @@ const fullBleed = appIcon.replace(/ rx="[\d.]+"/, '');
 const MASKABLE_SCALE = 0.85;
 const maskableOffset = 32 * (1 - MASKABLE_SCALE);
 const maskable = fullBleed
-  .replace(/(<rect[^>]*\/>)/, `$1<g transform="translate(${maskableOffset} ${maskableOffset}) scale(${MASKABLE_SCALE})">`)
+  .replace(
+    /(<rect[^>]*\/>)/,
+    `$1<g transform="translate(${maskableOffset} ${maskableOffset}) scale(${MASKABLE_SCALE})">`,
+  )
   .replace('</svg>', '</g></svg>');
 
 const ICONS: Record<string, { svg: string; size: number }> = {

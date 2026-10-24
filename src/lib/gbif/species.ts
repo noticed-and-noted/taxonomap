@@ -107,7 +107,9 @@ export async function getAllChildren(key: number, rank: Rank, signal?: AbortSign
 
 /** A taxon's global IUCN Red List category; `code` is "NE" when it was never assessed. */
 export function getRedListCategory(key: number) {
-  return http().getJson<{ code?: string; iucnTaxonID?: string }>(`/v1/species/${key}/iucnRedListCategory`, undefined, { ttlMs: DAY });
+  return http().getJson<{ code?: string; iucnTaxonID?: string }>(`/v1/species/${key}/iucnRedListCategory`, undefined, {
+    ttlMs: DAY,
+  });
 }
 
 // Widespread species run to a few hundred rows; one page covers them.
