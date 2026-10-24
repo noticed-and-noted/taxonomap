@@ -99,8 +99,9 @@ The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehea
 
 ### Icons
 
-- **Favicon** (`public/favicon.svg`): the simplified fern on a Forest rounded square (rx 14 of 64). It has no leaflets and a larger coil, so it reads at 16 px. The web app manifest uses it too.
-- **App icon** (`docs/brand/app-icon.svg`): the full fern with leaflets on the tile, for 32 px and up (social avatars, home screens).
+- **Favicon** (`public/favicon.svg`): the fern on a Forest rounded square (rx 14 of 64), without leaflets and with a slightly heavier stroke, so it reads at 16 px.
+- **App icon** (`docs/brand/app-icon.svg`): the full fern with leaflets on the tile, for 32 px and up (social avatars, home screens). `src/pages/icons/[name].png.ts` renders the PNG cuts from it at build: 192 and 512 px for the web app manifest, a full-bleed 180 px `apple-touch-icon` (iOS rounds the corners itself), and a full-bleed maskable 512 px with the fern shrunk into Android's safe zone.
+- **Browser bar**: `theme-color` follows the chosen theme (`--bg`: Forest or Paper). Its two values sit on the meta tag in `BaseLayout.astro`.
 - Don't add other logo variants; derive from these files.
 
 ## Shape, depth and motion
