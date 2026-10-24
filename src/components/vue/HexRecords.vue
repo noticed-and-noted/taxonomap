@@ -255,9 +255,22 @@ async function openPhotos(occurrence: Occurrence) {
   lightbox.value?.open(0);
 }
 
-/** Moves the lightbox to the next or previous record in the list, opening that row behind it. */
+const hasMore = computed(() => total.value !== null && records.value.length < total.value);
+const lightboxPosition = () => records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+/** The next record's first photo, for the lightbox to preload. */
+const nextRecordPhoto = computed(() => {
+  const next = lightboxRecord.value && records.value[lightboxPosition() + 1];
+  return next ? image(next) : undefined;
+});
+
+/**
+ * Moves the lightbox to the next or previous record in the list, opening that row behind it.
+ * Stepping down past the last loaded record loads the next page first.
+ */
 async function stepRecord(delta: number) {
-  const position = records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+  const isPastEnd = delta > 0 && lightboxPosition() + delta >= records.value.length;
+  if (isPastEnd && hasMore.value && !loading.value) await load(true);
+  const position = lightboxPosition();
   const next = records.value[position + delta];
   if (position < 0 || !next) return;
   expanded.value = next.key;
@@ -603,6 +616,7 @@ const institution = (occurrence: Occurrence) =>
       :images="lightboxPhotos"
       :name="lightboxRecord ? name(lightboxRecord) : ''"
       :href="lightboxAbout"
+      :next-row-image="nextRecordPhoto"
       @step-row="stepRecord"
     />
   </div>

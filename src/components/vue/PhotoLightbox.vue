@@ -15,13 +15,14 @@ import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
 import { useScrollFade } from './useScrollFade';
 
-/** `href`, when given, links the name (to the species' about page). */
+/** `href`, when given, links the name (to the species' about page). `nextRowImage` is preloaded so stepping down a row is instant. */
 // `onStepRow` is a prop rather than an emit so the legend can tell whether anyone handles it.
 const props = defineProps<{
   images: readonly UsableImage[];
   name: string;
   href?: string | undefined;
   onStepRow?: ((delta: number) => void) | undefined;
+  nextRowImage?: UsableImage | undefined;
 }>();
 
 /** Where a photo came from: its GBIF record, or its iNaturalist observation (or photo page). */
@@ -61,8 +62,7 @@ function settle(url: string, ok: boolean) {
   if (!ok) failed.add(url);
 }
 
-function preload(imageIndex: number) {
-  const image = props.images[imageIndex];
+function preload(image: UsableImage | undefined) {
   if (!image) return;
   const url = thumbnailUrl(image, '800x');
   if (settled.has(url) || preloading.has(url)) return;
@@ -76,15 +76,16 @@ function preload(imageIndex: number) {
   element.onerror = () => {
     if (!retryWithoutCors(url)) return settle(url, false);
     preloading.delete(url);
-    preload(imageIndex);
+    preload(image);
   };
   element.src = url;
 }
 
 function preloadAround(imageIndex: number) {
   const count = props.images.length;
-  preload((imageIndex + 1) % count);
-  preload((imageIndex - 1 + count) % count);
+  preload(props.images[(imageIndex + 1) % count]);
+  preload(props.images[(imageIndex - 1 + count) % count]);
+  preload(props.nextRowImage);
 }
 
 const strip = ref<HTMLElement>();
