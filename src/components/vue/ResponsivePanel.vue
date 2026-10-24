@@ -17,14 +17,26 @@ const closeSheet = () => (props.dismissible ? emit('dismiss') : emit('close'));
 
 const desktop = ref(true);
 let mediaQuery: MediaQueryList | undefined;
-const update = () => (desktop.value = !!mediaQuery?.matches);
+/**
+ * Swapping layouts remounts the panel's content, which would close a modal dialog inside it (the photo lightbox).
+ * The dialog covers the page anyway, so the swap waits until it closes.
+ */
+function update() {
+  if (document.querySelector('dialog[open]')) return;
+  desktop.value = !!mediaQuery?.matches;
+}
 
 onMounted(() => {
   mediaQuery = window.matchMedia('(min-width: 768px)');
   update();
   mediaQuery.addEventListener('change', update);
+  // `close` doesn't bubble, so listen in the capture phase.
+  document.addEventListener('close', update, true);
 });
-onBeforeUnmount(() => mediaQuery?.removeEventListener('change', update));
+onBeforeUnmount(() => {
+  mediaQuery?.removeEventListener('change', update);
+  document.removeEventListener('close', update, true);
+});
 </script>
 
 <template>

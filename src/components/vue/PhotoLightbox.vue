@@ -234,14 +234,14 @@ defineExpose({ open });
         </button>
       </template>
 
-      <!-- The strip, centred, with the credit and key hints beneath it.
+      <!-- The strip, from the left, with the credit and key hints beneath it.
            Clicks pass through the band, so taps beside them still reach the photo. -->
       <div class="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col gap-1.5">
         <!-- Padded inside the scroller so the thumbnails' focus rings aren't clipped. -->
         <div
           v-if="images.length > 1"
           ref="strip"
-          class="filmstrip overlay pointer-events-auto flex max-w-full gap-1.5 self-center overflow-x-auto overflow-y-hidden p-1"
+          class="filmstrip overlay pointer-events-auto flex max-w-full gap-1.5 self-start overflow-x-auto overflow-y-hidden p-1"
           :class="{ 'fade-left': fadeLeft, 'fade-right': fadeRight }"
           role="group"
           :aria-label="`Photos of ${name}`"
@@ -251,7 +251,7 @@ defineExpose({ open });
             v-for="(image, position) in images"
             :key="image.url"
             type="button"
-            class="filmstrip-thumb bg-photo"
+            class="filmstrip-thumb"
             :aria-pressed="position === index"
             :aria-label="`Photo ${position + 1} of ${images.length}`"
             @click="show(position)"
@@ -259,8 +259,9 @@ defineExpose({ open });
             <ThumbImage :image="image" size="200x" class="size-full object-cover" />
           </button>
         </div>
-        <div class="overlay flex flex-wrap items-center justify-between gap-1.5">
-          <div v-if="current" class="pointer-events-auto flex max-w-full flex-wrap items-center gap-1.5">
+        <!-- Side by side at any width; when space runs short both sides stack (see .bottom-row). -->
+        <div class="bottom-row overlay flex items-end justify-between gap-1.5">
+          <div v-if="current" class="credit pointer-events-auto flex min-w-0 flex-wrap items-center gap-1.5">
             <LicenceBadge
               class="bottom-pill"
               :licence="current.licence"
@@ -280,10 +281,17 @@ defineExpose({ open });
             </p>
           </div>
           <!-- ml-auto keeps it right when there's no credit beside it (no photo). -->
-          <p class="chip bottom-pill key-hints m-0 ml-auto gap-3" aria-hidden="true">
-            <span v-if="images.length > 1"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
-            <span v-if="onStepRow"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
-            <span><kbd>Esc</kbd> Close</span>
+          <p
+            class="chip bottom-pill key-hints m-0 ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1"
+            aria-hidden="true"
+          >
+            <span v-if="images.length > 1" class="keys-only"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
+            <span v-if="onStepRow" class="keys-only"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
+            <span class="keys-only"><kbd>Esc</kbd> Close</span>
+            <span class="flex items-center gap-1">
+              <UiIcon name="mouse" size="14" class="keys-only" /><UiIcon name="touch" size="14" class="touch-only" />
+              Hide UI
+            </span>
           </p>
         </div>
       </div>
@@ -312,14 +320,36 @@ defineExpose({ open });
   font-size: 14px;
   line-height: 1.75rem;
 }
-/* Keyboard hints only where there's likely a keyboard, as in the Omnibox. */
+/* Keyboard hints and the mouse icon only where there's likely a keyboard, as in the Omnibox; touch screens get the
+   touch icon. */
 .key-hints {
-  display: none;
   color: rgb(255 255 255 / 0.75);
 }
-@media (min-width: 640px) and (hover: hover) {
+.keys-only {
+  display: none;
+}
+/* Once the row is too narrow for the credit and all the hints on one line, both sides stack together: the credit
+   pills one above the other, the hints two by two rather than wrapping three and one.
+   shortcut: the width is a typical credit plus four hints; measure the row if long credits wrap them early. */
+.bottom-row {
+  container-type: inline-size;
+}
+@container (max-width: 42rem) {
+  .credit {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .key-hints {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+  }
+}
+@media (min-width: 640px) and (hover: hover) {
+  .keys-only {
+    display: inline;
+  }
+  .touch-only {
+    display: none;
   }
 }
 kbd {
@@ -383,17 +413,25 @@ kbd {
   width: 2.75rem;
   height: 2.75rem;
   overflow: hidden;
-  border: 2px solid transparent;
+  /* A themed frame around each thumbnail; the backing stops inside it, so the selected outline is accent alone. */
+  --thumb-backing: rgb(0 0 0 / 0.3);
+  --thumb-border: rgb(0 0 0 / 0.3);
+  border: 2px solid var(--thumb-border);
   border-radius: var(--radius-sm);
+  background: var(--thumb-backing) padding-box;
+  backdrop-filter: blur(8px);
   cursor: pointer;
 }
-/* The others are dimmed too: Rust alone barely shows on the black stage in the light theme. */
-.filmstrip-thumb:not([aria-pressed='true']) {
-  opacity: 0.6;
+:root[data-theme='light'] .filmstrip-thumb {
+  --thumb-border: rgb(255 255 255 / 0.3);
+}
+/* The others are dimmed too: Rust alone barely shows on the black stage in the light theme.
+   The image dims, not the button, so the blurred backing behind it shows through like the nav buttons'. */
+.filmstrip-thumb > * {
   transition: opacity var(--dur-fast) var(--ease);
 }
-.filmstrip-thumb:hover {
-  opacity: 1;
+.filmstrip-thumb:not([aria-pressed='true'], :hover) > * {
+  opacity: 0.6;
 }
 .filmstrip-thumb[aria-pressed='true'] {
   border-color: var(--accent);
