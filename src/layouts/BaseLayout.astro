@@ -140,13 +140,14 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
           document.addEventListener('astro:after-swap', checkForUpdate);
           document.addEventListener('visibilitychange', checkForUpdate);
           setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
-          // Offline, the worker answers every page with the offline page: reload into it rather than show a broken app.
-          window.addEventListener('offline', () => {
-            if (navigator.serviceWorker.controller && !document.querySelector('[data-offline-page]')) {
-              window.location.reload();
-            }
-          });
           void wb.register();
+        });
+        // Offline, the worker answers every page with the offline page: reload into it rather than show a broken app.
+        // Listen straight away, not once workbox-window loads, or a connection lost while it loads goes unnoticed.
+        window.addEventListener('offline', () => {
+          if (navigator.serviceWorker.controller && !document.querySelector('[data-offline-page]')) {
+            window.location.reload();
+          }
         });
       }
 
