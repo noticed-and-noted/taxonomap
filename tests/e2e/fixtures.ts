@@ -5,9 +5,22 @@
  * is built against the same fake (`pnpm build:e2e`).
  */
 import { test as base, expect } from '@playwright/test';
+import { MCR } from 'monocart-coverage-reports';
+import { coverageOptions, isCoverageOn } from './coverage';
 import { answer } from './fake/world';
 
-export const test = base.extend<{ external: string[]; showTour: boolean; seenTour: void }>({
+export const test = base.extend<{ external: string[]; showTour: boolean; seenTour: void; coverage: void }>({
+  coverage: [
+    async ({ page }, use, testInfo) => {
+      if (!isCoverageOn) return use();
+      await page.coverage.startJSCoverage({ resetOnNavigation: false });
+      await use();
+      const scripts = await page.coverage.stopJSCoverage();
+      // A test that skips itself has nothing to add, and MCR refuses an empty list.
+      if (testInfo.status !== 'skipped') await MCR(coverageOptions).add(scripts);
+    },
+    { auto: true },
+  ],
   // A fresh browser gets the onboarding tour, which covers the page; journeys skip it unless they test it.
   showTour: [false, { option: true }],
   seenTour: [

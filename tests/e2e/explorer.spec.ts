@@ -141,3 +141,41 @@ test('the cell tooltip hides while the map is dragged', async ({ page }, info) =
   await page.mouse.move(centreX + 41, centreY);
   await expect(tooltip).toBeVisible();
 });
+
+test('the When menu picks a preset, or a custom range typed or picked on the calendar', async ({ page }) => {
+  await page.goto('/?taxon=2492462');
+  await page.getByRole('button', { name: 'When', exact: true }).click();
+  const menu = page.getByRole('button', { name: /^Date range:/ });
+  await menu.click();
+  await page.getByRole('button', { name: 'Last 5 years' }).click();
+  await expect(page).toHaveURL(/when=5y/);
+  await expect(menu).toHaveAccessibleName('Date range: Last 5 years');
+
+  // Typed by month; a date that isn't one says what to type instead.
+  await menu.click();
+  await page.getByRole('button', { name: 'Custom range' }).click();
+  const unit = (name: string) => page.locator('label', { has: page.getByRole('radio', { name }) }).click();
+  await unit('Months');
+  const from = page.getByRole('textbox', { name: 'From' });
+  await from.fill('not a date');
+  await from.press('Enter');
+  await expect(page.getByRole('alert')).toHaveText('Try a date like Mar 2020.');
+  await from.fill('Mar 2020');
+  await from.press('Enter');
+  const to = page.getByRole('textbox', { name: 'To' });
+  await to.fill('June 2021');
+  await to.press('Enter');
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page).toHaveURL(/when=m(%3A|:)2020-03\.\.2021-06/);
+  await expect(menu).toHaveAccessibleName('Date range: Mar 2020 – Jun 2021');
+
+  // A custom range reopens on its own view; by year, the calendar pages back a decade to pick both ends.
+  await menu.click();
+  await unit('Years');
+  await page.getByRole('button', { name: 'Previous' }).click();
+  await page.getByRole('button', { name: '2012', exact: true }).click();
+  await page.getByRole('button', { name: '2016', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page).toHaveURL(/when=y(%3A|:)2012\.\.2016/);
+  await expect(menu).toHaveAccessibleName('Date range: 2012–2016');
+});

@@ -40,3 +40,25 @@ test('unknown routes show the 404 page', async ({ page }) => {
   expect(response?.status()).toBe(404);
   await expect(page.getByRole('heading', { name: 'This page isn’t here' })).toBeVisible();
 });
+
+test('a species page opens its photos in a lightbox and links similar species', async ({ page }) => {
+  await page.goto('/species/2490719/turdus-merula');
+  await page.getByRole('button', { name: /^Enlarge photo 1 of \d+$/ }).click();
+  const lightbox = page.getByRole('dialog', { name: 'Common Blackbird photos' });
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.getByText(/^1 \/ \d+$/)).toBeVisible();
+  await lightbox.getByRole('button', { name: 'Next photo' }).click();
+  await expect(lightbox.getByText(/^2 \/ \d+$/)).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(lightbox.getByText(/^1 \/ \d+$/)).toBeVisible();
+  await lightbox.getByRole('button', { name: 'Close' }).click();
+  await expect(lightbox).toBeHidden();
+
+  // The song thrush shares the blackbird's genus.
+  const similar = page.getByRole('region', { name: 'Similar species' });
+  await similar.scrollIntoViewIfNeeded();
+  const thrush = similar.getByRole('link', { name: /Song Thrush/ });
+  await expect(thrush).toHaveAttribute('href', /2490680/);
+  // Once the cards hydrate, they look up a photo for each species.
+  await expect(thrush.getByRole('img', { name: 'Song Thrush (Turdus philomelos)' })).toBeVisible();
+});

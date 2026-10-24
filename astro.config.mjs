@@ -42,6 +42,8 @@ export default defineConfig({
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },
   vite: {
     plugins: [tailwindcss(), speciesViewRewrite],
+    // Only the e2e build ships sourcemaps, for the journeys' coverage.
+    build: { sourcemap: process.env.E2E_SOURCEMAP === '1' },
     // Native/WASM build-time renderers for Open Graph images stay external.
     ssr: { external: ['@resvg/resvg-js', 'satori'] },
     optimizeDeps: { exclude: ['@resvg/resvg-js'] },

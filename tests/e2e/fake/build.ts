@@ -24,6 +24,8 @@ const env = {
   // Never the data a local `pnpm bake` left behind.
   BAKE_DIR: '.cache/e2e-bake-nothing',
   ASTRO_TELEMETRY_DISABLED: '1',
+  // Sourcemaps let the journeys' coverage (`pnpm test:e2e:coverage`) map back to src/.
+  E2E_SOURCEMAP: '1',
 };
 const code = await new Promise<number>((resolve) => {
   const child = spawn('npx', ['astro', 'build'], { env, stdio: 'inherit' });

@@ -12,6 +12,7 @@ export default defineConfig({
   testDir: 'tests/e2e',
   // The site must be built against the fake world first: `pnpm build:e2e`.
   globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
   // Journeys are CPU-bound (software WebGL), not network-bound: the default of half the cores as workers is the fastest.
   fullyParallel: true,
   // Map pages render WebGL in software on CI runners; give a busy machine room. Passing checks don't wait for it.

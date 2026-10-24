@@ -28,7 +28,8 @@
     "test:coverage": "vitest run --coverage",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "build:e2e": "node tests/e2e/fake/build.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:coverage": "E2E_COVERAGE=1 playwright test --project=desktop"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
@@ -74,6 +75,7 @@
     "eslint-plugin-vue": "^10.11.1",
     "globals": "^17.13.0",
     "jsdom": "^29.1.1",
+    "monocart-coverage-reports": "^3.0.0",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.1",
     "satori": "^0.51.0",
