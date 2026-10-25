@@ -7,6 +7,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import type { Place } from '~/lib/geocode';
 import { setNearLocation } from '~/stores/near';
+import SearchSpinner from './SearchSpinner.vue';
 import { usePlaceSearch } from './usePlaceSearch';
 
 const uniqueId = useId();
@@ -104,11 +105,13 @@ function onInput() {
             :aria-controls="listId"
             aria-autocomplete="list"
             :aria-activedescendant="activeId"
-            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 pr-2 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)]"
+            :class="['pr-2', { 'search-spinner-room': loading }]"
+            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle"
             @input="onInput"
             @focus="open = true"
             @keydown="onArrow"
           />
+          <SearchSpinner :active="loading" label="Looking up places" class="search-spinner-gap top-1/2" />
         </span>
       </label>
     </form>

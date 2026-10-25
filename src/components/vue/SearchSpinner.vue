@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * A small spinner inside a search box while species names are looked up.
+ * A small spinner inside a search box while results are looked up.
  * Position it with classes (they go on the spinner); screen readers hear a status instead.
  */
 defineOptions({ inheritAttrs: false });
 
-defineProps<{ active: boolean }>();
+withDefaults(defineProps<{ active: boolean; label?: string }>(), { label: 'Looking up species names' });
 </script>
 
 <template>
@@ -15,5 +15,5 @@ defineProps<{ active: boolean }>();
     class="pointer-events-none absolute size-3.5 -translate-y-1/2 animate-spin rounded-full border-2 border-border-strong border-t-accent motion-reduce:animate-none"
     aria-hidden="true"
   ></span>
-  <span class="sr-only" role="status">{{ active ? 'Looking up species names' : '' }}</span>
+  <span class="sr-only" role="status">{{ active ? label : '' }}</span>
 </template>

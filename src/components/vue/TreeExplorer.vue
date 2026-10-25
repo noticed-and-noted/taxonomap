@@ -398,7 +398,7 @@ const share = (node: TreeNode) => {
             type="search"
             placeholder="Filter groups"
             aria-label="Filter groups"
-            class="mb-2 w-full rounded-md border border-border-strong bg-surface-2 px-2.5 py-1.5 text-sm placeholder:text-subtle focus-visible:outline-offset-[-1px]"
+            class="mb-2 w-full rounded-md border border-border-strong bg-surface-2 px-2.5 py-1.5 text-sm placeholder:text-subtle"
           />
           <!-- Padding gives the rows' focus ring room inside the scroll box. -->
           <ol

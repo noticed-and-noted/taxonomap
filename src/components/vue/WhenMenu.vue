@@ -496,8 +496,9 @@ onBeforeUnmount(() => {
   border-color: var(--accent);
 }
 .end:has(input:focus-visible) {
+  border-color: transparent;
   outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline-offset: 0;
 }
 .end input {
   display: block;

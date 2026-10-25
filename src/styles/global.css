@@ -301,6 +301,12 @@
   }
 }
 
+/* The ring replaces a text field's border while focused, flush on the field. Unlayered so it beats border utilities. */
+input:is([type='search'], [type='text']):focus-visible {
+  border-color: transparent;
+  outline-offset: 0;
+}
+
 /* Room left of the browser's clear button for a SearchSpinner, and the spinner placed in it. */
 input[type='search'].search-spinner-room::-webkit-search-cancel-button {
   margin-left: 1.5rem;
