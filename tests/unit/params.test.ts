@@ -1,10 +1,8 @@
 import {
-  bboxToWkt,
   buildUrl,
   circleToWkt,
   polygonToWkt,
   round,
-  roundBbox,
   roundLatLng,
   snapRadiusKm,
   toQueryString,
@@ -23,8 +21,8 @@ describe('params', () => {
     expect(buildUrl('B', '/p', {})).toBe('B/p');
   });
 
-  it('rounds bbox to 2 dp and normalises -0', () => {
-    expect(roundBbox([-0.001, 51.4449, 0.12345, 51.678])).toEqual([0, 51.44, 0.12, 51.68]);
+  it('rounds and normalises -0', () => {
+    expect(round(51.4449, 2)).toBe(51.44);
     expect(Object.is(round(-0.001, 2), 0)).toBe(true);
   });
 
@@ -34,10 +32,6 @@ describe('params', () => {
 
   it('rounds geolocation to 3 dp', () => {
     expect(roundLatLng(51.507351, -0.127758)).toEqual({ lat: 51.507, lng: -0.128 });
-  });
-
-  it('builds a closed counter-clockwise bbox polygon', () => {
-    expect(bboxToWkt([-0.2, 51.4, 0, 51.6])).toBe('POLYGON((-0.2 51.4,0 51.4,0 51.6,-0.2 51.6,-0.2 51.4))');
   });
 
   it('builds a closed circle polygon from rounded inputs', () => {
@@ -65,6 +59,30 @@ describe('polygonToWkt', () => {
       [1, 0],
     ];
     expect(polygonToWkt(clockwise)).toBe('POLYGON((0 0,1 0,1 1,0 1,0 0))');
+  });
+
+  it('splits a ring crossing the antimeridian into a multipolygon', () => {
+    const hex: [number, number][] = [
+      [-178, 0],
+      [-179, 1],
+      [-181, 1],
+      [-182, 0],
+      [-181, -1],
+      [-179, -1],
+    ];
+    expect(polygonToWkt(hex)).toBe(
+      'MULTIPOLYGON(((-178 0,-179 1,-180 1,-180 -1,-179 -1,-178 0)),((180 1,179 1,178 0,179 -1,180 -1,180 1)))',
+    );
+  });
+
+  it('moves a ring on a wrapped world copy back onto -180..180', () => {
+    const square: [number, number][] = [
+      [361, 0],
+      [362, 0],
+      [362, 1],
+      [361, 1],
+    ];
+    expect(polygonToWkt(square)).toBe('POLYGON((1 0,2 0,2 1,1 1,1 0))');
   });
 });
 

@@ -120,6 +120,14 @@ describe('checkCells', () => {
     expect(searchOccurrences).toHaveBeenCalledOnce();
   });
 
+  it('tallies records on either side of a cell split at the antimeridian', async () => {
+    const { checkCells, knownCount } = await load();
+    const split = 'MULTIPOLYGON(((-180 0,-179 0,-179 1,-180 1,-180 0)),((179 0,180 0,180 1,179 1,179 0)))';
+    searchOccurrences.mockResolvedValue({ count: 2, results: [recordAt(-179.5, 0.5), recordAt(179.5, 0.5)] });
+    await checkCells(NONE, [split, SQUARE_A]);
+    expect(knownCount(NONE, split)).toBe(2);
+  });
+
   it('records nothing from an incomplete page or a record outside every cell', async () => {
     const { checkCells, knownCount } = await load();
     searchOccurrences.mockResolvedValueOnce({ count: 500, results: [recordAt(0.5, 0.5)] });

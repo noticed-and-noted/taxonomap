@@ -56,12 +56,12 @@ export function fetchCount(filter: OccurrenceFilter, wkt: string): Promise<numbe
   return pending;
 }
 
-/** A WKT polygon's ring, as [lng, lat] pairs. */
-function ringOf(wkt: string): [number, number][] {
+/** A WKT polygon's rings (two for a MULTIPOLYGON split at the antimeridian), as [lng, lat] pairs. */
+function ringsOf(wkt: string): [number, number][][] {
   return wkt
-    .slice('POLYGON(('.length, -'))'.length)
-    .split(',')
-    .map((pair) => pair.split(' ').map(Number) as [number, number]);
+    .replace(/^\w+\(+|\)+$/g, '')
+    .split(/\)+,\(+/)
+    .map((ring) => ring.split(',').map((pair) => pair.split(' ').map(Number) as [number, number]));
 }
 
 /** Point in polygon, planar in lng/lat as GBIF's search tests WKT. */
@@ -87,11 +87,11 @@ async function checkBatch(filter: OccurrenceFilter, wkts: string[]): Promise<boo
     const page = await searchOccurrences({ ...filter, geometry: wkts }, { limit: BATCH_RECORDS });
     // Only a complete page says which cells are empty.
     if (page.results.length < page.count) return false;
-    const rings = wkts.map(ringOf);
+    const cells = wkts.map(ringsOf);
     const hits = wkts.map(() => 0);
     for (const record of page.results) {
-      const cell = rings.findIndex((ring) => isInside(record, ring));
-      // A record no ring claims (an edge case at the antimeridian) makes the tally unreliable.
+      const cell = cells.findIndex((rings) => rings.some((ring) => isInside(record, ring)));
+      // A record no ring claims (one exactly on a cell edge) makes the tally unreliable.
       if (cell < 0) return false;
       hits[cell]!++;
     }

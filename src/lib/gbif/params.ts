@@ -7,8 +7,6 @@
 export type ParamValue = string | number | boolean | null | undefined;
 export type Params = Record<string, ParamValue | readonly ParamValue[]>;
 
-export type BBox = readonly [west: number, south: number, east: number, north: number];
-
 export const RADIUS_STEPS_KM = [1, 2, 5, 10, 25, 50] as const;
 export type RadiusKm = (typeof RADIUS_STEPS_KM)[number];
 
@@ -17,12 +15,6 @@ export function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   // Add 0 to normalise -0 to 0.
   return Math.round(value * factor) / factor + 0;
-}
-
-/** Rounds each edge of a [west, south, east, north] box. */
-export function roundBbox(bbox: BBox, decimals = 2): BBox {
-  const [west, south, east, north] = bbox;
-  return [round(west, decimals), round(south, decimals), round(east, decimals), round(north, decimals)];
 }
 
 /** Snap to the nearest allowed radius step (ties go to the larger step). */
@@ -39,21 +31,12 @@ export function roundLatLng(lat: number, lng: number): { lat: number; lng: numbe
   return { lat: round(lat, 3), lng: round(lng, 3) };
 }
 
-/** Counter-clockwise WKT polygon for a bbox (GBIF requires CCW rings). */
-export function bboxToWkt(bbox: BBox): string {
-  const [west, south, east, north] = roundBbox(bbox);
-  return `POLYGON((${west} ${south},${east} ${south},${east} ${north},${west} ${north},${west} ${south}))`;
-}
-
 /**
  * Approximate a circle as a 24-sided CCW polygon. Coordinates are rounded to
  * 3 dp (~100 m) so nearby users share cache entries.
  */
 export function circleToWkt(lat: number, lng: number, radiusKm: number, sides = 24): string {
-  const ring = circleRing(lat, lng, radiusKm, sides).map(
-    ([pointLng, pointLat]) => `${round(pointLng, 3)} ${round(pointLat, 3)}`,
-  );
-  return `POLYGON((${ring.join(',')}))`;
+  return polygonToWkt(circleRing(lat, lng, radiusKm, sides), 3);
 }
 
 /** Closed counter-clockwise ring [lng, lat][] for a (snapped, rounded) circle. */
@@ -115,11 +98,46 @@ function signedArea(ring: readonly LngLat[]): number {
   return area / 2;
 }
 
+const ANTIMERIDIAN = 180;
+const FULL_TURN = 360;
+
+/** The part of a convex ring on one side of a meridian (Sutherland–Hodgman against one edge). */
+function clipAtLng(ring: readonly LngLat[], edge: number, keepWest: boolean): LngLat[] {
+  const isKept = ([pointLng]: LngLat) => (keepWest ? pointLng <= edge : pointLng >= edge);
+  const clipped: LngLat[] = [];
+  ring.forEach((current, index) => {
+    const previous = ring[(index + ring.length - 1) % ring.length]!;
+    if (isKept(current) !== isKept(previous)) {
+      const share = (edge - previous[0]) / (current[0] - previous[0]);
+      clipped.push([edge, previous[1] + share * (current[1] - previous[1])]);
+    }
+    if (isKept(current)) clipped.push(current);
+  });
+  return clipped;
+}
+
 /**
- * WKT for a single polygon ring: rounded to 4 dp (~10 m), consecutive
- * duplicates removed, closed, and wound counter-clockwise as GBIF requires.
+ * A ring moved onto -180..180, and cut in two where it crosses the
+ * antimeridian: GBIF rejects longitudes past ±180, so map cells drawn across
+ * that line or on a wrapped world copy need this.
  */
-export function polygonToWkt(ring: readonly LngLat[], decimals = 4): string {
+function wrapRing(ring: readonly LngLat[]): LngLat[][] {
+  if (ring.length === 0) return [[]];
+  const lngs = ring.map(([pointLng]) => pointLng);
+  const shift = -Math.round((Math.min(...lngs) + Math.max(...lngs)) / 2 / FULL_TURN) * FULL_TURN;
+  const shifted = ring.map(([pointLng, pointLat]): LngLat => [pointLng + shift, pointLat]);
+  const isPastEast = Math.max(...lngs) + shift > ANTIMERIDIAN;
+  if (!isPastEast && Math.min(...lngs) + shift >= -ANTIMERIDIAN) return [shifted];
+  const edge = isPastEast ? ANTIMERIDIAN : -ANTIMERIDIAN;
+  const overhang = clipAtLng(shifted, edge, !isPastEast).map(([pointLng, pointLat]): LngLat => [
+    pointLng - Math.sign(edge) * FULL_TURN,
+    pointLat,
+  ]);
+  return [clipAtLng(shifted, edge, isPastEast), overhang];
+}
+
+/** A ring rounded, with consecutive duplicates removed, closed, and wound counter-clockwise. */
+function tidyRing(ring: readonly LngLat[], decimals: number): LngLat[] {
   const points: LngLat[] = [];
   for (const [pointLng, pointLat] of ring) {
     const point: LngLat = [round(pointLng, decimals), round(pointLat, decimals)];
@@ -130,5 +148,20 @@ export function polygonToWkt(ring: readonly LngLat[], decimals = 4): string {
   const last = points[points.length - 1];
   if (first && last && (first[0] !== last[0] || first[1] !== last[1])) points.push(first);
   if (signedArea(points) < 0) points.reverse();
-  return `POLYGON((${points.map(([pointLng, pointLat]) => `${pointLng} ${pointLat}`).join(',')}))`;
+  return points;
+}
+
+/**
+ * WKT for a convex polygon ring: rounded to 4 dp (~10 m), consecutive
+ * duplicates removed, closed, and wound counter-clockwise as GBIF requires.
+ * A ring crossing the antimeridian becomes a MULTIPOLYGON of its two halves.
+ */
+export function polygonToWkt(ring: readonly LngLat[], decimals = 4): string {
+  const parts = wrapRing(ring).map(
+    (part) =>
+      `((${tidyRing(part, decimals)
+        .map(([pointLng, pointLat]) => `${pointLng} ${pointLat}`)
+        .join(',')}))`,
+  );
+  return parts.length === 1 ? `POLYGON${parts[0]}` : `MULTIPOLYGON(${parts.join(',')})`;
 }
