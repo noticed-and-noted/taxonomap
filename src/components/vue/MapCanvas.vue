@@ -47,6 +47,7 @@ import {
   $occurrenceFilter,
   $selectedHex,
   $panel,
+  $viewCheck,
   clearHexSelection,
   sameView,
   type FlyRequest,
@@ -88,9 +89,12 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
   (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
+/** The map's two hex layers: settled cells and ones fading in. */
+const HEX_LAYERS = ['occ-fill', 'occ-fresh-fill'];
+
 /** Colour both hex layers with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
-  for (const id of ['occ-fill', 'occ-fresh-fill']) {
+  for (const id of HEX_LAYERS) {
     if (map?.getLayer(id)) map.setPaintProperty(id, 'fill-color', fillColor(level));
   }
 }
@@ -557,6 +561,13 @@ function publishBounds() {
   ]);
 }
 
+/** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
+function publishEmpty() {
+  if (!map || $mapLoad.get().loading) return;
+  const layers = HEX_LAYERS.filter((id) => map!.getLayer(id));
+  $viewCheck.set({ isEmpty: !failed.value && layers.length > 0 && !map.queryRenderedFeatures({ layers }).length });
+}
+
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
 function onMoveEnd() {
   if (!map) return;
@@ -605,6 +616,7 @@ function listenToMap() {
   document.addEventListener('pointerdown', onPointerDownOutsideAttribution);
   cleanups.push(() => document.removeEventListener('pointerdown', onPointerDownOutsideAttribution));
   map.on('moveend', onMoveEnd);
+  map.on('idle', publishEmpty);
   map.on('move', followBusiestHex);
   map.on('resize', followBusiestHex);
   map.on('mousemove', onMove);
@@ -622,6 +634,10 @@ function listenToStores() {
     // Cells drawn off-screen are checked once they come into view.
     $mapBounds.listen(() => checkSparse((occ?.collection().features ?? []) as Hex[])),
     $basemap.listen(() => void rebuildStyle()),
+    // A load that drew nothing new renders nothing, so no idle follows: ask for one.
+    $mapLoad.listen((load) => {
+      if (!load.loading) map?.triggerRepaint();
+    }),
     // A new density ramp only repaints the hexes.
     $ramp.listen(() => paintHexes()),
     $mapView.listen((view) => {

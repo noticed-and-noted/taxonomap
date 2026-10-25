@@ -7,8 +7,8 @@
  * Settings (map colours) sits at the foot of the rail, apart from the filters.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, ref, watch } from 'vue';
-import { clearFilters } from '~/stores/explorer';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { $railOpen, clearFilters } from '~/stores/explorer';
 import { $tourOpen } from '~/stores/onboarding';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
 import FilterGroup from './FilterGroup.vue';
@@ -22,25 +22,36 @@ type PanelId = FilterGroupId | 'settings';
 
 const counts = useStore($groupCounts);
 const total = useStore($activeFilterCount);
-const open = ref<PanelId | null>(null);
+// Shared, so the legend can open a group and a resize can hand it to the phone sheet.
+const open = useStore($railOpen);
 const current = computed(() =>
   open.value === 'settings' ? SETTINGS : (FILTER_GROUPS.find((group) => group.id === open.value) ?? null),
 );
 const buttons = ref<Record<string, HTMLButtonElement>>({});
+
+/* The flyout may stop short of the dock below it, but never shorter than the rail beside it. */
+const rail = ref<HTMLElement>();
+const railHeight = ref(0);
+let railObserver: ResizeObserver | undefined;
+onMounted(() => {
+  railObserver = new ResizeObserver(() => (railHeight.value = rail.value?.offsetHeight ?? 0));
+  if (rail.value) railObserver.observe(rail.value);
+});
+onBeforeUnmount(() => railObserver?.disconnect());
 const tourOpen = useStore($tourOpen);
 
 // The tour (restarted from Settings) spotlights the rail itself, so the flyout makes way.
 watch(tourOpen, (isOpen) => {
-  if (isOpen) open.value = null;
+  if (isOpen) $railOpen.set(null);
 });
 
 function toggle(id: PanelId) {
-  open.value = open.value === id ? null : id;
+  $railOpen.set(open.value === id ? null : id);
 }
 
 async function close() {
   const id = open.value;
-  open.value = null;
+  $railOpen.set(null);
   await nextTick();
   if (id) buttons.value[id]?.focus();
 }
@@ -58,8 +69,8 @@ function label(name: string, count: number) {
 </script>
 
 <template>
-  <div class="filter-rail-wrap" @keydown="onKey">
-    <nav class="rail" aria-label="Filters" data-tour="filters">
+  <div class="filter-rail-wrap" :style="{ '--rail-height': `${railHeight}px` }" @keydown="onKey">
+    <nav ref="rail" class="rail" aria-label="Filters" data-tour="filters">
       <button
         v-for="group in FILTER_GROUPS"
         :key="group.id"
@@ -248,7 +259,8 @@ function label(name: string, count: number) {
   flex-direction: column;
   width: 18rem;
   max-width: var(--flyout-max, 18rem);
-  max-height: 100%;
+  /* --dock-clear: the legend dock's height plus a gap, set by ExplorerOverlay. */
+  max-height: max(var(--rail-height, 0px), 100% - var(--dock-clear, 0px));
   overflow: hidden;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);

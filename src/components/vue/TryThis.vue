@@ -211,7 +211,8 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 
 /* Short enough that the open list stays clear of the filter rail above the dock. */
 .try-list {
-  max-height: min(16rem, 30dvh);
+  /* 248px at default text size: leaves a gap between the dock and the filter rail above it. */
+  max-height: min(15.5rem, 30dvh);
   scrollbar-width: thin;
 }
 
