@@ -94,6 +94,17 @@ describe('fetchCount', () => {
     expect(occurrenceCount).toHaveBeenCalledOnce();
   });
 
+  it('knows whether a filter has any empty cell, and forgets it with the count', async () => {
+    const { hasKnownEmpty, rememberCount } = await load();
+    const filter = { taxonKey: 1 };
+    expect(hasKnownEmpty(filter)).toBe(false);
+    rememberCount(filter, CELL_A, 0);
+    expect(hasKnownEmpty(filter)).toBe(true);
+    expect(hasKnownEmpty({ taxonKey: 2 })).toBe(false);
+    for (let index = 0; index < 500; index++) rememberCount(NONE, `cell${index}`, 1);
+    expect(hasKnownEmpty(filter)).toBe(false);
+  });
+
   it('keeps the most recent 500 cells', async () => {
     const { knownCount, rememberCount } = await load();
     for (let index = 0; index < 501; index++) rememberCount(NONE, `cell${index}`, index);

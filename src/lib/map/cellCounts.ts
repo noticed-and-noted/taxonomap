@@ -22,8 +22,41 @@ const BATCH_RECORDS = 100;
 const counts = new Map<string, number>();
 const inFlight = new Map<string, Promise<number>>();
 const checking = new Set<string>();
+/** Each filter's JSON: a store hands out the same object until its filter changes, and the map asks for every cell. */
+const filterKeys = new WeakMap<OccurrenceFilter, string>();
+/** WKTs counted at 0, by filter JSON, so the map can skip the lookup when a filter has none. */
+const emptyCells = new Map<string, Set<string>>();
 
-const keyOf = (filter: OccurrenceFilter, wkt: string) => `${JSON.stringify(filter)}|${wkt}`;
+function filterKeyOf(filter: OccurrenceFilter): string {
+  let filterKey = filterKeys.get(filter);
+  if (filterKey === undefined) {
+    filterKey = JSON.stringify(filter);
+    filterKeys.set(filter, filterKey);
+  }
+  return filterKey;
+}
+
+const keyOf = (filter: OccurrenceFilter, wkt: string) => `${filterKeyOf(filter)}|${wkt}`;
+
+function markEmpty(filterKey: string, wkt: string, isEmpty: boolean) {
+  const cells = emptyCells.get(filterKey) ?? new Set<string>();
+  if (isEmpty) cells.add(wkt);
+  else cells.delete(wkt);
+  if (cells.size) emptyCells.set(filterKey, cells);
+  else emptyCells.delete(filterKey);
+}
+
+/** Drop a count; WKT has no "|", so the last one splits the key. */
+function forget(key: string) {
+  counts.delete(key);
+  const split = key.lastIndexOf('|');
+  markEmpty(key.slice(0, split), key.slice(split + 1), false);
+}
+
+/** Whether any cell is known to hold no records under a filter: a cheap check before `knownCount` on every cell. */
+export function hasKnownEmpty(filter: OccurrenceFilter): boolean {
+  return emptyCells.has(filterKeyOf(filter));
+}
 
 /** The exact count for a cell (its WKT) under a filter, if known. */
 export function knownCount(filter: OccurrenceFilter, wkt: string): number | undefined {
@@ -32,10 +65,12 @@ export function knownCount(filter: OccurrenceFilter, wkt: string): number | unde
 
 /** Record a cell's exact count. */
 export function rememberCount(filter: OccurrenceFilter, wkt: string, count: number): void {
-  const key = keyOf(filter, wkt);
+  const filterKey = filterKeyOf(filter);
+  const key = `${filterKey}|${wkt}`;
   counts.delete(key);
   counts.set(key, count);
-  if (counts.size > MAX_CELLS) counts.delete(counts.keys().next().value!);
+  markEmpty(filterKey, wkt, count === 0);
+  if (counts.size > MAX_CELLS) forget(counts.keys().next().value!);
 }
 
 /** Fetch (once, however often asked) and record a cell's exact count. */

@@ -141,8 +141,8 @@ class OccLayerController {
   readonly #options: OccLayerOptions;
   #level: number;
   readonly #cache = new Map<string, Hex[]>();
-  readonly #inflight = new Set<string>();
-  #abort = new AbortController();
+  /** Fetches under way, by cache key, each with its level and a way to cancel it. */
+  readonly #inflight = new Map<string, { level: number; controller: AbortController }>();
   #filterShown = '';
   /** What the view wants: its tiles, the ring around them, at a filter and level. */
   #want: { filter: string; level: number; view: TileId[]; ring: TileId[] };
@@ -240,7 +240,12 @@ class OccLayerController {
       if (response.status === 429 || response.status >= 500) $gbifStale.set(true);
       return undefined;
     }
-    return decodeHexes(await response.arrayBuffer(), tile, level);
+    try {
+      return await decodeHexes(await response.arrayBuffer(), tile, level);
+    } catch {
+      // Cancelled mid-body (a zoom or new filters), or a tile that would not decode: left unloaded, asked for again next plan.
+      return undefined;
+    }
   }
 
   /** The cells of the wanted tiles that are loaded. */
@@ -300,11 +305,12 @@ class OccLayerController {
 
   #startJob(job: Job) {
     this.#running++;
-    this.#inflight.add(job.key);
-    const signal = this.#abort.signal;
+    const controller = new AbortController();
+    this.#inflight.set(job.key, { level: job.level, controller });
+    const { signal } = controller;
     void this.#fetchTile(job.tile, job.level, signal).then((hexes) => {
       this.#running--;
-      this.#inflight.delete(job.key);
+      if (this.#inflight.get(job.key)?.controller === controller) this.#inflight.delete(job.key);
       if (hexes && !signal.aborted) this.#remember(job.key, hexes);
       if (this.#progress.keys.has(job.key)) {
         this.#progress.done++;
@@ -313,6 +319,15 @@ class OccLayerController {
       this.#drawSoon();
       this.#pump();
     });
+  }
+
+  /** Cancels the fetches under way that `isUnwanted` picks; they no longer count as in flight, so they can be asked again. */
+  #cancel(isUnwanted: (level: number) => boolean) {
+    for (const [key, { level, controller }] of this.#inflight) {
+      if (!isUnwanted(level)) continue;
+      controller.abort();
+      this.#inflight.delete(key);
+    }
   }
 
   /** Keeps a decoded tile, dropping the oldest beyond the cache size. */
@@ -330,8 +345,7 @@ class OccLayerController {
     const filterId = this.#filterKey();
     if (filterId !== this.#filterShown) {
       // New filters: nothing in flight is wanted any more.
-      this.#abort.abort();
-      this.#abort = new AbortController();
+      this.#cancel(() => true);
       this.#filterShown = filterId;
     }
     const level = this.#level;
@@ -370,6 +384,8 @@ class OccLayerController {
     const map = this.#map;
     const next = this.#levelAt(map.getZoom(), map.getCenter().lat);
     if (next !== this.#level) {
+      // Old-level tiles would hold the fetch slots the new view needs; a flight's look-ahead is at the new level, so it stays.
+      this.#cancel((level) => level !== next);
       this.#level = next;
       this.#options.onLevel(next);
     }
@@ -434,7 +450,7 @@ class OccLayerController {
   }
 
   destroy() {
-    this.#abort.abort();
+    this.#cancel(() => true);
     this.#map.easeTo = this.#easeTo;
     this.#map.flyTo = this.#flyTo;
     this.#map.off('move', this.#onMove);
