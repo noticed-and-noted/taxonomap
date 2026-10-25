@@ -1,7 +1,8 @@
 /**
  * HTTP Basic auth in front of the whole Pages site while it is private.
  * Credentials come from the BASIC_AUTH_USER and BASIC_AUTH_PASS Pages secrets.
- * With either one unset the site stays locked rather than falling open.
+ * With both unset (local `wrangler pages dev`) the gate is off; with only one
+ * set the site stays locked, since that looks like a half-done configuration.
  */
 interface Env {
   BASIC_AUTH_USER?: string;
@@ -37,10 +38,12 @@ function challenge(): Response {
 
 /**
  * Pages Function gating the whole site behind HTTP Basic auth.
- * @returns 503 when no credentials are configured, 401 on a mismatch, otherwise the site's response.
+ * @returns The site's response when neither credential is set, 503 when only one is,
+ *   401 on a mismatch, otherwise the site's response.
  */
 export const onRequest = async ({ request, env, next }: Context): Promise<Response> => {
   const { BASIC_AUTH_USER: user, BASIC_AUTH_PASS: pass } = env;
+  if (!user && !pass) return next();
   if (!user || !pass) return new Response('Login is not configured', { status: 503 });
 
   const header = request.headers.get('Authorization') ?? '';
