@@ -158,6 +158,9 @@ export interface HexGeometry {
 /** Geometry of the selected hex, published by MapCanvas. */
 export const $hexGeometry = atom<HexGeometry | null>(null);
 
+/** [lng, lat] of the record expanded in the records list, published by HexRecords so the map can mark it. */
+export const $recordPoint = atom<readonly [number, number] | null>(null);
+
 export type FlyRequest =
   | {
       kind: 'bounds';

@@ -11,6 +11,9 @@ import { rampColors, thresholdsAt } from '~/lib/ramp';
 import type { HexGeometry } from '~/stores/explorer';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+/** Zoomed out further, a record's dot says little more than its cell outline. */
+const RECORD_MIN_ZOOM = 7;
 /** Glyphs for raster basemaps, which bring none of their own. */
 const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 
@@ -91,11 +94,29 @@ function dataLayers(level: number): LayerSpecification[] {
   ];
 }
 
+/** The expanded record: a ring, not a filled dot, so it never reads as the near-me pin. */
+function recordLayer(accent: string, bg: string): LayerSpecification {
+  return {
+    id: 'selected-record',
+    type: 'circle',
+    source: 'selected',
+    minzoom: RECORD_MIN_ZOOM,
+    filter: ['==', ['geometry-type'], 'Point'],
+    paint: { 'circle-color': bg, 'circle-radius': 6, 'circle-stroke-color': accent, 'circle-stroke-width': 3 },
+  };
+}
+
 /** Hover, selection and "near me" layers, drawn above everything. */
 function topLayers({ accent, bg, text }: MapColors): LayerSpecification[] {
   return [
     { id: 'hover-line', type: 'line', source: 'hover', paint: { 'line-color': text, 'line-width': 1.5 } },
-    { id: 'selected-line', type: 'line', source: 'selected', paint: { 'line-color': accent, 'line-width': 3 } },
+    {
+      id: 'selected-line',
+      type: 'line',
+      source: 'selected',
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'line-color': accent, 'line-width': 3 },
+    },
     {
       id: 'near-area',
       type: 'fill',
@@ -117,6 +138,7 @@ function topLayers({ accent, bg, text }: MapColors): LayerSpecification[] {
       filter: ['==', ['geometry-type'], 'Point'],
       paint: { 'circle-color': accent, 'circle-radius': 7, 'circle-stroke-color': bg, 'circle-stroke-width': 3 },
     },
+    recordLayer(accent, bg),
   ];
 }
 
@@ -279,13 +301,17 @@ export function nearGeoJson(at: { lat: number; lng: number } | null, radiusKm: n
   };
 }
 
-/** Outline of the selected cell. */
-export function selectedGeoJson(geometry: HexGeometry | null): GeoJSON.FeatureCollection {
-  if (!geometry) return EMPTY;
-  return {
-    type: 'FeatureCollection',
-    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [geometry.ring] } }],
-  };
+/** Outline of the selected cell, and a point for the record expanded in its list. */
+export function selectedGeoJson(
+  geometry: HexGeometry | null,
+  record: readonly [number, number] | null = null,
+): GeoJSON.FeatureCollection {
+  if (!geometry && !record) return EMPTY;
+  const features: GeoJSON.Feature[] = [];
+  if (geometry)
+    features.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [geometry.ring] } });
+  if (record) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [...record] } });
+  return { type: 'FeatureCollection', features };
 }
 
 /** A hex feature's outer ring, WKT and tile count, or null if it has no usable ring. */

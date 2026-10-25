@@ -49,6 +49,7 @@ describe('buildStyle', () => {
       'near-area',
       'near-edge',
       'near-pin',
+      'selected-record',
     ]);
     expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'near']);
     // Cell ids let arriving tiles update the hexes in place.
@@ -152,6 +153,13 @@ describe('map GeoJSON', () => {
 
   it('outlines the selected cell', () => {
     expect(selectedGeoJson(null)).toBe(EMPTY);
+  });
+
+  it('marks the expanded record, with or without a selected cell', () => {
+    const collection = selectedGeoJson(null, [-0.1, 51.5]);
+    expect(collection.features).toEqual([
+      { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [-0.1, 51.5] } },
+    ]);
   });
 
   it('reads a hex feature into its ring, WKT and count', () => {

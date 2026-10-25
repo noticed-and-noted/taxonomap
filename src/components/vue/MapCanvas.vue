@@ -47,6 +47,7 @@ import {
   $occurrenceFilter,
   $selectedHex,
   $panel,
+  $recordPoint,
   $viewCheck,
   clearHexSelection,
   sameView,
@@ -161,7 +162,7 @@ function syncOverlays() {
   replaceHexes(occ?.collection() ?? EMPTY);
   // The grid level is set as the map starts, usually before its style has loaded.
   paintHexes();
-  setData('selected', selectedGeoJson($hexGeometry.get()));
+  setData('selected', selectedGeoJson($hexGeometry.get(), $recordPoint.get()));
   setData('near', nearData());
 }
 
@@ -169,7 +170,7 @@ function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
     hexes: occ?.collection() ?? EMPTY,
     level: $gridLevel.get(),
-    selected: selectedGeoJson($hexGeometry.get()),
+    selected: selectedGeoJson($hexGeometry.get(), $recordPoint.get()),
     near: nearData(),
   });
 }
@@ -646,7 +647,9 @@ function listenToStores() {
       if (!sameView(view, { lng: center.lng, lat: center.lat, zoom: map.getZoom() }))
         map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom });
     }),
-    $hexGeometry.subscribe((geometry) => setData('selected', selectedGeoJson(geometry))),
+    ...[$hexGeometry, $recordPoint].map((store) =>
+      store.listen(() => setData('selected', selectedGeoJson($hexGeometry.get(), $recordPoint.get()))),
+    ),
     $selectedHex.listen((selected) => {
       if (!selected) $hexGeometry.set(null);
       else if (!$hexGeometry.get()) pendingHexRestore = true;

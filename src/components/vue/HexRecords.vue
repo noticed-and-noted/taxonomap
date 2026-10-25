@@ -7,7 +7,7 @@
  * Pass `filter` to list another area's records (near me) instead of the selected cell's.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, distance, full } from '~/lib/format';
 import { normalise } from '~/lib/data/name-index';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
@@ -16,7 +16,7 @@ import PhotoLightbox from './PhotoLightbox.vue';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { tidy } from '~/lib/species/names';
-import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
+import { $hexGeometry, $occurrenceFilter, $recordPoint } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -59,6 +59,13 @@ const speciesKey = ref<number | ''>('');
 const records = shallowRef<Occurrence[]>([]);
 /** Expanded row's occurrence key. */
 const expanded = ref<number | null>(null);
+// Mark the expanded record on the map, when it has coordinates.
+watch(expanded, (key) => {
+  const record = records.value.find((occurrence) => occurrence.key === key);
+  const { decimalLongitude: lng, decimalLatitude: lat } = record ?? {};
+  $recordPoint.set(lng !== undefined && lat !== undefined ? [lng, lat] : null);
+});
+onBeforeUnmount(() => $recordPoint.set(null));
 const total = ref<number | null>(null);
 const scroller = ref<HTMLElement>();
 const { fadeBottom, update: updateFade } = useScrollFade(scroller);
