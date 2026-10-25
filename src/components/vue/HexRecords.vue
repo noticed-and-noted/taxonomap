@@ -394,7 +394,7 @@ const accuracy = (occurrence: Occurrence) => {
           @mousedown.prevent="pick(option)"
         >
           <span class="min-w-0 truncate" :class="{ 'sci-name': !speciesCommonName(option) }">{{ label(option) }}</span>
-          <span class="shrink-0 text-[11px] text-subtle tabular-nums">{{ full(option.records) }}</span>
+          <span class="shrink-0 text-[0.6875rem] text-subtle tabular-nums">{{ full(option.records) }}</span>
         </li>
         <li v-if="hasNoResults" role="option" aria-disabled="true" class="option text-muted">No results found</li>
       </ul>
@@ -547,7 +547,7 @@ const accuracy = (occurrence: Occurrence) => {
                           @click="openPhotos(occurrence)"
                         >
                           <span
-                            class="absolute right-1 top-1 flex items-center gap-1 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[11px] text-white tabular-nums"
+                            class="absolute right-1 top-1 flex items-center gap-1 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[0.6875rem] text-white tabular-nums"
                             aria-hidden="true"
                           >
                             <UiIcon name="photo" size="13" />{{ photos(occurrence).length }}
@@ -686,7 +686,7 @@ const accuracy = (occurrence: Occurrence) => {
   display: inline-block;
   padding: 0.0625rem 0.25rem;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--type);

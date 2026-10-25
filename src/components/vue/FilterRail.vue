@@ -15,6 +15,7 @@ import FilterGroup from './FilterGroup.vue';
 import LegalLinks from './LegalLinks.vue';
 import MapSettings from './MapSettings.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
+import ReadingSettings from './ReadingSettings.vue';
 import SearchFitSetting from './SearchFitSetting.vue';
 
 type PanelId = FilterGroupId | 'settings';
@@ -129,9 +130,12 @@ function label(name: string, count: number) {
             </svg>
           </button>
         </header>
-        <!-- Settings scrolls its own option list, so its body doesn't scroll. -->
-        <div v-if="current.id === 'settings'" class="flex min-h-0 flex-1 flex-col px-4 pt-3">
+        <div v-if="current.id === 'settings'" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3">
           <MapSettings />
+          <section class="-mx-4 border-t border-border px-4 py-3" aria-labelledby="reading-settings-title">
+            <h3 id="reading-settings-title" class="mb-2 font-sans text-sm font-medium">Reading and display</h3>
+            <ReadingSettings in-settings />
+          </section>
           <SearchFitSetting class="-mx-4 border-t border-border px-4 py-3" />
           <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
           <LegalLinks class="-mx-4 border-t border-border px-4 py-2" />

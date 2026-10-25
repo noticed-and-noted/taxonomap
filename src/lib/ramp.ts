@@ -17,6 +17,8 @@ export interface Ramp {
   name: string;
   /** One line for the settings list. */
   note: string;
+  /** Perceptually uniform and readable with common colour blindness (the d3 and Crameri maps). */
+  colourBlindSafe?: boolean;
   /** Eight stops, low to high: --ramp-0…7. The map bins use stops 1–7. */
   colors: readonly string[];
 }
@@ -35,6 +37,7 @@ export const RAMPS = [
   },
   {
     id: 'viridis',
+    colourBlindSafe: true,
     name: 'Viridis',
     note: 'Purple to yellow, colour-blind safe',
     colors: ['#440154', '#46327e', '#365c8d', '#277f8e', '#1fa187', '#4ac16d', '#a0da39', '#fde725'],
@@ -47,42 +50,49 @@ export const RAMPS = [
   },
   {
     id: 'cividis',
+    colourBlindSafe: true,
     name: 'Cividis',
     note: 'Navy to yellow, tuned for colour blindness',
     colors: ['#10366c', '#3b4c6e', '#61636f', '#7f7b75', '#999478', '#bbae71', '#e2cb5c', '#fdea45'],
   },
   {
     id: 'magma',
+    colourBlindSafe: true,
     name: 'Magma',
     note: 'Purple through pink to peach',
     colors: ['#1a1042', '#4e117b', '#812581', '#b5367a', '#e55064', '#fb8761', '#fec287', '#fcfdbf'],
   },
   {
     id: 'inferno',
+    colourBlindSafe: true,
     name: 'Inferno',
     note: 'Embers: purple, red, orange, yellow',
     colors: ['#1e0c45', '#540f6d', '#88226a', '#ba3655', '#e35933', '#f98c0a', '#f9c932', '#fcffa4'],
   },
   {
     id: 'plasma',
+    colourBlindSafe: true,
     name: 'Plasma',
     note: 'Saturated violet to yellow',
     colors: ['#4903a0', '#7b02a8', '#a82296', '#cb4679', '#e56b5d', '#f89441', '#fdc328', '#f0f921'],
   },
   {
     id: 'mako',
+    colourBlindSafe: true,
     name: 'Mako',
     note: 'Deep blue to sea-glass',
     colors: ['#2e1e3c', '#413d7b', '#37659e', '#348fa7', '#40b7ad', '#67cfab', '#a6e1bc', '#def5e5'],
   },
   {
     id: 'batlow',
+    colourBlindSafe: true,
     name: 'Batlow',
     note: 'Navy, green, orange, pink; built for print',
     colors: ['#011959', '#0f3f5f', '#25575d', '#4f6b48', '#7f7d32', '#b38b3c', '#e59a6f', '#fbb6c5'],
   },
   {
     id: 'bamako',
+    colourBlindSafe: true,
     name: 'Bamako',
     note: 'Teal to olive to straw',
     colors: ['#00404d', '#134b42', '#275736', '#406527', '#5f7413', '#8c8a05', '#c2a63e', '#f2d68e'],

@@ -28,6 +28,7 @@ import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
+import { prefersReducedMotion } from '~/stores/reading';
 import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
 import WebglNotice from './WebglNotice.vue';
@@ -64,7 +65,6 @@ let pendingHexRestore = false;
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
@@ -122,7 +122,7 @@ function changeHexes(add: Hex[], remove: string[]) {
   if (!map || !src) return;
   if (remove.length) void src.updateData({ remove });
   if (!add.length) return;
-  if (reducedMotion()) {
+  if (prefersReducedMotion()) {
     void src.updateData({ add });
     return;
   }
@@ -340,7 +340,7 @@ function flyToBounds(request: Extract<FlyRequest, { kind: 'bounds' }>) {
     maxZoom: request.maxZoom ?? FIT_MAX_ZOOM,
   };
   if (!request.centre) {
-    map.fitBounds(bounds, { ...fit, duration: reducedMotion() ? 0 : FIT_DURATION_MS });
+    map.fitBounds(bounds, { ...fit, duration: prefersReducedMotion() ? 0 : FIT_DURATION_MS });
     return;
   }
   const zoom = map.cameraForBounds(bounds, fit)?.zoom ?? map.getZoom();
@@ -359,7 +359,7 @@ function fly(request: FlyRequest) {
     center: [request.lng, request.lat],
     zoom: request.zoom,
     offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
-    duration: reducedMotion() ? 0 : FLIGHT_DURATION_MS,
+    duration: prefersReducedMotion() ? 0 : FLIGHT_DURATION_MS,
     essential: false,
   });
 }
@@ -708,7 +708,7 @@ onMounted(async () => {
     maxPitch: 0,
     dragRotate: false,
     renderWorldCopies: false,
-    fadeDuration: reducedMotion() ? 0 : MAP_FADE_MS,
+    fadeDuration: prefersReducedMotion() ? 0 : MAP_FADE_MS,
   });
   occ = createOccLayer(map, occLayerOptions());
   cleanups.push(() => occ?.destroy());

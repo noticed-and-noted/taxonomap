@@ -17,6 +17,8 @@ const props = defineProps<{
   stepKey: string | number;
   labelledby: string;
   clickThrough?: boolean;
+  /** A wider centred card, for content laid out in columns. */
+  wide?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -172,7 +174,7 @@ defineExpose({ measure });
       </svg>
       <div v-for="(box, index) in boxes" :key="index" class="spotlight-ring" :style="px(box)" aria-hidden="true"></div>
 
-      <div ref="card" tabindex="-1" class="spotlight-card" :class="{ centred: !boxes.length }" :style="tipStyle">
+      <div ref="card" tabindex="-1" class="spotlight-card" :class="{ centred: !boxes.length, wide }" :style="tipStyle">
         <slot />
       </div>
     </div>
@@ -236,6 +238,12 @@ defineExpose({ measure });
   top: 50%;
   translate: -50% -50%;
   width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+.spotlight-card.centred.wide {
+  width: min(40rem, calc(100vw - 2rem));
 }
 
 .spotlight-card:focus {

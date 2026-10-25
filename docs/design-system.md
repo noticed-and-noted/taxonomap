@@ -132,6 +132,16 @@ The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehea
 - **Visually hidden radios or checkboxes** inside a label: give the label `position: relative`, so focusing the input doesn't scroll the page.
 - **Icons**: 24×24 stroke icons, `stroke-width` 1.7, `currentColor`, round caps and joins. Mark them `aria-hidden`; the control carries the label.
 
+## Reading settings
+
+Viewers can change how text reads from the welcome card ("Reading and display options") or under Settings. `src/stores/reading.ts` saves the choices in `localStorage` (`reading`) and writes them onto `<html>` as data attributes, which the rules at the end of `global.css` style. An inline script in `BaseLayout.astro` applies them before first paint.
+
+- **Text size** (`data-text-size`): `large` is 112.5%, `larger` 125% of the root size. Size text in `rem`, never `px`, so it scales.
+- **No italics** (`data-no-italics`): everything upright, scientific names included.
+- **Wider spacing** (`data-wide-spacing`): WCAG 1.4.12 letter, word and line spacing. Check new layouts don't clip with it on.
+- **Reduce motion** (`data-reduce-motion`): the same as `prefers-reduced-motion`. In script, ask `prefersReducedMotion()` rather than the media query.
+- The welcome card also offers the map colours as a dropdown, colour-blind-safe ramps first (`colourBlindSafe` in `src/lib/ramp.ts`).
+
 ## Accessibility checklist
 
 - Text contrast is AA in both themes. Check new colour pairs; `tokens.css` notes the ratio next to each text token.

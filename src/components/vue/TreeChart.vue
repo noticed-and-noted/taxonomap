@@ -10,6 +10,7 @@ import { arc } from 'd3-shape';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { compact, full, RANK_LABELS } from '~/lib/format';
 import type { TreeNode } from '~/lib/tree/model';
+import { prefersReducedMotion } from '~/stores/reading';
 import ChartTip from './ChartTip.vue';
 import UiIcon from './UiIcon.vue';
 
@@ -88,7 +89,7 @@ function targetFor(focus: TreeNode) {
 
 function animateTo(target: { x0: number; x1: number; depth: number }) {
   cancelAnimationFrame(animationFrameId);
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduce = prefersReducedMotion();
   const from = viewWindow.value;
   if (reduce) {
     viewWindow.value = target;
@@ -231,7 +232,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
               :transform="sunLabel(shape)!.transform"
               text-anchor="middle"
               dominant-baseline="middle"
-              class="text-[10.5px] font-medium"
+              class="text-[0.65625rem] font-medium"
             >
               {{ sunLabel(shape)!.text }}
             </text>
@@ -308,7 +309,7 @@ const centreLabel = computed(() => props.focus.common ?? props.focus.name);
           v-if="rect(shape).h > 15 && rect(shape).w > 30"
           :x="rect(shape).x + 6"
           :y="rect(shape).y + 13"
-          class="pointer-events-none text-[10.5px] font-medium"
+          class="pointer-events-none text-[0.65625rem] font-medium"
           fill="var(--bg)"
         >
           {{

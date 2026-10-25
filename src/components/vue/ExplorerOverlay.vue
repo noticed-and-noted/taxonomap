@@ -24,6 +24,7 @@ import NearExplorer from './NearExplorer.vue';
 import OnboardingTour from './OnboardingTour.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
+import ReadingSettings from './ReadingSettings.vue';
 import SearchFitSetting from './SearchFitSetting.vue';
 import TaxonChip from './TaxonChip.vue';
 import ThemePicker from './ThemePicker.vue';
@@ -212,7 +213,11 @@ function closePanel() {
               <p class="mb-2 text-sm font-medium">Theme</p>
               <ThemePicker />
             </div>
-            <MapSettings inline />
+            <MapSettings />
+            <section aria-labelledby="reading-settings-sheet-title">
+              <h3 id="reading-settings-sheet-title" class="mb-2 font-sans text-sm font-medium">Reading and display</h3>
+              <ReadingSettings in-settings />
+            </section>
             <SearchFitSetting />
             <OnboardingSettings />
             <LegalLinks />

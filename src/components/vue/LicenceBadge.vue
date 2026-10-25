@@ -13,7 +13,7 @@ const credit = computed(() => props.creator ?? props.rightsHolder);
 
 <template>
   <span
-    class="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[11px] leading-tight text-white"
+    class="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[0.6875rem] leading-tight text-white"
   >
     <a
       :href="LICENCE_URLS[licence]"

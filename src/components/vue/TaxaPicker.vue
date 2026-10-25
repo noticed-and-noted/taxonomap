@@ -121,7 +121,7 @@ function onKey(event: KeyboardEvent) {
             <span v-if="taxon.commonName" class="sci-name ml-1 text-xs text-muted">{{ taxon.scientificName }}</span>
           </span>
         </Transition>
-        <span class="ml-auto shrink-0 text-[11px] text-subtle">{{ rankLabel(taxon.rank) }}</span>
+        <span class="ml-auto shrink-0 text-[0.6875rem] text-subtle">{{ rankLabel(taxon.rank) }}</span>
         <button
           type="button"
           class="remove-btn"
@@ -173,7 +173,7 @@ function onKey(event: KeyboardEvent) {
               hit.scientificName
             }}</span>
           </span>
-          <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
+          <span class="shrink-0 text-right text-[0.6875rem] leading-tight text-subtle">
             <span class="block">{{ rankLabel(hit.rank) }}</span>
             <span v-if="hit.count" class="block tabular-nums">{{ compact(hit.count) }}</span>
           </span>
