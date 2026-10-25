@@ -12,8 +12,23 @@ import type { HexGeometry } from '~/stores/explorer';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-/** Zoomed out further, a record's dot says little more than its cell outline. */
+/** Zoomed out further, a record's area (or, outside a cell, its dot) says little more than its cell outline. */
 const RECORD_MIN_ZOOM = 7;
+export const RECORD_DOT_LAYER = 'selected-record';
+const RECORD_DOT_RADIUS_PX = 6;
+const RECORD_DOT_STROKE_PX = 3;
+const RECORD_DOT_DIAMETER_PX = 2 * (RECORD_DOT_RADIUS_PX + RECORD_DOT_STROKE_PX);
+/** The dot shows once its cell is this many dots wide on screen; narrower, the dot would all but cover the cell. */
+const CELL_WIDTH_IN_DOTS = 3;
+/** MapLibre's highest layer zoom. */
+const LAYER_MAX_ZOOM = 24;
+/** Marks the record's feature in the `selected` source, so its area isn't drawn as the cell outline. */
+const RECORD_PART = 'record';
+const IS_RECORD_AREA: ExpressionSpecification = [
+  'all',
+  ['==', ['geometry-type'], 'Polygon'],
+  ['==', ['get', 'part'], RECORD_PART],
+];
 /** Glyphs for raster basemaps, which bring none of their own. */
 const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
 
@@ -94,16 +109,52 @@ function dataLayers(level: number): LayerSpecification[] {
   ];
 }
 
-/** The expanded record: a ring, not a filled dot, so it never reads as the near-me pin. */
-function recordLayer(accent: string, bg: string): LayerSpecification {
-  return {
-    id: 'selected-record',
-    type: 'circle',
-    source: 'selected',
-    minzoom: RECORD_MIN_ZOOM,
-    filter: ['==', ['geometry-type'], 'Point'],
-    paint: { 'circle-color': bg, 'circle-radius': 6, 'circle-stroke-color': accent, 'circle-stroke-width': 3 },
-  };
+/**
+ * The expanded record: a ring, not a filled dot, so it never reads as the near-me pin; an obscured
+ * record's square is dashed like the near-me circle, as both mean "somewhere in here".
+ */
+function recordLayers(accent: string, bg: string): LayerSpecification[] {
+  const base = { source: 'selected', minzoom: RECORD_MIN_ZOOM } as const;
+  return [
+    {
+      ...base,
+      id: 'record-area',
+      type: 'fill',
+      filter: IS_RECORD_AREA,
+      paint: { 'fill-color': accent, 'fill-opacity': 0.12 },
+    },
+    {
+      ...base,
+      id: 'record-edge',
+      type: 'line',
+      filter: IS_RECORD_AREA,
+      paint: { 'line-color': accent, 'line-width': 2, 'line-dasharray': [3, 2] },
+    },
+    {
+      ...base,
+      id: RECORD_DOT_LAYER,
+      type: 'circle',
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-color': bg,
+        'circle-radius': RECORD_DOT_RADIUS_PX,
+        'circle-stroke-color': accent,
+        'circle-stroke-width': RECORD_DOT_STROKE_PX,
+      },
+    },
+  ];
+}
+
+/**
+ * The zoom from which an expanded record's dot shows: once its cell is wide enough on screen for the dot
+ * to say where in the cell the record is.
+ * @param zoom The map's zoom now.
+ * @param cellWidthPx The cell's width on screen now, or null for a record listed outside a cell (near me).
+ */
+export function recordDotMinZoom(zoom: number, cellWidthPx: number | null): number {
+  if (cellWidthPx === null) return RECORD_MIN_ZOOM;
+  const zoomIn = Math.log2((CELL_WIDTH_IN_DOTS * RECORD_DOT_DIAMETER_PX) / cellWidthPx);
+  return Math.min(LAYER_MAX_ZOOM, zoom + zoomIn);
 }
 
 /** Hover, selection and "near me" layers, drawn above everything. */
@@ -114,7 +165,7 @@ function topLayers({ accent, bg, text }: MapColors): LayerSpecification[] {
       id: 'selected-line',
       type: 'line',
       source: 'selected',
-      filter: ['==', ['geometry-type'], 'Polygon'],
+      filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['!=', ['get', 'part'], RECORD_PART]],
       paint: { 'line-color': accent, 'line-width': 3 },
     },
     {
@@ -138,7 +189,7 @@ function topLayers({ accent, bg, text }: MapColors): LayerSpecification[] {
       filter: ['==', ['geometry-type'], 'Point'],
       paint: { 'circle-color': accent, 'circle-radius': 7, 'circle-stroke-color': bg, 'circle-stroke-width': 3 },
     },
-    recordLayer(accent, bg),
+    ...recordLayers(accent, bg),
   ];
 }
 
@@ -301,16 +352,16 @@ export function nearGeoJson(at: { lat: number; lng: number } | null, radiusKm: n
   };
 }
 
-/** Outline of the selected cell, and a point for the record expanded in its list. */
+/** Outline of the selected cell, and the place of the record expanded in its list (lib/map/recordPlace.ts). */
 export function selectedGeoJson(
   geometry: HexGeometry | null,
-  record: readonly [number, number] | null = null,
+  record: GeoJSON.Point | GeoJSON.Polygon | null = null,
 ): GeoJSON.FeatureCollection {
   if (!geometry && !record) return EMPTY;
   const features: GeoJSON.Feature[] = [];
   if (geometry)
     features.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [geometry.ring] } });
-  if (record) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [...record] } });
+  if (record) features.push({ type: 'Feature', properties: { part: RECORD_PART }, geometry: record });
   return { type: 'FeatureCollection', features };
 }
 

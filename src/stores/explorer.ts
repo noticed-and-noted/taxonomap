@@ -158,8 +158,8 @@ export interface HexGeometry {
 /** Geometry of the selected hex, published by MapCanvas. */
 export const $hexGeometry = atom<HexGeometry | null>(null);
 
-/** [lng, lat] of the record expanded in the records list, published by HexRecords so the map can mark it. */
-export const $recordPoint = atom<readonly [number, number] | null>(null);
+/** Where the record expanded in the records list sits (lib/map/recordPlace.ts), published by HexRecords for the map. */
+export const $recordPlace = atom<GeoJSON.Point | GeoJSON.Polygon | null>(null);
 
 export type FlyRequest =
   | {

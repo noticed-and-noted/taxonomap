@@ -19,6 +19,8 @@ import {
   geometryOf,
   nearGeoJson,
   occOpacity,
+  RECORD_DOT_LAYER,
+  recordDotMinZoom,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
@@ -26,6 +28,7 @@ import { needsAdhoc } from '~/lib/gbif';
 import { checkCells, createHoverCounter, knownCount } from '~/lib/map/cellCounts';
 import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
+import { createRecordFit } from '~/lib/map/recordFit';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { prefersReducedMotion } from '~/stores/reading';
@@ -47,7 +50,7 @@ import {
   $occurrenceFilter,
   $selectedHex,
   $panel,
-  $recordPoint,
+  $recordPlace,
   $viewCheck,
   clearHexSelection,
   sameView,
@@ -162,15 +165,16 @@ function syncOverlays() {
   replaceHexes(occ?.collection() ?? EMPTY);
   // The grid level is set as the map starts, usually before its style has loaded.
   paintHexes();
-  setData('selected', selectedGeoJson($hexGeometry.get(), $recordPoint.get()));
+  setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
   setData('near', nearData());
+  sizeRecordDot();
 }
 
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
     hexes: occ?.collection() ?? EMPTY,
     level: $gridLevel.get(),
-    selected: selectedGeoJson($hexGeometry.get(), $recordPoint.get()),
+    selected: selectedGeoJson($hexGeometry.get(), $recordPlace.get()),
     near: nearData(),
   });
 }
@@ -647,8 +651,8 @@ function listenToStores() {
       if (!sameView(view, { lng: center.lng, lat: center.lat, zoom: map.getZoom() }))
         map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom });
     }),
-    ...[$hexGeometry, $recordPoint].map((store) =>
-      store.listen(() => setData('selected', selectedGeoJson($hexGeometry.get(), $recordPoint.get()))),
+    ...[$hexGeometry, $recordPlace].map((store) =>
+      store.listen(() => setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()))),
     ),
     $selectedHex.listen((selected) => {
       if (!selected) $hexGeometry.set(null);
@@ -671,6 +675,25 @@ function listenToStores() {
       findBusiestHex(request === 'select');
     }),
   );
+}
+
+/** Zoom out to show an expanded record's whole obscured area, and back again (lib/map/recordFit.ts); size its dot. */
+function followRecord() {
+  if (!map) return;
+  const fit = createRecordFit({
+    map,
+    coveredEdges,
+    fitBox: (bbox, maxZoom) => flyToBounds({ kind: 'bounds', bbox, maxZoom }),
+  });
+  cleanups.push($recordPlace.listen(fit), $hexGeometry.listen(sizeRecordDot));
+}
+
+/** Show an expanded record's dot only from the zoom where its cell is wide enough on screen to hold it. */
+function sizeRecordDot() {
+  if (!map?.getLayer(RECORD_DOT_LAYER)) return;
+  const xs = $hexGeometry.get()?.ring.map((position) => map!.project(position).x);
+  const cellWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
+  map.setLayerZoomRange(RECORD_DOT_LAYER, recordDotMinZoom(map.getZoom(), cellWidth), map.getMaxZoom() + 1);
 }
 
 /** Page-level events: theme switches and client-side page swaps. */
@@ -734,6 +757,7 @@ onMounted(async () => {
   decorateMap(maplibre, element);
   listenToMap();
   listenToStores();
+  followRecord();
   listenToPage();
 });
 
