@@ -91,7 +91,7 @@ describe('the checklist', () => {
     explorer.$dateRange.set({ preset: '1y' });
     near.$nearMode.set(true);
     tree.$treeFocus.set(212);
-    ramp.setRamp('magma');
+    ramp.setRamp('plasma');
     expect(onboarding.$checklistDone.get()).toEqual(['hex', 'when', 'tree', 'style', 'near']);
   });
 

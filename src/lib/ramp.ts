@@ -24,16 +24,17 @@ export interface Ramp {
 }
 
 /**
- * The ramps a viewer can pick. The d3 ones (viridis, cividis, magma, inferno,
+ * The ramps a viewer can pick. The d3 ones (viridis, cividis and
  * plasma) are sampled from d3-scale-chromatic; all but viridis skip their
- * darkest 12% so the lowest bins still show on the dark basemap.
+ * darkest 12% so the lowest bins still show on the dark basemap. Every ramp
+ * runs dark (few records) to light (many).
  */
 export const RAMPS = [
   {
     id: 'lichen-fern',
     name: 'Lichen to fern',
-    note: 'Pale straw to deep teal; best on the light map',
-    colors: ['#e8e2b0', '#c6d491', '#9cc27b', '#6fab6f', '#45916a', '#237563', '#105958', '#0b3c48'],
+    note: 'Deep teal to pale straw; best on the light map',
+    colors: ['#0b3c48', '#105958', '#237563', '#45916a', '#6fab6f', '#9cc27b', '#c6d491', '#e8e2b0'],
   },
   {
     id: 'viridis',
@@ -54,20 +55,6 @@ export const RAMPS = [
     name: 'Cividis',
     note: 'Navy to yellow, tuned for colour blindness',
     colors: ['#10366c', '#3b4c6e', '#61636f', '#7f7b75', '#999478', '#bbae71', '#e2cb5c', '#fdea45'],
-  },
-  {
-    id: 'magma',
-    colourBlindSafe: true,
-    name: 'Magma',
-    note: 'Purple through pink to peach',
-    colors: ['#1a1042', '#4e117b', '#812581', '#b5367a', '#e55064', '#fb8761', '#fec287', '#fcfdbf'],
-  },
-  {
-    id: 'inferno',
-    colourBlindSafe: true,
-    name: 'Inferno',
-    note: 'Embers: purple, red, orange, yellow',
-    colors: ['#1e0c45', '#540f6d', '#88226a', '#ba3655', '#e35933', '#f98c0a', '#f9c932', '#fcffa4'],
   },
   {
     id: 'plasma',

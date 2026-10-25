@@ -242,6 +242,9 @@ const broken = ref(new Set<string>());
 const photos = (occurrence: Occurrence) => usableImages(occurrence).filter((photo) => !broken.value.has(photo.url));
 const image = (occurrence: Occurrence) => photos(occurrence)[0];
 const markBroken = (photo: UsableImage) => (broken.value = new Set(broken.value).add(photo.url));
+/** Photo URLs that have loaded at some size, so their skeletons can go. */
+const loaded = ref(new Set<string>());
+const markLoaded = (photo: UsableImage) => (loaded.value = new Set(loaded.value).add(photo.url));
 
 const lightbox = ref<InstanceType<typeof PhotoLightbox>>();
 /** Record whose photos the lightbox shows. */
@@ -463,16 +466,25 @@ const accuracy = (occurrence: Occurrence) => {
               >
                 <td v-if="expanded !== occurrence.key" class="py-1.5 pl-4 pr-2">
                   <span
-                    class="block size-8 overflow-hidden rounded bg-photo"
+                    class="relative block size-8 overflow-hidden rounded bg-photo"
                     :style="transitionName(occurrence, 'photo')"
                   >
-                    <ThumbImage
-                      v-if="image(occurrence)"
-                      :image="image(occurrence)!"
-                      size="200x"
-                      class="size-full object-cover"
-                      @broken="markBroken(image(occurrence)!)"
-                    />
+                    <template v-if="image(occurrence)">
+                      <SkeletonBlock
+                        v-if="!loaded.has(image(occurrence)!.url)"
+                        class="absolute inset-0"
+                        height="100%"
+                        rounded="sm"
+                        aria-hidden="true"
+                      />
+                      <ThumbImage
+                        :image="image(occurrence)!"
+                        size="200x"
+                        class="relative size-full object-cover"
+                        @loaded="markLoaded(image(occurrence)!)"
+                        @broken="markBroken(image(occurrence)!)"
+                      />
+                    </template>
                     <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
                       {{ initials(occurrence) }}
                     </span>
@@ -528,15 +540,24 @@ const accuracy = (occurrence: Occurrence) => {
                     >
                       <template v-if="image(occurrence)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
+                        <SkeletonBlock
+                          v-if="!loaded.has(image(occurrence)!.url)"
+                          class="absolute inset-0"
+                          height="100%"
+                          rounded="sm"
+                          aria-hidden="true"
+                        />
                         <ThumbImage
                           :image="image(occurrence)!"
                           size="200x"
                           class="absolute inset-0 size-full object-cover"
+                          @loaded="markLoaded(image(occurrence)!)"
                         />
                         <ThumbImage
                           :image="image(occurrence)!"
                           size="400x"
                           class="absolute inset-0 size-full object-cover"
+                          @loaded="markLoaded(image(occurrence)!)"
                           @broken="markBroken(image(occurrence)!)"
                         />
                         <!-- A sibling of the badge, not its parent: the badge holds a link. -->

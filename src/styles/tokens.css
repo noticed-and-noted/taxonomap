@@ -64,18 +64,18 @@
 
 :root {
   /*
-   * Density ramp: "lichen to fern" (pale straw to deep teal). Viewers can
+   * Density ramp: "lichen to fern" (deep teal to pale straw). Viewers can
    * pick another in map settings (RAMPS in lib/ramp.ts), which overrides
    * these on <html>.
    */
-  --ramp-0: #e8e2b0;
-  --ramp-1: #c6d491;
-  --ramp-2: #9cc27b;
-  --ramp-3: #6fab6f;
-  --ramp-4: #45916a;
-  --ramp-5: #237563;
-  --ramp-6: #105958;
-  --ramp-7: #0b3c48;
+  --ramp-0: #0b3c48;
+  --ramp-1: #105958;
+  --ramp-2: #237563;
+  --ramp-3: #45916a;
+  --ramp-4: #6fab6f;
+  --ramp-5: #9cc27b;
+  --ramp-6: #c6d491;
+  --ramp-7: #e8e2b0;
 
   /* Extinct reads as the text colour. */
   --iucn-nt-text: var(--iucn-threat-text);

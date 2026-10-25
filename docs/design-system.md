@@ -76,10 +76,10 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 
 The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. The map bins use stops 1 to 7. Charts that want a single data colour use `var(--ramp-4)`.
 
-- The default is **Lichen to fern** (pale straw to deep teal), set in `tokens.css` and as `DEFAULT_RAMP` in `src/lib/ramp.ts`. A unit test keeps the two in step.
+- The default is **Lichen to fern** (deep teal to pale straw), set in `tokens.css` and as `DEFAULT_RAMP` in `src/lib/ramp.ts`. A unit test keeps the two in step.
 - Viewers can pick another ramp under Settings on the map's left rail (or in the phone filters sheet). The choice is saved in `localStorage` (`map-colours`) and written onto `<html>` as `--ramp-*` overrides.
-- Choices: Lichen to fern, Viridis, Forest to pollen, Cividis, Magma, Inferno, Plasma, Mako, Batlow, Bamako.
-- A new ramp needs 8 stops that rise steadily in lightness (light to dark or dark to light), so the order reads in greyscale. Its lowest stops must stay visible on both basemaps.
+- Choices: Lichen to fern, Viridis, Forest to pollen, Cividis, Plasma, Mako, Batlow, Bamako.
+- A new ramp needs 8 stops that rise steadily in lightness from dark (few records) to light (many), so the order reads in greyscale. Its end stops must stay visible on both basemaps.
 
 ## Typography
 
