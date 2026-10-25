@@ -345,6 +345,10 @@ onBeforeUnmount(() => {
   /* Above the rail and its flyout where a short window makes them meet; below the panels (z-20). */
   z-index: 1;
 }
+/* An open flyout is what you're working in, so it goes above the dock; a tall dock would otherwise hide its last rows. */
+.rail-region:has(.flyout) {
+  z-index: 2;
+}
 /* The dock's surface sits on its own layer, above the stash tab (z -10) but below the legend. */
 .bottom-dock::before {
   content: '';
