@@ -72,21 +72,10 @@ describe('renderSpeciesCard', () => {
   it('lays out the names, count and initials when there is no photo', async () => {
     const { renderSpeciesCard, trees } = await loadTree();
     await renderSpeciesCard({ commonName: 'European robin', scientificName: 'Erithacus rubecula', count: 1234 });
-    expect(texts(trees[0])).toEqual([
-      'ER',
-      'European robin',
-      'Erithacus rubecula',
-      '1.2K',
-      'records on GBIF',
-    ]);
+    expect(texts(trees[0])).toEqual(['ER', 'European robin', 'Erithacus rubecula', '1.2K', 'records on GBIF']);
     await renderSpeciesCard({ scientificName: 'Erithacus rubecula subsp. melophilus', count: 5 });
     // No common name: the scientific name is the (smaller, long) title, shown once.
-    expect(texts(trees[1])).toEqual([
-      'ER',
-      'Erithacus rubecula subsp. melophilus',
-      '5',
-      'records on GBIF',
-    ]);
+    expect(texts(trees[1])).toEqual(['ER', 'Erithacus rubecula subsp. melophilus', '5', 'records on GBIF']);
   });
 
   it('downloads the photo once, credits it, and falls back to initials when it cannot', async () => {
