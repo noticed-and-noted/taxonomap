@@ -94,6 +94,17 @@ describe('fetchCount', () => {
     expect(occurrenceCount).toHaveBeenCalledOnce();
   });
 
+  it('knows whether a filter has any empty cell, and forgets it with the count', async () => {
+    const { hasKnownEmpty, rememberCount } = await load();
+    const filter = { taxonKey: 1 };
+    expect(hasKnownEmpty(filter)).toBe(false);
+    rememberCount(filter, CELL_A, 0);
+    expect(hasKnownEmpty(filter)).toBe(true);
+    expect(hasKnownEmpty({ taxonKey: 2 })).toBe(false);
+    for (let index = 0; index < 500; index++) rememberCount(NONE, `cell${index}`, 1);
+    expect(hasKnownEmpty(filter)).toBe(false);
+  });
+
   it('keeps the most recent 500 cells', async () => {
     const { knownCount, rememberCount } = await load();
     for (let index = 0; index < 501; index++) rememberCount(NONE, `cell${index}`, index);
@@ -118,6 +129,14 @@ describe('checkCells', () => {
     // Known cells are not asked for again.
     await checkCells(NONE, [SQUARE_A, SQUARE_B]);
     expect(searchOccurrences).toHaveBeenCalledOnce();
+  });
+
+  it('tallies records on either side of a cell split at the antimeridian', async () => {
+    const { checkCells, knownCount } = await load();
+    const split = 'MULTIPOLYGON(((-180 0,-179 0,-179 1,-180 1,-180 0)),((179 0,180 0,180 1,179 1,179 0)))';
+    searchOccurrences.mockResolvedValue({ count: 2, results: [recordAt(-179.5, 0.5), recordAt(179.5, 0.5)] });
+    await checkCells(NONE, [split, SQUARE_A]);
+    expect(knownCount(NONE, split)).toBe(2);
   });
 
   it('records nothing from an incomplete page or a record outside every cell', async () => {

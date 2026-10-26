@@ -76,10 +76,10 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 
 The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. The map bins use stops 1 to 7. Charts that want a single data colour use `var(--ramp-4)`.
 
-- The default is **Lichen to fern** (pale straw to deep teal), set in `tokens.css` and as `DEFAULT_RAMP` in `src/lib/ramp.ts`. A unit test keeps the two in step.
+- The default is **Lichen to fern** (deep teal to pale straw), set in `tokens.css` and as `DEFAULT_RAMP` in `src/lib/ramp.ts`. A unit test keeps the two in step.
 - Viewers can pick another ramp under Settings on the map's left rail (or in the phone filters sheet). The choice is saved in `localStorage` (`map-colours`) and written onto `<html>` as `--ramp-*` overrides.
-- Choices: Lichen to fern, Viridis, Forest to pollen, Cividis, Magma, Inferno, Plasma, Mako, Batlow, Bamako.
-- A new ramp needs 8 stops that rise steadily in lightness (light to dark or dark to light), so the order reads in greyscale. Its lowest stops must stay visible on both basemaps.
+- Choices: Lichen to fern, Viridis, Forest to pollen, Cividis, Plasma, Mako, Batlow, Bamako.
+- A new ramp needs 8 stops that rise steadily in lightness from dark (few records) to light (many), so the order reads in greyscale. Its end stops must stay visible on both basemaps.
 
 ## Typography
 
@@ -131,6 +131,16 @@ The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehea
 - **Selected state**: an accent border with an `--accent-soft` fill and a small "Selected" label in accent. Don't add checkmark icons.
 - **Visually hidden radios or checkboxes** inside a label: give the label `position: relative`, so focusing the input doesn't scroll the page.
 - **Icons**: 24×24 stroke icons, `stroke-width` 1.7, `currentColor`, round caps and joins. Mark them `aria-hidden`; the control carries the label.
+
+## Reading settings
+
+Viewers can change how text reads from the welcome card ("Reading and display options") or under Settings. `src/stores/reading.ts` saves the choices in `localStorage` (`reading`) and writes them onto `<html>` as data attributes, which the rules at the end of `global.css` style. An inline script in `BaseLayout.astro` applies them before first paint.
+
+- **Text size** (`data-text-size`): `large` is 112.5%, `larger` 125% of the root size. Size text in `rem`, never `px`, so it scales.
+- **No italics** (`data-no-italics`): everything upright, scientific names included.
+- **Wider spacing** (`data-wide-spacing`): WCAG 1.4.12 letter, word and line spacing. Check new layouts don't clip with it on.
+- **Reduce motion** (`data-reduce-motion`): the same as `prefers-reduced-motion`. In script, ask `prefersReducedMotion()` rather than the media query.
+- The welcome card also offers the map colours as a dropdown, colour-blind-safe ramps first (`colourBlindSafe` in `src/lib/ramp.ts`).
 
 ## Accessibility checklist
 

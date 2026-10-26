@@ -379,6 +379,33 @@ describe('occurrence layer', () => {
     expect(ids(callbackSet.o.onCells.mock.calls[0]![0]).every((id) => id.startsWith('2:'))).toBe(true);
   });
 
+  it('drops tiles of the old level once a zoom ends, keeping a flight’s look-ahead', async () => {
+    const held = gate();
+    let isHolding = true;
+    const asked = network((request) => (isHolding ? held.hold(request) : undefined));
+    const map = fakeMap({ zoom: 3 });
+    const callbackSet = callbacks();
+    createOccLayer(map.map, callbackSet.o);
+    await settle();
+    const first = [...asked];
+    expect(first.every((tile) => tile.z === 3)).toBe(true);
+
+    map.map.flyTo({ center: [0, 0], zoom: 4 });
+    await settle();
+    map.moveTo([0, 0], 4);
+    map.fire('moveend');
+    await settle();
+    expect(callbackSet.o.onLevel).toHaveBeenLastCalledWith(4);
+    expect(first.every((tile) => tile.signal.aborted)).toBe(true);
+    const next = asked.slice(first.length);
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.every((tile) => tile.z === 4 && !tile.signal.aborted)).toBe(true);
+    isHolding = false;
+    held.release();
+    await settle();
+    expect(ids(callbackSet.o.onCells.mock.calls.at(-1)![0]).every((id) => id.startsWith('4:'))).toBe(true);
+  });
+
   it('asks for each tile once, however often it is queued', async () => {
     const asked = network(() => new ArrayBuffer(0));
     // Nine tiles in view: eight load at once, the ninth waits its turn.

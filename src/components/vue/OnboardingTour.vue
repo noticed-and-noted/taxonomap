@@ -17,6 +17,7 @@ import {
   clearHexSelection,
 } from '~/stores/explorer';
 import { $tourOpen, finishTour } from '~/stores/onboarding';
+import ReadingSettings from './ReadingSettings.vue';
 import Spotlight from './Spotlight.vue';
 import { boxOf, PANEL_SELECTOR, speciesListBox } from './tourTargets';
 
@@ -89,6 +90,8 @@ const STEPS: TourStep[] = [
 const titleId = useId();
 const spotlight = ref<InstanceType<typeof Spotlight>>();
 const stepIndex = ref(WELCOME);
+/** The welcome card is showing the reading and display settings instead. */
+const isReadingOpen = ref(false);
 
 const step = computed(() => STEPS[stepIndex.value]);
 const isLast = computed(() => stepIndex.value === STEPS.length - 1);
@@ -129,10 +132,19 @@ onBeforeUnmount(() => {
     :targets="currentTargets"
     :step-key="stepIndex"
     :labelledby="titleId"
+    :wide="isReadingOpen"
     @settled="onSettled"
     @close="end"
   >
-    <template v-if="!step">
+    <template v-if="!step && isReadingOpen">
+      <h2 :id="titleId" class="font-display text-xl">Reading and display</h2>
+      <p class="mt-1 mb-4 text-sm text-muted">Saved in this browser. You can change these later under Settings.</p>
+      <ReadingSettings />
+      <div class="mt-4 flex justify-end gap-2">
+        <button type="button" class="tour-btn primary" @click="isReadingOpen = false">Done</button>
+      </div>
+    </template>
+    <template v-else-if="!step">
       <h2 :id="titleId" class="font-display text-xl">Welcome to taxonomap</h2>
       <p class="mt-2 text-sm text-muted">
         The map is built on GBIF, the Global Biodiversity Information Facility: billions of records pooled from museums,
@@ -142,6 +154,22 @@ onBeforeUnmount(() => {
         A record is one find of one organism: what it was, where, and when. It might be a museum specimen, a photo, or a
         sighting in a survey. Each hex counts the records found inside it.
       </p>
+      <button type="button" class="reading-link" @click="isReadingOpen = true">
+        <svg
+          viewBox="0 0 24 24"
+          class="size-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="4.5" r="1.5" />
+          <path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5 9 21M12 14.5l3 6.5" />
+        </svg>
+        Reading and display options
+      </button>
       <div class="mt-4 flex justify-end gap-2">
         <button type="button" class="tour-btn" @click="end">Skip</button>
         <button type="button" class="tour-btn primary" @click="go(0)">Start tour</button>
@@ -161,3 +189,28 @@ onBeforeUnmount(() => {
     </template>
   </Spotlight>
 </template>
+
+<style scoped>
+.reading-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+  min-height: 2.75rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+.reading-link:hover {
+  color: var(--accent);
+}
+
+@media (min-width: 640px) {
+  .reading-link {
+    min-height: 2.25rem;
+  }
+}
+</style>

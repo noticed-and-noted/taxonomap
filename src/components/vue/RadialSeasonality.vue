@@ -93,7 +93,7 @@ function onHover(event: PointerEvent) {
         :y="wedge.ly"
         text-anchor="middle"
         dominant-baseline="middle"
-        class="fill-[var(--text-subtle)] text-[11px]"
+        class="fill-[var(--text-subtle)] text-[0.6875rem]"
       >
         {{ wedge.m[0] }}
       </text>

@@ -37,9 +37,20 @@ describe('ramp catalogue', () => {
     }
   });
 
+  it('runs every ramp dark to light', () => {
+    const luminance = (hex: string) => {
+      const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+      return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+    };
+    for (const ramp of RAMPS) {
+      const lightness = ramp.colors.map(luminance);
+      lightness.slice(1).forEach((value, index) => expect(value, ramp.id).toBeGreaterThan(lightness[index]!));
+    }
+  });
+
   it('defaults to lichen to fern and rejects unknown ids', () => {
     expect(DEFAULT_RAMP).toBe('lichen-fern');
-    expect(isRampId('magma')).toBe(true);
+    expect(isRampId('plasma')).toBe(true);
     expect(isRampId('rainbow')).toBe(false);
     expect(isRampId(null)).toBe(false);
     expect(rampById(DEFAULT_RAMP).name).toBe('Lichen to fern');
@@ -61,15 +72,15 @@ describe('ramp store', () => {
 
   it('applies, saves and restores a chosen ramp', async () => {
     const rampStore = await store();
-    rampStore.setRamp('magma');
-    expect(rampStore.$ramp.get()).toBe('magma');
-    expect(token(1)).toBe(rampById('magma').colors[1]);
-    expect(localStorage.getItem(rampStore.RAMP_KEY)).toBe('magma');
+    rampStore.setRamp('plasma');
+    expect(rampStore.$ramp.get()).toBe('plasma');
+    expect(token(1)).toBe(rampById('plasma').colors[1]);
+    expect(localStorage.getItem(rampStore.RAMP_KEY)).toBe('plasma');
 
     document.documentElement.removeAttribute('style');
     const again = await store();
-    expect(again.$ramp.get()).toBe('magma');
-    expect(token(7)).toBe(rampById('magma').colors[7]);
+    expect(again.$ramp.get()).toBe('plasma');
+    expect(token(7)).toBe(rampById('plasma').colors[7]);
   });
 
   it('sets the tokens before listeners hear about the change', async () => {

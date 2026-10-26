@@ -356,7 +356,9 @@ const share = (node: TreeNode) => {
             />
           </div>
           <div class="min-w-0">
-            <p class="text-[11px] uppercase tracking-wide text-subtle">{{ RANK_LABELS[detail.rank] ?? 'All life' }}</p>
+            <p class="text-[0.6875rem] uppercase tracking-wide text-subtle">
+              {{ RANK_LABELS[detail.rank] ?? 'All life' }}
+            </p>
             <h2 class="truncate font-display text-xl leading-tight">{{ detail.common ?? detail.name }}</h2>
             <p v-if="detail.common" class="sci-name truncate text-sm text-muted">{{ detail.name }}</p>
             <p class="mt-1 text-xs text-muted">
@@ -396,7 +398,7 @@ const share = (node: TreeNode) => {
             type="search"
             placeholder="Filter groups"
             aria-label="Filter groups"
-            class="mb-2 w-full rounded-md border border-border-strong bg-surface-2 px-2.5 py-1.5 text-sm placeholder:text-subtle focus-visible:outline-offset-[-1px]"
+            class="mb-2 w-full rounded-md border border-border-strong bg-surface-2 px-2.5 py-1.5 text-sm placeholder:text-subtle"
           />
           <!-- Padding gives the rows' focus ring room inside the scroll box. -->
           <ol

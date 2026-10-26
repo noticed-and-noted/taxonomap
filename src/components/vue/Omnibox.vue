@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
                     >{{ option.hit.scientificName }}</span
                   >
                 </span>
-                <span class="shrink-0 text-right text-[11px] leading-tight text-subtle">
+                <span class="shrink-0 text-right text-[0.6875rem] leading-tight text-subtle">
                   <span class="block">{{ RANK_LABELS[option.hit.rank] ?? option.hit.rank }}</span>
                   <span v-if="option.hit.count" class="block">{{ compact(option.hit.count) }}</span>
                 </span>

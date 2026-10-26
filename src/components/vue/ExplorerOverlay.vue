@@ -6,14 +6,29 @@
  * "Near me" (`?near=1`) swaps these controls for the NearExplorer panel.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, ref } from 'vue';
-import { $mapUnsupported, $panel, $selectedHex, clearFilters, clearHexSelection } from '~/stores/explorer';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+  $mapUnsupported,
+  $panel,
+  $railOpen,
+  $selectedHex,
+  $viewCheck,
+  clearFilters,
+  clearHexSelection,
+} from '~/stores/explorer';
 import { $nearMode, exitNearMode } from '~/stores/near';
 import { $checklistHint, $tourSeen } from '~/stores/onboarding';
 import BasemapSwitcher from './BasemapSwitcher.vue';
 import ChecklistHint from './ChecklistHint.vue';
 import FilterGroup from './FilterGroup.vue';
-import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from './filterGroups';
+import {
+  $activeFilterCount,
+  $groupCounts,
+  FILTER_GROUPS,
+  PHONE_QUERY,
+  SETTINGS,
+  type FilterGroupId,
+} from './filterGroups';
 import FilterRail from './FilterRail.vue';
 import HexPanel from './HexPanel.vue';
 import LegalLinks from './LegalLinks.vue';
@@ -24,6 +39,7 @@ import NearExplorer from './NearExplorer.vue';
 import OnboardingTour from './OnboardingTour.vue';
 import ResponsivePanel from './ResponsivePanel.vue';
 import OnboardingSettings from './OnboardingSettings.vue';
+import ReadingSettings from './ReadingSettings.vue';
 import SearchFitSetting from './SearchFitSetting.vue';
 import TaxonChip from './TaxonChip.vue';
 import ThemePicker from './ThemePicker.vue';
@@ -40,8 +56,22 @@ const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
 const mapUnsupported = useStore($mapUnsupported);
 
-/* Phone only: slide the dock off to the left to see the map behind it. */
+/* Slide the dock off to the left to see the map behind it. */
 const dockStashed = ref(false);
+
+/* The rail's flyout stops above the dock, whose height follows its content (the legend's notice, Try this). */
+const dock = ref<HTMLElement>();
+const dockHeight = ref(0);
+const dockClear = computed(() => (dockStashed.value ? '0px' : `calc(${dockHeight.value}px + 0.5rem)`));
+let dockObserver: ResizeObserver | undefined;
+// An empty map's notice lives in the legend: bring it back if it was slid away.
+const viewCheck = useStore($viewCheck);
+watch(
+  () => viewCheck.value.isEmpty,
+  (isEmpty) => {
+    if (isEmpty) dockStashed.value = false;
+  },
+);
 function toggleNear() {
   if (near.value) {
     exitNearMode();
@@ -68,6 +98,32 @@ function closePanel() {
   if (filtersOpen.value) $panel.set(hex.value ? 'hex' : 'none');
   else clearHexSelection();
 }
+
+/** Crossing the phone width with filters open: move them between the rail's flyout and the sheet, on the same group. */
+function swapFilterLayout(event: MediaQueryListEvent) {
+  if (event.matches) {
+    const group = $railOpen.get();
+    if (!group) return;
+    $railOpen.set(null);
+    filterTab.value = group;
+    $panel.set('filters');
+  } else if (filtersOpen.value) {
+    $railOpen.set(filterTab.value);
+    closePanel();
+  }
+}
+
+let phoneQuery: MediaQueryList | undefined;
+onMounted(() => {
+  phoneQuery = window.matchMedia(PHONE_QUERY);
+  phoneQuery.addEventListener('change', swapFilterLayout);
+  dockObserver = new ResizeObserver(() => (dockHeight.value = dock.value?.offsetHeight ?? 0));
+  if (dock.value) dockObserver.observe(dock.value);
+});
+onBeforeUnmount(() => {
+  phoneQuery?.removeEventListener('change', swapFilterLayout);
+  dockObserver?.disconnect();
+});
 </script>
 
 <template>
@@ -131,6 +187,7 @@ function closePanel() {
 
     <!-- Stays in Near me too, on wider screens; phones hide it under Near me's sheet (see the styles). -->
     <div
+      ref="dock"
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg p-3"
       :class="{ stashed: dockStashed }"
     >
@@ -148,10 +205,13 @@ function closePanel() {
         </svg>
       </button>
       <TryThis />
-      <MapLegend class="w-full max-w-56" data-tour="legend" />
+      <MapLegend class="w-full max-w-60" data-tour="legend" />
     </div>
 
-    <div class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block">
+    <div
+      class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block"
+      :style="{ '--dock-clear': dockClear }"
+    >
       <FilterRail />
     </div>
 
@@ -212,7 +272,11 @@ function closePanel() {
               <p class="mb-2 text-sm font-medium">Theme</p>
               <ThemePicker />
             </div>
-            <MapSettings inline />
+            <MapSettings />
+            <section aria-labelledby="reading-settings-sheet-title">
+              <h3 id="reading-settings-sheet-title" class="mb-2 font-sans text-sm font-medium">Reading and display</h3>
+              <ReadingSettings in-settings />
+            </section>
             <SearchFitSetting />
             <OnboardingSettings />
             <LegalLinks />
@@ -276,8 +340,14 @@ function closePanel() {
 }
 
 .bottom-dock {
-  width: 15.5rem; /* the legend's 14rem plus padding */
+  width: 16.5rem; /* the legend's 15rem (its longest line, "Closest are about 10,000 km north-west.") plus padding */
   isolation: isolate;
+  /* Above the rail and its flyout where a short window makes them meet; below the panels (z-20). */
+  z-index: 1;
+}
+/* An open flyout is what you're working in, so it goes above the dock; a tall dock would otherwise hide its last rows. */
+.rail-region:has(.flyout) {
+  z-index: 2;
 }
 /* The dock's surface sits on its own layer, above the stash tab (z -10) but below the legend. */
 .bottom-dock::before {
@@ -292,7 +362,7 @@ function closePanel() {
   backdrop-filter: blur(8px);
 }
 
-/* Phone: a tab on the dock's right edge slides it off-screen, leaving the tab visible. */
+/* A tab on the dock's right edge slides it off-screen, leaving the tab visible. */
 .bottom-dock {
   transition: transform 200ms ease;
 }
@@ -305,14 +375,8 @@ function closePanel() {
   }
 }
 
-/* Phone-only control (scoped display would otherwise beat a sm:hidden utility). */
+/* Phone-only controls (scoped display would otherwise beat a sm:hidden utility). */
 @media (min-width: 640px) {
-  .stash-toggle {
-    display: none;
-  }
-  .bottom-dock.stashed {
-    transform: none;
-  }
   .filters-btn,
   .near-phone {
     display: none;

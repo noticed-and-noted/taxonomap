@@ -307,7 +307,7 @@ defineExpose({ open });
   border-radius: var(--radius-sm);
   background: rgb(0 0 0 / 0.55);
   backdrop-filter: blur(8px);
-  font-size: 11px;
+  font-size: 0.6875rem;
   line-height: 1.25;
 }
 /* After .chip, and scoped so it also beats LicenceBadge's own padding. */
@@ -318,7 +318,7 @@ defineExpose({ open });
 /* 1.75rem tall, so with the overlay at top-4 it centres on the 2.75rem close button at top-2. */
 .chip-title {
   padding: 0 0.5rem;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.75rem;
 }
 /* Keyboard hints and the mouse icon only where there's likely a keyboard, as in the Omnibox; touch screens get the

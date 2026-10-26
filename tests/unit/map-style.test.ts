@@ -1,6 +1,15 @@
 /** The map's style: our layers spliced into each kind of basemap, and the GeoJSON helpers. */
 import type { MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
-import { buildStyle, EMPTY, fetchStyle, fillColor, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
+import {
+  buildStyle,
+  EMPTY,
+  fetchStyle,
+  fillColor,
+  geometryOf,
+  nearGeoJson,
+  recordDotMinZoom,
+  selectedGeoJson,
+} from '~/lib/map/style';
 import { json, stubNetwork } from './helpers/network';
 import { thresholdsAt } from '~/lib/ramp';
 
@@ -49,6 +58,9 @@ describe('buildStyle', () => {
       'near-area',
       'near-edge',
       'near-pin',
+      'record-area',
+      'record-edge',
+      'selected-record',
     ]);
     expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'near']);
     // Cell ids let arriving tiles update the hexes in place.
@@ -152,6 +164,21 @@ describe('map GeoJSON', () => {
 
   it('outlines the selected cell', () => {
     expect(selectedGeoJson(null)).toBe(EMPTY);
+  });
+
+  it('shows the record’s dot once its cell is three dots wide on screen', () => {
+    expect(recordDotMinZoom(8, 54)).toBe(8);
+    expect(recordDotMinZoom(8, 27)).toBe(9);
+    expect(recordDotMinZoom(8, 108)).toBe(7);
+    expect(recordDotMinZoom(8, null)).toBe(7);
+    expect(recordDotMinZoom(8, 0)).toBe(24);
+  });
+
+  it('marks the expanded record, with or without a selected cell', () => {
+    const point: GeoJSON.Point = { type: 'Point', coordinates: [-0.1, 51.5] };
+    expect(selectedGeoJson(null, point).features).toEqual([
+      { type: 'Feature', properties: { part: 'record' }, geometry: point },
+    ]);
   });
 
   it('reads a hex feature into its ring, WKT and count', () => {

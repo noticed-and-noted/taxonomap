@@ -65,7 +65,7 @@ const initials = computed(() =>
       <span class="block px-2.5 pb-2 pt-1.5">
         <span v-if="commonName" class="block truncate text-sm font-medium text-text">{{ commonName }}</span>
         <span class="sci-name block truncate text-xs text-muted">{{ scientificName }}</span>
-        <span v-if="count !== undefined" class="mt-0.5 block text-[11px] text-subtle"
+        <span v-if="count !== undefined" class="mt-0.5 block text-[0.6875rem] text-subtle"
           >{{ compact(count) }} records</span
         >
       </span>

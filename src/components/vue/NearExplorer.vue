@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
                 :aria-valuetext="`${radius} kilometres`"
                 @change="onRadius"
               />
-              <span class="flex justify-between text-[10px] text-subtle" aria-hidden="true">
+              <span class="flex justify-between text-[0.625rem] text-subtle" aria-hidden="true">
                 <span v-for="radiusKm in RADIUS_STEPS_KM" :key="radiusKm">{{ radiusKm }}</span>
               </span>
             </label>

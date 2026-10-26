@@ -90,7 +90,7 @@ onBeforeUnmount(() => load.cancel());
     <div class="body">
       <p class="truncate font-medium text-text">{{ name }}</p>
       <p v-if="hit.commonName" class="sci-name truncate text-xs text-muted">{{ hit.scientificName }}</p>
-      <p class="mt-0.5 text-[11px] text-subtle">
+      <p class="mt-0.5 text-[0.6875rem] text-subtle">
         {{ RANK_LABELS[hit.rank] ?? hit.rank
         }}<span v-if="count !== null" class="tabular-nums"> · {{ compact(count) }} records</span
         ><span v-else-if="isCountLoading" class="ml-1 inline-flex items-center gap-1 align-middle"

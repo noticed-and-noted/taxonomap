@@ -68,6 +68,18 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
           doc.documentElement.dataset.theme = theme;
           const themeColor = doc.querySelector('meta[name="theme-color"]');
           if (themeColor) themeColor.content = themeColor.dataset[theme];
+          // Reading preferences: keep in step with src/stores/reading.ts.
+          let reading = {};
+          try {
+            reading = JSON.parse(localStorage.getItem('reading') ?? '{}') ?? {};
+          } catch {
+            /* storage blocked or corrupt: no reading preferences */
+          }
+          const root = doc.documentElement;
+          if (reading.textSize === 'large' || reading.textSize === 'larger') root.dataset.textSize = reading.textSize;
+          if (reading.noItalics === true) root.dataset.noItalics = '';
+          if (reading.wideSpacing === true) root.dataset.wideSpacing = '';
+          if (reading.reduceMotion === true) root.dataset.reduceMotion = '';
         };
         apply(document);
         document.addEventListener('astro:before-swap', (event) => apply(event.newDocument));

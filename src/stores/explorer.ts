@@ -158,6 +158,9 @@ export interface HexGeometry {
 /** Geometry of the selected hex, published by MapCanvas. */
 export const $hexGeometry = atom<HexGeometry | null>(null);
 
+/** Where the record expanded in the records list sits (lib/map/recordPlace.ts), published by HexRecords for the map. */
+export const $recordPlace = atom<GeoJSON.Point | GeoJSON.Polygon | null>(null);
+
 export type FlyRequest =
   | {
       kind: 'bounds';
@@ -180,8 +183,17 @@ export const $gridLevel = atom(0);
 /** Hex tile loading for the current burst, published by the map (`total` 0: nothing counted yet). */
 export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>({ loading: true, done: 0, total: 0 });
 
+/**
+ * The map's latest check, once loaded and settled, of whether any cell is in view (published by MapCanvas).
+ * A new object every check, so listeners hear each one even when the answer is unchanged.
+ */
+export const $viewCheck = atom<{ isEmpty: boolean }>({ isEmpty: false });
+
 /** Set by the map when the browser has no WebGL2, so the map can't draw at all. */
 export const $mapUnsupported = atom(false);
+
+/** The desktop filter rail's open flyout: a filter group or settings (phones use the Filters sheet instead). */
+export const $railOpen = atom<FilterGroupId | 'settings' | null>(null);
 
 /** One-shot camera requests (place search, taxon extent). */
 export const $flyTo = atom<FlyRequest | null>(null);

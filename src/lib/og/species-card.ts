@@ -115,7 +115,7 @@ const COLOURS = {
   text: '#f2ede2',
   muted: '#a8b8ae',
   subtle: '#93a79b',
-  ramp4: '#45916a',
+  ramp4: '#6fab6f',
 };
 const PHOTO_SIZE = 630;
 const TEXT_PANEL_WIDTH = WIDTH - PHOTO_SIZE;

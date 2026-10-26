@@ -301,6 +301,12 @@
   }
 }
 
+/* The ring replaces a text field's border while focused, flush on the field. Unlayered so it beats border utilities. */
+input:is([type='search'], [type='text']):focus-visible {
+  border-color: transparent;
+  outline-offset: 0;
+}
+
 /* Room left of the browser's clear button for a SearchSpinner, and the spinner placed in it. */
 input[type='search'].search-spinner-room::-webkit-search-cancel-button {
   margin-left: 1.5rem;
@@ -308,4 +314,50 @@ input[type='search'].search-spinner-room::-webkit-search-cancel-button {
 
 .search-spinner-gap {
   right: 2rem;
+}
+
+/*
+ * Reading settings (stores/reading.ts). Unlayered, so they beat Tailwind's utilities;
+ * the important flags also beat scoped component styles.
+ */
+html[data-text-size='large'] {
+  font-size: 112.5%;
+}
+
+html[data-text-size='larger'] {
+  font-size: 125%;
+}
+
+html[data-no-italics] *,
+html[data-no-italics] *::before,
+html[data-no-italics] *::after {
+  font-style: normal !important;
+}
+
+/* WCAG 1.4.12 text spacing. */
+html[data-wide-spacing] body {
+  letter-spacing: 0.05em;
+  word-spacing: 0.12em;
+}
+
+html[data-wide-spacing] :is(p, li, dd, dt, label, td, th, blockquote) {
+  line-height: 1.7 !important;
+}
+
+html[data-reduce-motion] {
+  --dur-fast: 0ms;
+  --dur: 0ms;
+  --dur-slow: 0ms;
+}
+
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after,
+html[data-reduce-motion]::view-transition-group(*),
+html[data-reduce-motion]::view-transition-old(*),
+html[data-reduce-motion]::view-transition-new(*) {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
 }

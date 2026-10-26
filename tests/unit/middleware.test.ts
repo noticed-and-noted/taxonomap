@@ -35,7 +35,13 @@ describe('Basic auth middleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('stays locked when the secrets are missing', async () => {
+  it('is off when neither secret is set', async () => {
+    const { res: response, next } = call(null, {});
+    expect(await (await response).text()).toBe('site');
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it('stays locked when only one secret is set', async () => {
     const { res: response, next } = call(basic('jack:'), { BASIC_AUTH_USER: 'jack' });
     expect((await response).status).toBe(503);
     expect(next).not.toHaveBeenCalled();

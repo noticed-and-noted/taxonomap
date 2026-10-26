@@ -52,7 +52,7 @@ const minutes = computed(() => Math.max(0, Math.round((now.value - counts.value.
 <template>
   <aside
     v-if="enabled && visible"
-    class="fixed left-16 top-1/2 z-40 hidden -translate-y-1/2 rounded-md border border-border bg-surface/95 px-3 py-2 text-[11px] text-muted shadow-panel backdrop-blur md:block"
+    class="fixed left-16 top-1/2 z-40 hidden -translate-y-1/2 rounded-md border border-border bg-surface/95 px-3 py-2 text-[0.6875rem] text-muted shadow-panel backdrop-blur md:block"
     aria-label="GBIF request meter"
   >
     <p class="mb-1 font-medium text-text">GBIF requests · {{ minutes }} min</p>

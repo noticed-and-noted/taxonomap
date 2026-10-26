@@ -15,8 +15,8 @@ it('keep the default ramp without a window or document', async () => {
   const { $ramp, setRamp } = await import('~/stores/ramp');
   expect($ramp.get()).toBe(DEFAULT_RAMP);
   vi.stubGlobal('localStorage', { setItem: vi.fn(), removeItem: vi.fn() });
-  setRamp('magma');
-  expect($ramp.get()).toBe('magma');
+  setRamp('plasma');
+  expect($ramp.get()).toBe('plasma');
   vi.unstubAllGlobals();
 });
 

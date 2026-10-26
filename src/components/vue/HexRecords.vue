@@ -7,8 +7,9 @@
  * Pass `filter` to list another area's records (near me) instead of the selected cell's.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, ref, shallowRef, useId, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import { BASIS_LABELS, distance, full } from '~/lib/format';
+import { recordPlace } from '~/lib/map/recordPlace';
 import { normalise } from '~/lib/data/name-index';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
@@ -16,7 +17,7 @@ import PhotoLightbox from './PhotoLightbox.vue';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { tidy } from '~/lib/species/names';
-import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
+import { $hexGeometry, $occurrenceFilter, $recordPlace } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
 import SearchSpinner from './SearchSpinner.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -59,6 +60,12 @@ const speciesKey = ref<number | ''>('');
 const records = shallowRef<Occurrence[]>([]);
 /** Expanded row's occurrence key. */
 const expanded = ref<number | null>(null);
+// Mark the expanded record on the map, when it has coordinates.
+watch(expanded, (key) => {
+  const record = records.value.find((occurrence) => occurrence.key === key);
+  $recordPlace.set(record ? recordPlace(record) : null);
+});
+onBeforeUnmount(() => $recordPlace.set(null));
 const total = ref<number | null>(null);
 const scroller = ref<HTMLElement>();
 const { fadeBottom, update: updateFade } = useScrollFade(scroller);
@@ -242,6 +249,9 @@ const broken = ref(new Set<string>());
 const photos = (occurrence: Occurrence) => usableImages(occurrence).filter((photo) => !broken.value.has(photo.url));
 const image = (occurrence: Occurrence) => photos(occurrence)[0];
 const markBroken = (photo: UsableImage) => (broken.value = new Set(broken.value).add(photo.url));
+/** Photo URLs that have loaded at some size, so their skeletons can go. */
+const loaded = ref(new Set<string>());
+const markLoaded = (photo: UsableImage) => (loaded.value = new Set(loaded.value).add(photo.url));
 
 const lightbox = ref<InstanceType<typeof PhotoLightbox>>();
 /** Record whose photos the lightbox shows. */
@@ -360,7 +370,7 @@ const accuracy = (occurrence: Occurrence) => {
         :id="`${uniqueId}-input`"
         v-model="query"
         type="search"
-        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus)] disabled:opacity-60"
+        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle disabled:opacity-60"
         :class="isNaming && !query ? 'pr-8' : ['pr-2', { 'search-spinner-room': isNaming }]"
         role="combobox"
         autocomplete="off"
@@ -394,7 +404,7 @@ const accuracy = (occurrence: Occurrence) => {
           @mousedown.prevent="pick(option)"
         >
           <span class="min-w-0 truncate" :class="{ 'sci-name': !speciesCommonName(option) }">{{ label(option) }}</span>
-          <span class="shrink-0 text-[11px] text-subtle tabular-nums">{{ full(option.records) }}</span>
+          <span class="shrink-0 text-[0.6875rem] text-subtle tabular-nums">{{ full(option.records) }}</span>
         </li>
         <li v-if="hasNoResults" role="option" aria-disabled="true" class="option text-muted">No results found</li>
       </ul>
@@ -463,16 +473,25 @@ const accuracy = (occurrence: Occurrence) => {
               >
                 <td v-if="expanded !== occurrence.key" class="py-1.5 pl-4 pr-2">
                   <span
-                    class="block size-8 overflow-hidden rounded bg-photo"
+                    class="relative block size-8 overflow-hidden rounded bg-photo"
                     :style="transitionName(occurrence, 'photo')"
                   >
-                    <ThumbImage
-                      v-if="image(occurrence)"
-                      :image="image(occurrence)!"
-                      size="200x"
-                      class="size-full object-cover"
-                      @broken="markBroken(image(occurrence)!)"
-                    />
+                    <template v-if="image(occurrence)">
+                      <SkeletonBlock
+                        v-if="!loaded.has(image(occurrence)!.url)"
+                        class="absolute inset-0"
+                        height="100%"
+                        rounded="sm"
+                        aria-hidden="true"
+                      />
+                      <ThumbImage
+                        :image="image(occurrence)!"
+                        size="200x"
+                        class="relative size-full object-cover"
+                        @loaded="markLoaded(image(occurrence)!)"
+                        @broken="markBroken(image(occurrence)!)"
+                      />
+                    </template>
                     <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
                       {{ initials(occurrence) }}
                     </span>
@@ -528,15 +547,24 @@ const accuracy = (occurrence: Occurrence) => {
                     >
                       <template v-if="image(occurrence)">
                         <!-- The row's 200x thumbnail is already cached: show it at once, and fade the sharper 400x in over it. -->
+                        <SkeletonBlock
+                          v-if="!loaded.has(image(occurrence)!.url)"
+                          class="absolute inset-0"
+                          height="100%"
+                          rounded="sm"
+                          aria-hidden="true"
+                        />
                         <ThumbImage
                           :image="image(occurrence)!"
                           size="200x"
                           class="absolute inset-0 size-full object-cover"
+                          @loaded="markLoaded(image(occurrence)!)"
                         />
                         <ThumbImage
                           :image="image(occurrence)!"
                           size="400x"
                           class="absolute inset-0 size-full object-cover"
+                          @loaded="markLoaded(image(occurrence)!)"
                           @broken="markBroken(image(occurrence)!)"
                         />
                         <!-- A sibling of the badge, not its parent: the badge holds a link. -->
@@ -547,7 +575,7 @@ const accuracy = (occurrence: Occurrence) => {
                           @click="openPhotos(occurrence)"
                         >
                           <span
-                            class="absolute right-1 top-1 flex items-center gap-1 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[11px] text-white tabular-nums"
+                            class="absolute right-1 top-1 flex items-center gap-1 rounded-sm bg-black/55 px-1.5 backdrop-blur-sm py-0.5 text-[0.6875rem] text-white tabular-nums"
                             aria-hidden="true"
                           >
                             <UiIcon name="photo" size="13" />{{ photos(occurrence).length }}
@@ -686,7 +714,7 @@ const accuracy = (occurrence: Occurrence) => {
   display: inline-block;
   padding: 0.0625rem 0.25rem;
   border-radius: var(--radius-sm);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--type);

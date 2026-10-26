@@ -22,8 +22,41 @@ const BATCH_RECORDS = 100;
 const counts = new Map<string, number>();
 const inFlight = new Map<string, Promise<number>>();
 const checking = new Set<string>();
+/** Each filter's JSON: a store hands out the same object until its filter changes, and the map asks for every cell. */
+const filterKeys = new WeakMap<OccurrenceFilter, string>();
+/** WKTs counted at 0, by filter JSON, so the map can skip the lookup when a filter has none. */
+const emptyCells = new Map<string, Set<string>>();
 
-const keyOf = (filter: OccurrenceFilter, wkt: string) => `${JSON.stringify(filter)}|${wkt}`;
+function filterKeyOf(filter: OccurrenceFilter): string {
+  let filterKey = filterKeys.get(filter);
+  if (filterKey === undefined) {
+    filterKey = JSON.stringify(filter);
+    filterKeys.set(filter, filterKey);
+  }
+  return filterKey;
+}
+
+const keyOf = (filter: OccurrenceFilter, wkt: string) => `${filterKeyOf(filter)}|${wkt}`;
+
+function markEmpty(filterKey: string, wkt: string, isEmpty: boolean) {
+  const cells = emptyCells.get(filterKey) ?? new Set<string>();
+  if (isEmpty) cells.add(wkt);
+  else cells.delete(wkt);
+  if (cells.size) emptyCells.set(filterKey, cells);
+  else emptyCells.delete(filterKey);
+}
+
+/** Drop a count; WKT has no "|", so the last one splits the key. */
+function forget(key: string) {
+  counts.delete(key);
+  const split = key.lastIndexOf('|');
+  markEmpty(key.slice(0, split), key.slice(split + 1), false);
+}
+
+/** Whether any cell is known to hold no records under a filter: a cheap check before `knownCount` on every cell. */
+export function hasKnownEmpty(filter: OccurrenceFilter): boolean {
+  return emptyCells.has(filterKeyOf(filter));
+}
 
 /** The exact count for a cell (its WKT) under a filter, if known. */
 export function knownCount(filter: OccurrenceFilter, wkt: string): number | undefined {
@@ -32,10 +65,12 @@ export function knownCount(filter: OccurrenceFilter, wkt: string): number | unde
 
 /** Record a cell's exact count. */
 export function rememberCount(filter: OccurrenceFilter, wkt: string, count: number): void {
-  const key = keyOf(filter, wkt);
+  const filterKey = filterKeyOf(filter);
+  const key = `${filterKey}|${wkt}`;
   counts.delete(key);
   counts.set(key, count);
-  if (counts.size > MAX_CELLS) counts.delete(counts.keys().next().value!);
+  markEmpty(filterKey, wkt, count === 0);
+  if (counts.size > MAX_CELLS) forget(counts.keys().next().value!);
 }
 
 /** Fetch (once, however often asked) and record a cell's exact count. */
@@ -56,12 +91,12 @@ export function fetchCount(filter: OccurrenceFilter, wkt: string): Promise<numbe
   return pending;
 }
 
-/** A WKT polygon's ring, as [lng, lat] pairs. */
-function ringOf(wkt: string): [number, number][] {
+/** A WKT polygon's rings (two for a MULTIPOLYGON split at the antimeridian), as [lng, lat] pairs. */
+function ringsOf(wkt: string): [number, number][][] {
   return wkt
-    .slice('POLYGON(('.length, -'))'.length)
-    .split(',')
-    .map((pair) => pair.split(' ').map(Number) as [number, number]);
+    .replace(/^\w+\(+|\)+$/g, '')
+    .split(/\)+,\(+/)
+    .map((ring) => ring.split(',').map((pair) => pair.split(' ').map(Number) as [number, number]));
 }
 
 /** Point in polygon, planar in lng/lat as GBIF's search tests WKT. */
@@ -87,11 +122,11 @@ async function checkBatch(filter: OccurrenceFilter, wkts: string[]): Promise<boo
     const page = await searchOccurrences({ ...filter, geometry: wkts }, { limit: BATCH_RECORDS });
     // Only a complete page says which cells are empty.
     if (page.results.length < page.count) return false;
-    const rings = wkts.map(ringOf);
+    const cells = wkts.map(ringsOf);
     const hits = wkts.map(() => 0);
     for (const record of page.results) {
-      const cell = rings.findIndex((ring) => isInside(record, ring));
-      // A record no ring claims (an edge case at the antimeridian) makes the tally unreliable.
+      const cell = cells.findIndex((rings) => rings.some((ring) => isInside(record, ring)));
+      // A record no ring claims (one exactly on a cell edge) makes the tally unreliable.
       if (cell < 0) return false;
       hits[cell]!++;
     }

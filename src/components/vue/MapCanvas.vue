@@ -19,15 +19,19 @@ import {
   geometryOf,
   nearGeoJson,
   occOpacity,
+  RECORD_DOT_LAYER,
+  recordDotMinZoom,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
 import { needsAdhoc } from '~/lib/gbif';
-import { checkCells, createHoverCounter, knownCount } from '~/lib/map/cellCounts';
+import { checkCells, createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
+import { createRecordFit } from '~/lib/map/recordFit';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
+import { prefersReducedMotion } from '~/stores/reading';
 import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
 import WebglNotice from './WebglNotice.vue';
@@ -46,6 +50,8 @@ import {
   $occurrenceFilter,
   $selectedHex,
   $panel,
+  $recordPlace,
+  $viewCheck,
   clearHexSelection,
   sameView,
   type FlyRequest,
@@ -64,7 +70,6 @@ let pendingHexRestore = false;
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
@@ -88,9 +93,12 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
   (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
+/** The map's two hex layers: settled cells and ones fading in. */
+const HEX_LAYERS = ['occ-fill', 'occ-fresh-fill'];
+
 /** Colour both hex layers with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
-  for (const id of ['occ-fill', 'occ-fresh-fill']) {
+  for (const id of HEX_LAYERS) {
     if (map?.getLayer(id)) map.setPaintProperty(id, 'fill-color', fillColor(level));
   }
 }
@@ -122,7 +130,7 @@ function changeHexes(add: Hex[], remove: string[]) {
   if (!map || !src) return;
   if (remove.length) void src.updateData({ remove });
   if (!add.length) return;
-  if (reducedMotion()) {
+  if (prefersReducedMotion()) {
     void src.updateData({ add });
     return;
   }
@@ -157,15 +165,16 @@ function syncOverlays() {
   replaceHexes(occ?.collection() ?? EMPTY);
   // The grid level is set as the map starts, usually before its style has loaded.
   paintHexes();
-  setData('selected', selectedGeoJson($hexGeometry.get()));
+  setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
   setData('near', nearData());
+  sizeRecordDot();
 }
 
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
     hexes: occ?.collection() ?? EMPTY,
     level: $gridLevel.get(),
-    selected: selectedGeoJson($hexGeometry.get()),
+    selected: selectedGeoJson($hexGeometry.get(), $recordPlace.get()),
     near: nearData(),
   });
 }
@@ -340,7 +349,7 @@ function flyToBounds(request: Extract<FlyRequest, { kind: 'bounds' }>) {
     maxZoom: request.maxZoom ?? FIT_MAX_ZOOM,
   };
   if (!request.centre) {
-    map.fitBounds(bounds, { ...fit, duration: reducedMotion() ? 0 : FIT_DURATION_MS });
+    map.fitBounds(bounds, { ...fit, duration: prefersReducedMotion() ? 0 : FIT_DURATION_MS });
     return;
   }
   const zoom = map.cameraForBounds(bounds, fit)?.zoom ?? map.getZoom();
@@ -359,7 +368,7 @@ function fly(request: FlyRequest) {
     center: [request.lng, request.lat],
     zoom: request.zoom,
     offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
-    duration: reducedMotion() ? 0 : FLIGHT_DURATION_MS,
+    duration: prefersReducedMotion() ? 0 : FLIGHT_DURATION_MS,
     essential: false,
   });
 }
@@ -376,8 +385,11 @@ const hoverCounter = createHoverCounter((wkt, count) => {
 
 /** A cell whose exact count is known to be 0. */
 function knownEmpty(hex: Hex): boolean {
+  const filter = $occurrenceFilter.get();
+  // Asked of every cell on every draw: skip building its WKT when no cell is known to be empty.
+  if (!hasKnownEmpty(filter)) return false;
   const geometry = geometryOf(hex);
-  return !!geometry && knownCount($occurrenceFilter.get(), geometry.wkt) === 0;
+  return !!geometry && knownCount(filter, geometry.wkt) === 0;
 }
 
 /** Estimates at or below this are checked for empty cells. */
@@ -388,21 +400,23 @@ const MAX_CHECKS = 40;
 /**
  * Adhoc tiles snap records to a coarse grid (lib/map/occGrid.ts), so a record
  * near an edge can make a neighbouring cell that holds none. Check low
- * estimates and drop the cells that come back empty.
- * shortcut: only estimates ≤ SPARSE_MAX, at most MAX_CHECKS per draw; a larger phantom cell goes when hovered.
+ * estimates in view, once its tiles have loaded (not on every arrival), and
+ * drop the cells that come back empty.
+ * shortcut: only estimates ≤ SPARSE_MAX, at most MAX_CHECKS per view; a larger phantom cell goes when hovered.
  */
-function checkSparse(hexes: Hex[]) {
+function checkSparse() {
   const filter = $occurrenceFilter.get();
   const bounds = $mapBounds.get();
-  if (!needsAdhoc(filter) || !bounds) return;
+  if (!occ || !needsAdhoc(filter) || !bounds || $mapLoad.get().loading) return;
   const inView = (hex: Hex) => {
     const [lng, lat] = hex.geometry.coordinates[0]![0]!;
     return lng! >= bounds[0] && lng! <= bounds[2] && lat! >= bounds[1] && lat! <= bounds[3];
   };
-  const wkts = hexes
+  const wkts = (occ.collection().features as Hex[])
     .filter((candidate) => candidate.properties.total <= SPARSE_MAX && inView(candidate))
-    .slice(0, MAX_CHECKS)
-    .flatMap((hex) => geometryOf(hex)?.wkt ?? []);
+    .flatMap((hex) => geometryOf(hex)?.wkt ?? [])
+    .filter((wkt) => knownCount(filter, wkt) === undefined)
+    .slice(0, MAX_CHECKS);
   checkCells(filter, wkts).then(
     (hasEmpty) => hasEmpty && filter === $occurrenceFilter.get() && occ?.redraw(),
     () => undefined, // The estimates stay up.
@@ -503,12 +517,12 @@ function occLayerOptions(): OccLayerOptions {
     isEmpty: knownEmpty,
     onCells: (cells) => {
       replaceHexes(cells);
-      checkSparse(cells.features as Hex[]);
+      checkSparse();
       restoreHexIfDue();
     },
     onChanges: (add, remove) => {
       changeHexes(add, remove);
-      checkSparse(add);
+      checkSparse();
       restoreHexIfDue();
     },
     onLevel: (level) => {
@@ -555,6 +569,13 @@ function publishBounds() {
     Math.max(...lngs),
     Math.min(MAX_MERCATOR_LAT, Math.max(...lats)),
   ]);
+}
+
+/** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
+function publishEmpty() {
+  if (!map || $mapLoad.get().loading) return;
+  const layers = HEX_LAYERS.filter((id) => map!.getLayer(id));
+  $viewCheck.set({ isEmpty: !failed.value && layers.length > 0 && !map.queryRenderedFeatures({ layers }).length });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
@@ -605,6 +626,7 @@ function listenToMap() {
   document.addEventListener('pointerdown', onPointerDownOutsideAttribution);
   cleanups.push(() => document.removeEventListener('pointerdown', onPointerDownOutsideAttribution));
   map.on('moveend', onMoveEnd);
+  map.on('idle', publishEmpty);
   map.on('move', followBusiestHex);
   map.on('resize', followBusiestHex);
   map.on('mousemove', onMove);
@@ -616,12 +638,22 @@ function listenToMap() {
   cleanups.push(() => map?.getCanvas().removeEventListener('keydown', onKey));
 }
 
+/** The hex tiles for the view are all in: repaint, and check the view's sparse cells. */
+function onLoadChange(load: { loading: boolean }) {
+  if (load.loading) return;
+  // A load that drew nothing new renders nothing, so no idle follows: ask for one.
+  map?.triggerRepaint();
+  // The last tile may draw no change, so no onChanges would check the view.
+  checkSparse();
+}
+
 /** Store → map: view, basemap, ramp, selection, mode, "near me" and fly requests. */
 function listenToStores() {
   cleanups.push(
     // Cells drawn off-screen are checked once they come into view.
-    $mapBounds.listen(() => checkSparse((occ?.collection().features ?? []) as Hex[])),
+    $mapBounds.listen(checkSparse),
     $basemap.listen(() => void rebuildStyle()),
+    $mapLoad.listen(onLoadChange),
     // A new density ramp only repaints the hexes.
     $ramp.listen(() => paintHexes()),
     $mapView.listen((view) => {
@@ -630,7 +662,9 @@ function listenToStores() {
       if (!sameView(view, { lng: center.lng, lat: center.lat, zoom: map.getZoom() }))
         map.jumpTo({ center: [view.lng, view.lat], zoom: view.zoom });
     }),
-    $hexGeometry.subscribe((geometry) => setData('selected', selectedGeoJson(geometry))),
+    ...[$hexGeometry, $recordPlace].map((store) =>
+      store.listen(() => setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()))),
+    ),
     $selectedHex.listen((selected) => {
       if (!selected) $hexGeometry.set(null);
       else if (!$hexGeometry.get()) pendingHexRestore = true;
@@ -652,6 +686,25 @@ function listenToStores() {
       findBusiestHex(request === 'select');
     }),
   );
+}
+
+/** Zoom out to show an expanded record's whole obscured area, and back again (lib/map/recordFit.ts); size its dot. */
+function followRecord() {
+  if (!map) return;
+  const fit = createRecordFit({
+    map,
+    coveredEdges,
+    fitBox: (bbox, maxZoom) => flyToBounds({ kind: 'bounds', bbox, maxZoom }),
+  });
+  cleanups.push($recordPlace.listen(fit), $hexGeometry.listen(sizeRecordDot));
+}
+
+/** Show an expanded record's dot only from the zoom where its cell is wide enough on screen to hold it. */
+function sizeRecordDot() {
+  if (!map?.getLayer(RECORD_DOT_LAYER)) return;
+  const xs = $hexGeometry.get()?.ring.map((position) => map!.project(position).x);
+  const cellWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
+  map.setLayerZoomRange(RECORD_DOT_LAYER, recordDotMinZoom(map.getZoom(), cellWidth), map.getMaxZoom() + 1);
 }
 
 /** Page-level events: theme switches and client-side page swaps. */
@@ -708,13 +761,14 @@ onMounted(async () => {
     maxPitch: 0,
     dragRotate: false,
     renderWorldCopies: false,
-    fadeDuration: reducedMotion() ? 0 : MAP_FADE_MS,
+    fadeDuration: prefersReducedMotion() ? 0 : MAP_FADE_MS,
   });
   occ = createOccLayer(map, occLayerOptions());
   cleanups.push(() => occ?.destroy());
   decorateMap(maplibre, element);
   listenToMap();
   listenToStores();
+  followRecord();
   listenToPage();
 });
 
