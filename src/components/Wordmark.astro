@@ -72,14 +72,15 @@ const LEAVES = [
   .wordmark {
     display: flex;
     line-height: 1;
-    transform: translateY(-0.12em);
   }
 
-  /* 863.4 x 200 artwork units at 200 to the em. */
+  /* 863.4 x 200 artwork units at 200 to the em. The ink hangs below the frame (the p's tail), so lift it
+     to leave about twice the space above the T as below the p. */
   .full {
     width: 4.317em;
     height: 1em;
     overflow: visible;
+    transform: translateY(-0.18em);
   }
 
   /* The fern's own bounds, 100.6 x 155.3 units. */
