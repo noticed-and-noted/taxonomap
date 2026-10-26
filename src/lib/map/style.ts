@@ -42,6 +42,8 @@ export interface MapColors {
   accent: string;
   accentContrast: string;
   bg: string;
+  /** The plain basemap's land fill. */
+  land: string;
   text: string;
 }
 
@@ -226,9 +228,22 @@ const DETAIL_LINE_MIN_ZOOM = 8;
 const LABEL_MIN_ZOOM = 5;
 const MAJOR_LABEL_LAYER = /country|continent/;
 
-/** Restyles one basemap layer for the app's theme: flat background, quieter details, haloed labels. */
-function themeBasemapLayer(layer: LayerSpecification, { bg, text }: MapColors): LayerSpecification {
-  if (layer.type === 'background') return { ...layer, paint: { ...layer.paint, 'background-color': bg } };
+/** Dark-style fills drawn near-black to match its background, which would show as holes on lifted land. */
+const DARK_LAND_FILL_LAYER = /ice_shelf|glacier|residential|pier/;
+
+/** On the dark style, land fills take the land colour and water sinks to the page background, so land reads lighter. */
+function themeDarkFill(layer: LayerSpecification, { bg, land }: MapColors): LayerSpecification {
+  if (layer.type !== 'fill') return layer;
+  if (layer.id === 'water') return { ...layer, paint: { ...layer.paint, 'fill-color': bg } };
+  if (DARK_LAND_FILL_LAYER.test(layer.id)) return { ...layer, paint: { ...layer.paint, 'fill-color': land } };
+  return layer;
+}
+
+/** Restyles one basemap layer for the app's theme: flat land, quieter details, haloed labels. */
+function themeBasemapLayer(layer: LayerSpecification, colors: MapColors, theme: Theme): LayerSpecification {
+  const { bg, land, text } = colors;
+  if (layer.type === 'background') return { ...layer, paint: { ...layer.paint, 'background-color': land } };
+  if (theme === 'dark' && layer.type === 'fill') return themeDarkFill(layer, colors);
   if (layer.type === 'line' && DETAIL_LINE_LAYER.test(layer.id)) {
     return { ...layer, minzoom: Math.max(layer.minzoom ?? 0, DETAIL_LINE_MIN_ZOOM) };
   }
@@ -258,9 +273,14 @@ function globeSettings(bg: string): Pick<StyleSpecification, 'projection' | 'sky
 }
 
 /** The loaded vector style with our data above all its non-label layers, and its labels and our selections on top. */
-function spliceOverlay(base: StyleSpecification, colors: MapColors, data: OverlayData): StyleSpecification {
+function spliceOverlay(
+  base: StyleSpecification,
+  colors: MapColors,
+  data: OverlayData,
+  theme: Theme,
+): StyleSpecification {
   const ours = overlay(colors, data);
-  const layers = base.layers.map((layer) => themeBasemapLayer(layer, colors));
+  const layers = base.layers.map((layer) => themeBasemapLayer(layer, colors, theme));
   // Not a cut at the first label: OpenFreeMap's dark style puts water names before its roads and buildings.
   const shapes = layers.filter((layer) => layer.type !== 'symbol');
   const labels = layers.filter((layer) => layer.type === 'symbol');
@@ -329,11 +349,13 @@ export async function buildStyle(
   const source = BASEMAPS[basemap].source(theme);
   if (source.kind === 'vector') {
     const base = await loadStyle(source.styleUrl);
-    return base ? spliceOverlay(base, colors, data) : plainStyle(null, colors, data);
+    return base ? spliceOverlay(base, colors, data, theme) : plainStyle(null, colors, data);
   }
   // Raster basemaps borrow the plain map's labels, so place names read the same on both.
   const labels = await loadStyle(plainStyleUrl(theme));
-  return labels ? spliceOverlay(rasterUnderLabels(labels, source), colors, data) : plainStyle(source, colors, data);
+  return labels
+    ? spliceOverlay(rasterUnderLabels(labels, source), colors, data, theme)
+    : plainStyle(source, colors, data);
 }
 
 /** Pin and radius circle for "near me". */

@@ -24,6 +24,8 @@
   --overlay: rgb(6 12 9 / 0.72);
   --shadow: 0 8px 28px rgb(0 0 0 / 0.45);
   --photo-placeholder: #1f3329;
+  /* The plain basemap's land, lifted off --bg so the map under the hexes reads. */
+  --map-land: #2c4437;
   /* IUCN Red List fills; each pairs with its -text colour at 4.5:1 or better. */
   --iucn-lc: #2c4437;
   --iucn-lc-text: #f2ede2;
@@ -53,6 +55,7 @@
   --overlay: rgb(245 239 227 / 0.8);
   --shadow: 0 8px 24px rgb(60 45 20 / 0.16);
   --photo-placeholder: #e2d8c4;
+  --map-land: var(--bg);
   --iucn-lc: #3f5c4c;
   --iucn-lc-text: #fffaf0;
   --iucn-nt: #5f6e12;

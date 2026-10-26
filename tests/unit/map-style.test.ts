@@ -13,7 +13,7 @@ import {
 import { json, stubNetwork } from './helpers/network';
 import { thresholdsAt } from '~/lib/ramp';
 
-const COLORS = { accent: '#a', accentContrast: '#c', bg: '#b', text: '#t' };
+const COLORS = { accent: '#a', accentContrast: '#c', bg: '#b', land: '#l', text: '#t' };
 const HEXES: GeoJSON.FeatureCollection = {
   type: 'FeatureCollection',
   features: [
@@ -77,12 +77,19 @@ describe('buildStyle', () => {
 
   it('themes the basemap: background, label colours, and roads and minor labels only up close', async () => {
     const style = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
-    expect(layer(style, 'background')['paint']).toEqual({ 'background-color': '#b' });
+    expect(layer(style, 'background')['paint']).toEqual({ 'background-color': '#l' });
     expect(layer(style, 'road_major')['minzoom']).toBe(8);
     expect(layer(style, 'water')['minzoom']).toBeUndefined();
     expect(layer(style, 'place_city')['minzoom']).toBe(5);
     expect(layer(style, 'place_country')['minzoom']).toBe(1);
     expect(layer(style, 'place_city')['paint']).toMatchObject({ 'text-color': '#t', 'text-halo-color': '#b' });
+  });
+
+  it('sinks water to the page background on the dark style only', async () => {
+    const dark = await buildStyle('plain', 'dark', COLORS, DATA, async () => vectorBase);
+    const light = await buildStyle('plain', 'light', COLORS, DATA, async () => vectorBase);
+    expect(layer(dark, 'water')['paint']).toEqual({ 'fill-color': '#b' });
+    expect(layer(light, 'water')['paint']).toBeUndefined();
   });
 
   it('asks for the theme’s vector style', async () => {
