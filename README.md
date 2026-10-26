@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme-banner-dark.svg">
-  <img src="docs/brand/readme-banner-light.svg" alt="Taxonomap: where the world’s species have been recorded. A visual explorer for GBIF occurrence data." width="100%">
+  <img src="docs/brand/readme-banner-light.svg" alt="Taxonomap: explore species records from around the world. A visual explorer for GBIF occurrence data." width="100%">
 </picture>
 
 # Taxonomap
