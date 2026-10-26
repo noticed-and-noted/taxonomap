@@ -74,8 +74,6 @@ describe('renderSpeciesCard', () => {
     await renderSpeciesCard({ commonName: 'European robin', scientificName: 'Erithacus rubecula', count: 1234 });
     expect(texts(trees[0])).toEqual([
       'ER',
-      'tax',
-      'nomap',
       'European robin',
       'Erithacus rubecula',
       '1.2K',
@@ -85,8 +83,6 @@ describe('renderSpeciesCard', () => {
     // No common name: the scientific name is the (smaller, long) title, shown once.
     expect(texts(trees[1])).toEqual([
       'ER',
-      'tax',
-      'nomap',
       'Erithacus rubecula subsp. melophilus',
       '5',
       'records on GBIF',

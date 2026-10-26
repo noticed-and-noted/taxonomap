@@ -5,7 +5,7 @@ test.use({ showTour: true });
 
 test('the tour walks the map once, then hands over to the checklist', { tag: '@mobile' }, async ({ page }) => {
   await page.goto('/');
-  const tour = page.getByRole('dialog', { name: 'Welcome to taxonomap' });
+  const tour = page.getByRole('dialog', { name: 'Welcome to Taxonomap' });
   await expect(tour).toContainText('A record is one find of one organism');
   await page.getByRole('button', { name: 'Start tour' }).click();
 
@@ -50,7 +50,7 @@ test('skipping the tour leaves the checklist, which ticks itself', async ({ page
   await expect(checklist).toContainText('1 of 7');
   await expect(page.getByRole('button', { name: 'Show Try this' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Restart tour' }).click();
-  await expect(page.getByRole('dialog', { name: 'Welcome to taxonomap' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Welcome to Taxonomap' })).toBeVisible();
 });
 
 test('an item’s help spotlights where to click, and lets the click through', async ({ page }) => {

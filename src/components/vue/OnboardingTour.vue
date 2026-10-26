@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
       </div>
     </template>
     <template v-else-if="!step">
-      <h2 :id="titleId" class="font-display text-xl">Welcome to taxonomap</h2>
+      <h2 :id="titleId" class="font-display text-xl">Welcome to Taxonomap</h2>
       <p class="mt-2 text-sm text-muted">
         The map is built on GBIF, the Global Biodiversity Information Facility: billions of records pooled from museums,
         herbaria, research surveys and nature apps like iNaturalist.

@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme-banner-dark.svg">
+  <img src="docs/brand/readme-banner-light.svg" alt="Taxonomap: where the world’s species have been recorded. A visual explorer for GBIF occurrence data." width="100%">
+</picture>
+
 # Taxonomap
 
 A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, built for birders, naturalists, recorders and educators. Pages are pre-rendered at build time, interactive parts hydrate as Vue islands, and the browser calls `api.gbif.org` directly. There is no application server.

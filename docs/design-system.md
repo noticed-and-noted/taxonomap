@@ -4,15 +4,15 @@ The rules for how Taxonomap looks. Read this before changing anything visual: co
 
 The code is the source of truth. This file explains it and names where each part lives; if they disagree, fix this file.
 
-| Part                         | Lives in                                                  |
-| ---------------------------- | --------------------------------------------------------- |
-| Colour, radius, motion       | `src/styles/tokens.css`                                   |
-| Fonts, Tailwind theme, bases | `src/styles/global.css`                                   |
-| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`) |
-| Wordmark                     | `src/components/Wordmark.astro`                           |
-| Favicon                      | `public/favicon.svg`                                      |
-| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts) |
-| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference) |
+| Part                         | Lives in                                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| Colour, radius, motion       | `src/styles/tokens.css`                                                                        |
+| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                        |
+| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                      |
+| Wordmark                     | `docs/brand/wordmark-light.svg` (the master artwork), drawn by `src/components/Wordmark.astro` |
+| Favicon                      | `public/favicon.svg`                                                                           |
+| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, wordmark with outlined letters)      |
+| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                      |
 
 ## Principles
 
@@ -83,12 +83,12 @@ The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. T
 
 ## Typography
 
-| Role               | Font                      | Token / class                            | Notes                                                 |
-| ------------------ | ------------------------- | ---------------------------------------- | ----------------------------------------------------- |
-| Interface and body | Lexend (variable)         | `--font-sans` (the default)              | Everything that isn't a heading                       |
-| Headings, display  | Source Serif 4 (variable) | `--font-serif`, `h1–h3`, `.font-display` | Optical sizing on, tracking −1%                       |
-| Scientific names   | Source Serif 4 italic     | `.sci-name`                              | Every Latin binomial, everywhere                      |
-| Wordmark only      | Patrick Hand              | `--font-hand`                            | Never for interface text; Latin subset only is loaded |
+| Role               | Font                      | Token / class                            | Notes                                                  |
+| ------------------ | ------------------------- | ---------------------------------------- | ------------------------------------------------------ |
+| Interface and body | Lexend (variable)         | `--font-sans` (the default)              | Everything that isn't a heading                        |
+| Headings, display  | Source Serif 4 (variable) | `--font-serif`, `h1–h3`, `.font-display` | Optical sizing on, tracking −1%                        |
+| Scientific names   | Source Serif 4 italic     | `.sci-name`                              | Every Latin binomial, everywhere                       |
+| Wordmark only      | Patrick Hand, outlined    | none (artwork, not a loaded font)        | The letters are drawn shapes; the font is never loaded |
 
 - Fonts are self-hosted through `@fontsource` packages. Don't add Google Fonts links. The sans and serif files are preloaded in `BaseLayout.astro`.
 - Use sentence case for headings, buttons and labels.
@@ -96,11 +96,11 @@ The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. T
 
 ## Logo
 
-The logo is the word **taxonomap** in lowercase Patrick Hand, with a **fiddlehead fern** (an unfurling fern frond) in place of the first "o": life still being discovered.
+The logo is the word **Taxonomap** hand-lettered from Patrick Hand, with a **fiddlehead fern** (an unfurling fern frond) in place of the first "o": life still being discovered.
 
-- **Always lowercase**, always with the fern as the first "o". Never write the wordmark in another font, and never show the plain word as a logo.
+- **Capital T, the rest lowercase**, always with the fern as the first "o". Never write the wordmark in another font, and never show the plain word as a logo. In running text the name is plain "Taxonomap".
 - **The fern**: a 1½-turn coil ending in a ball, on a stem that drops below the baseline, with two leaflets. Coil and stem use `--accent`; leaflets use `--text-muted`. The letters use `--text`. So the mark follows the theme with no extra artwork.
-- **Sizing**: the fern is sized to Patrick Hand's x-height (0.467 em). It is 0.474 em wide and 0.786 em tall, shifted down 0.308 em and spaced 0.02 em on each side. For another font, scale those by its x-height (width 1.016 × x-height, height 1.683 × x-height, drop 0.659 × x-height).
+- **The artwork is the master.** `docs/brand/wordmark-light.svg` holds the letters (outlined, re-spaced and reshaped by hand) and the fern; `wordmark-dark.svg` is the same artwork recoloured. Never retype the wordmark in the font. Change the master, then update its copies: the paths in `Wordmark.astro`, the README banners, and (for the fern) the mark files, app icon, favicon and `WebglNotice.vue`. The Open Graph card reads `wordmark-dark.svg` directly. The artwork is 200 units to the em: `Wordmark.astro` frames the letters in the old typed line box, 1 em tall, so it sizes from the parent's font-size.
 - **Small screens**: below 640 px the header shows the fern alone (the letters are hidden). The link keeps its "Taxonomap home" label for screen readers.
 - **Clear space**: keep at least half the coil's width clear around the mark.
 - **Colourways**: on forest, Pollen coil and Lichen leaflets. On paper, Rust coil and Fern leaflets. One colour: all Forest on paper or Pollen.
