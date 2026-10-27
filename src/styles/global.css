@@ -304,15 +304,6 @@ input:is([type='search'], [type='text']):focus-visible {
   outline-offset: 0;
 }
 
-/* Room left of the browser's clear button for a SearchSpinner, and the spinner placed in it. */
-input[type='search'].search-spinner-room::-webkit-search-cancel-button {
-  margin-left: 1.5rem;
-}
-
-.search-spinner-gap {
-  right: 2rem;
-}
-
 /*
  * Reading settings (stores/reading.ts). Unlayered, so they beat Tailwind's utilities;
  * the important flags also beat scoped component styles.

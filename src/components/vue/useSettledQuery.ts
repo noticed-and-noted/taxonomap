@@ -4,10 +4,7 @@
  * names already known can keep using the live text.
  */
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
-import { debounce } from '~/lib/util/debounce';
-
-/** Pause after the last keystroke before a search's lookups start. */
-const SETTLE_MS = 300;
+import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
 /**
  * Follows `query` once it has stopped changing; clearing it applies at once.
@@ -16,7 +13,7 @@ const SETTLE_MS = 300;
  */
 export function useSettledQuery(query: Ref<string>) {
   const settled = ref(query.value);
-  const settle = debounce((text: string) => (settled.value = text), SETTLE_MS);
+  const settle = debounce((text: string) => (settled.value = text), SEARCH_DEBOUNCE_MS);
 
   watch(query, (text) => {
     if (text.trim()) {

@@ -13,7 +13,7 @@
  */
 import { navigate } from 'astro:transitions/client';
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import type { Place } from '~/lib/geocode';
@@ -26,6 +26,7 @@ import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
 import { hrefWith } from '~/stores/url-sync';
+import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import TaxonPreview from './TaxonPreview.vue';
 import { useNameSearch } from './useNameSearch';
@@ -71,7 +72,8 @@ const {
   flush: flushPlaces,
   reset: resetPlaces,
 } = usePlaceSearch();
-const input = ref<HTMLInputElement>();
+const searchBox = useTemplateRef('searchBox');
+const input = computed(() => searchBox.value?.input);
 
 /* Short note shown under the box when a pick could not be applied (the What list is full). */
 const notice = ref('');
@@ -371,15 +373,16 @@ onBeforeUnmount(() => {
           aria-hidden="true"
           >Search species or places…</span
         >
-        <input
+        <SearchInput
           id="omnibox-input"
-          ref="input"
+          ref="searchBox"
           v-model="query"
-          type="search"
+          icon="none"
+          bare
           role="combobox"
           autocomplete="off"
           spellcheck="false"
-          class="h-[calc(var(--header-height)-2px)] w-full min-w-0 bg-transparent text-sm text-ellipsis text-text focus:outline-none"
+          class="h-[calc(var(--header-height)-2px)] text-ellipsis text-text focus:outline-none"
           aria-autocomplete="list"
           aria-controls="omnibox-listbox"
           :aria-expanded="open && options.length > 0"
@@ -601,13 +604,5 @@ kbd {
   font-family: inherit;
   font-size: 0.625rem;
   color: var(--text-muted);
-}
-
-/* Matches the box's px-3, so the clear button has equal space either side. */
-input[type='search']::-webkit-search-cancel-button {
-  flex-shrink: 0;
-  margin-left: 0.75rem;
-  cursor: pointer;
-  filter: grayscale(1);
 }
 </style>

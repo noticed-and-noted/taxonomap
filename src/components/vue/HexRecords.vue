@@ -19,7 +19,7 @@ import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { tidy } from '~/lib/species/names';
 import { $hexGeometry, $occurrenceFilter, $recordPlace } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
-import SearchSpinner from './SearchSpinner.vue';
+import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
@@ -355,23 +355,10 @@ const accuracy = (occurrence: Occurrence) => {
   <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
     <div class="relative text-sm">
       <label :for="`${uniqueId}-input`" class="sr-only">Filter records by species</label>
-      <svg
-        class="pointer-events-none absolute left-2.5 top-[1.0625rem] size-3.5 -translate-y-1/2 text-subtle"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        aria-hidden="true"
-      >
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </svg>
-      <input
+      <SearchInput
         :id="`${uniqueId}-input`"
         v-model="query"
-        type="search"
-        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle disabled:opacity-60"
-        :class="isNaming && !query ? 'pr-8' : ['pr-2', { 'search-spinner-room': isNaming }]"
+        :loading="isNaming"
         role="combobox"
         autocomplete="off"
         placeholder="Filter by species"
@@ -385,7 +372,6 @@ const accuracy = (occurrence: Occurrence) => {
         @input="onInput"
         @keydown="onKey"
       />
-      <SearchSpinner :active="isNaming" class="top-[1.0625rem]" :class="query ? 'search-spinner-gap' : 'right-2.5'" />
       <ul
         v-show="showOptions"
         :id="`${uniqueId}-list`"
