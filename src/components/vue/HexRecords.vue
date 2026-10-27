@@ -270,26 +270,45 @@ async function openPhotos(occurrence: Occurrence) {
 }
 
 const hasMore = computed(() => total.value !== null && records.value.length < total.value);
-const lightboxPosition = () => records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+const positionOf = (key: number | undefined) => records.value.findIndex((occurrence) => occurrence.key === key);
 /** The next record's first photo, for the lightbox to preload. */
 const nextRecordPhoto = computed(() => {
-  const next = lightboxRecord.value && records.value[lightboxPosition() + 1];
+  const next = lightboxRecord.value && records.value[positionOf(lightboxRecord.value.key) + 1];
   return next ? image(next) : undefined;
 });
 
-/**
- * Moves the lightbox to the next or previous record in the list, opening that row behind it.
- * Stepping down past the last loaded record loads the next page first.
- */
-async function stepRecord(delta: number) {
-  const isPastEnd = delta > 0 && lightboxPosition() + delta >= records.value.length;
+/** The record `delta` rows from `key`; stepping down past the last loaded record loads the next page first. */
+async function recordFrom(key: number | undefined, delta: number) {
+  const isPastEnd = delta > 0 && positionOf(key) + delta >= records.value.length;
   if (isPastEnd && hasMore.value && !loading.value) await load(true);
-  const position = lightboxPosition();
-  const next = records.value[position + delta];
-  if (position < 0 || !next) return;
+  const position = positionOf(key);
+  return position < 0 ? undefined : records.value[position + delta];
+}
+
+/** Moves the lightbox to the next or previous record in the list, opening that row behind it. */
+async function stepRecord(delta: number) {
+  const next = await recordFrom(lightboxRecord.value?.key, delta);
+  if (!next) return;
   expanded.value = next.key;
   await openPhotos(next);
   revealInList(document.getElementById(`${uniqueId}-rec-${next.key}`));
+}
+
+const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
+
+/** Up and down arrows in the list open the previous or next record from the focused row, and focus it. */
+async function onListKey(event: KeyboardEvent) {
+  const delta = ROW_KEYS[event.key];
+  const row = event.target instanceof HTMLElement && event.target.closest<HTMLElement>('[data-record]');
+  if (!delta || !row) return;
+  event.preventDefault();
+  const next = await recordFrom(Number(row.dataset.record), delta);
+  if (!next) return;
+  expanded.value = next.key;
+  await nextTick();
+  const details = `${uniqueId}-rec-${next.key}`;
+  document.querySelector<HTMLElement>(`[aria-controls="${details}"]`)?.focus({ preventScroll: true });
+  revealInList(document.getElementById(details));
 }
 const initials = (occurrence: Occurrence) =>
   name(occurrence)
@@ -310,8 +329,17 @@ function revealInList(element: HTMLElement | null) {
   const panel = box.parentElement?.closest<HTMLElement>('.overflow-y-auto');
   const bottom = Math.min(boxRect.bottom, panel?.getBoundingClientRect().bottom ?? Infinity);
   const rowRect = element.getBoundingClientRect();
-  if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, rowRect.top - boxRect.top);
+  // Stepping up: the record's own row sits just above its details.
+  const top = (element.previousElementSibling ?? element).getBoundingClientRect().top;
+  if (top < boxRect.top) box.scrollTop -= boxRect.top - top;
+  else if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, rowRect.top - boxRect.top);
 }
+
+/**
+ * Set by a click in the list and cleared by any key, so a row focused from the keyboard (arrows) and then
+ * clicked loses its ring, as a clicked row would.
+ */
+const usedPointer = ref(false);
 
 /** Row whose photo and name carry view-transition names while it opens or closes (one row, so others don't animate). */
 const animating = ref<number | null>(null);
@@ -352,7 +380,7 @@ const accuracy = (occurrence: Occurrence) => {
 </script>
 
 <template>
-  <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
+  <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'" @keydown.capture="usedPointer = false">
     <div class="relative text-sm">
       <label :for="`${uniqueId}-input`" class="sr-only">Filter records by species</label>
       <SearchInput
@@ -450,9 +478,10 @@ const accuracy = (occurrence: Occurrence) => {
               <th scope="col">Date</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody :class="{ 'used-pointer': usedPointer }" @keydown="onListKey" @pointerdown="usedPointer = true">
             <template v-for="occurrence in records" :key="occurrence.key">
               <tr
+                :data-record="occurrence.key"
                 class="record cursor-pointer border-b border-border hover:bg-surface-2"
                 :data-type="occurrence.basisOfRecord"
                 @click="toggle(occurrence)"
@@ -523,6 +552,7 @@ const accuracy = (occurrence: Occurrence) => {
               <tr
                 v-if="expanded === occurrence.key"
                 :id="`${uniqueId}-rec-${occurrence.key}`"
+                :data-record="occurrence.key"
                 class="border-b border-border"
               >
                 <td colspan="4" class="bg-surface-2 px-4 py-3">
@@ -651,12 +681,18 @@ const accuracy = (occurrence: Occurrence) => {
       :name="lightboxRecord ? name(lightboxRecord) : ''"
       :href="lightboxAbout"
       :next-row-image="nextRecordPhoto"
+      :loading="loading"
       @step-row="stepRecord"
     />
   </div>
 </template>
 
 <style scoped>
+/* The open row's details already mark which record has focus, so its name needs no ring as well. */
+.record button[aria-expanded='true']:focus-visible,
+.used-pointer button:focus-visible {
+  outline: none;
+}
 /* Type colours: ≥4.5:1 on the code's tint in each theme. */
 .record {
   --type: var(--text-muted);
