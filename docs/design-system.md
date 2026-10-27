@@ -72,6 +72,10 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 
 `--range-introduced` (the `--iucn-en` orange) and `--range-invasive` (the `--iucn-cr` coral) mark the rows of the species page's "Introduced range" list. They sit beside a text label, so they never carry meaning alone.
 
+### Basemap land
+
+`--map-land` fills the plain basemap's land: `#2c4437` (Moss) on forest, lifted off `--bg` so the map shows under the hexes, and `--bg` on paper. On the dark style, water drops to `--bg` so land reads lighter than sea, as on paper.
+
 ### Map density ramps
 
 The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. The map bins use stops 1 to 7. Charts that want a single data colour use `var(--ramp-4)`.

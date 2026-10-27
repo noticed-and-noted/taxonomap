@@ -81,6 +81,7 @@ function colors(): MapColors {
     accent: css('--accent', '#f0b443'),
     accentContrast: css('--accent-contrast', '#1d1404'),
     bg: css('--bg', '#0e1813'),
+    land: css('--map-land', '#2c4437'),
     text: css('--text', '#f2ede2'),
   };
 }
