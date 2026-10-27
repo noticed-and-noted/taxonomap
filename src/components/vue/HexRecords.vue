@@ -321,18 +321,42 @@ const initials = (occurrence: Occurrence) =>
  * Scroll only the list (not the panel) so `el` is in view: the animation draws above the
  * list, unclipped, so its end point must be inside the list for it to stay inside.
  */
+/** The part of the list on screen: the panel body, which scrolls too on phones, may hide either edge. */
+function visibleBounds(box: HTMLElement) {
+  const boxRect = box.getBoundingClientRect();
+  const panelRect = box.parentElement?.closest<HTMLElement>('.overflow-y-auto')?.getBoundingClientRect();
+  return {
+    top: Math.max(boxRect.top, panelRect?.top ?? -Infinity),
+    bottom: Math.min(boxRect.bottom, panelRect?.bottom ?? Infinity),
+  };
+}
+
+/**
+ * Clips the view-transition overlay to the list's on-screen box, so a row's moving photo and name can't draw over
+ * the panel. The overlay sits above the whole page, out of reach of the list's own overflow.
+ * @returns A function that removes the clip.
+ */
+function clipTransitionToList() {
+  const box = scroller.value;
+  if (!box) return () => {};
+  const { left, right } = box.getBoundingClientRect();
+  const { top, bottom } = visibleBounds(box);
+  const root = document.documentElement;
+  root.style.setProperty('--records-clip', `rect(${top}px ${right}px ${bottom}px ${left}px)`);
+  root.classList.add('records-transition');
+  return () => root.classList.remove('records-transition');
+}
+
 function revealInList(element: HTMLElement | null) {
   const box = scroller.value;
   if (!element || !box) return;
   const boxRect = box.getBoundingClientRect();
-  // The panel body may hide the list's lower edge; use whichever bottom is higher.
-  const panel = box.parentElement?.closest<HTMLElement>('.overflow-y-auto');
-  const bottom = Math.min(boxRect.bottom, panel?.getBoundingClientRect().bottom ?? Infinity);
+  const { bottom } = visibleBounds(box);
   const rowRect = element.getBoundingClientRect();
-  // Stepping up: the record's own row sits just above its details.
+  // The record's own row sits just above its details; keep it in view even when the details don't fit.
   const top = (element.previousElementSibling ?? element).getBoundingClientRect().top;
   if (top < boxRect.top) box.scrollTop -= boxRect.top - top;
-  else if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, rowRect.top - boxRect.top);
+  else if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, top - boxRect.top);
 }
 
 /**
@@ -354,12 +378,14 @@ function toggle(occurrence: Occurrence) {
   }
   animating.value = occurrence.key;
   void nextTick(() => {
+    const unclip = clipTransitionToList();
     const transition = document.startViewTransition(async () => {
       expanded.value = next;
       await nextTick();
       if (next !== null) revealInList(document.getElementById(`${uniqueId}-rec-${next}`));
     });
     void transition.finished.finally(() => {
+      unclip();
       if (animating.value === occurrence.key) animating.value = null;
     });
   });
@@ -460,7 +486,10 @@ const accuracy = (occurrence: Occurrence) => {
       <div
         ref="scroller"
         class="fade-list -mx-4 overflow-y-auto [scrollbar-gutter:stable]"
-        :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': fadeBottom }]"
+        :class="[
+          fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]',
+          { 'fade-bottom': fadeBottom, 'clips-transition': animating !== null },
+        ]"
         @scroll.passive="updateFade"
       >
         <table class="w-full table-fixed text-sm" aria-label="Records">
@@ -692,6 +721,18 @@ const accuracy = (occurrence: Occurrence) => {
 .record button[aria-expanded='true']:focus-visible,
 .used-pointer button:focus-visible {
   outline: none;
+}
+/* While a row opens or closes, only the list and that row's photo and name animate, and the overlay is clipped to the
+   list (clipTransitionToList). The page stays out, live underneath, or the clip would hide it. Global: these hang
+   off <html>, which a scoped selector would never match. */
+.clips-transition {
+  view-transition-name: rec-list;
+}
+:global(html.records-transition) {
+  view-transition-name: none;
+}
+:global(html.records-transition::view-transition) {
+  clip-path: var(--records-clip);
 }
 /* Type colours: ≥4.5:1 on the code's tint in each theme. */
 .record {
