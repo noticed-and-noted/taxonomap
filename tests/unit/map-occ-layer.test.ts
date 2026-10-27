@@ -6,6 +6,7 @@
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import { $gbifStale, type TileFilter } from '~/lib/gbif';
+import { tileAt } from '~/lib/map/occGrid';
 import { createOccLayer as create, type OccLayer } from '~/lib/map/occLayer';
 import { hexAt, mvt } from './helpers/tiles';
 
@@ -192,6 +193,30 @@ describe('occurrence layer', () => {
     expect(layer.cellAt(middle)).toBe(cell);
     expect(layer.cellAt([170, 0])).toBeUndefined();
     layer.destroy();
+  });
+
+  it('finds the cell at a point at any level, wherever it is, from its tile and the ring around it', async () => {
+    const asked = network();
+    const map = fakeMap();
+    const { o } = callbacks();
+    const layer = createOccLayer(map.map, o);
+    await settle();
+    const level = 7;
+    const tile = tileAt([120, 40], level);
+    // Each fake tile holds one hex at its centre.
+    const tileCount = 2 ** level;
+    const centre: [number, number] = [
+      ((tile.x + 0.5) / tileCount) * 360 - 180,
+      (Math.atan(Math.sinh(Math.PI * (1 - (2 * (tile.y + 0.5)) / tileCount))) * 180) / Math.PI,
+    ];
+    const cell = await layer.findCell(centre, level);
+    expect(cell).toBeDefined();
+    const atLevel = asked.filter((request) => request.z === level).map(key);
+    expect(atLevel).toEqual(expect.arrayContaining([key(tile), key({ x: tile.x + 1, y: tile.y })]));
+    expect(atLevel).toHaveLength(9);
+    // A second look reuses the loaded tiles; a point between hexes has no cell.
+    expect(await layer.findCell([((tile.x + 0.01) / tileCount) * 360 - 180, centre[1]], level)).toBeUndefined();
+    expect(asked.filter((request) => request.z === level)).toHaveLength(9);
   });
 
   it('leaves out cells known to be empty, and drops them on redraw', async () => {

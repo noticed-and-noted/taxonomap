@@ -55,6 +55,7 @@ import {
   clearHexSelection,
   sameView,
   type FlyRequest,
+  type HexPoint,
 } from '~/stores/explorer';
 
 const container = ref<HTMLDivElement>();
@@ -65,7 +66,6 @@ const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(
 let map: MlMap | undefined;
 let occ: OccLayer | undefined;
 const cleanups: (() => void)[] = [];
-let pendingHexRestore = false;
 
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
@@ -205,24 +205,30 @@ function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: n
     return;
   }
   $hexGeometry.set(geometry);
-  $selectedHex.set([Number(lngLat.lng.toFixed(4)), Number(lngLat.lat.toFixed(4))]);
+  $selectedHex.set(hexPoint(lngLat.lng, lngLat.lat));
   $panel.set('hex');
 }
 
-/** Re-resolve a hex selected via the URL once its cell is loaded. */
-function restoreHex() {
+/** A selected hex for the URL: the point, rounded, and the grid level its cell is from. */
+function hexPoint(lng: number, lat: number): HexPoint {
+  return [Number(lng.toFixed(4)), Number(lat.toFixed(4)), $gridLevel.get()];
+}
+
+/** Re-resolve a hex selected via the URL at its level, wherever it is; a link to a cell with no records drops it. */
+async function restoreHex() {
   const selected = $selectedHex.get();
-  if (!occ || !selected || $hexGeometry.get()) {
-    pendingHexRestore = false;
+  if (!occ || !selected || $hexGeometry.get()) return;
+  const [lng, lat, level = $gridLevel.get()] = selected;
+  const feature = await occ.findCell([lng, lat], level);
+  // Another hex was picked meanwhile.
+  if ($selectedHex.get() !== selected) return;
+  const geometry = feature && geometryOf(feature);
+  if (!geometry) {
+    clearHexSelection();
     return;
   }
-  const feature = occ.cellAt([selected[0], selected[1]]);
-  const geometry = feature && geometryOf(feature);
-  if (geometry) {
-    $hexGeometry.set(geometry);
-    if ($panel.get() === 'none') $panel.set('hex');
-  }
-  pendingHexRestore = false;
+  $hexGeometry.set(geometry);
+  if ($panel.get() === 'none') $panel.set('hex');
 }
 
 /** Room kept between the tour's hex and the map's covered edges, so its tip and the legend never hide it. */
@@ -288,7 +294,7 @@ function findBusiestHex(shouldSelect: boolean) {
   if (hex && geometry && shouldSelect) {
     const [lng, lat] = hexCentre(hex);
     $hexGeometry.set(geometry);
-    $selectedHex.set([Number(lng.toFixed(4)), Number(lat.toFixed(4))]);
+    $selectedHex.set(hexPoint(lng, lat));
   }
   $busiestHexBox.set(pointedBox());
 }
@@ -505,11 +511,6 @@ async function loadMapLibre(): Promise<MapLibre> {
   return maplibre;
 }
 
-/** Whether a restore of a URL-selected hex is due: asked for, or selected without a resolved cell. */
-function restoreHexIfDue() {
-  if (pendingHexRestore || ($selectedHex.get() && !$hexGeometry.get())) restoreHex();
-}
-
 /** How the occurrence layer reads the filter and reports cells, level, progress and failure. */
 function occLayerOptions(): OccLayerOptions {
   return {
@@ -519,12 +520,10 @@ function occLayerOptions(): OccLayerOptions {
     onCells: (cells) => {
       replaceHexes(cells);
       checkSparse();
-      restoreHexIfDue();
     },
     onChanges: (add, remove) => {
       changeHexes(add, remove);
       checkSparse();
-      restoreHexIfDue();
     },
     onLevel: (level) => {
       $gridLevel.set(level);
@@ -668,7 +667,7 @@ function listenToStores() {
     ),
     $selectedHex.listen((selected) => {
       if (!selected) $hexGeometry.set(null);
-      else if (!$hexGeometry.get()) pendingHexRestore = true;
+      else void restoreHex();
     }),
     $mapMode.subscribe((mode) => {
       if (!map) return;
@@ -765,6 +764,7 @@ onMounted(async () => {
     fadeDuration: prefersReducedMotion() ? 0 : MAP_FADE_MS,
   });
   occ = createOccLayer(map, occLayerOptions());
+  void restoreHex();
   cleanups.push(() => occ?.destroy());
   decorateMap(maplibre, element);
   listenToMap();

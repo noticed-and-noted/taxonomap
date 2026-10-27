@@ -148,7 +148,11 @@
      hydrate. Browsers without scroll-driven animations show no fade. */
   @supports (animation-timeline: scroll()) {
     .fade-list.fade-scroll {
-      animation: fade-scroll linear both;
+      /* Longhands: with the `animation` shorthand, Lightning CSS folds the timeline into it on minify, which
+         browsers reject. */
+      animation-name: fade-scroll;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: scroll(self);
     }
   }

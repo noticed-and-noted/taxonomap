@@ -121,23 +121,29 @@ export const $maxUncertainty = urlAtom({
   parse: (raw) => (UNCERTAINTY_STEPS_M as readonly number[]).find((metres) => String(metres) === raw),
 });
 export const $iucn = urlAtom(codecs.setOf('iucn', IUCN_CATEGORIES, { scope: 'map' }));
-export type HexPoint = readonly [lng: number, lat: number] | null;
+export type HexPoint = readonly [lng: number, lat: number, level?: number] | null;
 
 /**
- * Selected hex, stored as the clicked point ("lng,lat", 4 dp). Hex ids are
- * not stable across zooms, so MapCanvas re-resolves the cell under this point
- * at the URL's zoom and publishes its geometry to $hexGeometry.
+ * Selected hex, stored as the clicked point and its grid level ("lng,lat,level",
+ * 4 dp). Hex ids are not stable across levels, so MapCanvas re-resolves the
+ * cell under this point at that level (the view's, in links without one) and
+ * publishes its geometry to $hexGeometry.
  */
 const hexCodec: UrlCodec<HexPoint> = {
   key: 'hex',
   default: null,
   scope: 'map',
   parse(raw) {
-    const [lng, lat] = raw.split(',').map(Number);
+    const [lng, lat, level] = raw.split(',').map(Number);
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lat as number) > 90) return undefined;
-    return [lng as number, lat as number];
+    if (level === undefined) return [lng as number, lat as number];
+    if (!Number.isInteger(level) || level < 0) return undefined;
+    return [lng as number, lat as number, level];
   },
-  serialize: (position) => `${position![0].toFixed(4)},${position![1].toFixed(4)}`,
+  serialize(position) {
+    const [lng, lat, level] = position!;
+    return [lng.toFixed(4), lat.toFixed(4), ...(level === undefined ? [] : [level])].join(',');
+  },
 };
 
 export const $selectedHex = urlAtom(hexCodec);
