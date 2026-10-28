@@ -136,6 +136,7 @@ const label = computed(() =>
         <p v-else-if="error !== null && !counts.size" class="grid h-14 place-items-center text-xs text-muted">
           Year counts are unavailable right now.
         </p>
+        <p v-else-if="!counts.size" class="grid h-14 place-items-center text-xs text-muted">No results</p>
         <svg
           v-else
           :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
