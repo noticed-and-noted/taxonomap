@@ -3,7 +3,8 @@
  * stable and costs a GBIF search (or an iNaturalist one) to find, so each
  * browser finds it once. Held in localStorage, newest last, capped.
  */
-const STORAGE_KEY = 'inat-ids';
+// v2: v1 could hold wrong matches for groups iNaturalist ranks differently (GBIF's order Cetacea).
+const STORAGE_KEY = 'inat-ids-v2';
 const MAX_ENTRIES = 3000;
 
 let cachedIds: Map<number, number> | undefined;

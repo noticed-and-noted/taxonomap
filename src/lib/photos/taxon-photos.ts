@@ -22,6 +22,7 @@ import { HOUR } from '~/lib/util/time';
 import {
   findImages,
   http,
+  type HigherKeys,
   INATURALIST_DATASET_KEY,
   type OccurrenceSearch,
   type Rank,
@@ -65,11 +66,24 @@ const RANK_LEVEL: Partial<Record<Rank, number>> = {
   FORM: 5,
 };
 
+/** The field naming a GBIF record's taxon at each rank above species, to check an iNaturalist ancestor is the same group. */
+const RANK_FIELD: Partial<Record<Rank, keyof HigherKeys>> = {
+  KINGDOM: 'kingdom',
+  PHYLUM: 'phylum',
+  CLASS: 'class',
+  ORDER: 'order',
+  FAMILY: 'family',
+  GENUS: 'genus',
+};
+
 // GBIF lookups, a few at a time: bursts of parallel searches trip its rate limit.
 const gbifLimit = pLimit(3);
 
-/** One GBIF record of the taxon from the iNaturalist dataset: its iNaturalist taxon ID and species name. */
-async function inatRecord(key: number, options: Opts): Promise<{ taxonId?: number; species?: string }> {
+/** One GBIF record of the taxon from the iNaturalist dataset: its iNaturalist taxon ID, species name and GBIF's name for the taxon. */
+async function inatRecord(
+  { key, rank }: PhotoTaxon,
+  options: Opts,
+): Promise<{ taxonId?: number; species?: string; rankName?: string }> {
   const response = await gbifLimit(() =>
     http().getJson<OccurrenceSearch>(
       '/v1/occurrence/search',
@@ -79,9 +93,12 @@ async function inatRecord(key: number, options: Opts): Promise<{ taxonId?: numbe
   );
   const result = response.results[0];
   const id = Number(result?.taxonID);
+  const field = RANK_FIELD[rank];
+  const rankName = field && result?.[field];
   return {
     ...(Number.isInteger(id) && id > 0 && { taxonId: id }),
     ...(result?.species && { species: result.species }),
+    ...(typeof rankName === 'string' && { rankName }),
   };
 }
 
@@ -156,8 +173,7 @@ async function searchRecords(unknown: readonly PhotoTaxon[], options: Opts): Pro
     unknown
       .filter((taxon) => !searches.has(taxon.key))
       .map(
-        async (taxon) =>
-          void searches.set(taxon.key, await inatRecord(taxon.key, options).catch((): InatRecord => ({}))),
+        async (taxon) => void searches.set(taxon.key, await inatRecord(taxon, options).catch((): InatRecord => ({}))),
       ),
   );
   return searches;
@@ -179,20 +195,24 @@ async function lookupAncestors(
   return ancestorIds.length ? getTaxa(ancestorIds, options.signal) : new Map<number, InatTaxon>();
 }
 
-/** The candidate itself when it is at `level`, else its ancestor at `level`; null when neither is. */
+/**
+ * The candidate itself when it is at `level`, else its ancestor named `name` when GBIF gives one
+ * (the two place some groups at different ranks: iNaturalist's order Artiodactyla holds the
+ * infraorder Cetacea, GBIF's order), else its ancestor at `level`; null when there is none.
+ */
 function candidateAtLevel(
   candidate: InatTaxon | undefined,
   level: number,
   ancestors: ReadonlyMap<number, InatTaxon>,
+  name?: string,
 ): InatTaxon | null {
   if (!candidate) return null;
   if (candidate.rank_level === level) return candidate;
   if (candidate.rank_level > level) return null;
-  return (
-    (candidate.ancestor_ids ?? [])
-      .map((ancestorId) => ancestors.get(ancestorId))
-      .find((ancestor) => ancestor?.rank_level === level) ?? null
-  );
+  const lineage = (candidate.ancestor_ids ?? []).map((ancestorId) => ancestors.get(ancestorId));
+  const isMatch = (ancestor: InatTaxon | undefined) =>
+    name ? ancestor?.name === name : ancestor?.rank_level === level;
+  return lineage.find(isMatch) ?? null;
 }
 
 /**
@@ -237,7 +257,7 @@ async function matchTaxa(
     }
 
     const candidate = record?.taxonId === undefined ? undefined : candidates.get(record.taxonId);
-    const match = candidateAtLevel(candidate, level, ancestors);
+    const match = candidateAtLevel(candidate, level, ancestors, record?.rankName);
     if (match) found.set(taxon.key, match.id);
     const isNameSearchable = !match && !candidate && taxon.name && taxon.rank === 'SPECIES';
     matched.set(taxon.key, isNameSearchable ? byName(taxon.key, taxon.name!, options) : match);
