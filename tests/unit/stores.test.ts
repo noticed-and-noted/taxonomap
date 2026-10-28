@@ -30,6 +30,11 @@ describe('explorer URL state', () => {
     expect(loaded.$panel.get()).toBe('none');
   });
 
+  it('drops a selected cell with a level that is negative or not whole', async () => {
+    expect((await stores('?hex=1,2,-1')).$selectedHex.get()).toBeNull();
+    expect((await stores('?hex=1,2,1.5')).$selectedHex.get()).toBeNull();
+  });
+
   it('writes compact values back to the URL', async () => {
     const loaded = await stores();
     loaded.$dateRange.set({ unit: 'm', from: '1990-03-01', to: '2000-06-30' });

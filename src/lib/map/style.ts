@@ -3,7 +3,13 @@
  * functions of their inputs (theme colours, hex cells, GeoJSON), so the
  * MapCanvas island only gathers inputs and wires events.
  */
-import type { ExpressionSpecification, LayerSpecification, MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
+import type {
+  ExpressionSpecification,
+  FillLayerSpecification,
+  LayerSpecification,
+  MapGeoJSONFeature,
+  StyleSpecification,
+} from 'maplibre-gl';
 import { BASEMAPS, plainStyleUrl, type BasemapId, type RasterDef, type Theme } from '~/lib/basemaps';
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
@@ -232,8 +238,7 @@ const MAJOR_LABEL_LAYER = /country|continent/;
 const DARK_LAND_FILL_LAYER = /ice_shelf|glacier|residential|pier/;
 
 /** On the dark style, land fills take the land colour and water sinks to the page background, so land reads lighter. */
-function themeDarkFill(layer: LayerSpecification, { bg, land }: MapColors): LayerSpecification {
-  if (layer.type !== 'fill') return layer;
+function themeDarkFill(layer: FillLayerSpecification, { bg, land }: MapColors): LayerSpecification {
   if (layer.id === 'water') return { ...layer, paint: { ...layer.paint, 'fill-color': bg } };
   if (DARK_LAND_FILL_LAYER.test(layer.id)) return { ...layer, paint: { ...layer.paint, 'fill-color': land } };
   return layer;

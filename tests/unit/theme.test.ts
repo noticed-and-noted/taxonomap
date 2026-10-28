@@ -26,6 +26,19 @@ describe('theme', () => {
     document.removeEventListener('themechange', heard);
   });
 
+  it('sets the browser bar colour for the theme, keeping it when the theme has none', () => {
+    const meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    meta.content = '#0e1813';
+    meta.dataset['light'] = '#f5efe3';
+    document.head.append(meta);
+    setTheme('light');
+    expect(meta.content).toBe('#f5efe3');
+    setTheme('dark');
+    expect(meta.content).toBe('#f5efe3');
+    meta.remove();
+  });
+
   it('still applies the theme when storage is blocked', () => {
     vi.stubGlobal('localStorage', {
       setItem: () => {
