@@ -50,7 +50,6 @@ describe('buildStyle', () => {
       'road_major',
       'water',
       'occ-fill',
-      'occ-fresh-fill',
       'place_city',
       'place_country',
       'hover-line',
@@ -62,7 +61,7 @@ describe('buildStyle', () => {
       'record-edge',
       'selected-record',
     ]);
-    expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'occ-fresh', 'hover', 'selected', 'near']);
+    expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'hover', 'selected', 'near']);
     // Cell ids let arriving tiles update the hexes in place.
     expect(style.sources['occ']).toMatchObject({ promoteId: 'id' });
     expect(style.projection).toEqual({ type: 'globe' });
@@ -116,14 +115,7 @@ describe('buildStyle', () => {
     const asked: string[] = [];
     const style = await buildStyle('satellite', 'dark', COLORS, DATA, async (url) => (asked.push(url), vectorBase));
     expect(asked).toEqual(['https://tiles.openfreemap.org/styles/dark']);
-    expect(ids(style).slice(0, 6)).toEqual([
-      'background',
-      'base',
-      'occ-fill',
-      'occ-fresh-fill',
-      'place_city',
-      'place_country',
-    ]);
+    expect(ids(style).slice(0, 5)).toEqual(['background', 'base', 'occ-fill', 'place_city', 'place_country']);
     expect(style.sources['base']).toMatchObject({ type: 'raster', tileSize: 256 });
     expect(layer(style, 'place_city')['paint']).toMatchObject({ 'text-color': '#t', 'text-halo-color': '#b' });
   });
@@ -212,8 +204,11 @@ describe('map GeoJSON', () => {
     ];
     const feature = (geometry: GeoJSON.Geometry, total?: number) =>
       ({ geometry, properties: total === undefined ? {} : { total } }) as unknown as MapGeoJSONFeature;
-    const geometry = geometryOf(feature({ type: 'Polygon', coordinates: [square] }, 42));
+    const hex = feature({ type: 'Polygon', coordinates: [square] }, 42);
+    const geometry = geometryOf(hex);
     expect(geometry).toMatchObject({ tileTotal: 42, wkt: 'POLYGON((0 0,1 0,1 1,0 1,0 0))' });
+    // Built once per feature: the map asks it of every cell on every draw.
+    expect(geometryOf(hex)).toBe(geometry);
     expect(geometryOf(feature({ type: 'MultiPolygon', coordinates: [[square]] }))?.tileTotal).toBe(0);
     expect(geometryOf(feature({ type: 'Point', coordinates: [0, 0] }))).toBeNull();
     expect(

@@ -10,21 +10,24 @@
  *   once you let go;
  * - an inertia glide or a flight (easeTo/flyTo) starts loading where it will
  *   end as soon as it starts.
+ * Tiles are decoded off the main thread (hexDecoder.ts). Only the view's
+ * cells are drawn; the ring's wait in the cache until a pan brings them in.
  * Cells arriving for the view are passed on as changes (onChanges); a new
  * level or new filters swap the whole set once its view is loaded (onCells),
  * so the old hexes stay up until then.
  */
 import type { EaseToOptions, FlyToOptions, LngLatLike, Map as MlMap, PointLike } from 'maplibre-gl';
 import { $gbifStale, countRequest, needsAdhoc, occurrenceTileTemplate, type TileFilter } from '~/lib/gbif';
+import { decodeOffThread } from './hexDecoder';
 import {
   adhocLevel,
-  decodeHexes,
   gridLevel,
   HEX_PER_TILE,
   mergeHexes,
   ringAround,
   shiftTiles,
   tileAt,
+  tileCoordinateKey,
   tilesFor,
   type Hex,
   type LngLat,
@@ -35,8 +38,11 @@ import {
 const CACHE_TILES = 512;
 /** Tile requests in flight at once. */
 const CONCURRENCY = 8;
-/** How often a drag re-plans the tiles it needs. */
-const MOVE_EVERY_MS = 200;
+/**
+ * How often a drag or glide checks which tiles are in view. Cheap (sampling the
+ * view); the costly re-plan and draw only follow when the tiles change.
+ */
+const MOVE_EVERY_MS = 50;
 /**
  * Screen points sampled per side to find the tiles in view. A tile is at
  * least 512 px wide at the centre; at the globe's edge it narrows, so sample
@@ -259,20 +265,25 @@ class OccLayerController {
       return undefined;
     }
     try {
-      return await decodeHexes(await response.arrayBuffer(), tile, level);
+      return await decodeOffThread(await response.arrayBuffer(), tile, level);
     } catch {
       // Cancelled mid-body (a zoom or new filters), or a tile that would not decode: left unloaded, asked for again next plan.
       return undefined;
     }
   }
 
-  /** The cells of the wanted tiles that are loaded. */
+  /**
+   * The loaded cells of the view's tiles. The ring is merged in for its home
+   * counts but not drawn: sending its cells to MapLibre's worker as well
+   * roughly triples the copy that stalls a frame on every new level.
+   */
   #wantedCells(): Map<string, Hex> {
     const { filter, level, view, ring } = this.#want;
-    const tiles = [...view, ...ring];
-    const merged = mergeHexes(tiles.map((tile) => this.#cache.get(tileKey(filter, level, tile)) ?? []));
+    const hexesOf = (tile: TileId) => this.#cache.get(tileKey(filter, level, tile)) ?? [];
+    const inView = new Set(view.flatMap(hexesOf).map((hex) => hex.properties.id));
+    const merged = mergeHexes([...view, ...ring].map(hexesOf));
     const { isEmpty } = this.#options;
-    if (isEmpty) for (const [id, hex] of merged) if (isEmpty(hex)) merged.delete(id);
+    for (const [id, hex] of merged) if (!inView.has(id) || isEmpty?.(hex)) merged.delete(id);
     return merged;
   }
 
@@ -387,13 +398,17 @@ class OccLayerController {
     this.#plan(tilesFor(this.#viewPoints(), this.#level));
   }
 
-  /** While dragging: re-plan now and then, at the level shown (zooming changes it at moveend). */
+  /** While dragging: re-plan once other tiles come into view, at the level shown (zooming changes it at moveend). */
   readonly #onMove = () => {
     const now = performance.now();
     if (now - this.#lastMoveAt < MOVE_EVERY_MS) return;
     this.#lastMoveAt = now;
     const map = this.#map;
-    if (this.#levelAt(map.getZoom(), map.getCenter().lat) === this.#level) this.#planView();
+    if (this.#levelAt(map.getZoom(), map.getCenter().lat) !== this.#level) return;
+    const view = tilesFor(this.#viewPoints(), this.#level);
+    const shown = new Set(this.#want.view.map(tileCoordinateKey));
+    const isSameView = view.length === shown.size && view.every((tile) => shown.has(tileCoordinateKey(tile)));
+    if (!isSameView) this.#plan(view);
   };
 
   readonly #onMoveEnd = () => {

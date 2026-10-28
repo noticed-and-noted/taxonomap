@@ -124,7 +124,8 @@ function offsetTile(tile: TileId, dx: number, dy: number, tileCount: number): Ti
   return { x: (((tile.x + dx) % tileCount) + tileCount) % tileCount, y: row };
 }
 
-const tileCoordinateKey = (tile: TileId) => `${tile.x}/${tile.y}`;
+/** A tile's x/y as a key, to compare sets of tiles at one level. */
+export const tileCoordinateKey = (tile: TileId) => `${tile.x}/${tile.y}`;
 
 /** The nine (dx, dy) steps to a tile and its eight neighbours. */
 const NEIGHBOURHOOD = [-1, 0, 1].flatMap((dy) => [-1, 0, 1].map((dx) => [dx, dy] as const));

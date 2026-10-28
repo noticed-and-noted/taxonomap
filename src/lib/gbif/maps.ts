@@ -62,7 +62,10 @@ export function tileParams(filter: TileFilter, style: TileStyle = {}, format: Ti
 /** XYZ template for MapLibre. Uses adhoc only when a filter requires it. */
 export function occurrenceTileTemplate(filter: TileFilter, style: TileStyle = {}, format: TileFormat = 'png'): string {
   const kind = needsAdhoc(filter) ? 'adhoc' : 'density';
-  const queryString = toQueryString(tileParams(filter, style, format));
+  // Density tiles leave out records with geospatial issues; adhoc ones must be told to, or their cells
+  // disagree with the area queries (a cell of only flagged records shows, then counts as empty).
+  const params = { ...tileParams(filter, style, format), hasGeospatialIssue: kind === 'adhoc' ? false : undefined };
+  const queryString = toQueryString(params);
   return `${GBIF_TILE_BASE}/v2/map/occurrence/${kind}/{z}/{x}/{y}${suffix(format)}${queryString ? `?${queryString}` : ''}`;
 }
 

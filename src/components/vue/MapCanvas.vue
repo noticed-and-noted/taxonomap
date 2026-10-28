@@ -18,14 +18,12 @@ import {
   fillColor,
   geometryOf,
   nearGeoJson,
-  occOpacity,
   RECORD_DOT_LAYER,
   recordDotMinZoom,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
-import { needsAdhoc } from '~/lib/gbif';
-import { checkCells, createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
+import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { createRecordFit } from '~/lib/map/recordFit';
@@ -94,66 +92,21 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
   (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
-/** The map's two hex layers: settled cells and ones fading in. */
-const HEX_LAYERS = ['occ-fill', 'occ-fresh-fill'];
+/** The map's hex layer. */
+const HEX_LAYER = 'occ-fill';
 
-/** Colour both hex layers with the bins for this grid level. */
+/** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
-  for (const id of HEX_LAYERS) {
-    if (map?.getLayer(id)) map.setPaintProperty(id, 'fill-color', fillColor(level));
-  }
+  if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', fillColor(level));
 }
 
-/** How long arriving cells take to fade in. */
-const FADE_MS = 180;
-/** Cells fading in on `occ-fresh`, and the fade they belong to. */
-let fresh: Hex[] = [];
-let fade = 0;
-let fadeTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** Move cells that have faded in onto `occ`. */
-function settleFresh() {
-  clearTimeout(fadeTimer);
-  if (!fresh.length) return;
-  const mine = fade;
-  const src = map?.getSource('occ') as GeoJSONSource | undefined;
-  void src?.updateData({ add: fresh }).then(() => {
-    // A newer fade may have started meanwhile; its cells stay.
-    if (mine === fade) setData('occ-fresh', EMPTY);
-  });
-  fresh = [];
-}
-
-/** Cells arriving as you pan: removed ones go at once, new ones fade in. */
+/** Cells arriving or leaving as you pan, sent to MapLibre's worker as one diff (no fade-in: that sent each cell twice). */
 function changeHexes(add: Hex[], remove: string[]) {
-  settleFresh();
-  const src = map?.getSource('occ') as GeoJSONSource | undefined;
-  if (!map || !src) return;
-  if (remove.length) void src.updateData({ remove });
-  if (!add.length) return;
-  if (prefersReducedMotion()) {
-    void src.updateData({ add });
-    return;
-  }
-  const activeMap = map;
-  fresh = add;
-  fade++;
-  setData('occ-fresh', { type: 'FeatureCollection', features: add });
-  activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: 0, delay: 0 });
-  activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity', 0);
-  requestAnimationFrame(() => {
-    activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: FADE_MS, delay: 0 });
-    activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity', occOpacity(activeMap.getZoom()));
-  });
-  fadeTimer = setTimeout(settleFresh, FADE_MS + 20);
+  void (map?.getSource('occ') as GeoJSONSource | undefined)?.updateData({ add, remove });
 }
 
-/** A whole new set of cells (new level or filters): no fade, nothing left mid-fade. */
+/** A whole new set of cells (new level or filters). */
 function replaceHexes(collection: GeoJSON.FeatureCollection) {
-  clearTimeout(fadeTimer);
-  fresh = [];
-  fade++;
-  setData('occ-fresh', EMPTY);
   setData('occ', collection);
 }
 
@@ -399,37 +352,6 @@ function knownEmpty(hex: Hex): boolean {
   return !!geometry && knownCount(filter, geometry.wkt) === 0;
 }
 
-/** Estimates at or below this are checked for empty cells. */
-const SPARSE_MAX = 3;
-/** Most cells checked per draw. */
-const MAX_CHECKS = 40;
-
-/**
- * Adhoc tiles snap records to a coarse grid (lib/map/occGrid.ts), so a record
- * near an edge can make a neighbouring cell that holds none. Check low
- * estimates in view, once its tiles have loaded (not on every arrival), and
- * drop the cells that come back empty.
- * shortcut: only estimates ≤ SPARSE_MAX, at most MAX_CHECKS per view; a larger phantom cell goes when hovered.
- */
-function checkSparse() {
-  const filter = $occurrenceFilter.get();
-  const bounds = $mapBounds.get();
-  if (!occ || !needsAdhoc(filter) || !bounds || $mapLoad.get().loading) return;
-  const inView = (hex: Hex) => {
-    const [lng, lat] = hex.geometry.coordinates[0]![0]!;
-    return lng! >= bounds[0] && lng! <= bounds[2] && lat! >= bounds[1] && lat! <= bounds[3];
-  };
-  const wkts = (occ.collection().features as Hex[])
-    .filter((candidate) => candidate.properties.total <= SPARSE_MAX && inView(candidate))
-    .flatMap((hex) => geometryOf(hex)?.wkt ?? [])
-    .filter((wkt) => knownCount(filter, wkt) === undefined)
-    .slice(0, MAX_CHECKS);
-  checkCells(filter, wkts).then(
-    (hasEmpty) => hasEmpty && filter === $occurrenceFilter.get() && occ?.redraw(),
-    () => undefined, // The estimates stay up.
-  );
-}
-
 function clearHover() {
   hoverCounter.cancel();
   tooltip.value = null;
@@ -517,14 +439,8 @@ function occLayerOptions(): OccLayerOptions {
     filter: () => $occurrenceFilter.get(),
     listenFilter: (onChange) => $occurrenceFilter.listen(onChange),
     isEmpty: knownEmpty,
-    onCells: (cells) => {
-      replaceHexes(cells);
-      checkSparse();
-    },
-    onChanges: (add, remove) => {
-      changeHexes(add, remove);
-      checkSparse();
-    },
+    onCells: replaceHexes,
+    onChanges: changeHexes,
     onLevel: (level) => {
       $gridLevel.set(level);
       paintHexes(level);
@@ -574,8 +490,10 @@ function publishBounds() {
 /** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
 function publishEmpty() {
   if (!map || $mapLoad.get().loading) return;
-  const layers = HEX_LAYERS.filter((id) => map!.getLayer(id));
-  $viewCheck.set({ isEmpty: !failed.value && layers.length > 0 && !map.queryRenderedFeatures({ layers }).length });
+  const hasLayer = Boolean(map.getLayer(HEX_LAYER));
+  $viewCheck.set({
+    isEmpty: !failed.value && hasLayer && !map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length,
+  });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
@@ -638,20 +556,15 @@ function listenToMap() {
   cleanups.push(() => map?.getCanvas().removeEventListener('keydown', onKey));
 }
 
-/** The hex tiles for the view are all in: repaint, and check the view's sparse cells. */
+/** The hex tiles for the view are all in: repaint. */
 function onLoadChange(load: { loading: boolean }) {
-  if (load.loading) return;
   // A load that drew nothing new renders nothing, so no idle follows: ask for one.
-  map?.triggerRepaint();
-  // The last tile may draw no change, so no onChanges would check the view.
-  checkSparse();
+  if (!load.loading) map?.triggerRepaint();
 }
 
 /** Store → map: view, basemap, ramp, selection, mode, "near me" and fly requests. */
 function listenToStores() {
   cleanups.push(
-    // Cells drawn off-screen are checked once they come into view.
-    $mapBounds.listen(checkSparse),
     $basemap.listen(() => void rebuildStyle()),
     $mapLoad.listen(onLoadChange),
     // A new density ramp only repaints the hexes.
