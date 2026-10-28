@@ -58,6 +58,17 @@ describe('useNameSearch', () => {
     search.stop();
   });
 
+  it('orders each wave on its own, so late live hits never move the index hits', async () => {
+    gbif();
+    const { sortByRank } = await import('~/lib/gbif');
+    const search = await setup({ max: 8, order: sortByRank });
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    // The live genera sort before species by rank, but stay below the index's species.
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564, 1, 2]));
+    search.stop();
+  });
+
   it('leaves out excluded keys and stops at the maximum', async () => {
     gbif();
     const search = await setup({ max: 2, exclude: () => [2492462] });

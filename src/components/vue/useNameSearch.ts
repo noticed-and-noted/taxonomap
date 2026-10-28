@@ -19,6 +19,11 @@ export interface NameSearchOptions {
   max: number;
   /** Keys to leave out (e.g. taxa already picked). */
   exclude?: () => Iterable<number>;
+  /**
+   * Orders each wave of hits (index, then live) on its own, so late live hits
+   * only ever land below the index hits already on screen.
+   */
+  order?: (hits: readonly NameHit[]) => NameHit[];
 }
 
 /** Live scientific matches are mostly noise once the index has answers, so only a few are kept then. */
@@ -27,17 +32,16 @@ const MAX_LIVE_HITS_WITH_INDEX = 3;
 const THIN_INDEX_HITS = 5;
 const INDEX_WAIT_MS = 1500;
 
-/** Index hits then live hits, without repeats or excluded keys, up to `max`. */
+/** Index hits then live hits, each wave in `order`, without repeats or excluded keys, up to `max`. */
 function mergeHits(
   indexHits: readonly NameHit[],
   liveHits: readonly NameHit[],
-  excluded: Iterable<number>,
-  max: number,
+  { exclude, max, order = (hits) => [...hits] }: NameSearchOptions,
 ): NameHit[] {
-  const seen = new Set(excluded);
+  const seen = new Set(exclude?.() ?? []);
   const merged: NameHit[] = [];
   const live = indexHits.length ? liveHits.slice(0, MAX_LIVE_HITS_WITH_INDEX) : liveHits;
-  for (const hit of [...indexHits, ...live]) {
+  for (const hit of [...order(indexHits), ...order(live)]) {
     if (seen.has(hit.key)) continue;
     seen.add(hit.key);
     merged.push(hit);
@@ -120,7 +124,7 @@ function useLiveHits(prepare: (text: string) => Promise<number>) {
  * Search for taxa by name: the baked index answers at once, GBIF's live providers follow.
  * @returns Merged `hits`, `loading` and `failed` flags, `search(text)` to call on every input, and `reset()`.
  */
-export function useNameSearch({ max, exclude }: NameSearchOptions) {
+export function useNameSearch(options: NameSearchOptions) {
   const indexHits = ref<NameHit[]>([]);
   let current = '';
 
@@ -137,7 +141,7 @@ export function useNameSearch({ max, exclude }: NameSearchOptions) {
     return indexHits.value.length;
   });
 
-  const hits = computed(() => mergeHits(indexHits.value, live.hits.value, exclude?.() ?? [], max));
+  const hits = computed(() => mergeHits(indexHits.value, live.hits.value, options));
 
   function reset() {
     current = '';

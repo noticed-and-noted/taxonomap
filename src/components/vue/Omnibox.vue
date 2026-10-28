@@ -60,6 +60,7 @@ const {
   reset: resetSearch,
 } = useNameSearch({
   max: MAX_RESULTS,
+  order: sortByRank,
 });
 /** Showing place results rather than species and groups; typing keeps it. */
 const inPlaces = ref(false);
@@ -95,7 +96,7 @@ const placeholderRows = computed(() => (searching.value ? Math.max(0, 3 - listOp
 const options = computed<Option[]>(() => {
   const rows: Option[] = inPlaces.value
     ? places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }))
-    : sortByRank(taxa.value).map((hit) => ({ kind: 'taxon', id: `omni-taxon-${hit.key}`, hit }));
+    : taxa.value.map((hit) => ({ kind: 'taxon', id: `omni-taxon-${hit.key}`, hit }));
   if (query.value.trim().length >= 2) {
     rows.push(
       inPlaces.value

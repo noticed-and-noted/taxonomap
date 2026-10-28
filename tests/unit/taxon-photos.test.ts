@@ -204,6 +204,23 @@ describe('taxon photos', () => {
     expect(label(images.get(8)!)).toBe('inat:3');
   });
 
+  it('matches by GBIF’s name when iNaturalist ranks the group differently', async () => {
+    network({
+      // GBIF's order Cetacea is an infraorder inside iNaturalist's order Artiodactyla.
+      records: { 733: { taxonID: '41481', order: 'Cetacea' } as { taxonID: string } },
+      taxa: {
+        41481: taxon(41481, 10, [photo(1)], [1, 152870, 152871, 41481]),
+        152870: { ...taxon(152870, 40, [photo(2)], [1, 152870]), name: 'Artiodactyla' },
+        152871: { ...taxon(152871, 35, [photo(3)], [1, 152870, 152871]), name: 'Cetacea' },
+      },
+      voted: {},
+      gbifInat: {},
+      gbifAny: {},
+    });
+    const loaded = await load();
+    expect(label((await loaded.leadPhoto({ key: 733, rank: 'ORDER' }))!)).toBe('inat:3');
+  });
+
   it('caps the list at 20 photos', async () => {
     network({
       records: { 1: { taxonID: '11' } },
@@ -485,7 +502,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     const world = { ...base, records: recordsFor(1, 2), taxa: speciesTaxa(101, 102) };
     network(world);
     await (await load()).leadPhotos(species(1, 2));
-    expect(JSON.parse(store.get('inat-ids')!)).toEqual([
+    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
       [1, 101],
       [2, 102],
     ]);
@@ -500,11 +517,11 @@ describe('finding iNaturalist taxa cheaply', () => {
   });
 
   it('forgets a remembered ID iNaturalist no longer has, so the next visit looks it up afresh', async () => {
-    const store = stubStorage({ 'inat-ids': JSON.stringify([[1, 999]]) });
+    const store = stubStorage({ 'inat-ids-v2': JSON.stringify([[1, 999]]) });
     network({ ...base, gbifAny: { 1: [occ(11, 'g.jpg')] } });
     const { images } = await (await load()).leadPhotos(species(1));
     expect(label(images.get(1)!)).toBe('gbif:g.jpg');
-    expect(JSON.parse(store.get('inat-ids')!)).toEqual([]);
+    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([]);
   });
 
   it('finds a species GBIF holds no record of by its name', async () => {
@@ -541,7 +558,7 @@ describe('finding iNaturalist taxa cheaply', () => {
       'gbif:i.jpg',
       'gbif:j.jpg',
     ]);
-    expect(JSON.parse(store.get('inat-ids')!)).toEqual([
+    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
       [2, 102],
       [1, 901],
     ]);
@@ -612,7 +629,7 @@ describe('remembered iNaturalist IDs', () => {
 
   it('reads what an earlier visit stored, ignoring what is not an ID pair', async () => {
     stubStorage({
-      'inat-ids': JSON.stringify([
+      'inat-ids-v2': JSON.stringify([
         [1, 11],
         ['x', 2],
         [3, 'y'],
@@ -624,7 +641,7 @@ describe('remembered iNaturalist IDs', () => {
   });
 
   it('starts empty when the stored value is not JSON', async () => {
-    stubStorage({ 'inat-ids': '{' });
+    stubStorage({ 'inat-ids-v2': '{' });
     expect((await load()).knownInatId(1)).toBeUndefined();
   });
 
@@ -643,14 +660,14 @@ describe('remembered iNaturalist IDs', () => {
     loaded.forgetInatId(9);
     loaded.forgetInatId(2);
     expect(setItem).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(store.get('inat-ids')!)).toEqual([[1, 12]]);
+    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([[1, 12]]);
   });
 
   it('keeps the newest 3000', async () => {
     const store = stubStorage();
     const loaded = await load();
     loaded.rememberInatIds(new Map(Array.from({ length: 3002 }, (_unused, index) => [index, index + 1])));
-    const kept = JSON.parse(store.get('inat-ids')!) as [number, number][];
+    const kept = JSON.parse(store.get('inat-ids-v2')!) as [number, number][];
     expect(kept).toHaveLength(3000);
     expect(kept[0]).toEqual([2, 3]);
   });
