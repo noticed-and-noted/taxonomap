@@ -23,8 +23,7 @@ import {
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
-import { needsAdhoc } from '~/lib/gbif';
-import { checkCells, createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
+import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { createRecordFit } from '~/lib/map/recordFit';
@@ -353,37 +352,6 @@ function knownEmpty(hex: Hex): boolean {
   return !!geometry && knownCount(filter, geometry.wkt) === 0;
 }
 
-/** Estimates at or below this are checked for empty cells. */
-const SPARSE_MAX = 3;
-/** Most cells checked per draw. */
-const MAX_CHECKS = 40;
-
-/**
- * Adhoc tiles snap records to a coarse grid (lib/map/occGrid.ts), so a record
- * near an edge can make a neighbouring cell that holds none. Check low
- * estimates in view, once its tiles have loaded (not on every arrival), and
- * drop the cells that come back empty.
- * shortcut: only estimates ≤ SPARSE_MAX, at most MAX_CHECKS per view; a larger phantom cell goes when hovered.
- */
-function checkSparse() {
-  const filter = $occurrenceFilter.get();
-  const bounds = $mapBounds.get();
-  if (!occ || !needsAdhoc(filter) || !bounds || $mapLoad.get().loading) return;
-  const inView = (hex: Hex) => {
-    const [lng, lat] = hex.geometry.coordinates[0]![0]!;
-    return lng! >= bounds[0] && lng! <= bounds[2] && lat! >= bounds[1] && lat! <= bounds[3];
-  };
-  const wkts = (occ.collection().features as Hex[])
-    .filter((candidate) => candidate.properties.total <= SPARSE_MAX && inView(candidate))
-    .flatMap((hex) => geometryOf(hex)?.wkt ?? [])
-    .filter((wkt) => knownCount(filter, wkt) === undefined)
-    .slice(0, MAX_CHECKS);
-  checkCells(filter, wkts).then(
-    (hasEmpty) => hasEmpty && filter === $occurrenceFilter.get() && occ?.redraw(),
-    () => undefined, // The estimates stay up.
-  );
-}
-
 function clearHover() {
   hoverCounter.cancel();
   tooltip.value = null;
@@ -471,14 +439,8 @@ function occLayerOptions(): OccLayerOptions {
     filter: () => $occurrenceFilter.get(),
     listenFilter: (onChange) => $occurrenceFilter.listen(onChange),
     isEmpty: knownEmpty,
-    onCells: (cells) => {
-      replaceHexes(cells);
-      checkSparse();
-    },
-    onChanges: (add, remove) => {
-      changeHexes(add, remove);
-      checkSparse();
-    },
+    onCells: replaceHexes,
+    onChanges: changeHexes,
     onLevel: (level) => {
       $gridLevel.set(level);
       paintHexes(level);
@@ -594,20 +556,15 @@ function listenToMap() {
   cleanups.push(() => map?.getCanvas().removeEventListener('keydown', onKey));
 }
 
-/** The hex tiles for the view are all in: repaint, and check the view's sparse cells. */
+/** The hex tiles for the view are all in: repaint. */
 function onLoadChange(load: { loading: boolean }) {
-  if (load.loading) return;
   // A load that drew nothing new renders nothing, so no idle follows: ask for one.
-  map?.triggerRepaint();
-  // The last tile may draw no change, so no onChanges would check the view.
-  checkSparse();
+  if (!load.loading) map?.triggerRepaint();
 }
 
 /** Store → map: view, basemap, ramp, selection, mode, "near me" and fly requests. */
 function listenToStores() {
   cleanups.push(
-    // Cells drawn off-screen are checked once they come into view.
-    $mapBounds.listen(checkSparse),
     $basemap.listen(() => void rebuildStyle()),
     $mapLoad.listen(onLoadChange),
     // A new density ramp only repaints the hexes.
