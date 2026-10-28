@@ -130,19 +130,27 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
         void import('workbox-window').then(({ Workbox }) => {
           const wb = new Workbox('/sw.js');
           let isUpdateRequested = false;
-          wb.addEventListener('waiting', () =>
+          let isSilentUpdate = false;
+          wb.addEventListener('waiting', (event) => {
+            // Already waiting when this page loaded (a reload): pages are network-only, so this page is already the
+            // new deploy; a reload alone never activates a waiting worker, so take it over now without another reload.
+            if (event.wasWaitingBeforeRegister) {
+              isSilentUpdate = true;
+              wb.messageSkipWaiting();
+              return;
+            }
             $applyUpdate.set(() => {
               isUpdateRequested = true;
               wb.messageSkipWaiting();
-            }),
-          );
+            });
+          });
           // Workbox's isUpdate stays false for a page first opened without a worker, so track it here:
           // the first worker to take control on a first visit isn't an update.
           let hasWorker = Boolean(navigator.serviceWorker.controller);
           // This tab asked for the update: reload into it. Another tab did: offer the reload here too.
           wb.addEventListener('controlling', () => {
             if (isUpdateRequested) window.location.reload();
-            else if (hasWorker) $applyUpdate.set(() => window.location.reload());
+            else if (hasWorker && !isSilentUpdate) $applyUpdate.set(() => window.location.reload());
             hasWorker = true;
           });
           // Browsers only check for a new worker on full page loads; ClientRouter swaps aren't, so check here too,
