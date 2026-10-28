@@ -72,7 +72,7 @@ export default defineConfig(
   },
   {
     // Readability rules for source code (tests are exempt from the length limits).
-    files: ['src/**/*.{ts,vue,astro}', 'scripts/**/*.ts', 'functions/**/*.ts', 'integrations/**/*.ts'],
+    files: ['src/**/*.{ts,vue,astro}', 'scripts/**/*.ts', 'integrations/**/*.ts'],
     rules: {
       'id-length': ['error', { min: 2, properties: 'never' }],
       'max-depth': ['error', 3],
@@ -83,7 +83,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['src/**/*.{ts,vue}', 'functions/**/*.ts', 'integrations/**/*.ts'],
+    files: ['src/**/*.{ts,vue}', 'integrations/**/*.ts'],
     plugins: { local: { rules: { 'require-export-docs': requireExportDocs } } },
     rules: { 'local/require-export-docs': 'error' },
   },

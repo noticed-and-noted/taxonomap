@@ -14,7 +14,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // Vue and Astro files are covered by the Playwright journeys, not measured here.
-      include: ['src/**/*.ts', 'functions/**/*.ts', 'integrations/**/*.ts'],
+      include: ['src/**/*.ts', 'integrations/**/*.ts'],
       exclude: ['src/**/*.d.ts', '**/types.ts'],
       reporter: ['text-summary', 'html'],
       thresholds: {
@@ -23,11 +23,10 @@ export default defineConfig({
         statements: 90,
         functions: 90,
         branches: 85,
-        // The libraries, stores, endpoints and Pages Functions are fully covered.
+        // The libraries, stores and endpoints are fully covered.
         'src/lib/**': FULL,
         'src/stores/**': FULL,
         'src/pages/**': FULL,
-        'functions/**': FULL,
       },
     },
   },

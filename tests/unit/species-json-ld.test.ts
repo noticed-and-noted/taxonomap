@@ -43,4 +43,22 @@ describe('speciesJsonLd', () => {
     expect(crumbs.itemListElement[0]?.['item']).toBe('https://app.taxonomap.com/tree/?focus=1');
     expect(crumbs.itemListElement[3]?.['item']).toBe(PAGE_URL);
   });
+
+  it('falls back to the scientific name and GBIF alone when there is no common name or Wikipedia page', () => {
+    const { commonName: _omitted, ...scientificOnly } = ROBIN;
+    const [bare, bareCrumbs] = (
+      speciesJsonLd({
+        data: { ...scientificOnly, classification: [] },
+        pageUrl: PAGE_URL,
+        siteUrl: 'https://app.taxonomap.com',
+        description: 'Robins.',
+      }) as { '@graph': [Record<string, unknown>, { itemListElement: Record<string, unknown>[] }] }
+    )['@graph'];
+    expect(bare).not.toHaveProperty('alternateName');
+    expect(bare).not.toHaveProperty('parentTaxon');
+    expect(bare['sameAs']).toEqual(['https://www.gbif.org/species/2492462']);
+    expect(bareCrumbs.itemListElement).toEqual([
+      { '@type': 'ListItem', position: 1, name: 'Erithacus rubecula', item: PAGE_URL },
+    ]);
+  });
 });
