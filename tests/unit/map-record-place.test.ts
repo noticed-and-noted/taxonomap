@@ -31,4 +31,8 @@ describe('recordPlace', () => {
   it('keeps the point when another dataset withholds information', () => {
     expect(recordPlace(record({ informationWithheld: BLURRED }))?.type).toBe('Point');
   });
+
+  it('keeps the point for an iNaturalist record that withholds nothing', () => {
+    expect(recordPlace(record({ datasetKey: INATURALIST_DATASET_KEY }))?.type).toBe('Point');
+  });
 });

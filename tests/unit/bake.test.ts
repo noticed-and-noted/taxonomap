@@ -287,7 +287,16 @@ describe('bake with iNaturalist IDs', () => {
   it('keeps the IDs the last bake found, looking up only the species without one', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'baked-'));
     try {
-      writeFileSync(join(dir, 'names.json'), JSON.stringify({ names: [[11, 'S', 'Species number11', null, 1, 555]] }));
+      writeFileSync(
+        join(dir, 'names.json'),
+        // Species 12 was baked before without a match, so it is looked up again.
+        JSON.stringify({
+          names: [
+            [11, 'S', 'Species number11', null, 1, 555],
+            [12, 'S', 'Species number12', null, 1],
+          ],
+        }),
+      );
       const calls = gbif(inat);
       await (await bake({ BAKE_DIR: dir, NAME_INDEX_SIZE: '3' })).bakeToDisk();
       const { names } = JSON.parse(readFileSync(join(dir, 'names.json'), 'utf8')) as NamesSnapshot;
@@ -297,6 +306,19 @@ describe('bake with iNaturalist IDs', () => {
       ]);
       const recordSearches = calls.filter((url) => url.searchParams.has('datasetKey'));
       expect(recordSearches.flatMap((url) => url.searchParams.getAll('speciesKey'))).not.toContain('11');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('looks every species up again when asked to refresh the IDs', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baked-'));
+    try {
+      writeFileSync(join(dir, 'names.json'), JSON.stringify({ names: [[11, 'S', 'Species number11', null, 1, 555]] }));
+      const calls = gbif(inat);
+      await (await bake({ BAKE_DIR: dir, NAME_INDEX_SIZE: '3', INAT_IDS_REFRESH: '1' })).bakeToDisk();
+      const recordSearches = calls.filter((url) => url.searchParams.has('datasetKey'));
+      expect(recordSearches.flatMap((url) => url.searchParams.getAll('speciesKey'))).toContain('11');
     } finally {
       rmSync(dir, { recursive: true });
     }

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRecordFit } from '~/lib/map/recordFit';
 import { $selectedHex } from '~/stores/explorer';
 
-vi.mock('~/stores/reading', () => ({ prefersReducedMotion: () => true }));
+const motion = vi.hoisted(() => ({ isReduced: true }));
+vi.mock('~/stores/reading', () => ({ prefersReducedMotion: () => motion.isReduced }));
 
 const SIZE_PX = 100;
 const NONE_COVERED = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -61,7 +62,10 @@ function setup() {
 }
 
 describe('createRecordFit', () => {
-  beforeEach(() => $selectedHex.set([0, 0]));
+  beforeEach(() => {
+    $selectedHex.set([0, 0]);
+    motion.isReduced = true;
+  });
 
   it('leaves the map alone when the whole area is in view', () => {
     const { fitBox, follow } = setup();
@@ -104,5 +108,36 @@ describe('createRecordFit', () => {
     follow(square(-2, -2, 2));
     expect(map.easeTo).toHaveBeenCalledTimes(1);
     expect(fitBox).toHaveBeenLastCalledWith([-2, -2, 0, 0], 6);
+  });
+
+  it('glides back unless motion is reduced', () => {
+    motion.isReduced = false;
+    const { map, follow } = setup();
+    follow(square(0, 0, 2));
+    follow(null);
+    expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({ duration: expect.any(Number) }));
+    expect(map.easeTo.mock.calls[0]![0]).not.toMatchObject({ duration: 0 });
+  });
+
+  it('leaves the map alone for an area with no ring', () => {
+    const { fitBox, follow } = setup();
+    follow({ type: 'Polygon', coordinates: [] });
+    expect(fitBox).not.toHaveBeenCalled();
+  });
+
+  it('ignores the end of a fit it has since gone back from', () => {
+    const map = fakeMap();
+    // This fit's move is still under way when the next record opens.
+    const fitBox = vi.fn();
+    const follow = createRecordFit({ map: map as unknown as MlMap, coveredEdges: () => NONE_COVERED, fitBox });
+    follow(square(0, 0, 2));
+    follow(square(-2, -2, 2));
+    expect(map.stop).toHaveBeenCalledOnce();
+    expect(fitBox).toHaveBeenCalledTimes(2);
+    // The second fit's view is taken when its own move ends, not the first's.
+    map.camera.lng = 9;
+    map.moveEnd();
+    follow(null);
+    expect(map.easeTo).toHaveBeenLastCalledWith(expect.objectContaining({ center: [0, 0] }));
   });
 });

@@ -8,6 +8,7 @@
 import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData } from '~/lib/species/data';
+import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
 import { wikipediaIntro } from '~/lib/species/wikipedia';
 import { full } from '~/lib/format';
@@ -43,20 +44,14 @@ const description =
   (topCountries ? `, most from ${topCountries}` : '') +
   '. See where and when it has been recorded, photos, common names and similar species.';
 
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'Taxon',
-  name: data.canonicalName,
-  ...(data.commonName && { alternateName: data.commonName }),
-  taxonRank: data.rank.toLowerCase(),
-  identifier: `https://www.gbif.org/species/${data.key}`,
-  ...(data.classification.length && {
-    parentTaxon: {
-      '@type': 'Taxon',
-      name: data.classification[data.classification.length - 1]?.name,
-    },
-  }),
-};
+const siteUrl = String(Astro.site);
+const jsonLd = speciesJsonLd({
+  data,
+  pageUrl: new URL(Astro.url.pathname, siteUrl).href,
+  siteUrl,
+  description,
+  wikipediaUrl: intro?.url,
+});
 ---
 
 <BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>

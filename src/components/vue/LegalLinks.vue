@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /** Links to the privacy notice and the terms and credits; static, so it renders without hydrating. */
 const LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms and credits' },
+  { href: '/privacy/', label: 'Privacy' },
+  { href: '/terms/', label: 'Terms and credits' },
 ];
 </script>
 

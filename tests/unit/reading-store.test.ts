@@ -39,6 +39,8 @@ describe('reading store', () => {
   it('ignores corrupt or unknown saved values', async () => {
     localStorage.setItem('reading', '{"textSize":"huge","reduceMotion":"yes"}');
     expect((await store()).$reading.get()).toEqual((await store()).DEFAULT_READING);
+    localStorage.setItem('reading', 'null');
+    expect((await store()).$reading.get()).toEqual((await store()).DEFAULT_READING);
     localStorage.setItem('reading', 'not json');
     expect((await store()).$reading.get().textSize).toBe('normal');
   });

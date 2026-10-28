@@ -7,39 +7,25 @@
 import { useStore } from '@nanostores/vue';
 import { $gbifStale } from '~/lib/gbif';
 import { $applyUpdate } from '~/stores/app-update';
+import BusyNotice from './BusyNotice.vue';
+import UpdateNotice from './UpdateNotice.vue';
+
+const { onMap = false } = defineProps<{
+  /** The map shows both notes itself, above its loading ring (MapProgress). */
+  onMap?: boolean;
+}>();
 
 const stale = useStore($gbifStale);
 const applyUpdate = useStore($applyUpdate);
-const dismiss = () => $gbifStale.set(false);
 </script>
 
 <template>
   <Transition name="fade">
-    <div
-      v-if="applyUpdate"
-      role="status"
-      class="update-notice fixed inset-x-3 z-30 flex items-center gap-2 rounded-md border border-border bg-surface py-1.5 pr-1.5 pl-3 text-xs text-muted shadow-panel sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
-    >
-      <span class="size-1.5 rounded-full bg-accent" aria-hidden="true"></span>
-      A new version of Taxonomap is available.
-      <!-- The ::after stretches the hit area to 44px on phones without making the button look bigger. -->
-      <button
-        type="button"
-        class="relative ml-auto shrink-0 rounded-sm border border-border-strong bg-surface-2 px-2.5 py-1 font-medium text-text transition-colors duration-(--dur-fast) ease-field after:absolute after:-inset-x-1.5 after:-inset-y-[9px] hover:bg-surface-3 sm:ml-2 sm:after:hidden"
-        @click="applyUpdate()"
-      >
-        Reload
-      </button>
-    </div>
-    <div
-      v-else-if="stale"
-      role="status"
-      class="fixed bottom-3 left-3 z-30 flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-xs text-muted shadow-panel"
-    >
-      <span class="size-1.5 rounded-full bg-accent" aria-hidden="true"></span>
-      GBIF is busy. Some data may be out of date.
-      <button type="button" class="ml-1 underline-offset-2 hover:underline" @click="dismiss">Dismiss</button>
-    </div>
+    <UpdateNotice
+      v-if="applyUpdate && !onMap"
+      class="update-notice fixed inset-x-3 z-30 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
+    />
+    <BusyNotice v-else-if="stale && !onMap" class="fixed bottom-3 left-3 z-30" />
   </Transition>
 </template>
 

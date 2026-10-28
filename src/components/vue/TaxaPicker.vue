@@ -19,6 +19,7 @@ import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import UiIcon from './UiIcon.vue';
 import { useNameSearch } from './useNameSearch';
+import { useScrollFade } from './useScrollFade';
 
 const MAX_OPTIONS = 20;
 /** Past this many selected taxa, the list scrolls instead of growing. */
@@ -30,6 +31,8 @@ const keys = useStore($taxonKeys);
 const taxa = useStore($taxa);
 const manifest = useStore($speciesManifest);
 const list = ref<HTMLUListElement>();
+const { fadeTop, fadeBottom, update: updateFade } = useScrollFade(list);
+watch([taxa, list], () => nextTick(updateFade));
 
 // The list is sorted by key, so a newly added taxon (here or from the header
 // search) can land out of view once it scrolls; bring it into view.
@@ -106,9 +109,10 @@ function onKey(event: KeyboardEvent) {
     <ul
       v-if="taxa.length"
       ref="list"
-      class="selected-list mb-2 space-y-1"
-      :class="{ scrolls: taxa.length > SCROLL_AFTER }"
+      class="selected-list fade-list mb-2 space-y-1"
+      :class="{ scrolls: taxa.length > SCROLL_AFTER, 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
       :aria-label="`Selected taxa (${taxa.length})`"
+      @scroll.passive="updateFade"
     >
       <li v-for="taxon in taxa" :key="taxon.key" :data-key="taxon.key" class="selected-row">
         <Transition name="name-in" @leave="(_element, done) => done()">

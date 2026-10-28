@@ -70,3 +70,18 @@ describe('/og/species/[key].png', () => {
     });
   });
 });
+
+describe('/icons/[name].png', () => {
+  const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
+
+  it('renders every icon cut as a PNG', async () => {
+    const { GET, getStaticPaths } = await import('~/pages/icons/[name].png');
+    const names = getStaticPaths().map(({ params }) => params.name);
+    expect(names).toEqual(['icon-192', 'icon-512', 'icon-maskable-512', 'apple-touch-icon']);
+    for (const name of names) {
+      const response = await GET(context({ params: { name } }));
+      expect(response.headers.get('Content-Type')).toBe('image/png');
+      expect([...new Uint8Array(await response.arrayBuffer()).slice(0, 4)]).toEqual(PNG_SIGNATURE);
+    }
+  });
+});

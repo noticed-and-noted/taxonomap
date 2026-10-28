@@ -52,6 +52,11 @@ describe('recordsView', () => {
     expect((await recordsView(freshFilter()))?.extent).toEqual([-150.5, -0.5, 149.5, 0.5]);
   });
 
+  it('keeps the busiest cell when it comes first', async () => {
+    decodedHexes.current = [cell([10, 50], 40), cell([-20, 10], 5)];
+    expect((await recordsView(freshFilter()))?.busiest).toEqual([10, 50]);
+  });
+
   it('is null with no records', async () => {
     decodedHexes.current = [cell([0, 0], 0)];
     expect(await recordsView(freshFilter())).toBeNull();
@@ -78,6 +83,11 @@ describe('nearestRecords', () => {
     expect(nearest?.distanceKm).toBeCloseTo(556, -1);
   });
 
+  it('keeps the closest cell when farther ones come after it', async () => {
+    decodedHexes.current = [cell([3, 4], 1), cell([30, 0], 500)];
+    expect((await nearestRecords(freshFilter(), [0, 0]))?.extent).toEqual([2.5, 3.5, 3.5, 4.5]);
+  });
+
   it('is null when nothing matches anywhere', async () => {
     decodedHexes.current = [cell([0, 0], 0)];
     expect(await nearestRecords(freshFilter(), [0, 0])).toBeNull();
@@ -89,6 +99,19 @@ describe('nearestRecords', () => {
     await nearestRecords(filter, [0, 0]);
     await nearestRecords(filter, [50, 50]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a newer filter’s grid when an older one fails late', async () => {
+    let failOlder: (response: Response) => void = () => {};
+    fetchSpy.mockReturnValueOnce(new Promise((resolve) => (failOlder = resolve)));
+    decodedHexes.current = [cell([3, 4], 1)];
+    const older = nearestRecords(freshFilter(), [0, 0]);
+    const newer = freshFilter();
+    await nearestRecords(newer, [0, 0]);
+    failOlder(new Response(null, { status: 503 }));
+    await expect(older).rejects.toThrow();
+    await nearestRecords(newer, [0, 0]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it('throws when the grid cannot load, and asks again next time', async () => {

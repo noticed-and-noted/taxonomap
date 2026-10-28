@@ -11,7 +11,7 @@ export type SpeciesManifest = Record<string, string>;
 /** Path of a species' page: its pre-rendered one if the manifest lists it, else the client-side fallback. */
 export function speciesPath(key: number, manifest: SpeciesManifest | null | undefined): string {
   const slug = manifest?.[String(key)];
-  return slug ? `/species/${key}/${slug}` : `/species/view/${key}`;
+  return slug ? `/species/${key}/${slug}/` : `/species/view/${key}`;
 }
 
 /** Similar species with their page links, for the SimilarSpecies island (which gets no manifest). */

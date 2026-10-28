@@ -515,6 +515,71 @@ describe('occurrence layer', () => {
     expect(await cellNear(0, 6, 179.9)).toBe(true);
   });
 
+  it('cancels what is in flight when the filters change at the same level, and when destroyed', async () => {
+    const held = gate();
+    const asked = network((request) => held.hold(request));
+    const map = fakeMap({ zoom: 3 });
+    const callbackSet = callbacks();
+    const layer = createOccLayer(map.map, callbackSet.o);
+    await settle();
+    const first = [...asked];
+
+    // One taxon still uses density tiles, so the level stays and only the filters differ.
+    callbackSet.setFilter({ taxonKeys: [1] });
+    await settle();
+    expect(first.every((tile) => tile.signal.aborted)).toBe(true);
+    const second = asked.slice(first.length);
+    expect(second.length).toBeGreaterThan(0);
+    expect(second.every((tile) => tile.z === 3 && !tile.adhoc)).toBe(true);
+    layer.destroy();
+    expect(second.every((tile) => tile.signal.aborted)).toBe(true);
+  });
+
+  it('keeps a flight’s look-ahead loading when the move ends at its level', async () => {
+    const held = gate();
+    let isHolding = true;
+    const asked = network((request) => (isHolding && request.z === 4 ? held.hold(request) : new ArrayBuffer(0)));
+    const map = fakeMap({ zoom: 3 });
+    createOccLayer(map.map, callbacks().o);
+    await settle();
+    map.map.flyTo({ center: [0, 0], zoom: 4 });
+    await settle();
+    const lookAhead = asked.filter((tile) => tile.z === 4);
+    expect(lookAhead.length).toBeGreaterThan(0);
+
+    map.moveTo([0, 0], 4);
+    map.fire('moveend');
+    await settle();
+    expect(lookAhead.some((tile) => !tile.signal.aborted)).toBe(true);
+    isHolding = false;
+    held.release();
+    await settle();
+  });
+
+  it('leaves a tile that will not decode unloaded, and asks for it again', async () => {
+    const garbage = new Uint8Array([0xff, 0xff, 0xff, 0xff, 0xff]).buffer;
+    const asked = network((request) => (key(request) === '8/8' ? garbage : undefined));
+    const map = fakeMap();
+    const { o } = callbacks();
+    createOccLayer(map.map, o);
+    await settle();
+    expect(o.onCells).not.toHaveBeenCalled();
+    map.fire('moveend');
+    await settle();
+    expect(asked.filter((tile) => key(tile) === '8/8')).toHaveLength(2);
+  });
+
+  it('finds no cell where its tiles fail, and asks for them again next time', async () => {
+    const level = 7;
+    const point: [number, number] = [120, 40];
+    const asked = network((request) => (request.z === level ? new Response(null, { status: 503 }) : undefined));
+    const layer = createOccLayer(fakeMap().map, callbacks().o);
+    await settle();
+    expect(await layer.findCell(point, level)).toBeUndefined();
+    await layer.findCell(point, level);
+    expect(asked.filter((request) => request.z === level)).toHaveLength(18);
+  });
+
   it('lets go of the map when destroyed', async () => {
     const asked = network(() => new ArrayBuffer(0));
     const map = fakeMap();

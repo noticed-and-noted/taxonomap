@@ -39,7 +39,7 @@ const { map = 'full', search } = Astro.props;
     </main>
   </div>
 
-  <StaleNotice client:idle />
+  <StaleNotice client:idle onMap={map === 'full'} />
   <RequestMeter client:idle />
 </div>
 

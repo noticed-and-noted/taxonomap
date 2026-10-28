@@ -33,3 +33,12 @@ it('start onboarding unseen and empty at build time', async () => {
     [],
   ]);
 });
+
+it('start reading, map-fit and update state at their defaults at build time', async () => {
+  const [{ $reading, DEFAULT_READING }, { $fitOnSearch }, { $applyUpdate }] = await Promise.all([
+    import('~/stores/reading'),
+    import('~/stores/fit-search'),
+    import('~/stores/app-update'),
+  ]);
+  expect([$reading.get(), $fitOnSearch.get(), $applyUpdate.get()]).toEqual([DEFAULT_READING, true, null]);
+});

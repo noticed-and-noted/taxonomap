@@ -78,14 +78,16 @@ describe('explorer filter stores', () => {
     expect(Object.values(explorer.$groupCounts.get()).every((count) => count === 0)).toBe(true);
   });
 
-  it('give each set filter but taxa a pill (one per IUCN category or month) that clears it', async () => {
+  it('give each set filter but taxa a pill (one per value) that clears it', async () => {
     const explorer = await import('~/stores/explorer');
     explorer.clearFilters();
     explorer.$taxonKeys.set([212]);
     explorer.$iucn.set(['CR', 'VU']);
     explorer.$dateRange.set({ unit: 'y', from: '1990-01-01', to: '2000-12-31' });
     explorer.$months.set([4, 5]);
+    explorer.$continents.set(['EUROPE', 'AFRICA']);
     explorer.$maxUncertainty.set(1000);
+    explorer.$basisOfRecord.set(['HUMAN_OBSERVATION', 'PRESERVED_SPECIMEN']);
     explorer.$hasPhoto.set(true);
     expect(explorer.$filterPills.get().map((pill) => [pill.group, pill.text])).toEqual([
       ['what', 'Critically endangered'],
@@ -93,7 +95,11 @@ describe('explorer filter stores', () => {
       ['when', '1990–2000'],
       ['when', 'Apr'],
       ['when', 'May'],
+      ['where', 'Europe'],
+      ['where', 'Africa'],
       ['where', 'Accuracy ≤ 1 km'],
+      ['how', 'Human observation'],
+      ['how', 'Preserved specimen'],
       ['how', 'Has photo'],
     ]);
     explorer.$filterPills.get()[0]?.clear();
@@ -115,8 +121,10 @@ describe('explorer filter stores', () => {
     explorer.$basisOfRecord.set(['HUMAN_OBSERVATION', 'FOSSIL_SPECIMEN']);
     expect(explorer.$filterPills.get().map((pill) => pill.text)).toEqual([
       '2001',
-      'Europe, Asia',
-      'Human observation, Fossil specimen',
+      'Europe',
+      'Asia',
+      'Human observation',
+      'Fossil specimen',
     ]);
     explorer.clearFilters();
   });

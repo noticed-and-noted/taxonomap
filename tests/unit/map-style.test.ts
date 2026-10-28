@@ -92,6 +92,20 @@ describe('buildStyle', () => {
     expect(layer(light, 'water')['paint']).toBeUndefined();
   });
 
+  it('lifts the dark style’s near-black land fills to the land colour, leaving other fills', async () => {
+    const withFills = {
+      ...vectorBase,
+      layers: [
+        ...vectorBase.layers,
+        { id: 'glacier', type: 'fill', source: 'omt', 'source-layer': 'landcover' },
+        { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#0f0' } },
+      ],
+    } as StyleSpecification;
+    const dark = await buildStyle('plain', 'dark', COLORS, DATA, async () => withFills);
+    expect(layer(dark, 'glacier')['paint']).toEqual({ 'fill-color': '#l' });
+    expect(layer(dark, 'park')['paint']).toEqual({ 'fill-color': '#0f0' });
+  });
+
   it('asks for the theme’s vector style', async () => {
     const asked: string[] = [];
     await buildStyle('plain', 'light', COLORS, DATA, async (url) => (asked.push(url), vectorBase));

@@ -75,6 +75,20 @@ describe('polygonToWkt', () => {
     );
   });
 
+  it('splits a ring running past +180 the same way', () => {
+    const hex: [number, number][] = [
+      [181, 0],
+      [180, 1],
+      [178, 1],
+      [177, 0],
+      [178, -1],
+      [180, -1],
+    ];
+    expect(polygonToWkt(hex)).toBe(
+      'MULTIPOLYGON(((180 -1,180 1,178 1,177 0,178 -1,180 -1)),((-179 0,-180 1,-180 -1,-179 0)))',
+    );
+  });
+
   it('moves a ring on a wrapped world copy back onto -180..180', () => {
     const square: [number, number][] = [
       [361, 0],

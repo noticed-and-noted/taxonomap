@@ -158,12 +158,6 @@ jobs:
       contents: read
       deployments: write
     steps:
-      # The Pages Functions in functions/ (the login gate) deploy alongside dist.
-      - uses: actions/checkout@v5
-        with:
-          # Only functions/: with package.json present the action installs wrangler into the project and fails.
-          sparse-checkout: /functions/
-          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           name: dist
