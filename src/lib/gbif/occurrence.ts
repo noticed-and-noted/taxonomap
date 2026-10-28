@@ -72,6 +72,8 @@ export function taxonParams(filter: Pick<OccurrenceFilter, 'taxonKey' | 'taxonKe
 
 /** Query parameters for an occurrence filter, with unset fields left out. */
 export function filterToParams(filter: OccurrenceFilter): Params {
+  // The map tiles leave out records with geospatial issues (e.g. a 0,0 placeholder), so area queries must too.
+  const georeferenced = filter.georeferenced || filter.geometry !== undefined;
   return {
     ...taxonParams(filter),
     speciesKey: filter.speciesKeys,
@@ -84,8 +86,8 @@ export function filterToParams(filter: OccurrenceFilter): Params {
     country: filter.country,
     geometry: filter.geometry,
     datasetKey: filter.datasetKey,
-    hasCoordinate: filter.georeferenced ? true : undefined,
-    hasGeospatialIssue: filter.georeferenced ? false : undefined,
+    hasCoordinate: georeferenced ? true : undefined,
+    hasGeospatialIssue: georeferenced ? false : undefined,
   };
 }
 

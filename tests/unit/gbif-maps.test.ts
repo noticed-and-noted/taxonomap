@@ -100,6 +100,9 @@ describe('occurrence filters', () => {
       hasCoordinate: true,
       hasGeospatialIssue: false,
     });
+    expect(api.filterToParams({ geometry: 'POLYGON((0 0,1 0,1 1,0 0))' })).toMatchObject({
+      hasGeospatialIssue: false,
+    });
     const controller = new AbortController();
     await expect(api.occurrenceCount({}, controller.signal)).resolves.toBe(3);
     await api.searchOccurrences({}, undefined, controller.signal);
