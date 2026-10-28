@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * The active filters as removable chips: the selected taxa (the first few by
- * name, then a "+N more" chip), then one per other filter that is set.
+ * The active filters as removable chips: one per selected taxon, then one per
+ * other filter value that is set.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $filterPills, type FilterGroupId } from '~/stores/explorer';
 import { $taxa, removeTaxon } from '~/stores/taxon';
@@ -14,13 +14,10 @@ import UiIcon from './UiIcon.vue';
 import { useDragScroll } from './useDragScroll';
 import { useScrollFade } from './useScrollFade';
 
-const SHOWN = 3;
 const taxa = useStore($taxa);
 const pills = useStore($filterPills);
 const manifest = useStore($speciesManifest);
 const iconOf = (group: FilterGroupId) => FILTER_GROUPS.find((filterGroup) => filterGroup.id === group)?.icon;
-const shown = computed(() => taxa.value.slice(0, SHOWN));
-const rest = computed(() => taxa.value.slice(SHOWN));
 const nameOf = (taxon: { commonName?: string; scientificName: string }) => taxon.commonName ?? taxon.scientificName;
 
 // Fade whichever side has more chips beyond it.
@@ -48,7 +45,7 @@ onBeforeUnmount(() => resize.disconnect());
     @pointerdown="onPointerDown"
     @click.capture="onClickCapture"
   >
-    <span v-for="taxon in shown" :key="taxon.key" class="chip max-w-[18rem]">
+    <span v-for="taxon in taxa" :key="taxon.key" class="chip max-w-[18rem]">
       <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf('what')" /></svg>
       <Transition name="name-in" @leave="(_element, done) => done()">
         <SkeletonBlock
@@ -77,7 +74,6 @@ onBeforeUnmount(() => resize.disconnect());
         <UiIcon name="close" size="0.875rem" />
       </button>
     </span>
-    <span v-if="rest.length" class="chip more" :title="rest.map(nameOf).join(', ')">+{{ rest.length }} more</span>
     <span v-for="pill in pills" :key="pill.id" class="chip max-w-[18rem]" :title="pill.text">
       <svg viewBox="0 0 24 24" class="chip-icon" aria-hidden="true"><path :d="iconOf(pill.group)" /></svg>
       <span class="min-w-0 truncate">{{ pill.text }}</span>
@@ -167,12 +163,6 @@ onBeforeUnmount(() => resize.disconnect());
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.chip.more {
-  border-color: var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
 }
 
 .chip-x {

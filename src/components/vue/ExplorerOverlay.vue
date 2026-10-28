@@ -159,13 +159,9 @@ onBeforeUnmount(() => {
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
     >
-      <!-- flex-auto: the chips shrink only once the row is full; spare room still splits around the progress pill. -->
       <div class="min-w-0 sm:flex-auto" :class="{ 'max-sm:mr-2': near }"><TaxonChip /></div>
-      <!-- In the row's free space so it never sits under the pills; below the row on phones, where the taxon chip can fill it. -->
-      <MapProgress
-        v-if="!near"
-        class="absolute left-1/2 top-9 -translate-x-1/2 sm:static sm:shrink-0 sm:translate-x-0"
-      />
+      <!-- Below the row, centred on the page, so the chips can fill the row. -->
+      <MapProgress v-if="!near" class="absolute left-1/2 top-9 -translate-x-1/2 sm:top-11" />
       <div
         v-if="!near"
         class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1"

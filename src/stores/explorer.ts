@@ -272,12 +272,12 @@ const whole =
   <T>(store: WritableAtom<T>, cleared: T, label: (value: T) => string) =>
   (value: T): FilterPill[] => [{ text: label(value), clear: () => store.set(cleared) }];
 
-/** A list filter shows one pill (`label`) or, with `{ each }`, one per item that removes just that item. */
+/** A list filter, with (`each`) one pill per item that removes just that item. */
 const list = <T>(
   store: WritableAtom<T[]>,
   group: FilterGroupId,
   apply: (values: T[]) => OccurrenceFilter,
-  label?: ((values: T[]) => string) | { each: (item: T) => string },
+  each?: (item: T) => string,
 ) =>
   filter({
     store,
@@ -286,14 +286,12 @@ const list = <T>(
     isSet: (value) => value.length > 0,
     apply,
     pills:
-      label &&
-      (typeof label === 'function'
-        ? whole(store, [], label)
-        : (value) =>
-            value.map((item) => ({
-              text: label.each(item),
-              clear: () => store.set(store.get().filter((existing) => existing !== item)),
-            }))),
+      each &&
+      ((value) =>
+        value.map((item) => ({
+          text: each(item),
+          clear: () => store.set(store.get().filter((existing) => existing !== item)),
+        }))),
   });
 const flag = (store: WritableAtom<boolean>, group: FilterGroupId, fields: OccurrenceFilter, label: string) =>
   filter({
@@ -326,14 +324,24 @@ const nullable = <T>(
 export const FILTERS: readonly Filter[] = [
   list($taxonKeys, 'what', (taxonKeys) => ({ taxonKeys })),
   flag($exactTaxon, 'what', { exactTaxon: true }, 'Exact taxon only'),
-  list($iucn, 'what', (iucn) => ({ iucn }), { each: (code) => IUCN_LABELS[code]! }),
+  list(
+    $iucn,
+    'what',
+    (iucn) => ({ iucn }),
+    (code) => IUCN_LABELS[code]!,
+  ),
   nullable($dateRange, 'when', (range) => rangeFilter(range), rangeLabel),
-  list($months, 'when', (months) => ({ months }), { each: (month) => MONTHS[month - 1]! }),
+  list(
+    $months,
+    'when',
+    (months) => ({ months }),
+    (month) => MONTHS[month - 1]!,
+  ),
   list(
     $continents,
     'where',
     (continents) => ({ continents }),
-    (values) => values.map((continent) => CONTINENT_LABELS[continent]).join(', '),
+    (continent) => CONTINENT_LABELS[continent]!,
   ),
   nullable(
     $maxUncertainty,
@@ -345,7 +353,7 @@ export const FILTERS: readonly Filter[] = [
     $basisOfRecord,
     'how',
     (basisOfRecord) => ({ basisOfRecord }),
-    (values) => values.map((basis) => BASIS_LABELS[basis]).join(', '),
+    (basis) => BASIS_LABELS[basis]!,
   ),
   flag($hasPhoto, 'how', { hasImage: true }, 'Has photo'),
   flag($hasSound, 'how', { hasSound: true }, 'Has sound'),
