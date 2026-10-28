@@ -182,15 +182,21 @@ describe('occurrence layer', () => {
     expect(o.onProgress).toHaveBeenNthCalledWith(1, 0, asked.length);
     expect(o.onProgress).toHaveBeenLastCalledWith(asked.length, asked.length);
     expect(o.onCells).toHaveBeenCalled();
-    // Every tile's hex is drawn, view and ring, once it has loaded.
-    expect(layer.collection().features).toHaveLength(new Set(asked.map(key)).size);
-    const cell = layer.collection().features[0]!;
-    const ring = cell.geometry.coordinates[0]!;
-    const middle: [number, number] = [
-      ring.reduce((sum, vertex) => sum + vertex[0]!, 0) / ring.length,
-      ring.reduce((sum, vertex) => sum + vertex[1]!, 0) / ring.length,
-    ];
-    expect(layer.cellAt(middle)).toBe(cell);
+    // Only the view's tiles (asked first) are drawn; the ring's wait in the cache for a pan.
+    const middleOf = (feature: GeoJSON.Feature<GeoJSON.Polygon>): [number, number] => {
+      const ring = feature.geometry.coordinates[0]!;
+      return [
+        ring.reduce((sum, vertex) => sum + vertex[0]!, 0) / ring.length,
+        ring.reduce((sum, vertex) => sum + vertex[1]!, 0) / ring.length,
+      ];
+    };
+    const drawn = layer.collection().features;
+    expect(drawn.length).toBeLessThan(new Set(asked.map(key)).size);
+    expect(drawn.map((feature) => key(tileAt(middleOf(feature), 4))).sort()).toEqual(
+      asked.slice(0, drawn.length).map(key).sort(),
+    );
+    const cell = drawn[0]!;
+    expect(layer.cellAt(middleOf(cell))).toBe(cell);
     expect(layer.cellAt([170, 0])).toBeUndefined();
     layer.destroy();
   });
@@ -339,7 +345,7 @@ describe('occurrence layer', () => {
     expect(asked.length).toBeGreaterThan(0);
   });
 
-  it('re-plans now and then during a drag, at the level shown', async () => {
+  it('re-plans during a drag once other tiles are in view, at the level shown', async () => {
     const asked = network(() => new ArrayBuffer(0));
     const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
     const map = fakeMap();
@@ -355,8 +361,16 @@ describe('occurrence layer', () => {
     const afterFirst = count();
     expect(afterFirst).toBeGreaterThan(start);
 
-    // Too soon after the last re-plan.
-    now.mockReturnValue(1100);
+    // A nudge that keeps the same tiles in view plans nothing.
+    const plans = o.onProgress.mock.calls.length;
+    now.mockReturnValue(1060);
+    map.moveTo([60.01, 0]);
+    map.fire('move');
+    await settle();
+    expect(o.onProgress.mock.calls.length).toBe(plans);
+
+    // Too soon after the last check.
+    now.mockReturnValue(1080);
     map.moveTo([120, 0]);
     map.fire('move');
     await settle();

@@ -18,7 +18,6 @@ import {
   fillColor,
   geometryOf,
   nearGeoJson,
-  occOpacity,
   RECORD_DOT_LAYER,
   recordDotMinZoom,
   selectedGeoJson,
@@ -94,66 +93,21 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
   (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
 }
 
-/** The map's two hex layers: settled cells and ones fading in. */
-const HEX_LAYERS = ['occ-fill', 'occ-fresh-fill'];
+/** The map's hex layer. */
+const HEX_LAYER = 'occ-fill';
 
-/** Colour both hex layers with the bins for this grid level. */
+/** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
-  for (const id of HEX_LAYERS) {
-    if (map?.getLayer(id)) map.setPaintProperty(id, 'fill-color', fillColor(level));
-  }
+  if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', fillColor(level));
 }
 
-/** How long arriving cells take to fade in. */
-const FADE_MS = 180;
-/** Cells fading in on `occ-fresh`, and the fade they belong to. */
-let fresh: Hex[] = [];
-let fade = 0;
-let fadeTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** Move cells that have faded in onto `occ`. */
-function settleFresh() {
-  clearTimeout(fadeTimer);
-  if (!fresh.length) return;
-  const mine = fade;
-  const src = map?.getSource('occ') as GeoJSONSource | undefined;
-  void src?.updateData({ add: fresh }).then(() => {
-    // A newer fade may have started meanwhile; its cells stay.
-    if (mine === fade) setData('occ-fresh', EMPTY);
-  });
-  fresh = [];
-}
-
-/** Cells arriving as you pan: removed ones go at once, new ones fade in. */
+/** Cells arriving or leaving as you pan, sent to MapLibre's worker as one diff (no fade-in: that sent each cell twice). */
 function changeHexes(add: Hex[], remove: string[]) {
-  settleFresh();
-  const src = map?.getSource('occ') as GeoJSONSource | undefined;
-  if (!map || !src) return;
-  if (remove.length) void src.updateData({ remove });
-  if (!add.length) return;
-  if (prefersReducedMotion()) {
-    void src.updateData({ add });
-    return;
-  }
-  const activeMap = map;
-  fresh = add;
-  fade++;
-  setData('occ-fresh', { type: 'FeatureCollection', features: add });
-  activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: 0, delay: 0 });
-  activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity', 0);
-  requestAnimationFrame(() => {
-    activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity-transition', { duration: FADE_MS, delay: 0 });
-    activeMap.setPaintProperty('occ-fresh-fill', 'fill-opacity', occOpacity(activeMap.getZoom()));
-  });
-  fadeTimer = setTimeout(settleFresh, FADE_MS + 20);
+  void (map?.getSource('occ') as GeoJSONSource | undefined)?.updateData({ add, remove });
 }
 
-/** A whole new set of cells (new level or filters): no fade, nothing left mid-fade. */
+/** A whole new set of cells (new level or filters). */
 function replaceHexes(collection: GeoJSON.FeatureCollection) {
-  clearTimeout(fadeTimer);
-  fresh = [];
-  fade++;
-  setData('occ-fresh', EMPTY);
   setData('occ', collection);
 }
 
@@ -574,8 +528,10 @@ function publishBounds() {
 /** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
 function publishEmpty() {
   if (!map || $mapLoad.get().loading) return;
-  const layers = HEX_LAYERS.filter((id) => map!.getLayer(id));
-  $viewCheck.set({ isEmpty: !failed.value && layers.length > 0 && !map.queryRenderedFeatures({ layers }).length });
+  const hasLayer = Boolean(map.getLayer(HEX_LAYER));
+  $viewCheck.set({
+    isEmpty: !failed.value && hasLayer && !map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length,
+  });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */

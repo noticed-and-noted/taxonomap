@@ -33,6 +33,9 @@ describe('map tiles', () => {
     expect(url.searchParams.get('month')).toBe('5');
     expect(url.searchParams.get('hexPerTile')).toBe('28');
     expect(url.searchParams.has('style')).toBe(false);
+    // Adhoc tiles count flagged records unless told not to; density tiles already leave them out.
+    expect(url.searchParams.get('hasGeospatialIssue')).toBe('false');
+    expect(api.occurrenceTileTemplate({ taxonKey: 1 })).not.toContain('hasGeospatialIssue');
   });
 
   it('matches exact taxa with acceptedTaxonKey on adhoc tiles', async () => {

@@ -81,15 +81,13 @@ function overlaySources(data: OverlayData): StyleSpecification['sources'] {
       promoteId: 'id',
       attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
     },
-    // Cells fading in, before they join `occ`.
-    'occ-fresh': { type: 'geojson', data: EMPTY },
     hover: { type: 'geojson', data: EMPTY },
     selected: { type: 'geojson', data: data.selected },
     near: { type: 'geojson', data: data.near },
   };
 }
 
-/** The occurrence layers, drawn below basemap labels. */
+/** The occurrence layer, drawn below basemap labels. */
 function dataLayers(level: number): LayerSpecification[] {
   return [
     {
@@ -99,18 +97,6 @@ function dataLayers(level: number): LayerSpecification[] {
       paint: {
         'fill-color': fillColor(level),
         'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, occOpacity(0), 8, occOpacity(8)],
-        'fill-antialias': true,
-      },
-    },
-    {
-      id: 'occ-fresh-fill',
-      type: 'fill',
-      source: 'occ-fresh',
-      paint: {
-        'fill-color': fillColor(level),
-        // Animated from 0 to occOpacity as cells arrive.
-        'fill-opacity': 0,
-        'fill-opacity-transition': { duration: 0, delay: 0 },
         'fill-antialias': true,
       },
     },
@@ -392,8 +378,18 @@ export function selectedGeoJson(
   return { type: 'FeatureCollection', features };
 }
 
-/** A hex feature's outer ring, WKT and tile count, or null if it has no usable ring. */
-export function geometryOf(feature: Pick<MapGeoJSONFeature, 'geometry' | 'properties'>): HexGeometry | null {
+type HexFeature = Pick<MapGeoJSONFeature, 'geometry' | 'properties'>;
+
+/** Each feature's geometry, built once: the map asks it of every drawn cell on every draw once one is known empty. */
+const geometries = new WeakMap<HexFeature, HexGeometry | null>();
+
+/** A hex feature's outer ring, WKT and tile count, or null if it has no usable ring; the feature must not change after. */
+export function geometryOf(feature: HexFeature): HexGeometry | null {
+  if (!geometries.has(feature)) geometries.set(feature, buildGeometry(feature));
+  return geometries.get(feature)!;
+}
+
+function buildGeometry(feature: HexFeature): HexGeometry | null {
   const geometry = feature.geometry;
   const ring =
     geometry.type === 'Polygon'

@@ -94,22 +94,37 @@ describe('fetchCount', () => {
     expect(occurrenceCount).toHaveBeenCalledOnce();
   });
 
-  it('knows whether a filter has any empty cell, and forgets it with the count', async () => {
-    const { hasKnownEmpty, rememberCount } = await load();
+  it('knows whether a filter has any empty cell, and keeps it past the counts it outlives', async () => {
+    const { checkCells, fetchCount, hasKnownEmpty, knownCount, rememberCount } = await load();
     const filter = { taxonKey: 1 };
     expect(hasKnownEmpty(filter)).toBe(false);
     rememberCount(filter, CELL_A, 0);
     expect(hasKnownEmpty(filter)).toBe(true);
     expect(hasKnownEmpty({ taxonKey: 2 })).toBe(false);
+    // A view can hold more sparse cells than the counts kept; a forgotten empty cell would be drawn and checked again.
     for (let index = 0; index < 500; index++) rememberCount(NONE, `cell${index}`, 1);
+    expect(hasKnownEmpty(filter)).toBe(true);
+    expect(knownCount(filter, CELL_A)).toBe(0);
+    expect(await fetchCount(filter, CELL_A)).toBe(0);
+    expect(await checkCells(filter, [CELL_A])).toBe(false);
+    expect(occurrenceCount).not.toHaveBeenCalled();
+    // A later count wins.
+    rememberCount(filter, CELL_A, 3);
     expect(hasKnownEmpty(filter)).toBe(false);
+  });
+
+  it('keeps the most recent 20,000 empty cells per filter', async () => {
+    const { knownCount, rememberCount } = await load();
+    for (let index = 0; index <= 20_000; index++) rememberCount(NONE, `empty${index}`, 0);
+    expect(knownCount(NONE, 'empty0')).toBeUndefined();
+    expect(knownCount(NONE, 'empty20000')).toBe(0);
   });
 
   it('keeps the most recent 500 cells', async () => {
     const { knownCount, rememberCount } = await load();
-    for (let index = 0; index < 501; index++) rememberCount(NONE, `cell${index}`, index);
+    for (let index = 0; index < 501; index++) rememberCount(NONE, `cell${index}`, index + 1);
     expect(knownCount(NONE, 'cell0')).toBeUndefined();
-    expect(knownCount(NONE, 'cell500')).toBe(500);
+    expect(knownCount(NONE, 'cell500')).toBe(501);
   });
 });
 
