@@ -15,6 +15,7 @@ import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
 import { markDone } from '~/stores/onboarding';
 import { $taxa, addTaxon, removeTaxon, taxonFromHit } from '~/stores/taxon';
+import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import UiIcon from './UiIcon.vue';
 import { useNameSearch } from './useNameSearch';
@@ -46,6 +47,8 @@ const { hits: options, loading, search } = useNameSearch({ max: MAX_OPTIONS, exc
 const full = computed(() => keys.value.length >= MAX_TAXA);
 
 const open = computed(() => query.value.trim().length >= 2 && !full.value);
+// As in the cell's records search: the box's spinner shows the wait, so the list stays shut until it has something to say.
+const showOptions = computed(() => open.value && (options.value.length > 0 || !loading.value));
 const activeId = computed(() => (active.value >= 0 ? `${uniqueId}-opt-${active.value}` : undefined));
 const rankLabel = (rank: string) => RANK_LABELS[rank] ?? (rank === 'UNRANKED' ? '' : rank.toLowerCase());
 
@@ -135,16 +138,15 @@ function onKey(event: KeyboardEvent) {
     <p v-else class="mb-2 text-muted">All life.</p>
 
     <div class="relative">
-      <input
+      <SearchInput
         :id="`${uniqueId}-input`"
         v-model="query"
-        type="search"
-        class="picker-input"
         role="combobox"
         autocomplete="off"
         :placeholder="full ? `Up to ${MAX_TAXA} at once` : 'Add a species or group'"
         :disabled="full"
-        :aria-expanded="open"
+        :loading="loading"
+        :aria-expanded="showOptions"
         :aria-controls="listId"
         aria-autocomplete="list"
         :aria-activedescendant="activeId"
@@ -153,7 +155,7 @@ function onKey(event: KeyboardEvent) {
         @keydown="onKey"
       />
 
-      <ul v-show="open" :id="listId" role="listbox" class="options" aria-label="Species and group suggestions">
+      <ul v-show="showOptions" :id="listId" role="listbox" class="options" aria-label="Species and group suggestions">
         <li
           v-for="(hit, index) in options"
           :id="`${uniqueId}-opt-${index}`"
@@ -178,9 +180,7 @@ function onKey(event: KeyboardEvent) {
             <span v-if="hit.count" class="block tabular-nums">{{ compact(hit.count) }}</span>
           </span>
         </li>
-        <li v-if="!options.length" class="option-note" role="presentation">
-          {{ loading ? 'Searching…' : 'Nothing found' }}
-        </li>
+        <li v-if="!options.length" class="option-note" role="presentation">Nothing found</li>
       </ul>
     </div>
 
@@ -248,22 +248,6 @@ function onKey(event: KeyboardEvent) {
 .remove-btn:hover {
   color: var(--text);
   background: var(--surface-3);
-}
-
-.picker-input {
-  width: 100%;
-  height: 2rem;
-  padding: 0 0.625rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-}
-.picker-input:hover {
-  border-color: var(--border-strong);
-}
-.picker-input:disabled {
-  opacity: 0.6;
 }
 
 .options {

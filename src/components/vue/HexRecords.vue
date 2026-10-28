@@ -19,7 +19,7 @@ import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { tidy } from '~/lib/species/names';
 import { $hexGeometry, $occurrenceFilter, $recordPlace } from '~/stores/explorer';
 import ListSkeleton from './ListSkeleton.vue';
-import SearchSpinner from './SearchSpinner.vue';
+import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
@@ -270,26 +270,45 @@ async function openPhotos(occurrence: Occurrence) {
 }
 
 const hasMore = computed(() => total.value !== null && records.value.length < total.value);
-const lightboxPosition = () => records.value.findIndex((occurrence) => occurrence.key === lightboxRecord.value?.key);
+const positionOf = (key: number | undefined) => records.value.findIndex((occurrence) => occurrence.key === key);
 /** The next record's first photo, for the lightbox to preload. */
 const nextRecordPhoto = computed(() => {
-  const next = lightboxRecord.value && records.value[lightboxPosition() + 1];
+  const next = lightboxRecord.value && records.value[positionOf(lightboxRecord.value.key) + 1];
   return next ? image(next) : undefined;
 });
 
-/**
- * Moves the lightbox to the next or previous record in the list, opening that row behind it.
- * Stepping down past the last loaded record loads the next page first.
- */
-async function stepRecord(delta: number) {
-  const isPastEnd = delta > 0 && lightboxPosition() + delta >= records.value.length;
+/** The record `delta` rows from `key`; stepping down past the last loaded record loads the next page first. */
+async function recordFrom(key: number | undefined, delta: number) {
+  const isPastEnd = delta > 0 && positionOf(key) + delta >= records.value.length;
   if (isPastEnd && hasMore.value && !loading.value) await load(true);
-  const position = lightboxPosition();
-  const next = records.value[position + delta];
-  if (position < 0 || !next) return;
+  const position = positionOf(key);
+  return position < 0 ? undefined : records.value[position + delta];
+}
+
+/** Moves the lightbox to the next or previous record in the list, opening that row behind it. */
+async function stepRecord(delta: number) {
+  const next = await recordFrom(lightboxRecord.value?.key, delta);
+  if (!next) return;
   expanded.value = next.key;
   await openPhotos(next);
   revealInList(document.getElementById(`${uniqueId}-rec-${next.key}`));
+}
+
+const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
+
+/** Up and down arrows in the list open the previous or next record from the focused row, and focus it. */
+async function onListKey(event: KeyboardEvent) {
+  const delta = ROW_KEYS[event.key];
+  const row = event.target instanceof HTMLElement && event.target.closest<HTMLElement>('[data-record]');
+  if (!delta || !row) return;
+  event.preventDefault();
+  const next = await recordFrom(Number(row.dataset.record), delta);
+  if (!next) return;
+  expanded.value = next.key;
+  await nextTick();
+  const details = `${uniqueId}-rec-${next.key}`;
+  document.querySelector<HTMLElement>(`[aria-controls="${details}"]`)?.focus({ preventScroll: true });
+  revealInList(document.getElementById(details));
 }
 const initials = (occurrence: Occurrence) =>
   name(occurrence)
@@ -302,16 +321,49 @@ const initials = (occurrence: Occurrence) =>
  * Scroll only the list (not the panel) so `el` is in view: the animation draws above the
  * list, unclipped, so its end point must be inside the list for it to stay inside.
  */
+/** The part of the list on screen: the panel body, which scrolls too on phones, may hide either edge. */
+function visibleBounds(box: HTMLElement) {
+  const boxRect = box.getBoundingClientRect();
+  const panelRect = box.parentElement?.closest<HTMLElement>('.overflow-y-auto')?.getBoundingClientRect();
+  return {
+    top: Math.max(boxRect.top, panelRect?.top ?? -Infinity),
+    bottom: Math.min(boxRect.bottom, panelRect?.bottom ?? Infinity),
+  };
+}
+
+/**
+ * Clips the view-transition overlay to the list's on-screen box, so a row's moving photo and name can't draw over
+ * the panel. The overlay sits above the whole page, out of reach of the list's own overflow.
+ * @returns A function that removes the clip.
+ */
+function clipTransitionToList() {
+  const box = scroller.value;
+  if (!box) return () => {};
+  const { left, right } = box.getBoundingClientRect();
+  const { top, bottom } = visibleBounds(box);
+  const root = document.documentElement;
+  root.style.setProperty('--records-clip', `rect(${top}px ${right}px ${bottom}px ${left}px)`);
+  root.classList.add('records-transition');
+  return () => root.classList.remove('records-transition');
+}
+
 function revealInList(element: HTMLElement | null) {
   const box = scroller.value;
   if (!element || !box) return;
   const boxRect = box.getBoundingClientRect();
-  // The panel body may hide the list's lower edge; use whichever bottom is higher.
-  const panel = box.parentElement?.closest<HTMLElement>('.overflow-y-auto');
-  const bottom = Math.min(boxRect.bottom, panel?.getBoundingClientRect().bottom ?? Infinity);
+  const { bottom } = visibleBounds(box);
   const rowRect = element.getBoundingClientRect();
-  if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, rowRect.top - boxRect.top);
+  // The record's own row sits just above its details; keep it in view even when the details don't fit.
+  const top = (element.previousElementSibling ?? element).getBoundingClientRect().top;
+  if (top < boxRect.top) box.scrollTop -= boxRect.top - top;
+  else if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, top - boxRect.top);
 }
+
+/**
+ * Set by a click in the list and cleared by any key, so a row focused from the keyboard (arrows) and then
+ * clicked loses its ring, as a clicked row would.
+ */
+const usedPointer = ref(false);
 
 /** Row whose photo and name carry view-transition names while it opens or closes (one row, so others don't animate). */
 const animating = ref<number | null>(null);
@@ -326,12 +378,14 @@ function toggle(occurrence: Occurrence) {
   }
   animating.value = occurrence.key;
   void nextTick(() => {
+    const unclip = clipTransitionToList();
     const transition = document.startViewTransition(async () => {
       expanded.value = next;
       await nextTick();
       if (next !== null) revealInList(document.getElementById(`${uniqueId}-rec-${next}`));
     });
     void transition.finished.finally(() => {
+      unclip();
       if (animating.value === occurrence.key) animating.value = null;
     });
   });
@@ -352,26 +406,13 @@ const accuracy = (occurrence: Occurrence) => {
 </script>
 
 <template>
-  <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'">
+  <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'" @keydown.capture="usedPointer = false">
     <div class="relative text-sm">
       <label :for="`${uniqueId}-input`" class="sr-only">Filter records by species</label>
-      <svg
-        class="pointer-events-none absolute left-2.5 top-[1.0625rem] size-3.5 -translate-y-1/2 text-subtle"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        aria-hidden="true"
-      >
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </svg>
-      <input
+      <SearchInput
         :id="`${uniqueId}-input`"
         v-model="query"
-        type="search"
-        class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle disabled:opacity-60"
-        :class="isNaming && !query ? 'pr-8' : ['pr-2', { 'search-spinner-room': isNaming }]"
+        :loading="isNaming"
         role="combobox"
         autocomplete="off"
         placeholder="Filter by species"
@@ -385,7 +426,6 @@ const accuracy = (occurrence: Occurrence) => {
         @input="onInput"
         @keydown="onKey"
       />
-      <SearchSpinner :active="isNaming" class="top-[1.0625rem]" :class="query ? 'search-spinner-gap' : 'right-2.5'" />
       <ul
         v-show="showOptions"
         :id="`${uniqueId}-list`"
@@ -446,7 +486,10 @@ const accuracy = (occurrence: Occurrence) => {
       <div
         ref="scroller"
         class="fade-list -mx-4 overflow-y-auto [scrollbar-gutter:stable]"
-        :class="[fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]', { 'fade-bottom': fadeBottom }]"
+        :class="[
+          fill ? 'min-h-48 flex-1' : 'max-h-[min(23rem,65dvh)]',
+          { 'fade-bottom': fadeBottom, 'clips-transition': animating !== null },
+        ]"
         @scroll.passive="updateFade"
       >
         <table class="w-full table-fixed text-sm" aria-label="Records">
@@ -464,9 +507,10 @@ const accuracy = (occurrence: Occurrence) => {
               <th scope="col">Date</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody :class="{ 'used-pointer': usedPointer }" @keydown="onListKey" @pointerdown="usedPointer = true">
             <template v-for="occurrence in records" :key="occurrence.key">
               <tr
+                :data-record="occurrence.key"
                 class="record cursor-pointer border-b border-border hover:bg-surface-2"
                 :data-type="occurrence.basisOfRecord"
                 @click="toggle(occurrence)"
@@ -537,6 +581,7 @@ const accuracy = (occurrence: Occurrence) => {
               <tr
                 v-if="expanded === occurrence.key"
                 :id="`${uniqueId}-rec-${occurrence.key}`"
+                :data-record="occurrence.key"
                 class="border-b border-border"
               >
                 <td colspan="4" class="bg-surface-2 px-4 py-3">
@@ -665,12 +710,30 @@ const accuracy = (occurrence: Occurrence) => {
       :name="lightboxRecord ? name(lightboxRecord) : ''"
       :href="lightboxAbout"
       :next-row-image="nextRecordPhoto"
+      :loading="loading"
       @step-row="stepRecord"
     />
   </div>
 </template>
 
 <style scoped>
+/* The open row's details already mark which record has focus, so its name needs no ring as well. */
+.record button[aria-expanded='true']:focus-visible,
+.used-pointer button:focus-visible {
+  outline: none;
+}
+/* While a row opens or closes, only the list and that row's photo and name animate, and the overlay is clipped to the
+   list (clipTransitionToList). The page stays out, live underneath, or the clip would hide it. Global: these hang
+   off <html>, which a scoped selector would never match. */
+.clips-transition {
+  view-transition-name: rec-list;
+}
+:global(html.records-transition) {
+  view-transition-name: none;
+}
+:global(html.records-transition::view-transition) {
+  clip-path: var(--records-clip);
+}
 /* Type colours: ≥4.5:1 on the code's tint in each theme. */
 .record {
   --type: var(--text-muted);

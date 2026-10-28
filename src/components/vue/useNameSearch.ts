@@ -2,16 +2,16 @@
  * Species and group search, shared by the header search and the What
  * filter's picker. The baked common-name index answers at once; live GBIF
  * providers (scientific suggest, plus vernacular search when the index is
- * thin) follow after a 250 ms debounce. Each new query aborts the last.
+ * thin) follow once typing pauses (`SEARCH_DEBOUNCE_MS`). Each new query aborts the last.
  */
 import { computed, onScopeDispose, ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexWithin } from '~/lib/data/name-index';
 import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
-import { debounce } from '~/lib/util/debounce';
+import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
 /** Shortest query searched at all, and the shortest sent to GBIF. */
 const MIN_QUERY = 2;
-const MIN_LIVE_QUERY = 3;
+export const MIN_LIVE_QUERY = 3;
 
 /** Options for `useNameSearch`. */
 export interface NameSearchOptions {
@@ -25,7 +25,6 @@ export interface NameSearchOptions {
 const MAX_LIVE_HITS_WITH_INDEX = 3;
 /** Vernacular search ranks poorly, so it is only asked when the index has fewer hits than this. */
 const THIN_INDEX_HITS = 5;
-const LIVE_DEBOUNCE_MS = 250;
 const INDEX_WAIT_MS = 1500;
 
 /** Index hits then live hits, without repeats or excluded keys, up to `max`. */
@@ -103,7 +102,7 @@ function useLiveHits(prepare: (text: string) => Promise<number>) {
     hits.value = live.hits;
     failed.value = live.failed;
     loading.value = false;
-  }, LIVE_DEBOUNCE_MS);
+  }, SEARCH_DEBOUNCE_MS);
 
   /** Stop any search in flight and empty the results. */
   function reset() {

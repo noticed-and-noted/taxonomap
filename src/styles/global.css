@@ -148,7 +148,11 @@
      hydrate. Browsers without scroll-driven animations show no fade. */
   @supports (animation-timeline: scroll()) {
     .fade-list.fade-scroll {
-      animation: fade-scroll linear both;
+      /* Longhands: with the `animation` shorthand, Lightning CSS folds the timeline into it on minify, which
+         browsers reject. */
+      animation-name: fade-scroll;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
       animation-timeline: scroll(self);
     }
   }
@@ -302,15 +306,6 @@
 input:is([type='search'], [type='text']):focus-visible {
   border-color: transparent;
   outline-offset: 0;
-}
-
-/* Room left of the browser's clear button for a SearchSpinner, and the spinner placed in it. */
-input[type='search'].search-spinner-room::-webkit-search-cancel-button {
-  margin-left: 1.5rem;
-}
-
-.search-spinner-gap {
-  right: 2rem;
 }
 
 /*

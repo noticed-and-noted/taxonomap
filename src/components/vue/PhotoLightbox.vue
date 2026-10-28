@@ -15,7 +15,10 @@ import ThumbImage from './ThumbImage.vue';
 import UiIcon from './UiIcon.vue';
 import { useScrollFade } from './useScrollFade';
 
-/** `href`, when given, links the name (to the species' about page). `nextRowImage` is preloaded so stepping down a row is instant. */
+/**
+ * `href`, when given, links the name (to the species' about page). `nextRowImage` is preloaded so stepping down a row
+ * is instant. `loading` shows the photo skeleton while the list fetches the next record.
+ */
 // `onStepRow` is a prop rather than an emit so the legend can tell whether anyone handles it.
 const props = defineProps<{
   images: readonly UsableImage[];
@@ -23,6 +26,7 @@ const props = defineProps<{
   href?: string | undefined;
   onStepRow?: ((delta: number) => void) | undefined;
   nextRowImage?: UsableImage | undefined;
+  loading?: boolean;
 }>();
 
 /** Where a photo came from: its GBIF record, or its iNaturalist observation (or photo page). */
@@ -181,17 +185,17 @@ defineExpose({ open });
       @pointerup="onPointerUp"
       @pointercancel="onPointerCancel"
     >
-      <p v-if="!current" class="absolute inset-0 m-0 grid place-items-center text-sm text-white/70">
-        No image recorded
-      </p>
       <SkeletonBlock
-        v-else-if="currentSrc && !settled.has(currentSrc)"
+        v-if="loading || (currentSrc && !settled.has(currentSrc))"
         class="photo-skeleton absolute inset-0"
         width="100%"
         height="100%"
         rounded="sm"
-        label="Loading photo"
+        :label="loading ? 'Loading record' : 'Loading photo'"
       />
+      <p v-else-if="!current" class="absolute inset-0 m-0 grid place-items-center text-sm text-white/70">
+        No image recorded
+      </p>
       <p
         v-else-if="currentSrc && failed.has(currentSrc)"
         class="absolute inset-0 grid place-items-center text-sm text-white/70"
@@ -199,7 +203,7 @@ defineExpose({ open });
         Couldn't load this photo
       </p>
       <img
-        v-if="currentSrc && !failed.has(currentSrc)"
+        v-if="!loading && currentSrc && !failed.has(currentSrc)"
         :key="`${currentSrc}#${attempt}`"
         :src="currentSrc"
         :crossorigin="photoCrossOrigin(currentSrc)"

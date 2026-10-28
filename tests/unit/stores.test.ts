@@ -14,10 +14,10 @@ const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 describe('explorer URL state', () => {
   it('reads and clamps the map view, dates and selected cell', async () => {
-    const loaded = await stores('?view=200,-90,30&when=y:2020..1990&hex=1.5,2.25&uncert=100');
+    const loaded = await stores('?view=200,-90,30&when=y:2020..1990&hex=1.5,2.25,7&uncert=100');
     expect(loaded.$mapView.get()).toEqual({ lng: 180, lat: -85, zoom: 22 });
     expect(loaded.$dateRange.get()).toEqual({ unit: 'y', from: '1990-01-01', to: '2020-12-31' });
-    expect(loaded.$selectedHex.get()).toEqual([1.5, 2.25]);
+    expect(loaded.$selectedHex.get()).toEqual([1.5, 2.25, 7]);
     expect(loaded.$maxUncertainty.get()).toBe(100);
   });
 
@@ -37,6 +37,9 @@ describe('explorer URL state', () => {
     await flush();
     expect(new URLSearchParams(location.search).get('when')).toBe('m:1990-03..2000-06');
     expect(new URLSearchParams(location.search).get('hex')).toBe('1.2346,-2.0000');
+    loaded.$selectedHex.set([1, 2, 9]);
+    await flush();
+    expect(new URLSearchParams(location.search).get('hex')).toBe('1.0000,2.0000,9');
   });
 
   it('writes the map view rounded, as viewParam does', async () => {

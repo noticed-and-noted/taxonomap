@@ -5,10 +5,11 @@
  * given an `area`, species hits outside the list are checked there with one facet request,
  * which also gives their record counts.
  */
-import { computed, ref, shallowRef, watch, type Ref } from 'vue';
+import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from 'vue';
 import { occurrenceFacets, type NameHit, type OccurrenceFilter } from '~/lib/gbif';
 import type { SpeciesRow } from '~/lib/species/groups';
-import { useNameSearch } from './useNameSearch';
+import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
+import { MIN_LIVE_QUERY, useNameSearch } from './useNameSearch';
 
 /** Hits asked for: they come mixed with genera and families, so plenty leaves enough species. */
 const NAME_SEARCH_HITS = 50;
@@ -20,6 +21,28 @@ export interface CellNameSearchOptions {
   species: () => readonly SpeciesRow[];
   /** The area to check unlisted species against; without it only listed species match. */
   area?: () => OccurrenceFilter | null;
+}
+
+/** The candidates with records in the area, with their counts, from one facet request. */
+async function countInArea(filter: OccurrenceFilter, candidates: readonly NameHit[], signal: AbortSignal) {
+  const keys = candidates.map((hit) => hit.key);
+  const response = await occurrenceFacets({ ...filter, speciesKeys: keys }, ['speciesKey'], {
+    facetLimit: keys.length,
+    signal,
+  });
+  const counts = new Map((response.facets['speciesKey'] ?? []).map((facet) => [Number(facet.name), facet.count]));
+  return candidates.flatMap((hit): SpeciesRow[] => {
+    const records = counts.get(hit.key);
+    if (!records) return [];
+    return [
+      {
+        key: hit.key,
+        scientificName: hit.scientificName,
+        records,
+        ...(hit.commonName && { commonName: hit.commonName }),
+      },
+    ];
+  });
 }
 
 /**
@@ -47,24 +70,7 @@ export function useCellNameSearch({ query, species, area }: CellNameSearchOption
     const mine = (controller = new AbortController());
     isChecking.value = true;
     try {
-      const keys = candidates.map((hit) => hit.key);
-      const response = await occurrenceFacets({ ...filter, speciesKeys: keys }, ['speciesKey'], {
-        facetLimit: keys.length,
-        signal: mine.signal,
-      });
-      const counts = new Map((response.facets['speciesKey'] ?? []).map((facet) => [Number(facet.name), facet.count]));
-      outside.value = candidates.flatMap((hit) => {
-        const records = counts.get(hit.key);
-        if (!records) return [];
-        return [
-          {
-            key: hit.key,
-            scientificName: hit.scientificName,
-            records,
-            ...(hit.commonName && { commonName: hit.commonName }),
-          },
-        ];
-      });
+      outside.value = await countInArea(filter, candidates, mine.signal);
     } catch {
       // Unchecked hits are left out rather than offered unverified; the listed species still match.
     } finally {
@@ -72,8 +78,21 @@ export function useCellNameSearch({ query, species, area }: CellNameSearchOption
     }
   }
 
+  const checkSoon = debounce((hits: readonly NameHit[]) => void checkOutside(hits), SEARCH_DEBOUNCE_MS);
+
+  // The index answers on every keystroke, so its hits wait for a pause; GBIF's arrive after one, so they go at once.
+  watch(nameSearch.hits, (hits) => {
+    checkSoon.cancel();
+    controller?.abort();
+    outside.value = [];
+    if (nameSearch.loading.value) return;
+    if (query.value.trim().length >= MIN_LIVE_QUERY) void checkOutside(hits);
+    else checkSoon(hits);
+  });
+
   watch(query, (text) => nameSearch.search(text), { immediate: true });
-  watch(nameSearch.hits, (hits) => void checkOutside(hits));
+
+  onScopeDispose(checkSoon.cancel);
 
   return {
     matchedKeys,

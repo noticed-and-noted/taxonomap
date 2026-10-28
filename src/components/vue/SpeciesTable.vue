@@ -15,7 +15,7 @@ import { debounce } from '~/lib/util/debounce';
 import type { ClassGroup, SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import ListSkeleton from './ListSkeleton.vue';
-import SearchSpinner from './SearchSpinner.vue';
+import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import { useCellNameSearch } from './useCellNameSearch';
@@ -207,28 +207,7 @@ watch([query, group, sortKey, sortDesc], () => {
     <div class="relative flex gap-2">
       <label class="min-w-0 flex-1">
         <span class="sr-only">Find in results</span>
-        <span class="relative block">
-          <svg
-            class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-subtle"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <input
-            v-model="query"
-            type="search"
-            placeholder="Find in results"
-            :disabled="pending"
-            :class="['pr-2', { 'search-spinner-room': isSearchingNames }]"
-            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle disabled:opacity-60"
-          />
-          <SearchSpinner :active="isSearchingNames" class="search-spinner-gap top-1/2" />
-        </span>
+        <SearchInput v-model="query" placeholder="Find in results" :disabled="pending" :loading="isSearchingNames" />
       </label>
       <button
         v-if="canFilter || pending"

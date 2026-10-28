@@ -11,9 +11,23 @@ import BottomSheet from './BottomSheet.vue';
 import SidePanel from './SidePanel.vue';
 
 const props = defineProps<{ title: string; open: boolean; collapsible?: boolean; dismissible?: string }>();
-const emit = defineEmits<{ close: []; open: []; dismiss: [] }>();
-/** The sheet has one close button: with `dismissible` it dismisses. */
-const closeSheet = () => (props.dismissible ? emit('dismiss') : emit('close'));
+/** `closing`: a dismissed sheet has started sliding away; `dismiss` follows once it's gone. */
+const emit = defineEmits<{ close: []; open: []; dismiss: []; closing: [] }>();
+/**
+ * The sheet has one close button: with `dismissible` it dismisses, once the sheet has slid away (dismissing
+ * removes the panel at once, which would cut the slide short).
+ */
+const isDismissing = ref(false);
+function closeSheet() {
+  if (!props.dismissible) return emit('close');
+  isDismissing.value = true;
+  emit('closing');
+}
+function onSheetClosed() {
+  if (!isDismissing.value) return;
+  isDismissing.value = false;
+  emit('dismiss');
+}
 
 const desktop = ref(true);
 let mediaQuery: MediaQueryList | undefined;
@@ -61,7 +75,14 @@ onBeforeUnmount(() => {
     <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />
   </SidePanel>
-  <BottomSheet v-else :title="title" :open="open" :close-label="dismissible" @close="closeSheet">
+  <BottomSheet
+    v-else
+    :title="title"
+    :open="open && !isDismissing"
+    :close-label="dismissible"
+    @close="closeSheet"
+    @closed="onSheetClosed"
+  >
     <template v-if="$slots.top" #top><slot name="top" /></template>
     <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />

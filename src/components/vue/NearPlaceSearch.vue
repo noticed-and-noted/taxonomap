@@ -7,7 +7,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import type { Place } from '~/lib/geocode';
 import { setNearLocation } from '~/stores/near';
-import SearchSpinner from './SearchSpinner.vue';
+import SearchInput from './SearchInput.vue';
 import { usePlaceSearch } from './usePlaceSearch';
 
 const uniqueId = useId();
@@ -82,37 +82,23 @@ function onInput() {
     <form role="search" class="flex" @submit.prevent="submit">
       <label class="min-w-0 flex-1">
         <span class="sr-only">Search for a place</span>
-        <span class="relative block">
-          <svg
-            class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-subtle"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-          >
-            <path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z" />
-            <circle cx="12" cy="10" r="2.5" />
-          </svg>
-          <input
-            v-model="query"
-            type="search"
-            enterkeyhint="search"
-            placeholder="Search a place"
-            autocomplete="off"
-            role="combobox"
-            :aria-expanded="open && places.length > 0"
-            :aria-controls="listId"
-            aria-autocomplete="list"
-            :aria-activedescendant="activeId"
-            :class="['pr-2', { 'search-spinner-room': loading }]"
-            class="w-full rounded-md border border-border-strong bg-surface-2 py-1.5 pl-8 text-sm placeholder:text-subtle"
-            @input="onInput"
-            @focus="open = true"
-            @keydown="onArrow"
-          />
-          <SearchSpinner :active="loading" label="Looking up places" class="search-spinner-gap top-1/2" />
-        </span>
+        <SearchInput
+          v-model="query"
+          icon="place"
+          :loading="loading"
+          loading-label="Looking up places"
+          enterkeyhint="search"
+          placeholder="Search a place"
+          autocomplete="off"
+          role="combobox"
+          :aria-expanded="open && places.length > 0"
+          :aria-controls="listId"
+          aria-autocomplete="list"
+          :aria-activedescendant="activeId"
+          @input="onInput"
+          @focus="open = true"
+          @keydown="onArrow"
+        />
       </label>
     </form>
     <ul

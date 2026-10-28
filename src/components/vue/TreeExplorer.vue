@@ -26,6 +26,7 @@ import {
 } from '~/lib/tree/model';
 import { $taxonKey } from '~/stores/explorer';
 import { $treeFocus, $treeLayout, $treeMetric } from '~/stores/tree';
+import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import TreeChart from './TreeChart.vue';
@@ -392,14 +393,9 @@ const share = (node: TreeNode) => {
             <template v-if="visibleChildren.length !== children.length">{{ visibleChildren.length }} of </template>
             {{ children.length }} {{ children.length === 1 ? 'group' : 'groups' }} in {{ focus.common ?? focus.name }}
           </h3>
-          <input
-            v-if="children.length > 1"
-            v-model="groupQuery"
-            type="search"
-            placeholder="Filter groups"
-            aria-label="Filter groups"
-            class="mb-2 w-full rounded-md border border-border-strong bg-surface-2 px-2.5 py-1.5 text-sm placeholder:text-subtle"
-          />
+          <div v-if="children.length > 1" class="mb-2">
+            <SearchInput v-model="groupQuery" placeholder="Filter groups" aria-label="Filter groups" />
+          </div>
           <!-- Padding gives the rows' focus ring room inside the scroll box. -->
           <ol
             ref="groupList"

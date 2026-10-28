@@ -2,6 +2,7 @@
 /** The shared species search: index first, then live GBIF, merged and de-duplicated. */
 import { effectScope } from 'vue';
 import type { NameRow } from '~/lib/data/types';
+import { SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 import { json, snapshots, stubNetwork } from './helpers/network';
 
 const NAMES: NameRow[] = [
@@ -34,7 +35,7 @@ async function setup(options: Parameters<typeof import('~/components/vue/useName
   return { ...search, stop: () => scope.stop() };
 }
 
-// Fake timers: tests step past the 250 ms debounce instead of waiting for it.
+// Fake timers: tests step past the debounce instead of waiting for it.
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   vi.useRealTimers();
@@ -47,7 +48,7 @@ describe('useNameSearch', () => {
     const search = await setup({ max: 8 });
     search.search('robin');
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564]));
-    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     // Index hits first; with index answers, only three live hits are kept (one a duplicate).
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564, 1, 2]));
     expect(search.loading.value).toBe(false);
@@ -61,7 +62,7 @@ describe('useNameSearch', () => {
     gbif();
     const search = await setup({ max: 2, exclude: () => [2492462] });
     search.search('robin');
-    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([9510564, 1]));
     search.stop();
   });
@@ -70,7 +71,7 @@ describe('useNameSearch', () => {
     gbif({ suggestFails: true });
     const search = await setup({ max: 8 });
     search.search('zzzz');
-    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     await vi.waitFor(() => expect(search.failed.value).toBe(true));
     expect(search.hits.value).toEqual([]);
     search.stop();
@@ -99,7 +100,7 @@ describe('useNameSearch', () => {
     });
     const search = await setup({ max: 8 });
     search.search('black headed gull');
-    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2, 4, 1, 3]));
     search.stop();
   });
@@ -126,7 +127,7 @@ describe('useNameSearch', () => {
     });
     const search = await setup({ max: 8 });
     search.search('feral pigeon');
-    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([3, 2, 1]));
     expect(search.hits.value.map((hit) => hit.matchedName)).toEqual([
       undefined,
@@ -141,7 +142,7 @@ describe('useNameSearch', () => {
     const search = await setup({ max: 8 });
     search.search('ro');
     await vi.waitFor(() => expect(search.hits.value).toHaveLength(2));
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     expect(calls.some((url) => url.pathname.startsWith('/v1/'))).toBe(false);
     search.search('r');
     expect(search.hits.value).toEqual([]);

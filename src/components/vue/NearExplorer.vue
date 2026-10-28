@@ -23,6 +23,7 @@ import { loadSpeciesManifest } from '~/lib/species/links';
 import { $flyTo, $mapMode, $occurrenceFilter } from '~/stores/explorer';
 import {
   $nearAt,
+  $nearLeaving,
   $nearRadius,
   $nearTab,
   $nearThisMonth,
@@ -48,6 +49,7 @@ const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
 
 const panelOpen = ref(true);
+const startLeaving = () => $nearLeaving.set(true);
 const geoState = ref<'idle' | 'asking' | 'denied' | 'unavailable'>('idle');
 const { loading, error, run: runArea, cancel: cancelArea } = useLatestLoad();
 const total = ref(0);
@@ -181,6 +183,7 @@ onBeforeUnmount(() => {
         dismissible="Leave near me"
         @close="panelOpen = false"
         @open="panelOpen = true"
+        @closing="startLeaving"
         @dismiss="exitNearMode"
       >
         <!-- No location yet: explainer -->
@@ -213,8 +216,9 @@ onBeforeUnmount(() => {
 
         <!-- Location set -->
         <!-- Exactly the panel's height, so the active list can fill what's left. On a very
-             short screen a list keeps its 12rem minimum and the panel scrolls instead. -->
-        <section v-else class="flex h-full flex-col gap-4">
+             short screen a list keeps its 12rem minimum and the panel scrolls instead. On phones the
+             half-height sheet would leave the list a sliver, so it gets most of the screen and the sheet scrolls to it. -->
+        <section v-else class="flex flex-col gap-4 sm:h-full">
           <div class="space-y-3 text-sm">
             <NearPlaceSearch />
             <label class="block">
@@ -265,7 +269,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Species -->
-          <div v-if="tab === 'species'" role="tabpanel" class="flex min-h-0 flex-1 flex-col">
+          <div v-if="tab === 'species'" role="tabpanel" class="list-panel flex min-h-0 flex-1 flex-col">
             <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
               GBIF is busy right now. <button type="button" class="underline" @click="loadArea">Try again</button>
             </div>
@@ -287,7 +291,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Records: the same list as a map cell's Records tab -->
-          <div v-else role="tabpanel" aria-label="Records" class="flex min-h-0 flex-1 flex-col">
+          <div v-else role="tabpanel" aria-label="Records" class="list-panel flex min-h-0 flex-1 flex-col">
             <HexRecords :species="species" :filter="recordsFilter" fill />
           </div>
         </section>
@@ -297,6 +301,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* About the full-height sheet's body, less the tabs. */
+@media (max-width: 639px) {
+  .list-panel {
+    flex: none;
+    height: 75dvh;
+  }
+}
 /* Desktop: beside the panel, which is always on screen (open, or tucked to a strip). */
 @media (min-width: 768px) {
   .near-bar {

@@ -4,10 +4,7 @@
  */
 import { onScopeDispose, ref } from 'vue';
 import { searchPlaces, type Place } from '~/lib/geocode';
-import { debounce } from '~/lib/util/debounce';
-
-/** Longer than the species debounce: the public geocoder is shared, so it gets fewer requests. */
-const PLACE_DEBOUNCE_MS = 400;
+import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
 /** Shorter queries match half the world, so they aren't sent. */
 const MIN_QUERY_LENGTH = 2;
@@ -40,7 +37,7 @@ export function usePlaceSearch() {
       failed.value = true;
     }
     loading.value = false;
-  }, PLACE_DEBOUNCE_MS);
+  }, SEARCH_DEBOUNCE_MS);
 
   function reset() {
     run.cancel();

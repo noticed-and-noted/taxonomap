@@ -50,6 +50,8 @@ export interface OccLayer {
   collection(): GeoJSON.FeatureCollection<GeoJSON.Polygon>;
   /** The cell containing a point, if any. */
   cellAt(point: LngLat): Hex | undefined;
+  /** The cell containing a point at any grid level, wherever it is, loading its tile and the ring around it. */
+  findCell(point: LngLat, level: number): Promise<Hex | undefined>;
   /** Draw again, e.g. after `isEmpty` learns of more empty cells. */
   redraw(): void;
   /** Stop loading and restore the map's methods the layer wrapped. */
@@ -106,6 +108,22 @@ function boxOf(ring: GeoJSON.Position[]) {
     box.north = Math.max(box.north, lat);
   }
   return box;
+}
+
+/** The cell containing a point, if any. */
+function cellIn(cells: Iterable<Hex>, [lng, lat]: LngLat): Hex | undefined {
+  // Called on every mouse move over thousands of cells: the box test skips nearly all of them.
+  for (const cell of cells) {
+    const ring = cell.geometry.coordinates[0]!;
+    const box = boxOf(ring);
+    if (lat < box.south || lat > box.north) continue;
+    // Cells by the antimeridian keep their vertices unwrapped (past ±180).
+    const hit = [lng, lng + 360, lng - 360].some(
+      (shifted) => shifted >= box.west && shifted <= box.east && inside([shifted, lat], ring),
+    );
+    if (hit) return cell;
+  }
+  return undefined;
 }
 
 /** Normalises MapLibre's accepted coordinate shapes to [lng, lat]. */
@@ -430,19 +448,27 @@ class OccLayerController {
     return { type: 'FeatureCollection', features: [...this.#cells.values()] };
   }
 
-  cellAt([lng, lat]: LngLat): Hex | undefined {
-    // Called on every mouse move over thousands of cells: the box test skips nearly all of them.
-    for (const cell of this.#cells.values()) {
-      const ring = cell.geometry.coordinates[0]!;
-      const box = boxOf(ring);
-      if (lat < box.south || lat > box.north) continue;
-      // Cells by the antimeridian keep their vertices unwrapped (past ±180).
-      const hit = [lng, lng + 360, lng - 360].some(
-        (shifted) => shifted >= box.west && shifted <= box.east && inside([shifted, lat], ring),
-      );
-      if (hit) return cell;
-    }
-    return undefined;
+  cellAt(point: LngLat): Hex | undefined {
+    return cellIn(this.#cells.values(), point);
+  }
+
+  async findCell(point: LngLat, level: number): Promise<Hex | undefined> {
+    const filterId = this.#filterKey();
+    const centre = tileAt(point, level);
+    // Its neighbours too, so a cell split across a tile edge is merged whole.
+    const tiles = [centre, ...ringAround([centre], level)];
+    const loaded = await Promise.all(tiles.map((tile) => this.#loadTile(filterId, level, tile)));
+    return cellIn(mergeHexes(loaded).values(), point);
+  }
+
+  /** A tile's hexes from the cache, or fetched outside the view's queue (none if it fails). */
+  async #loadTile(filterId: string, level: number, tile: TileId): Promise<Hex[]> {
+    const key = tileKey(filterId, level, tile);
+    const cached = this.#cache.get(key);
+    if (cached) return cached;
+    const hexes = await this.#fetchTile(tile, level, new AbortController().signal);
+    if (hexes) this.#remember(key, hexes);
+    return hexes ?? [];
   }
 
   redraw() {
@@ -470,6 +496,7 @@ export function createOccLayer(map: MlMap, options: OccLayerOptions): OccLayer {
   return {
     collection: () => layer.collection(),
     cellAt: (point) => layer.cellAt(point),
+    findCell: (point, level) => layer.findCell(point, level),
     redraw: () => layer.redraw(),
     destroy: () => layer.destroy(),
   };

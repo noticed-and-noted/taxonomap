@@ -1,10 +1,13 @@
+/** Pause after the last keystroke before any search sends a request. */
+export const SEARCH_DEBOUNCE_MS = 400;
+
 export interface Debounced<A extends unknown[]> {
   (...args: A): void;
   cancel(): void;
   flush(): void;
 }
 
-/** Trailing-edge debounce. Autocomplete uses 250 ms. */
+/** Trailing-edge debounce. Searches use `SEARCH_DEBOUNCE_MS`. */
 export function debounce<A extends unknown[]>(callback: (...args: A) => void, ms = 250): Debounced<A> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: A | undefined;
