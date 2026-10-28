@@ -22,7 +22,7 @@ const {
 } = Astro.props;
 
 const siteName = 'Taxonomap';
-const fullTitle = title === siteName ? title : `${title} · ${siteName}`;
+const fullTitle = title.startsWith(siteName) ? title : `${title} · ${siteName}`;
 const canonicalUrl = canonical ?? (Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined);
 const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : undefined;
 ---

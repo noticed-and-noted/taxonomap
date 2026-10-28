@@ -17,7 +17,7 @@ describe('species helpers', () => {
 
   it('links pre-rendered species to static pages and others to the fallback', () => {
     const manifest = { '2492462': 'erithacus-rubecula' };
-    expect(speciesPath(2492462, manifest)).toBe('/species/2492462/erithacus-rubecula');
+    expect(speciesPath(2492462, manifest)).toBe('/species/2492462/erithacus-rubecula/');
     expect(speciesPath(1, manifest)).toBe('/species/view/1');
     expect(speciesPath(1, null)).toBe('/species/view/1');
   });

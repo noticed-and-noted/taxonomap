@@ -183,9 +183,9 @@ describe('loadSpeciesData with sparse answers', () => {
 describe('species links', () => {
   it('use the pre-rendered page when the manifest has one', async () => {
     const { speciesPath, similarItems } = await load();
-    expect(speciesPath(1, { 1: 'animalia' })).toBe('/species/1/animalia');
+    expect(speciesPath(1, { 1: 'animalia' })).toBe('/species/1/animalia/');
     expect(speciesPath(2, null)).toBe('/species/view/2');
-    expect(similarItems([{ key: 1, scientificName: 'A', count: 1 }], { 1: 'a' })[0]?.href).toBe('/species/1/a');
+    expect(similarItems([{ key: 1, scientificName: 'A', count: 1 }], { 1: 'a' })[0]?.href).toBe('/species/1/a/');
   });
 
   it('load the manifest once and publish it', async () => {
