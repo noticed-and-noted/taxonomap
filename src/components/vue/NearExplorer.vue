@@ -23,6 +23,7 @@ import { loadSpeciesManifest } from '~/lib/species/links';
 import { $flyTo, $mapMode, $occurrenceFilter } from '~/stores/explorer';
 import {
   $nearAt,
+  $nearLeaving,
   $nearRadius,
   $nearTab,
   $nearThisMonth,
@@ -48,6 +49,7 @@ const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
 
 const panelOpen = ref(true);
+const startLeaving = () => $nearLeaving.set(true);
 const geoState = ref<'idle' | 'asking' | 'denied' | 'unavailable'>('idle');
 const { loading, error, run: runArea, cancel: cancelArea } = useLatestLoad();
 const total = ref(0);
@@ -181,6 +183,7 @@ onBeforeUnmount(() => {
         dismissible="Leave near me"
         @close="panelOpen = false"
         @open="panelOpen = true"
+        @closing="startLeaving"
         @dismiss="exitNearMode"
       >
         <!-- No location yet: explainer -->

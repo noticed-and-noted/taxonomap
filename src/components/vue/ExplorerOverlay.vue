@@ -16,7 +16,7 @@ import {
   clearFilters,
   clearHexSelection,
 } from '~/stores/explorer';
-import { $nearMode, exitNearMode } from '~/stores/near';
+import { $nearLeaving, $nearMode, exitNearMode } from '~/stores/near';
 import { $checklistHint, $tourSeen } from '~/stores/onboarding';
 import BasemapSwitcher from './BasemapSwitcher.vue';
 import ChecklistHint from './ChecklistHint.vue';
@@ -54,6 +54,7 @@ const groupCounts = useStore($groupCounts);
 /* Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
 const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
+const nearLeaving = useStore($nearLeaving);
 const mapUnsupported = useStore($mapUnsupported);
 
 /* Slide the dock off to the left to see the map behind it. */
@@ -62,7 +63,7 @@ const dockStashed = ref(false);
 /* The rail's flyout stops above the dock, whose height follows its content (the legend's notice, Try this). */
 const dock = ref<HTMLElement>();
 const dockHeight = ref(0);
-const dockClear = computed(() => (dockStashed.value ? '0px' : `calc(${dockHeight.value}px + 0.5rem)`));
+const dockClear = computed(() => (dockHidden.value ? '0px' : `calc(${dockHeight.value}px + 0.5rem)`));
 let dockObserver: ResizeObserver | undefined;
 // An empty map's notice lives in the legend: bring it back if it was slid away.
 const viewCheck = useStore($viewCheck);
@@ -90,6 +91,22 @@ const filtersOpen = computed(() => panel.value === 'filters');
 const panelOpen = computed(() => hexOpen.value || filtersOpen.value);
 const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : 'Selected cell'));
 
+/* Below this width panels are bottom sheets (ResponsivePanel), which cover the dock. */
+const SHEET_QUERY = '(max-width: 767.98px)';
+const hasSheets = ref(false);
+/* An open sheet slides the dock away; closing it brings the dock back as the viewer left it. */
+const sheetCoversDock = ref(false);
+watch(
+  () => hasSheets.value && (panelOpen.value || (near.value && !nearLeaving.value)),
+  (covers) => (sheetCoversDock.value = covers),
+);
+const dockHidden = computed(() => dockStashed.value || sheetCoversDock.value);
+function toggleDock() {
+  dockStashed.value = !dockHidden.value;
+  sheetCoversDock.value = false;
+}
+const onSheetQuery = (event: MediaQueryListEvent) => (hasSheets.value = event.matches);
+
 function openFilters() {
   $panel.set(filtersOpen.value ? (hex.value ? 'hex' : 'none') : 'filters');
 }
@@ -114,14 +131,19 @@ function swapFilterLayout(event: MediaQueryListEvent) {
 }
 
 let phoneQuery: MediaQueryList | undefined;
+let sheetQuery: MediaQueryList | undefined;
 onMounted(() => {
   phoneQuery = window.matchMedia(PHONE_QUERY);
   phoneQuery.addEventListener('change', swapFilterLayout);
+  sheetQuery = window.matchMedia(SHEET_QUERY);
+  hasSheets.value = sheetQuery.matches;
+  sheetQuery.addEventListener('change', onSheetQuery);
   dockObserver = new ResizeObserver(() => (dockHeight.value = dock.value?.offsetHeight ?? 0));
   if (dock.value) dockObserver.observe(dock.value);
 });
 onBeforeUnmount(() => {
   phoneQuery?.removeEventListener('change', swapFilterLayout);
+  sheetQuery?.removeEventListener('change', onSheetQuery);
   dockObserver?.disconnect();
 });
 </script>
@@ -163,45 +185,63 @@ onBeforeUnmount(() => {
         </button>
         <BasemapSwitcher />
       </div>
-      <!-- Phone: Near me + Filters button (the rail is hidden). -->
-      <button v-if="!near" type="button" class="near-btn near-phone ml-auto" data-tour="near" @click="toggleNear">
-        <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-          <path :d="pinIcon" />
-        </svg>
-        <span class="sr-only">Near me</span>
-      </button>
-      <button
-        type="button"
-        class="filters-btn"
-        data-tour="filters"
-        :aria-expanded="filtersOpen"
-        :class="{ active: activeFilters, 'ml-auto': near }"
-        @click="openFilters"
-      >
-        <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M4 6h16M7 12h10M10 18h4" />
-        </svg>
-        Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
-      </button>
+      <!-- Phone: Near me + Filters button (the rail is hidden). Grouped at the right, so Filters stays put while
+           Near me fades. -->
+      <div class="ml-auto flex shrink-0 sm:hidden">
+        <Transition name="fade">
+          <button
+            v-if="!near || nearLeaving"
+            type="button"
+            class="near-btn near-phone"
+            data-tour="near"
+            @click="toggleNear"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path :d="pinIcon" />
+            </svg>
+            <span class="sr-only">Near me</span>
+          </button>
+        </Transition>
+        <button
+          type="button"
+          class="filters-btn"
+          data-tour="filters"
+          :aria-expanded="filtersOpen"
+          :class="{ active: activeFilters }"
+          @click="openFilters"
+        >
+          <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M4 6h16M7 12h10M10 18h4" />
+          </svg>
+          Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
+        </button>
+      </div>
     </div>
 
-    <!-- Stays in Near me too, on wider screens; phones hide it under Near me's sheet (see the styles). -->
+    <!-- Stays in Near me too, on wider screens; on phones an open sheet slides it away (sheetCoversDock). -->
     <div
       ref="dock"
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg p-3"
-      :class="{ stashed: dockStashed }"
+      :class="{ stashed: dockHidden }"
     >
       <!-- Same edge tab as SidePanel's: tucked under the dock so its shadow falls across the join. -->
       <button
-        v-if="!near"
+        v-if="!near || hasSheets"
         type="button"
         class="stash-toggle absolute -z-10 left-full [clip-path:inset(-30px_-30px_-30px_0)] top-1/2 grid h-10 w-6 -translate-y-1/2 place-items-center rounded-r-md border border-l-0 border-border bg-surface text-muted shadow-panel hover:text-text"
-        :aria-label="dockStashed ? 'Show legend' : 'Slide legend away'"
-        :aria-expanded="!dockStashed"
-        @click="dockStashed = !dockStashed"
+        :aria-label="dockHidden ? 'Show legend' : 'Slide legend away'"
+        :aria-expanded="!dockHidden"
+        @click="toggleDock"
       >
         <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path :d="dockStashed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'" />
+          <path :d="dockHidden ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'" />
         </svg>
       </button>
       <TryThis />
@@ -433,11 +473,12 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Mobile: the dock hides behind the bottom sheet while it is open (Near me's sheet always is). */
-@media (max-width: 767.98px) {
-  .panel-open .bottom-dock,
-  .near .bottom-dock {
-    visibility: hidden;
-  }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--dur-slow) var(--ease);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

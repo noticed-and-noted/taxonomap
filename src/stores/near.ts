@@ -2,6 +2,7 @@
  * "What's near me" state. The location is always rounded to 3 dp (~100 m)
  * before it is stored, shown in the URL or sent anywhere.
  */
+import { atom } from 'nanostores';
 import { RADIUS_STEPS_KM, roundLatLng, type RadiusKm } from '~/lib/gbif/params';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
@@ -50,9 +51,13 @@ export function setNearLocation(lat: number, lng: number): void {
   $nearAt.set(roundLatLng(lat, lng));
 }
 
+/** Near me's phone sheet is sliding away on the way out, so what it covered can come back now. */
+export const $nearLeaving = atom(false);
+
 /** Leave near-me mode, dropping its params from the URL (one history step). */
 export function exitNearMode(): void {
   $nearMode.set(false);
+  $nearLeaving.set(false);
   $nearAt.set(null);
   $nearRadius.set(radiusCodec.default);
   $nearThisMonth.set(false);

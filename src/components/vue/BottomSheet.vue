@@ -6,7 +6,8 @@
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{ title: string; open: boolean; closeLabel?: string | undefined }>();
-const emit = defineEmits<{ close: [] }>();
+/** `closed` fires once the sheet has slid away. */
+const emit = defineEmits<{ close: []; closed: [] }>();
 
 const SNAPS = [0.22, 0.55, 0.92] as const;
 const snap = ref(1);
@@ -77,7 +78,8 @@ function onKey(event: KeyboardEvent) {
 </script>
 
 <template>
-  <Transition name="sheet">
+  <!-- appear: a sheet created already open (near me, a panel in a shared link) slides up too. -->
+  <Transition name="sheet" appear @after-leave="emit('closed')">
     <section
       v-if="open"
       class="bottom-sheet absolute inset-x-0 bottom-0 z-20 flex flex-col rounded-t-lg border-t border-border bg-surface shadow-panel"
