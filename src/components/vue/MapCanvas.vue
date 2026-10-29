@@ -97,6 +97,8 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
 
 /** The map's hex layer. */
 const HEX_LAYER = 'occ-fill';
+/** Below this the grid drops to level 0, whose single tile wraps onto itself and GBIF's cells overlap at the antimeridian. */
+const MIN_ZOOM = 1;
 
 /** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
@@ -699,6 +701,7 @@ onMounted(async () => {
     style,
     center: [view.lng, view.lat],
     zoom: view.zoom,
+    minZoom: MIN_ZOOM,
     attributionControl: { compact: true },
     maxPitch: 0,
     dragRotate: false,

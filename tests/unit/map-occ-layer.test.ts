@@ -78,7 +78,7 @@ function callbacks(initial: TileFilter = {}) {
   return {
     o: {
       filter: () => filter,
-      onCells: vi.fn<(collection: GeoJSON.FeatureCollection) => void>(),
+      onCells: vi.fn<(collection: GeoJSON.FeatureCollection<GeoJSON.Polygon>) => void>(),
       onChanges: vi.fn<(add: { properties: { id: string } }[], remove: string[]) => void>(),
       onLevel: vi.fn(),
       onProgress: vi.fn(),
@@ -182,7 +182,7 @@ describe('occurrence layer', () => {
     expect(o.onProgress).toHaveBeenNthCalledWith(1, 0, asked.length);
     expect(o.onProgress).toHaveBeenLastCalledWith(asked.length, asked.length);
     expect(o.onCells).toHaveBeenCalled();
-    // Only the view's tiles (asked first) are drawn; the ring's wait in the cache for a pan.
+    // The new set is only the view's tiles (asked first); the ring follows as changes.
     const middleOf = (feature: GeoJSON.Feature<GeoJSON.Polygon>): [number, number] => {
       const ring = feature.geometry.coordinates[0]!;
       return [
@@ -190,11 +190,13 @@ describe('occurrence layer', () => {
         ring.reduce((sum, vertex) => sum + vertex[1]!, 0) / ring.length,
       ];
     };
-    const drawn = layer.collection().features;
-    expect(drawn.length).toBeLessThan(new Set(asked.map(key)).size);
-    expect(drawn.map((feature) => key(tileAt(middleOf(feature), 4))).sort()).toEqual(
-      asked.slice(0, drawn.length).map(key).sort(),
+    const firstSet = o.onCells.mock.calls[0]![0].features;
+    expect(firstSet.length).toBeLessThan(new Set(asked.map(key)).size);
+    expect(firstSet.map((feature) => key(tileAt(middleOf(feature), 4))).sort()).toEqual(
+      asked.slice(0, firstSet.length).map(key).sort(),
     );
+    const drawn = layer.collection().features;
+    expect(drawn.map((feature) => key(tileAt(middleOf(feature), 4))).sort()).toEqual(asked.map(key).sort());
     const cell = drawn[0]!;
     expect(layer.cellAt(middleOf(cell))).toBe(cell);
     expect(layer.cellAt([170, 0])).toBeUndefined();
@@ -264,13 +266,14 @@ describe('occurrence layer', () => {
     const asked = network((request) => (key(request) === '8/8' ? held.hold(request) : undefined));
     const map = fakeMap();
     const { o } = callbacks();
-    createOccLayer(map.map, o);
+    const layer = createOccLayer(map.map, o);
     await settle();
     expect(o.onCells).not.toHaveBeenCalled();
     held.release();
     await settle();
     expect(o.onCells).toHaveBeenCalledOnce();
-    const before = new Set(ids(o.onCells.mock.calls[0]![0]));
+    const before = new Set(ids(layer.collection()));
+    o.onChanges.mockClear();
 
     // Pan east by a tile: new tiles' cells come in, the far west's go.
     map.moveTo([22.5, 0]);

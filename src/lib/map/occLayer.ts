@@ -10,8 +10,8 @@
  *   once you let go;
  * - an inertia glide or a flight (easeTo/flyTo) starts loading where it will
  *   end as soon as it starts.
- * Tiles are decoded off the main thread (hexDecoder.ts). Only the view's
- * cells are drawn; the ring's wait in the cache until a pan brings them in.
+ * Tiles are decoded off the main thread (hexDecoder.ts). The ring's cells are
+ * drawn too, a frame after a new set, so a pan reveals cells already on the map.
  * Cells arriving for the view are passed on as changes (onChanges); a new
  * level or new filters swap the whole set once its view is loaded (onCells),
  * so the old hexes stay up until then.
@@ -306,32 +306,38 @@ class OccLayerController {
   }
 
   /**
-   * The loaded cells of the view's tiles. The ring is merged in for its home
-   * counts but not drawn: sending its cells to MapLibre's worker as well
-   * roughly triples the copy that stalls a frame on every new level.
+   * The loaded cells of the view's tiles, and of the ring around them when
+   * `withRing`. The ring is always merged in for its home counts.
    */
-  #wantedCells(): Map<string, Hex> {
+  #wantedCells(withRing: boolean): Map<string, Hex> {
     const { filter, level, view, ring } = this.#want;
     const hexesOf = (tile: TileId) => this.#cache.get(tileKey(filter, level, tile)) ?? [];
     const inView = new Set(view.flatMap(hexesOf).map((hex) => hex.properties.id));
     const merged = mergeHexes([...view, ...ring].map(hexesOf));
     const { isEmpty } = this.#options;
-    for (const [id, hex] of merged) if (!inView.has(id) || isEmpty?.(hex)) merged.delete(id);
+    for (const [id, hex] of merged) if ((!withRing && !inView.has(id)) || isEmpty?.(hex)) merged.delete(id);
     return merged;
   }
 
-  /** Draw what is loaded for the view: a whole new set, or the changes since last time. */
+  /**
+   * Draw what is loaded for the view: a whole new set, or the changes since
+   * last time. A new set is the view alone, since sending the ring as well
+   * roughly triples the copy to MapLibre's worker that stalls a frame on a new
+   * level; changes add the ring, so a pan reveals cells already drawn.
+   */
   #draw() {
-    const next = this.#wantedCells();
     const { filter, level, view } = this.#want;
     if (this.#shown.filter !== filter || this.#shown.level !== level) {
       // A new set waits until its view is whole, so the old hexes stay up until then.
       if (!view.every((tile) => this.#cache.has(tileKey(filter, level, tile)))) return;
       this.#shown = { filter, level };
-      this.#cells = next;
+      this.#cells = this.#wantedCells(false);
       this.#options.onCells(this.collection());
+      // The ring follows as changes, next frame.
+      this.#drawSoon();
       return;
     }
+    const next = this.#wantedCells(true);
     const add: Hex[] = [];
     const remove: string[] = [];
     for (const [id, hex] of next) {
