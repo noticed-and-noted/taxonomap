@@ -17,12 +17,20 @@ export const TEXT_SIZES = [
 
 export type TextSize = (typeof TEXT_SIZES)[number]['id'];
 
+/** How many canvas pixels the map draws per CSS pixel, at most (a screen's own density caps it). */
+export const RENDER_SCALES = [
+  { id: 'high', label: 'High', pixelRatio: 2 },
+  { id: 'low', label: 'Low', pixelRatio: 1 },
+] as const;
+
+export type RenderScale = (typeof RENDER_SCALES)[number]['id'];
+
 export interface ReadingPrefs {
   textSize: TextSize;
   noItalics: boolean;
   wideSpacing: boolean;
   reduceMotion: boolean;
-  lightRendering: boolean;
+  renderScale: RenderScale;
 }
 
 export const DEFAULT_READING: ReadingPrefs = {
@@ -30,8 +38,15 @@ export const DEFAULT_READING: ReadingPrefs = {
   noItalics: false,
   wideSpacing: false,
   reduceMotion: false,
-  lightRendering: false,
+  // High stops at 2×: a 3× phone at 3× fills 2.25 times the pixels, the costliest part of its frame.
+  renderScale: 'high',
 };
+
+/** A saved render scale, or Low for anyone who had turned on its predecessor, Lighter rendering. */
+function savedRenderScale(stored: Partial<ReadingPrefs> & { lightRendering?: unknown }): RenderScale {
+  if (RENDER_SCALES.some((scale) => scale.id === stored.renderScale)) return stored.renderScale as RenderScale;
+  return stored.lightRendering === true ? 'low' : DEFAULT_READING.renderScale;
+}
 
 function saved(): ReadingPrefs {
   try {
@@ -43,7 +58,7 @@ function saved(): ReadingPrefs {
       noItalics: stored.noItalics === true,
       wideSpacing: stored.wideSpacing === true,
       reduceMotion: stored.reduceMotion === true,
-      lightRendering: stored.lightRendering === true,
+      renderScale: savedRenderScale(stored),
     };
   } catch {
     // Storage blocked or a corrupt value: start from the defaults.
@@ -65,7 +80,6 @@ function apply(prefs: ReadingPrefs) {
   toggleAttribute('data-no-italics', prefs.noItalics && '');
   toggleAttribute('data-wide-spacing', prefs.wideSpacing && '');
   toggleAttribute('data-reduce-motion', prefs.reduceMotion && '');
-  toggleAttribute('data-light-rendering', prefs.lightRendering && '');
 }
 
 /**
@@ -83,8 +97,14 @@ export function setReading(change: Partial<ReadingPrefs>) {
   $reading.set(next);
 }
 
-/** Whether to skip animation: the system setting, or the viewer's choice here (lighter rendering skips map flights too). */
+/** Whether to skip animation: the system setting, or the viewer's choice here. */
 export function prefersReducedMotion(): boolean {
-  const { reduceMotion, lightRendering } = $reading.get();
-  return reduceMotion || lightRendering || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return $reading.get().reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** The map's canvas pixels per CSS pixel: the chosen render scale, capped at the screen's own density. */
+export function mapPixelRatio(): number {
+  const { renderScale } = $reading.get();
+  const scale = RENDER_SCALES.find((option) => option.id === renderScale) ?? RENDER_SCALES[0];
+  return Math.min(window.devicePixelRatio, scale.pixelRatio);
 }

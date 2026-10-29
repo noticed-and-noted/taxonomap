@@ -145,7 +145,7 @@ Viewers can change how text reads from the welcome card ("Reading and display op
 - **No italics** (`data-no-italics`): everything upright, scientific names included.
 - **Wider spacing** (`data-wide-spacing`): WCAG 1.4.12 letter, word and line spacing. Check new layouts don't clip with it on.
 - **Reduce motion** (`data-reduce-motion`): the same as `prefers-reduced-motion`. In script, ask `prefersReducedMotion()` rather than the media query.
-- **Lighter rendering** (`data-light-rendering`): for low-power devices. The map draws at 1× pixel ratio, background blur (`backdrop-filter`) is off, and `prefersReducedMotion()` returns true so map flights jump and the tree of life's zooms snap. Don't rely on blur for legibility.
+- **Render scale** (`renderScale`, no attribute): how many canvas pixels the map draws per CSS pixel. High (2×, the default) or Low (1×), never more than the screen's own density; `mapPixelRatio()` in the store works it out. Filling pixels is the costliest part of a frame on a phone, so even a 3× phone draws at 2× at most, and Low is for older phones. Keep `backdrop-filter` off surfaces over the map: it is redrawn every map frame.
 - The welcome card also offers the map colours as a dropdown, colour-blind-safe ramps first (`colourBlindSafe` in `src/lib/ramp.ts`).
 
 ## Accessibility checklist

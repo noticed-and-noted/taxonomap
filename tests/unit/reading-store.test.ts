@@ -53,11 +53,23 @@ describe('reading store', () => {
     expect(reading.prefersReducedMotion()).toBe(true);
   });
 
-  it('lighter rendering marks the page and skips animation', async () => {
-    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  it('draws the map at the chosen render scale, never past the screen’s own density', async () => {
+    vi.stubGlobal('devicePixelRatio', 3);
     const reading = await store();
-    reading.setReading({ lightRendering: true });
-    expect(root().hasAttribute('data-light-rendering')).toBe(true);
-    expect(reading.prefersReducedMotion()).toBe(true);
+    expect(reading.$reading.get().renderScale).toBe('high');
+    expect(reading.mapPixelRatio()).toBe(2);
+    reading.setReading({ renderScale: 'low' });
+    expect(reading.mapPixelRatio()).toBe(1);
+
+    vi.stubGlobal('devicePixelRatio', 1);
+    reading.setReading({ renderScale: 'high' });
+    expect(reading.mapPixelRatio()).toBe(1);
+  });
+
+  it('turns a saved Lighter rendering into the Low render scale', async () => {
+    localStorage.setItem('reading', '{"lightRendering":true}');
+    expect((await store()).$reading.get().renderScale).toBe('low');
+    localStorage.setItem('reading', '{"renderScale":"max"}');
+    expect((await store()).$reading.get().renderScale).toBe('high');
   });
 });

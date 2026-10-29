@@ -11,7 +11,8 @@
  * - an inertia glide or a flight (easeTo/flyTo) starts loading where it will
  *   end as soon as it starts.
  * Tiles are decoded off the main thread (hexDecoder.ts). The ring's cells are
- * drawn too, a frame after a new set, so a pan reveals cells already on the map.
+ * drawn too, a frame after a new set, so a pan reveals cells already on the map,
+ * and drawn tiles linger a little past the ring, so panning back resends nothing.
  * Cells arriving for the view are passed on as changes (onChanges); a new
  * level or new filters swap the whole set once its view is loaded (onCells),
  * so the old hexes stay up until then.
@@ -28,6 +29,7 @@ import {
   shiftTiles,
   tileAt,
   tileCoordinateKey,
+  tileDistance,
   tilePoints,
   tilesFor,
   type Hex,
@@ -51,6 +53,18 @@ const MOVE_EVERY_MS = 50;
  * densely (every ~64 px on a 1000 px map).
  */
 const SAMPLES = 17;
+/**
+ * Drawn tiles stay drawn while within this many tiles of the view, though
+ * past the ring: a pan back, or a fling that overshoots the ring, then finds
+ * them still on the map instead of sending their cells to MapLibre again.
+ */
+const LINGER_TILES = 2;
+/**
+ * New or changed cells sent to MapLibre per frame; the rest follow next frame.
+ * Copying cells to its worker blocks the main thread (about 1 ms per 400
+ * cells on a fast laptop), so a burst of tiles would otherwise drop frames.
+ */
+const MAX_CELLS_PER_FRAME = 500;
 
 /** Handle on the occurrence hexes the layer keeps loaded for a map. */
 export interface OccLayer {
@@ -175,6 +189,8 @@ class OccLayerController {
   /** What is drawn: cells from tiles of this filter and level. */
   #shown = { filter: '', level: -1 };
   #cells = new Map<string, Hex>();
+  /** The tiles whose cells are drawn. */
+  #drawnTiles: TileId[] = [];
   #high: Job[] = [];
   #low: Job[] = [];
   /** Tiles where the current glide or flight ends: loaded with the view (same level) or after it, until the move ends. */
@@ -291,48 +307,80 @@ class OccLayerController {
   }
 
   /**
-   * The loaded cells of the view's tiles, and of the ring around them when
-   * `withRing`. The ring is always merged in for its home counts.
+   * The loaded cells of these tiles, less any known to be empty. The ring is
+   * always merged in for its home counts.
    */
-  #wantedCells(withRing: boolean): Map<string, Hex> {
-    const { filter, level, view, ring } = this.#want;
+  #cellsOf(tiles: TileId[]): Map<string, Hex> {
+    const { filter, level, ring } = this.#want;
     const hexesOf = (tile: TileId) => this.#cache.get(tileKey(filter, level, tile)) ?? [];
-    const inView = new Set(view.flatMap(hexesOf).map((hex) => hex.properties.id));
-    const merged = mergeHexes([...view, ...ring].map(hexesOf));
+    const isDrawn = new Set(tiles.flatMap(hexesOf).map((hex) => hex.properties.id));
+    const merged = mergeHexes([...tiles, ...ring].map(hexesOf));
     const { isEmpty } = this.#options;
-    for (const [id, hex] of merged) if ((!withRing && !inView.has(id)) || isEmpty?.(hex)) merged.delete(id);
+    for (const [id, hex] of merged) if (!isDrawn.has(id) || isEmpty?.(hex)) merged.delete(id);
     return merged;
   }
 
+  /** Drawn tiles past the ring that are still loaded and within LINGER_TILES of the view. */
+  #lingeringTiles(): TileId[] {
+    const { filter, level, view, ring } = this.#want;
+    const wanted = new Set([...view, ...ring].map(tileCoordinateKey));
+    return this.#drawnTiles.filter(
+      (tile) =>
+        !wanted.has(tileCoordinateKey(tile)) &&
+        this.#cache.has(tileKey(filter, level, tile)) &&
+        view.some((viewTile) => tileDistance(tile, viewTile, level) <= LINGER_TILES),
+    );
+  }
+
   /**
-   * Draw what is loaded for the view: a whole new set, or the changes since
-   * last time. A new set is the view alone, since sending the ring as well
-   * roughly triples the copy to MapLibre's worker that stalls a frame on a new
-   * level; changes add the ring, so a pan reveals cells already drawn.
+   * Draw what is loaded for the view: a whole new set (new level or filters),
+   * or the changes since last time.
    */
   #draw() {
+    const { filter, level } = this.#want;
+    if (this.#shown.filter !== filter || this.#shown.level !== level) this.#drawNewSet();
+    else this.#drawChanges();
+  }
+
+  /**
+   * A new set is the view alone, since sending the ring as well roughly
+   * triples the copy to MapLibre's worker that stalls a frame on a new level.
+   * It waits until its view is whole, so the old hexes stay up until then.
+   */
+  #drawNewSet() {
     const { filter, level, view } = this.#want;
-    if (this.#shown.filter !== filter || this.#shown.level !== level) {
-      // A new set waits until its view is whole, so the old hexes stay up until then.
-      if (!view.every((tile) => this.#cache.has(tileKey(filter, level, tile)))) return;
-      this.#shown = { filter, level };
-      this.#cells = this.#wantedCells(false);
-      this.#options.onCells(this.collection());
-      // The ring follows as changes, next frame.
-      this.#drawSoon();
-      return;
-    }
-    const next = this.#wantedCells(true);
+    if (!view.every((tile) => this.#cache.has(tileKey(filter, level, tile)))) return;
+    this.#shown = { filter, level };
+    this.#drawnTiles = view;
+    this.#cells = this.#cellsOf(view);
+    this.#options.onCells(this.collection());
+    // The ring follows as changes, next frame.
+    this.#drawSoon();
+  }
+
+  /**
+   * Changes add the ring, so a pan reveals cells already drawn. Removals all
+   * go at once (only ids); new and changed cells go up to MAX_CELLS_PER_FRAME
+   * at a time, view first.
+   */
+  #drawChanges() {
+    const { view, ring } = this.#want;
+    this.#drawnTiles = [...view, ...ring, ...this.#lingeringTiles()];
+    const wanted = this.#cellsOf(this.#drawnTiles);
+    const remove = [...this.#cells.keys()].filter((id) => !wanted.has(id));
+    for (const id of remove) this.#cells.delete(id);
     const add: Hex[] = [];
-    const remove: string[] = [];
-    for (const [id, hex] of next) {
+    for (const [id, hex] of wanted) {
       const had = this.#cells.get(id);
       if (had?.properties.total === hex.properties.total) continue;
+      if (add.length === MAX_CELLS_PER_FRAME) {
+        this.#drawSoon();
+        break;
+      }
       if (had) remove.push(id);
       add.push(hex);
+      this.#cells.set(id, hex);
     }
-    for (const id of this.#cells.keys()) if (!next.has(id)) remove.push(id);
-    this.#cells = next;
     if (add.length || remove.length) this.#options.onChanges(add, remove);
   }
 

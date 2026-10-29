@@ -275,18 +275,40 @@ describe('occurrence layer', () => {
     const before = new Set(ids(layer.collection()));
     o.onChanges.mockClear();
 
-    // Pan east by a tile: new tiles' cells come in, the far west's go.
+    // Pan east by a tile (22.5° at level 4): new tiles' cells come in; the west's linger, still near the view.
     map.moveTo([22.5, 0]);
     map.fire('moveend');
     await settle();
     expect(o.onCells).toHaveBeenCalledOnce();
-    const added = o.onChanges.mock.calls.flatMap(([add]) => add.map((hex) => hex.properties.id));
-    const removed = o.onChanges.mock.calls.flatMap(([, remove]) => remove);
-    expect(added.length).toBeGreaterThan(0);
-    expect(removed.length).toBeGreaterThan(0);
-    expect(removed.every((id) => before.has(id))).toBe(true);
-    expect(added.some((id) => before.has(id))).toBe(false);
+    const added = () => o.onChanges.mock.calls.flatMap(([add]) => add.map((hex) => hex.properties.id));
+    const removed = () => o.onChanges.mock.calls.flatMap(([, remove]) => remove);
+    expect(added().length).toBeGreaterThan(0);
+    expect(removed()).toEqual([]);
+    expect(added().some((id) => before.has(id))).toBe(false);
+
+    // Two more tiles east: the far west is now out of reach, and goes.
+    map.moveTo([67.5, 0]);
+    map.fire('moveend');
+    await settle();
+    expect(removed().length).toBeGreaterThan(0);
+    expect(removed().every((id) => before.has(id))).toBe(true);
     expect(asked.filter((tile) => key(tile) === '8/8')).toHaveLength(1);
+  });
+
+  it('sends a burst of new cells a few hundred a frame', async () => {
+    // A ring tile (sent as changes, not in the new set) full of hexes: 30 × 30, far more than a frame's share.
+    const grid = Array.from({ length: 900 }, (_unused, index) => ({
+      ring: hexAt(100 + (index % 30) * 130, 100 + Math.floor(index / 30) * 130, 50),
+      total: 2,
+    }));
+    network((request) => (key(request) === '10/8' ? mvt(grid) : undefined));
+    const map = fakeMap();
+    const { o } = callbacks();
+    const layer = createOccLayer(map.map, o);
+    await settle();
+    const batches = o.onChanges.mock.calls.map(([add]) => add.length);
+    expect(Math.max(...batches)).toBeLessThanOrEqual(500);
+    expect(layer.collection().features.length).toBeGreaterThan(900);
   });
 
   it('updates a cell whose count changes when a better copy arrives', async () => {

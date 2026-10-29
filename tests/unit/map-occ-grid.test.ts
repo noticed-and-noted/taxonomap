@@ -12,6 +12,7 @@ import {
   ringAround,
   shiftTiles,
   tileAt,
+  tileDistance,
   tilePoints,
   tilesFor,
   zoomDrop,
@@ -85,6 +86,14 @@ describe('gridLevel', () => {
 
   it('uses the zoom as is once the map is flat', () => {
     expect(level(12.5, 70)).toBe(12);
+  });
+});
+
+describe('tileDistance', () => {
+  it('counts diagonal steps as one, wrapping at the antimeridian', () => {
+    expect(tileDistance({ x: 3, y: 3 }, { x: 3, y: 3 }, 3)).toBe(0);
+    expect(tileDistance({ x: 3, y: 3 }, { x: 5, y: 4 }, 3)).toBe(2);
+    expect(tileDistance({ x: 0, y: 2 }, { x: 7, y: 2 }, 3)).toBe(1);
   });
 });
 

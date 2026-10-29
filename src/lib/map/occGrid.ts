@@ -146,6 +146,13 @@ function offsetTile(tile: TileId, dx: number, dy: number, tileCount: number): Ti
   return { x: (((tile.x + dx) % tileCount) + tileCount) % tileCount, y: row };
 }
 
+/** How many tiles apart two tiles are, a diagonal step counting as one; x wraps at the antimeridian. */
+export function tileDistance(from: TileId, to: TileId, level: number): number {
+  const tileCount = 2 ** level;
+  const across = Math.abs(from.x - to.x);
+  return Math.max(Math.min(across, tileCount - across), Math.abs(from.y - to.y));
+}
+
 /** A tile's x/y as a key, to compare sets of tiles at one level. */
 export const tileCoordinateKey = (tile: TileId) => `${tile.x}/${tile.y}`;
 
