@@ -356,3 +356,8 @@ html[data-reduce-motion]::view-transition-new(*) {
   transition-duration: 0s !important;
   scroll-behavior: auto !important;
 }
+
+/* Lighter rendering: background blur is among the costliest effects on weak GPUs. */
+html[data-light-rendering] * {
+  backdrop-filter: none !important;
+}

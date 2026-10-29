@@ -29,7 +29,7 @@ import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/o
 import { createRecordFit } from '~/lib/map/recordFit';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
-import { prefersReducedMotion } from '~/stores/reading';
+import { $reading, prefersReducedMotion } from '~/stores/reading';
 import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
 import WebglNotice from './WebglNotice.vue';
@@ -68,6 +68,8 @@ const cleanups: (() => void)[] = [];
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
+// Lighter rendering draws one canvas pixel per CSS pixel: a 3× phone then fills 9× fewer.
+const mapPixelRatio = () => ($reading.get().lightRendering ? 1 : window.devicePixelRatio);
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
@@ -618,6 +620,7 @@ function listenToStores() {
       fly(request);
       $flyTo.set(null);
     }),
+    $reading.listen(() => map?.setPixelRatio(mapPixelRatio())),
     $busiestHexRequest.subscribe((request) => {
       if (!request) return;
       $busiestHexRequest.set(null);
@@ -700,6 +703,7 @@ onMounted(async () => {
     dragRotate: false,
     renderWorldCopies: false,
     fadeDuration: prefersReducedMotion() ? 0 : MAP_FADE_MS,
+    pixelRatio: mapPixelRatio(),
   });
   occ = createOccLayer(map, occLayerOptions());
   void restoreHex();

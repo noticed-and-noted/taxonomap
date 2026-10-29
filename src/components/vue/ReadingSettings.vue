@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Reading and display settings: text size, italics, spacing and motion,
- * plus (outside Settings, which has its own list) the map colours. Changes
- * apply to the whole page at once; the preview card shows them on a sample.
+ * Reading and display settings: text size, italics, spacing, motion and
+ * lighter rendering, plus (outside Settings, which has its own list) the map
+ * colours. Changes apply to the whole page at once; the preview card shows them on a sample.
  */
 import { useStore } from '@nanostores/vue';
 import { useId } from 'vue';
@@ -19,6 +19,11 @@ const TOGGLES: { key: ToggleKey; label: string; hint: string }[] = [
   { key: 'noItalics', label: 'No italics', hint: 'Scientific names and quotes stay upright' },
   { key: 'wideSpacing', label: 'Wider spacing', hint: 'More room between lines, letters and words' },
   { key: 'reduceMotion', label: 'Reduce motion', hint: 'No animations or map flights' },
+  {
+    key: 'lightRendering',
+    label: 'Lighter rendering',
+    hint: 'For older or low-power devices: a less sharp map, no blur or map flights',
+  },
 ];
 
 const RAMP_GROUPS = [

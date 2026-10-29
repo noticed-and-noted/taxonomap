@@ -80,6 +80,7 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
           if (reading.noItalics === true) root.dataset.noItalics = '';
           if (reading.wideSpacing === true) root.dataset.wideSpacing = '';
           if (reading.reduceMotion === true) root.dataset.reduceMotion = '';
+          if (reading.lightRendering === true) root.dataset.lightRendering = '';
         };
         apply(document);
         document.addEventListener('astro:before-swap', (event) => apply(event.newDocument));
