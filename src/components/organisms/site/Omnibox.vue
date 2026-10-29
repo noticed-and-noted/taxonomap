@@ -14,12 +14,10 @@
 import { useStore } from '@nanostores/vue';
 import { navigate } from 'astro:transitions/client';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
-import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import { useNameSearch } from '~/composables/useNameSearch';
 import { usePlaceSearch } from '~/composables/usePlaceSearch';
 import { loadNameIndex } from '~/lib/data/name-index';
-import { compact, RANK_LABELS } from '~/lib/format';
 import { sortByRank, type NameHit } from '~/lib/gbif';
 import type { Place } from '~/lib/geocode';
 import { boundsAround, recordsView } from '~/lib/map/taxonView';
@@ -30,20 +28,28 @@ import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
 import { hrefWith } from '~/stores/url-sync';
+import OmniboxHintBar from './OmniboxHintBar.vue';
+import type { OmniboxOption as Option } from './omniboxOptions';
+import OmniboxPlaceholderRow from './OmniboxPlaceholderRow.vue';
+import OmniboxResult from './OmniboxResult.vue';
 import TaxonPreview from './TaxonPreview.vue';
 
 /** What picking a species or group does: add it to the map, move the tree there, or open its About page. */
 export type SearchMode = 'map' | 'tree' | 'about';
 const props = defineProps<{ mode: SearchMode }>();
 
-type Option =
-  | { kind: 'taxon'; id: string; hit: NameHit }
-  | { kind: 'place-search'; id: string }
-  | { kind: 'species-search'; id: string }
-  | { kind: 'place'; id: string; place: Place };
-
 /** Species and group results shown at once. */
 const MAX_RESULTS = 20;
+/** How long a notice under the box stays. */
+const NOTICE_MS = 5000;
+/** Rows the list fills to with placeholders while results load. */
+const MIN_ROWS = 3;
+/** Typed characters before the switch to places (or species) is offered. */
+const MIN_SWITCH_QUERY = 2;
+/** The dropdown's least height when an on-screen keyboard squeezes it. */
+const MIN_DROPDOWN_HEIGHT = 160;
+/** Room kept between the dropdown's foot and the visible area's. */
+const DROPDOWN_MARGIN = 8;
 // The omnibox hydrates on idle, and hydrating v-model empties the input, so
 // read anything typed before then from the server-rendered box first.
 const query = ref(
@@ -76,13 +82,15 @@ const {
 const searchBox = useTemplateRef('searchBox');
 const input = computed(() => searchBox.value?.input);
 
-/* Short note shown under the box when a pick could not be applied (the What list is full). */
+/** Short note shown under the box when a pick could not be applied (the What list is full). */
 const notice = ref('');
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Shows a notice under the box for a few seconds. */
 function announce(text: string) {
   notice.value = text;
   clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => (notice.value = ''), 5000);
+  noticeTimer = setTimeout(() => (notice.value = ''), NOTICE_MS);
 }
 
 /** What is loading, if anything: shown in the place row's spot. */
@@ -91,13 +99,13 @@ const searching = computed(() =>
 );
 
 /** Placeholder rows to show while results load: enough to make three rows with what's in. */
-const placeholderRows = computed(() => (searching.value ? Math.max(0, 3 - listOptions.value.length) : 0));
+const placeholderRows = computed(() => (searching.value ? Math.max(0, MIN_ROWS - listOptions.value.length) : 0));
 
 const options = computed<Option[]>(() => {
   const rows: Option[] = inPlaces.value
     ? places.value.map((place, index) => ({ kind: 'place', id: `omni-place-${index}`, place }))
     : taxa.value.map((hit) => ({ kind: 'taxon', id: `omni-taxon-${hit.key}`, hit }));
-  if (query.value.trim().length >= 2) {
+  if (query.value.trim().length >= MIN_SWITCH_QUERY) {
     rows.push(
       inPlaces.value
         ? { kind: 'species-search', id: 'omni-species-search' }
@@ -109,7 +117,7 @@ const options = computed<Option[]>(() => {
 
 const isSwitchOption = (option: Option) => option.kind === 'place-search' || option.kind === 'species-search';
 
-/* The switch to places (or back to species) is always last, so the scrolling rows keep their indexes into `options`. */
+/** The switch to places (or back to species) is always last, so the scrolling rows keep their indexes into `options`. */
 const listOptions = computed(() => options.value.filter((option) => !isSwitchOption(option)));
 
 /** Whether the scrolling list has anything in it; an empty one would leave stray padding above the place row. */
@@ -138,8 +146,6 @@ const manifest = useStore($speciesManifest);
  */
 const aboutHref = (hit: NameHit) => speciesPath(hit.key, manifest.value);
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
-const modKey = isMac ? '⌘' : 'Ctrl';
 /** What Enter does right now, for the hint bar. */
 const enterLabel = computed(() => {
   const option = options.value[active.value];
@@ -147,6 +153,11 @@ const enterLabel = computed(() => {
   if (option?.kind === 'place') return 'Go to place';
   if (option?.kind === 'species-search') return 'Search species';
   return 'Search places';
+});
+/** Whether the highlighted row is the switch itself, whose shortcut would then repeat Enter. */
+const isSwitchHighlighted = computed(() => {
+  const option = options.value[active.value];
+  return !option || isSwitchOption(option);
 });
 
 /** Empty the box and put the list away once a result is picked. */
@@ -159,12 +170,14 @@ function finishPick() {
   input.value?.blur();
 }
 
+/** Opens a result's About page. */
 function openAbout(hit: NameHit) {
   const href = aboutHref(hit);
   finishPick();
   void navigate(href);
 }
 
+/** Typing searches species, or places once switched to them. */
 function onInput() {
   open.value = true;
   active.value = 0;
@@ -172,12 +185,14 @@ function onInput() {
   else search(query.value);
 }
 
+/** Warms the data a search needs, and reopens the list over what's typed. */
 function onFocus() {
   void loadNameIndex(); // warm the index on first focus
   void loadSpeciesManifest(); // so About links go to pre-rendered pages
   if (query.value) open.value = true;
 }
 
+/** Puts the list away, keeping what's typed. */
 function close() {
   open.value = false;
   active.value = 0;
@@ -213,6 +228,7 @@ function selectLabel(): string | undefined {
   return SELECT_ACTIONS[props.mode]?.label;
 }
 
+/** Applies a species or group pick as the page's mode says (see SearchMode). */
 async function pickTaxon(hit: NameHit) {
   if (props.mode === 'about') {
     openAbout(hit);
@@ -252,6 +268,7 @@ async function flyToTaxon(taxonKey: number) {
   }
 }
 
+/** Shows a place on the map, going to the map first from other pages. */
 function pickPlace(place: Place) {
   finishPick();
   if (props.mode !== 'map') {
@@ -265,6 +282,7 @@ function pickPlace(place: Place) {
   );
 }
 
+/** Acts on a row: pick a result, or switch between species and places. */
 function choose(option: Option | undefined) {
   if (!option) return;
   if (option.kind === 'taxon') void pickTaxon(option.hit);
@@ -273,7 +291,7 @@ function choose(option: Option | undefined) {
   else showSpecies();
 }
 
-/* Set on pointerdown: Safari's click events don't say whether a finger or a mouse made them. */
+/** Set on pointerdown: Safari's click events don't say whether a finger or a mouse made them. */
 let lastPointerType = '';
 
 /** Phones have no hover, so a tap on another species row previews it first; tapping it again (or the preview's buttons) picks it. */
@@ -282,37 +300,51 @@ function onRowClick(option: Option, index: number) {
   else choose(option);
 }
 
-function onKeydown(event: KeyboardEvent) {
+/** Enter picks the highlighted row; with Cmd/Ctrl it opens the About page, and with Shift too it switches search. */
+function onEnter(event: KeyboardEvent) {
+  event.preventDefault();
+  const isModified = event.metaKey || event.ctrlKey;
+  const option = options.value[active.value];
+  if (isModified && event.shiftKey) {
+    if (inPlaces.value) showSpecies();
+    else showPlaces();
+  } else if (isModified && previewHit.value) openAbout(previewHit.value);
+  else if (option) choose(option);
+  // Nothing to pick yet (still loading, or no matches): look for a place now.
+  else if (inPlaces.value) flushPlaces();
+  else showPlaces();
+}
+
+/** Moves the highlight by `delta` rows, wrapping at either end. */
+function stepActive(delta: number) {
   const count = options.value.length;
+  active.value = count ? (active.value + delta + count) % count : 0;
+}
+
+/** Combobox keys: arrows move, Enter picks, Escape closes the list and then clears the box. */
+function onKeydown(event: KeyboardEvent) {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
     open.value = true;
-    active.value = count ? (active.value + 1) % count : 0;
+    stepActive(1);
   } else if (event.key === 'ArrowUp') {
     event.preventDefault();
-    active.value = count ? (active.value - 1 + count) % count : 0;
+    stepActive(-1);
   } else if (event.key === 'Enter') {
-    event.preventDefault();
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
-      if (inPlaces.value) showSpecies();
-      else showPlaces();
-    } else if ((event.metaKey || event.ctrlKey) && previewHit.value) openAbout(previewHit.value);
-    else if (options.value[active.value]) choose(options.value[active.value]);
-    // Nothing to pick yet (still loading, or no matches): look for a place now.
-    else if (inPlaces.value) flushPlaces();
-    else showPlaces();
+    onEnter(event);
   } else if (event.key === 'Escape') {
     if (open.value) close();
     else query.value = '';
   }
 }
 
+/** Closes the list when focus leaves the search and its dropdown. */
 function onBlur(event: FocusEvent) {
   const next = event.relatedTarget as Node | null;
   if (!next || !(event.currentTarget as HTMLElement).parentElement?.contains(next)) close();
 }
 
-/* Keep the dropdown inside the visible area: on-screen keyboards shrink the
+/** Keep the dropdown inside the visible area: on-screen keyboards shrink the
    visual viewport (not the layout one) on iOS and Android, hiding its foot. */
 const dropdown = ref<HTMLDivElement>();
 const fitHeight = ref<number | null>(null);
@@ -321,12 +353,16 @@ const isShown = computed(
     open.value &&
     (options.value.length > 0 || !!searching.value || (inPlaces.value && (placeFailed.value || placesAnswered.value))),
 );
+/** Sizes the dropdown to end above an on-screen keyboard. */
 function fit() {
   // Hidden (v-show) it measures at top 0, which would size it past the keyboard.
   if (!isShown.value || !dropdown.value) return;
   const viewport = window.visualViewport;
   const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
-  fitHeight.value = Math.max(160, Math.floor(bottom - dropdown.value.getBoundingClientRect().top - 8));
+  fitHeight.value = Math.max(
+    MIN_DROPDOWN_HEIGHT,
+    Math.floor(bottom - dropdown.value.getBoundingClientRect().top - DROPDOWN_MARGIN),
+  );
 }
 // On first use results arrive after `open`, so fit when it actually shows.
 watch(isShown, (shown) => (shown ? void nextTick(fit) : undefined));
@@ -425,55 +461,10 @@ onBeforeUnmount(() => {
               @click="onRowClick(option, index)"
               @pointermove="$event.pointerType === 'mouse' && (active = index)"
             >
-              <template v-if="option.kind === 'taxon'">
-                <span class="min-w-0 flex-1">
-                  <span v-if="option.hit.commonName" class="block truncate font-medium text-text"
-                    >{{ option.hit.commonName }}
-                    <span v-if="option.hit.matchedName" class="font-normal text-muted"
-                      >({{ option.hit.matchedName }})</span
-                    ></span
-                  >
-                  <span
-                    class="sci-name block truncate"
-                    :class="option.hit.commonName ? 'text-xs text-muted' : 'text-text'"
-                    >{{ option.hit.scientificName }}</span
-                  >
-                </span>
-                <span class="shrink-0 text-right text-[0.6875rem] leading-tight text-subtle">
-                  <span class="block">{{ RANK_LABELS[option.hit.rank] ?? option.hit.rank }}</span>
-                  <span v-if="option.hit.count" class="block">{{ compact(option.hit.count) }}</span>
-                </span>
-              </template>
-              <template v-else-if="option.kind === 'place'">
-                <span class="min-w-0 flex-1">
-                  <span class="block truncate text-text">{{ option.place.name }}</span>
-                  <span v-if="option.place.detail" class="block truncate text-xs text-muted">{{
-                    option.place.detail
-                  }}</span>
-                </span>
-              </template>
+              <OmniboxResult :option="option" />
             </li>
             <!-- Placeholder rows where results will land, so nothing jumps when they arrive. -->
-            <template v-if="searching">
-              <li
-                v-for="row in placeholderRows"
-                :key="`skel-${row}`"
-                role="none"
-                class="flex items-center gap-3 px-3 py-2"
-                aria-hidden="true"
-              >
-                <!-- Line boxes match a result's text-sm and text-xs lines, so rows keep their height. -->
-                <span class="min-w-0 flex-1">
-                  <span class="flex h-5 items-center">
-                    <SkeletonBlock :width="`${[55, 70, 45][row % 3]}%`" height="0.8rem" />
-                  </span>
-                  <span class="flex h-4 items-center">
-                    <SkeletonBlock :width="`${[32, 40, 36][row % 3]}%`" height="0.6rem" />
-                  </span>
-                </span>
-                <SkeletonBlock width="2.25rem" height="0.7rem" />
-              </li>
-            </template>
+            <OmniboxPlaceholderRow v-for="row in placeholderRows" :key="`skel-${row}`" :row="row" />
           </ul>
           <div
             v-if="switchOption"
@@ -529,16 +520,12 @@ onBeforeUnmount(() => {
       <p v-if="liveFailed && !inPlaces" class="border-t border-border px-3 py-1.5 text-xs text-subtle">
         Live species search is busy; showing saved names only.
       </p>
-      <p v-if="options.length" class="hint-bar" aria-hidden="true">
-        <span><kbd>↵</kbd> {{ enterLabel }}</span>
-        <span v-if="previewHit && selectLabel()"
-          ><kbd>{{ modKey }}</kbd> <kbd>↵</kbd> About</span
-        >
-        <span v-if="enterLabel !== 'Search places' && enterLabel !== 'Search species'"
-          ><kbd>{{ modKey }}</kbd> <kbd>⇧</kbd> <kbd>↵</kbd> {{ inPlaces ? 'Species' : 'Places' }}</span
-        >
-        <span><kbd>↑</kbd> <kbd>↓</kbd> Move</span>
-      </p>
+      <OmniboxHintBar
+        v-if="options.length"
+        :enter-label="enterLabel"
+        :can-open-about="!!previewHit && !!selectLabel()"
+        :switch-label="isSwitchHighlighted ? undefined : inPlaces ? 'Species' : 'Places'"
+      />
     </div>
     <p
       v-if="notice && !open"
@@ -578,32 +565,5 @@ onBeforeUnmount(() => {
   .results.with-preview {
     grid-template-columns: minmax(0, 1fr) 14rem;
   }
-}
-
-/* Keyboard hints: only where there is likely a keyboard. */
-.hint-bar {
-  display: none;
-  gap: 1rem;
-  padding: 0.375rem 0.75rem;
-  border-top: 1px solid var(--border);
-  font-size: 0.6875rem;
-  color: var(--text-subtle);
-}
-@media (min-width: 640px) and (hover: hover) {
-  .hint-bar {
-    display: flex;
-  }
-}
-kbd {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.125rem;
-  height: 1.125rem;
-  padding: 0 0.25rem;
-  border-radius: 4px;
-  border: 1px solid var(--border-strong);
-  font-family: inherit;
-  font-size: 0.625rem;
-  color: var(--text-muted);
 }
 </style>
