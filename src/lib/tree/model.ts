@@ -118,20 +118,24 @@ export async function loadBakedTree(): Promise<TreeNode | null> {
   return snapshot ? buildTree(snapshot.nodes) : null;
 }
 
+/** Everything needed to list a node's children: the child taxa, their record and species counts, and common names. */
+async function fetchChildData(node: TreeNode, childRank: TreeRank, wkt?: string, signal?: AbortSignal) {
+  const facet = FACET_FOR[childRank];
+  const [childUsages, recordFacets, species, nameIndex] = await Promise.all([
+    getAllChildren(node.key, RANK_BY_CODE[childRank], signal),
+    occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [facet], { facetLimit: 5000, ...(signal && { signal }) }),
+    childRank === 'S' ? Promise.resolve(null) : speciesCountsUnder(node.key, 5000, signal),
+    nameIndexWithin(800),
+  ]);
+  const records = new Map((recordFacets.facets[facet] ?? []).map((entry) => [Number(entry.name), entry.count]));
+  return { childUsages, records, species, nameIndex };
+}
+
 /** Fetch and attach the children of `node` (optionally scoped to a WKT area). */
 export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortSignal): Promise<TreeNode[]> {
   const childRank = NEXT_RANK[node.rank];
   if (!childRank || node.rank === 'ROOT') return node.children ?? [];
-  const [childUsages, occ, species, nameIndex] = await Promise.all([
-    getAllChildren(node.key, RANK_BY_CODE[childRank], signal),
-    occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [FACET_FOR[childRank]], {
-      facetLimit: 5000,
-      ...(signal && { signal }),
-    }),
-    childRank === 'S' ? Promise.resolve(null) : speciesCountsUnder(node.key, 5000, signal),
-    nameIndexWithin(800),
-  ]);
-  const records = new Map((occ.facets[FACET_FOR[childRank]] ?? []).map((facet) => [Number(facet.name), facet.count]));
+  const { childUsages, records, species, nameIndex } = await fetchChildData(node, childRank, wkt, signal);
   const children: TreeNode[] = [];
   for (const child of childUsages) {
     if (CODE_BY_RANK[child.rank] !== childRank) continue;

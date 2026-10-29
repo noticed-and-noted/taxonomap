@@ -86,29 +86,31 @@ export type UsableImage = GbifImage | InatImage;
  * licence. When the media licence is empty or free text ("Copyright by the
  * creator…"), the record licence decides.
  */
-export function usableImages(occ: Occurrence): GbifImage[] {
-  const recordLicence = parseLicence(occ.license);
-  const out: GbifImage[] = [];
-  for (const item of occ.media ?? []) {
-    if (item.type && item.type !== 'StillImage') continue;
-    if (!item.identifier) continue;
-    const licence = mediaLicence(item, recordLicence);
+export function usableImages(occurrence: Occurrence): GbifImage[] {
+  const recordLicence = parseLicence(occurrence.license);
+  const images: GbifImage[] = [];
+  for (const media of occurrence.media ?? []) {
+    if (media.type && media.type !== 'StillImage') continue;
+    if (!media.identifier) continue;
+    const licence = mediaLicence(media, recordLicence);
     if (!licence) continue;
-    out.push({
-      url: item.identifier,
+    images.push({
+      url: media.identifier,
       licence,
-      occurrenceKey: occ.key,
-      datasetKey: occ.datasetKey,
-      ...(occ.speciesKey !== undefined && { speciesKey: occ.speciesKey }),
-      ...(item.creator && { creator: item.creator }),
-      ...((item.rightsHolder ?? occ.rightsHolder) && {
-        rightsHolder: (item.rightsHolder ?? occ.rightsHolder) as string,
+      occurrenceKey: occurrence.key,
+      datasetKey: occurrence.datasetKey,
+      ...(occurrence.speciesKey !== undefined && { speciesKey: occurrence.speciesKey }),
+      ...(media.creator && { creator: media.creator }),
+      ...((media.rightsHolder ?? occurrence.rightsHolder) && {
+        rightsHolder: (media.rightsHolder ?? occurrence.rightsHolder) as string,
       }),
-      ...((item.publisher ?? occ.publisher) && { publisher: (item.publisher ?? occ.publisher) as string }),
-      ...(item.references && { references: item.references }),
+      ...((media.publisher ?? occurrence.publisher) && {
+        publisher: (media.publisher ?? occurrence.publisher) as string,
+      }),
+      ...(media.references && { references: media.references }),
     });
   }
-  return out;
+  return images;
 }
 
 /** Whether a licence string names a specific CC licence (allowed or not). */

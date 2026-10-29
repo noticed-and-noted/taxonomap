@@ -37,7 +37,7 @@ const row = (key: number, extra: Partial<SpeciesRow> = {}): SpeciesRow => ({
 });
 
 async function setup(rows: SpeciesRow[]) {
-  const { useRowDetails } = await import('~/components/vue/useRowDetails');
+  const { useRowDetails } = await import('~/composables/useRowDetails');
   const inView = ref(new Set<number>());
   const all = ref(false);
   const data = ref<object>({});

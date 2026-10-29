@@ -1,5 +1,5 @@
-import { md5 } from '~/lib/gbif/md5';
 import { thumbnailUrl } from '~/lib/gbif/images';
+import { md5 } from '~/lib/gbif/md5';
 
 describe('md5', () => {
   it.each([

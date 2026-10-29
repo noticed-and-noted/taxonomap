@@ -27,9 +27,9 @@ function gbif(options: { suggestFails?: boolean } = {}) {
   });
 }
 
-async function setup(options: Parameters<typeof import('~/components/vue/useNameSearch').useNameSearch>[0]) {
+async function setup(options: Parameters<typeof import('~/composables/useNameSearch').useNameSearch>[0]) {
   vi.resetModules();
-  const { useNameSearch } = await import('~/components/vue/useNameSearch');
+  const { useNameSearch } = await import('~/composables/useNameSearch');
   const scope = effectScope();
   const search = scope.run(() => useNameSearch(options))!;
   return { ...search, stop: () => scope.stop() };

@@ -12,9 +12,9 @@
  *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
  */
+import pLimit from 'p-limit';
 import { loadSnapshot } from '~/lib/data/load';
 import { loadNameIndex } from '~/lib/data/name-index';
-import pLimit from 'p-limit';
 import {
   getSpecies,
   getVernacularNames,

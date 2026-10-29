@@ -42,12 +42,12 @@ let forcedMode: 'push' | 'replace' | null = null;
  * 'replace' so they don't flood the back-button history).
  */
 export function withHistoryMode(mode: 'push' | 'replace', callback: () => void): void {
-  const prev = forcedMode;
+  const previousMode = forcedMode;
   forcedMode = mode;
   try {
     callback();
   } finally {
-    forcedMode = prev;
+    forcedMode = previousMode;
   }
 }
 

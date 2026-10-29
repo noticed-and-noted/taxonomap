@@ -6,8 +6,8 @@
  * Never import this from browser code. Import `~/lib/gbif/server` instead.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pLimit from 'p-limit';
 import { HOUR, MINUTE } from '~/lib/util/time';

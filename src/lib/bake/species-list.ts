@@ -1,5 +1,5 @@
-import { getSpecies } from '~/lib/gbif/server';
 import { isDev } from '~/lib/env';
+import { getSpecies } from '~/lib/gbif/server';
 import { speciesSlug } from '~/lib/species/data';
 import { countedFacets, lookupLimit, once, rethrowUnlessMissing } from './cache';
 

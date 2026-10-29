@@ -94,7 +94,7 @@ export default defineConfig(
   },
   {
     // A composable declares its state and wires it up; the work itself lives in helpers under the 40-line limit.
-    files: ['src/components/vue/use*.ts'],
+    files: ['src/**/use*.ts'],
     rules: { 'max-lines-per-function': ['error', { max: 50, skipBlankLines: true, skipComments: true }] },
   },
   {

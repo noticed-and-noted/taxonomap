@@ -4,15 +4,15 @@ The rules for how Taxonomap looks. Read this before changing anything visual: co
 
 The code is the source of truth. This file explains it and names where each part lives; if they disagree, fix this file.
 
-| Part                         | Lives in                                                                                       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| Colour, radius, motion       | `src/styles/tokens.css`                                                                        |
-| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                        |
-| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                      |
-| Wordmark                     | `docs/brand/wordmark-light.svg` (the master artwork), drawn by `src/components/Wordmark.astro` |
-| Favicon                      | `public/favicon.svg`                                                                           |
-| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, wordmark with outlined letters)      |
-| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                      |
+| Part                         | Lives in                                                                                             |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Colour, radius, motion       | `src/styles/tokens.css`                                                                              |
+| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                              |
+| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                            |
+| Wordmark                     | `docs/brand/wordmark-light.svg` (the master artwork), drawn by `src/components/atoms/Wordmark.astro` |
+| Favicon                      | `public/favicon.svg`                                                                                 |
+| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, wordmark with outlined letters)            |
+| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                            |
 
 ## Principles
 

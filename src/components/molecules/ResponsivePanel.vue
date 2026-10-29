@@ -1,0 +1,90 @@
+<script setup lang="ts">
+/**
+ * Desktop (≥768px): 400px right SidePanel. Mobile: BottomSheet.
+ * `collapsible`: on desktop, closing slides the panel aside to a strip
+ * instead of removing it; `open` asks for it back.
+ * `dismissible` (with collapsible): a close button that emits `dismiss`,
+ * for leaving the whole mode rather than tucking the panel away.
+ */
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import BottomSheet from '~/components/atoms/BottomSheet.vue';
+import SidePanel from '~/components/atoms/SidePanel.vue';
+
+const props = defineProps<{ title: string; open: boolean; collapsible?: boolean; dismissible?: string }>();
+/** `closing`: a dismissed sheet has started sliding away; `dismiss` follows once it's gone. */
+const emit = defineEmits<{ close: []; open: []; dismiss: []; closing: [] }>();
+/**
+ * The sheet has one close button: with `dismissible` it dismisses, once the sheet has slid away (dismissing
+ * removes the panel at once, which would cut the slide short).
+ */
+const isDismissing = ref(false);
+function closeSheet() {
+  if (!props.dismissible) return emit('close');
+  isDismissing.value = true;
+  emit('closing');
+}
+function onSheetClosed() {
+  if (!isDismissing.value) return;
+  isDismissing.value = false;
+  emit('dismiss');
+}
+
+const desktop = ref(true);
+let mediaQuery: MediaQueryList | undefined;
+/**
+ * Swapping layouts remounts the panel's content, which would close a modal dialog inside it (the photo lightbox).
+ * The dialog covers the page anyway, so the swap waits until it closes.
+ */
+function update() {
+  if (document.querySelector('dialog[open]')) return;
+  desktop.value = !!mediaQuery?.matches;
+}
+
+onMounted(() => {
+  mediaQuery = window.matchMedia('(min-width: 768px)');
+  update();
+  mediaQuery.addEventListener('change', update);
+  // `close` doesn't bubble, so listen in the capture phase.
+  document.addEventListener('close', update, true);
+});
+onBeforeUnmount(() => {
+  mediaQuery?.removeEventListener('change', update);
+  document.removeEventListener('close', update, true);
+});
+</script>
+
+<template>
+  <SidePanel
+    v-if="desktop && collapsible"
+    :title="title"
+    open
+    collapsible
+    :collapsed="!open"
+    :closable="!!dismissible"
+    :close-label="dismissible"
+    @close="emit('dismiss')"
+    @collapse="emit('close')"
+    @expand="emit('open')"
+  >
+    <template v-if="$slots.top" #top><slot name="top" /></template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
+    <slot />
+  </SidePanel>
+  <SidePanel v-else-if="desktop" :title="title" :open="open" @close="emit('close')">
+    <template v-if="$slots.top" #top><slot name="top" /></template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
+    <slot />
+  </SidePanel>
+  <BottomSheet
+    v-else
+    :title="title"
+    :open="open && !isDismissing"
+    :close-label="dismissible"
+    @close="closeSheet"
+    @closed="onSheetClosed"
+  >
+    <template v-if="$slots.top" #top><slot name="top" /></template>
+    <template v-if="$slots.actions" #actions><slot name="actions" /></template>
+    <slot />
+  </BottomSheet>
+</template>

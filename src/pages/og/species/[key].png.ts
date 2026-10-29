@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { bakeSpeciesList, bakedCommonNames } from '~/lib/bake';
-import { loadSpeciesData } from '~/lib/species/data';
 import { renderSpeciesCard } from '~/lib/og/species-card';
+import { loadSpeciesData } from '~/lib/species/data';
 
 /**
  * Open Graph image per pre-rendered species (satori + resvg at build). No

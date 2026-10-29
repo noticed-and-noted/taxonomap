@@ -13,9 +13,9 @@
  *  - Baked data: StaleWhileRevalidate (/data/*.json, on demand)
  *  - Precached:  the offline page and what it needs (JS/CSS, Latin font subsets)
  */
-import type { AstroIntegration } from 'astro';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import type { AstroIntegration } from 'astro';
 import { generateSW, type ManifestTransform } from 'workbox-build';
 
 type RuntimeCaching = NonNullable<Parameters<typeof generateSW>[0]['runtimeCaching']>;

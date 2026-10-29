@@ -5,21 +5,21 @@
  * Photos are never fetched at build: the gallery and similar species cards
  * look them up in the browser (see ~/lib/photos/taxon-photos).
  */
+import PlotChart from '~/components/molecules/PlotChart.vue';
+import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
+import MiniMap from '~/components/organisms/species/MiniMap.vue';
+import SimilarSpecies from '~/components/organisms/species/SimilarSpecies.vue';
+import SpeciesGallery from '~/components/organisms/species/SpeciesGallery.vue';
+import SpeciesPage from '~/components/organisms/species/SpeciesPage.vue';
+import BaseLayout from '~/layouts/BaseLayout.astro';
+import PageShell from '~/layouts/PageShell.astro';
 import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
+import { full } from '~/lib/format';
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData } from '~/lib/species/data';
 import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
 import { wikipediaIntro } from '~/lib/species/wikipedia';
-import { full } from '~/lib/format';
-import BaseLayout from '~/layouts/BaseLayout.astro';
-import PageShell from '~/components/PageShell.astro';
-import MiniMap from '~/components/vue/MiniMap.vue';
-import PlotChart from '~/components/vue/PlotChart.vue';
-import RadialSeasonality from '~/components/vue/RadialSeasonality.vue';
-import SimilarSpecies from '~/components/vue/SimilarSpecies.vue';
-import SpeciesGallery from '~/components/vue/SpeciesGallery.vue';
-import SpeciesPage from '~/components/vue/SpeciesPage.vue';
 
 export async function getStaticPaths() {
   const list = await bakeSpeciesList();

@@ -6,9 +6,9 @@
  * allowed and then requests are spaced out.
  */
 import { createHttp, type Transport } from '~/lib/gbif/http';
+import { parseLicence, type InatImage } from '~/lib/gbif/licence';
 import { LruCache } from '~/lib/gbif/lru';
 import { HOUR } from '~/lib/util/time';
-import { parseLicence, type InatImage } from '~/lib/gbif/licence';
 
 export const INAT_API_BASE = 'https://api.inaturalist.org';
 

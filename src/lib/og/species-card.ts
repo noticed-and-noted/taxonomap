@@ -3,10 +3,10 @@
  * satori → SVG → resvg. Node only. Photos and rendered PNGs are cached in
  * .cache/ so nightly builds only re-render what changed.
  */
-import { Resvg } from '@resvg/resvg-js';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { Resvg } from '@resvg/resvg-js';
 import satori from 'satori';
 import { compact } from '~/lib/format';
 import { thumbnailUrl, type UsableImage } from '~/lib/gbif';

@@ -223,7 +223,7 @@ export function clearHexSelection(): void {
 
 /* ---- Filters ---- */
 
-/** The filter rail's groups (see components/vue/filterGroups.ts for labels and icons). */
+/** The filter rail's groups (see lib/filter-groups.ts for labels and icons). */
 export type FilterGroupId = 'what' | 'when' | 'where' | 'how';
 
 /**

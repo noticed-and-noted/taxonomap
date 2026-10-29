@@ -1,9 +1,8 @@
+import { DAY, HOUR } from '~/lib/util/time';
 import { LIMITS } from './config';
 import { http } from './http';
 import { yearRangeParam, type Params } from './params';
 import type { BasisOfRecord, Continent, Facet, FacetCount, IucnCategory, Occurrence, OccurrenceSearch } from './types';
-
-import { DAY, HOUR } from '~/lib/util/time';
 
 /**
  * Filters that both the search API and the adhoc map tiles accept, but the

@@ -3,8 +3,8 @@
  * the main thread where workers are unavailable (tests, old browsers) or the
  * worker fails to load.
  */
-import { decodeHexes, type Hex, type TileId } from './occGrid';
 import type { DecodeResponse } from './hexWorker';
+import { decodeHexes, type Hex, type TileId } from './occGrid';
 
 interface Pending {
   resolve: (hexes: Hex[]) => void;

@@ -12,7 +12,7 @@ Follow the design system for any visual change: colours, type, the logo, icons o
 
 `pnpm lint` enforces most of these; run it with `pnpm check` and `pnpm test` before finishing.
 
-- **Structure**: functions stay under 40 lines (50 for `use*.ts` composables) and do one thing; nesting is at most 3 levels (use guard clauses or helpers); extract shared logic rather than copying it; one concern per file.
+- **Structure**: functions stay under 40 lines (50 for `use*.ts` composables) and do one thing; nesting is at most 3 levels (use guard clauses or helpers); extract shared logic rather than copying it; one concern per file. Components sit in atomic folders (atoms, molecules, organisms by feature, views); see "Code layout" in `docs/architecture.md`.
 - **Naming**: no single-character names anywhere, including loop counters, lambda arguments and parameter names in types. Names say what a thing is (`activeUsers`, not `list`), booleans read as questions (`isValid`), and abbreviations are spelled out (`response`, not `res`). Named constants replace magic numbers and strings.
 - **Formatting**: Prettier (`pnpm format`); one blank line between logical blocks and members; imports grouped Node, packages, `~/` aliases, then relative; no unused imports.
 - **Dead code**: delete unused code and commented-out code. Don't leave `console.log`, `debugger`, or TODO/FIXME/HACK comments (lint errors); track follow-ups outside the code.
