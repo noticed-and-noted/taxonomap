@@ -19,11 +19,22 @@ export type TextSize = (typeof TEXT_SIZES)[number]['id'];
 
 /** How many canvas pixels the map draws per CSS pixel, at most (a screen's own density caps it). */
 export const RENDER_SCALES = [
+  { id: 'max', label: 'Max', pixelRatio: 3 },
   { id: 'high', label: 'High', pixelRatio: 2 },
   { id: 'low', label: 'Low', pixelRatio: 1 },
 ] as const;
 
-export type RenderScale = (typeof RENDER_SCALES)[number]['id'];
+export type RenderScaleOption = (typeof RENDER_SCALES)[number];
+export type RenderScale = RenderScaleOption['id'];
+
+/**
+ * The render scales a screen this dense can tell apart: a scale is offered
+ * only where the screen has more pixels than the scale below it draws.
+ * @param density The screen's device pixel ratio.
+ */
+export function renderScalesFor(density: number): RenderScaleOption[] {
+  return RENDER_SCALES.filter((scale) => scale.pixelRatio === 1 || density > scale.pixelRatio - 1);
+}
 
 export interface ReadingPrefs {
   textSize: TextSize;
@@ -105,6 +116,6 @@ export function prefersReducedMotion(): boolean {
 /** The map's canvas pixels per CSS pixel: the chosen render scale, capped at the screen's own density. */
 export function mapPixelRatio(): number {
   const { renderScale } = $reading.get();
-  const scale = RENDER_SCALES.find((option) => option.id === renderScale) ?? RENDER_SCALES[0];
+  const scale = RENDER_SCALES.find((option) => option.id === renderScale) ?? RENDER_SCALES[1];
   return Math.min(window.devicePixelRatio, scale.pixelRatio);
 }

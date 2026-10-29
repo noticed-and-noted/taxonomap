@@ -58,6 +58,8 @@ describe('reading store', () => {
     const reading = await store();
     expect(reading.$reading.get().renderScale).toBe('high');
     expect(reading.mapPixelRatio()).toBe(2);
+    reading.setReading({ renderScale: 'max' });
+    expect(reading.mapPixelRatio()).toBe(3);
     reading.setReading({ renderScale: 'low' });
     expect(reading.mapPixelRatio()).toBe(1);
 
@@ -66,10 +68,20 @@ describe('reading store', () => {
     expect(reading.mapPixelRatio()).toBe(1);
   });
 
+  it('offers only the render scales a screen can tell apart', async () => {
+    const { renderScalesFor } = await store();
+    const offered = (density: number) => renderScalesFor(density).map((scale) => scale.id);
+    expect(offered(3)).toEqual(['max', 'high', 'low']);
+    expect(offered(2.625)).toEqual(['max', 'high', 'low']);
+    expect(offered(2)).toEqual(['high', 'low']);
+    expect(offered(1.25)).toEqual(['high', 'low']);
+    expect(offered(1)).toEqual(['low']);
+  });
+
   it('turns a saved Lighter rendering into the Low render scale', async () => {
     localStorage.setItem('reading', '{"lightRendering":true}');
     expect((await store()).$reading.get().renderScale).toBe('low');
-    localStorage.setItem('reading', '{"renderScale":"max"}');
+    localStorage.setItem('reading', '{"renderScale":"ultra"}');
     expect((await store()).$reading.get().renderScale).toBe('high');
   });
 });
