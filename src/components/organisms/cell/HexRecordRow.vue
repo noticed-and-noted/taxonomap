@@ -8,7 +8,8 @@ import type { StyleValue } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import type { Occurrence, UsableImage } from '~/lib/gbif';
-import { initials, recordDate, recordScientificName, typeCode, typeLabel } from '~/lib/record-fields';
+import { initials } from '~/lib/format';
+import { recordDate, recordScientificName, typeCode, typeLabel } from '~/lib/record-fields';
 
 defineProps<{
   occurrence: Occurrence;

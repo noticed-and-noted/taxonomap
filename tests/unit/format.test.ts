@@ -1,4 +1,4 @@
-import { compact, countryName, distance, full } from '~/lib/format';
+import { compact, countryName, distance, full, initials } from '~/lib/format';
 
 describe('format', () => {
   it('formats counts compactly and in full', () => {
@@ -16,5 +16,10 @@ describe('format', () => {
     expect(distance(100)).toBe('100 m');
     expect(distance(10_000)).toBe('10 km');
     expect(distance(26_293)).toBe('26.3 km');
+  });
+
+  it('takes up to two initials', () => {
+    expect(initials('red fox cub')).toBe('RF');
+    expect(initials('Vulpes')).toBe('V');
   });
 });

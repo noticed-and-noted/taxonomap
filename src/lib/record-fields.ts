@@ -60,12 +60,3 @@ export function accuracy(occurrence: Occurrence): string {
   const blurred = OBSERVER_BLURRED.test(occurrence.informationWithheld ?? '') ? ' · blurred by observer' : '';
   return `Within ${distance(metres)}${blurred}`;
 }
-
-/** Up to two capital initials of a name, shown where a record has no photo. */
-export function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase())
-    .join('');
-}

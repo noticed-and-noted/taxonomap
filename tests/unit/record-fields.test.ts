@@ -2,7 +2,6 @@ import type { Occurrence } from '~/lib/gbif';
 import {
   aboutKey,
   accuracy,
-  initials,
   institution,
   recordDate,
   recordScientificName,
@@ -54,10 +53,5 @@ describe('record fields', () => {
         }),
       ),
     ).toBe('Within 100 m · blurred by observer');
-  });
-
-  it('takes up to two initials', () => {
-    expect(initials('red fox cub')).toBe('RF');
-    expect(initials('Vulpes')).toBe('V');
   });
 });

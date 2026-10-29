@@ -7,17 +7,13 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import LegalLinks from '~/components/atoms/LegalLinks.vue';
 import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
-import MapSettings from '~/components/molecules/MapSettings.vue';
-import OnboardingSettings from '~/components/molecules/OnboardingSettings.vue';
-import ReadingSettings from '~/components/molecules/ReadingSettings.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
-import SearchFitSetting from '~/components/molecules/SearchFitSetting.vue';
-import ThemePicker from '~/components/molecules/ThemePicker.vue';
 import HexPanel from '~/components/organisms/cell/HexPanel.vue';
 import FilterGroup from '~/components/organisms/filters/FilterGroup.vue';
 import FilterRail from '~/components/organisms/filters/FilterRail.vue';
+import FilterSheetSettings from '~/components/organisms/filters/FilterSheetSettings.vue';
+import FilterSheetTabs from '~/components/organisms/filters/FilterSheetTabs.vue';
 import TaxonChip from '~/components/organisms/filters/TaxonChip.vue';
 import MapLegend from '~/components/organisms/map/MapLegend.vue';
 import MapProgress from '~/components/organisms/map/MapProgress.vue';
@@ -25,14 +21,7 @@ import NearExplorer from '~/components/organisms/near/NearExplorer.vue';
 import ChecklistHint from '~/components/organisms/onboarding/ChecklistHint.vue';
 import OnboardingTour from '~/components/organisms/onboarding/OnboardingTour.vue';
 import TryThis from '~/components/organisms/onboarding/TryThis.vue';
-import {
-  $activeFilterCount,
-  $groupCounts,
-  FILTER_GROUPS,
-  PHONE_QUERY,
-  SETTINGS,
-  type FilterGroupId,
-} from '~/lib/filter-groups';
+import { $activeFilterCount, PHONE_QUERY, type FilterGroupId } from '~/lib/filter-groups';
 import {
   $mapUnsupported,
   $panel,
@@ -50,17 +39,16 @@ const tourSeen = useStore($tourSeen);
 const hintId = useStore($checklistHint);
 const hex = useStore($selectedHex);
 const activeFilters = useStore($activeFilterCount);
-const groupCounts = useStore($groupCounts);
-/* Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
+/** Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
 const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
 const nearLeaving = useStore($nearLeaving);
 const mapUnsupported = useStore($mapUnsupported);
 
-/* Slide the dock off to the left to see the map behind it. */
+/** Slide the dock off to the left to see the map behind it. */
 const dockStashed = ref(false);
 
-/* The rail's flyout stops above the dock, whose height follows its content (the legend's notice, Try this). */
+/** The rail's flyout stops above the dock, whose height follows its content (the legend's notice, Try this). */
 const dock = ref<HTMLElement>();
 const dockHeight = ref(0);
 const dockClear = computed(() => (dockHidden.value ? '0px' : `calc(${dockHeight.value}px + 0.5rem)`));
@@ -80,12 +68,13 @@ watch(
     restashOnRecords.value = false;
   },
 );
+
+/** Enters or leaves Near me; entering drops the selected cell, in the same history step. */
 function toggleNear() {
   if (near.value) {
     exitNearMode();
     return;
   }
-  // Pin mode replaces hex selection; one history step.
   clearHexSelection();
   $panel.set('none');
   $nearMode.set(true);
@@ -98,16 +87,18 @@ const filtersOpen = computed(() => panel.value === 'filters');
 const panelOpen = computed(() => hexOpen.value || filtersOpen.value);
 const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : 'Selected cell'));
 
-/* Below this width panels are bottom sheets (ResponsivePanel), which cover the dock. */
+/** Below this width panels are bottom sheets (ResponsivePanel), which cover the dock. */
 const SHEET_QUERY = '(max-width: 767.98px)';
 const hasSheets = ref(false);
-/* An open sheet slides the dock away; closing it brings the dock back as the viewer left it. */
+/** An open sheet slides the dock away; closing it brings the dock back as the viewer left it. */
 const sheetCoversDock = ref(false);
 watch(
   () => hasSheets.value && (panelOpen.value || (near.value && !nearLeaving.value)),
   (covers) => (sheetCoversDock.value = covers),
 );
 const dockHidden = computed(() => dockStashed.value || sheetCoversDock.value);
+
+/** Slides the dock away or back, as the viewer asks. */
 function toggleDock() {
   dockStashed.value = !dockHidden.value;
   sheetCoversDock.value = false;
@@ -116,10 +107,12 @@ function toggleDock() {
 }
 const onSheetQuery = (event: MediaQueryListEvent) => (hasSheets.value = event.matches);
 
+/** The phone Filters button: opens the sheet, or closes it back to the cell panel if one is selected. */
 function openFilters() {
   $panel.set(filtersOpen.value ? (hex.value ? 'hex' : 'none') : 'filters');
 }
 
+/** Closes the open panel: the filters back to the cell, or the cell's selection. */
 function closePanel() {
   if (filtersOpen.value) $panel.set(hex.value ? 'hex' : 'none');
   else clearHexSelection();
@@ -263,37 +256,7 @@ onBeforeUnmount(() => {
     <div class="pointer-events-auto">
       <ResponsivePanel :title="panelTitle" :open="panelOpen" @close="closePanel">
         <template v-if="filtersOpen" #top>
-          <div role="tablist" aria-label="Filter groups" class="flex border-b border-border">
-            <button
-              v-for="tab in [...FILTER_GROUPS, { ...SETTINGS, label: 'Map' }]"
-              :key="tab.id"
-              role="tab"
-              type="button"
-              :aria-selected="filterTab === tab.id"
-              class="-mb-px flex flex-1 flex-col items-center gap-0.5 border-b-2 px-1 py-1.5 text-xs"
-              :class="
-                filterTab === tab.id ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'
-              "
-              @click="filterTab = tab.id"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                class="size-5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                aria-hidden="true"
-              >
-                <path :d="tab.icon" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              <span>
-                {{ tab.label
-                }}<span v-if="tab.id !== 'settings' && groupCounts[tab.id]" class="tabular-nums">
-                  ({{ groupCounts[tab.id] }})</span
-                >
-              </span>
-            </button>
-          </div>
+          <FilterSheetTabs v-model="filterTab" />
         </template>
         <template v-if="filtersOpen && activeFilters" #actions>
           <!-- pointerdown.stop: the sheet header is a drag handle. -->
@@ -308,26 +271,7 @@ onBeforeUnmount(() => {
           </button>
         </template>
         <div v-if="filtersOpen" class="sm:space-y-4 md:pt-0 pt-4">
-          <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
-            <!-- From sm up the basemap pill sits on the map instead. -->
-            <div class="sm:hidden">
-              <p class="mb-2 text-sm font-medium">Basemap</p>
-              <BasemapSwitcher class="w-fit" />
-            </div>
-            <!-- From sm up the header's theme pill shows instead (SiteHeader.astro). -->
-            <div class="sm:hidden">
-              <p class="mb-2 text-sm font-medium">Theme</p>
-              <ThemePicker />
-            </div>
-            <MapSettings />
-            <section aria-labelledby="reading-settings-sheet-title">
-              <h3 id="reading-settings-sheet-title" class="mb-2 font-sans text-sm font-medium">Reading and display</h3>
-              <ReadingSettings in-settings />
-            </section>
-            <SearchFitSetting />
-            <OnboardingSettings />
-            <LegalLinks />
-          </div>
+          <FilterSheetSettings v-if="filterTab === 'settings'" role="tabpanel" />
           <div v-else role="tabpanel">
             <FilterGroup :group="filterTab" />
           </div>

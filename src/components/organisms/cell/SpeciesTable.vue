@@ -8,7 +8,7 @@
  * names already known, plus rows the shared name search finds by other names.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
@@ -18,10 +18,11 @@ import { useCellNameSearch } from '~/composables/useCellNameSearch';
 import { useRowDetails } from '~/composables/useRowDetails';
 import { useScrollFade } from '~/composables/useScrollFade';
 import { normalise } from '~/lib/data/name-index';
-import { compact } from '~/lib/format';
+import { compact, initials } from '~/lib/format';
 import type { ClassGroup, SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { debounce } from '~/lib/util/debounce';
+import SpeciesTableGroupFilter from './SpeciesTableGroupFilter.vue';
 
 const props = defineProps<{
   rows: readonly SpeciesRow[];
@@ -41,18 +42,12 @@ type SortKey = 'name' | 'records';
 const PAGE = 50;
 
 const manifest = useStore($speciesManifest);
-const id = useId();
 
 const query = ref('');
 const sortKey = ref<SortKey>('records');
 const sortDesc = ref(true);
 const limit = ref(PAGE);
-const filterOpen = ref(false);
-const filterBtn = ref<HTMLButtonElement>();
-const popover = ref<HTMLElement>();
 const scroller = ref<HTMLElement>();
-const groupList = ref<HTMLElement>();
-const { fadeTop: groupFadeTop, fadeBottom: groupFade, update: updateGroupFade } = useScrollFade(groupList);
 const broken = ref(new Set<number>());
 
 // Rows currently scrolled into the results box (or just below it); see observeRows.
@@ -67,23 +62,9 @@ const { commonName, sciName, pendingName, photoOf, pendingPhoto, isLoadingNames 
 const nameSearch = useCellNameSearch({ query, species: () => props.rows });
 const isSearchingNames = computed(() => !!query.value.trim() && (isLoadingNames.value || nameSearch.loading.value));
 const displayName = (row: SpeciesRow) => commonName(row) ?? sciName(row);
-const initials = (row: SpeciesRow) =>
-  displayName(row)
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase())
-    .join('');
 
-/** Groups with their share of the largest group's records. */
-const groupOptions = computed(() => {
-  const max = Math.max(1, ...props.groups.map((classGroup) => classGroup.records));
-  return props.groups.map((classGroup) => ({ ...classGroup, bar: classGroup.records / max }));
-});
-const canFilter = computed(() => props.groups.length > 1);
 /** First load: nothing to search or filter yet. */
 const pending = computed(() => props.loading && !props.rows.length);
-
-const activeFilters = computed(() => (group.value === null ? 0 : 1));
 
 const filtered = computed(() => {
   const needle = normalise(query.value);
@@ -161,29 +142,7 @@ function resetAll() {
   query.value = '';
 }
 
-function closeFilter(refocus = false) {
-  filterOpen.value = false;
-  if (refocus) filterBtn.value?.focus();
-}
-function onDocPointer(event: PointerEvent) {
-  const target = event.target as Node;
-  if (!popover.value?.contains(target) && !filterBtn.value?.contains(target)) closeFilter();
-}
-function onKey(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeFilter(true);
-}
-watch(filterOpen, (open) => {
-  if (open) {
-    void nextTick(updateGroupFade);
-    document.addEventListener('pointerdown', onDocPointer);
-    document.addEventListener('keydown', onKey);
-  } else {
-    document.removeEventListener('pointerdown', onDocPointer);
-    document.removeEventListener('keydown', onKey);
-  }
-});
 onBeforeUnmount(() => {
-  filterOpen.value = false;
   intersectionObserver?.disconnect();
   settle.cancel();
 });
@@ -209,79 +168,7 @@ watch([query, group, sortKey, sortDesc], () => {
         <span class="sr-only">Find in results</span>
         <SearchInput v-model="query" placeholder="Find in results" :disabled="pending" :loading="isSearchingNames" />
       </label>
-      <button
-        v-if="canFilter || pending"
-        ref="filterBtn"
-        type="button"
-        :disabled="pending"
-        class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors duration-200 disabled:cursor-default disabled:opacity-60"
-        :class="activeFilters ? 'border-accent bg-accent-soft' : 'border-border enabled:hover:border-border-strong'"
-        :aria-expanded="filterOpen"
-        :aria-controls="`${id}-filters`"
-        @click="filterOpen = !filterOpen"
-      >
-        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M4 6h16M7 12h10M10 18h4" />
-        </svg>
-        Filter<span v-if="activeFilters" class="tabular-nums"> · {{ activeFilters }}</span>
-      </button>
-
-      <div
-        v-if="filterOpen && canFilter"
-        :id="`${id}-filters`"
-        ref="popover"
-        role="dialog"
-        aria-label="Filter species"
-        class="absolute right-0 top-full z-20 mt-1 w-64 space-y-3 rounded-lg border border-border-strong bg-surface p-3 text-sm shadow-panel"
-      >
-        <!-- min-w-0: a fieldset is otherwise as wide as its longest group name. -->
-        <fieldset class="min-w-0">
-          <legend class="sr-only">Group</legend>
-          <p class="mb-1 flex justify-between px-1.5 text-xs text-subtle" aria-hidden="true">
-            <span>Group</span><span>Records</span>
-          </p>
-          <div
-            ref="groupList"
-            class="fade-list -mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1"
-            :class="{ 'fade-top': groupFadeTop, 'fade-bottom': groupFade }"
-            @scroll.passive="updateGroupFade"
-          >
-            <label class="group-opt">
-              <input
-                type="radio"
-                :name="`${id}-group`"
-                :checked="group === null"
-                class="sr-only"
-                @change="group = null"
-              />
-              <span class="min-w-0 flex-1 truncate">All groups</span>
-            </label>
-            <label v-for="groupOption in groupOptions" :key="groupOption.key" class="group-opt">
-              <input
-                type="radio"
-                :name="`${id}-group`"
-                :checked="group === groupOption.key"
-                class="sr-only"
-                @change="group = groupOption.key"
-              />
-              <span class="min-w-0 flex-1 truncate">{{ groupOption.common ?? groupOption.name }}</span>
-              <span class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
-                <span
-                  class="block h-full rounded-full"
-                  :class="group === groupOption.key ? 'bg-accent' : 'bg-border-strong'"
-                  :style="{ width: `${Math.max(4, groupOption.bar * 100)}%` }"
-                ></span>
-              </span>
-              <span class="w-11 shrink-0 text-right text-xs tabular-nums text-muted">{{
-                compact(groupOption.records)
-              }}</span>
-            </label>
-          </div>
-        </fieldset>
-        <div class="flex justify-end border-t border-border pt-2 text-xs">
-          <button type="button" class="font-medium" @click="closeFilter(true)">Done</button>
-        </div>
-      </div>
+      <SpeciesTableGroupFilter v-model="group" :groups="groups" :pending="pending" />
     </div>
 
     <ListSkeleton v-if="pending" label="Loading species" :fill="fill">
@@ -371,7 +258,7 @@ watch([query, group, sortKey, sortDesc], () => {
                         @broken="broken = new Set(broken).add(row.key)"
                       />
                       <span v-else class="grid size-full place-items-center font-display text-xs text-subtle">
-                        {{ initials(row) }}
+                        {{ initials(displayName(row)) }}
                       </span>
                     </span>
                     <!-- Two lines' height (h-9) whether loading, named or scientific only, so rows never change size. -->
@@ -440,25 +327,6 @@ watch([query, group, sortKey, sortDesc], () => {
 }
 .sort {
   color: inherit;
-}
-.group-opt {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.375rem;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background-color var(--dur-fast) var(--ease);
-}
-.group-opt:hover {
-  background: var(--surface-2);
-}
-.group-opt:has(:checked) {
-  background: var(--accent-soft);
-}
-.group-opt:has(:focus-visible) {
-  outline: 2px solid var(--focus);
 }
 .sort:hover,
 .sort.on {

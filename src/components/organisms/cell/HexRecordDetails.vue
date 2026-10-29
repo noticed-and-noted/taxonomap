@@ -9,7 +9,8 @@ import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import type { Occurrence, UsableImage } from '~/lib/gbif';
-import { accuracy, initials, institution } from '~/lib/record-fields';
+import { initials } from '~/lib/format';
+import { accuracy, institution } from '~/lib/record-fields';
 
 const props = defineProps<{
   occurrence: Occurrence;

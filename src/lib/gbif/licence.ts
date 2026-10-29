@@ -104,7 +104,9 @@ export function usableImages(occurrence: Occurrence): GbifImage[] {
       ...((media.rightsHolder ?? occurrence.rightsHolder) && {
         rightsHolder: (media.rightsHolder ?? occurrence.rightsHolder) as string,
       }),
-      ...((media.publisher ?? occurrence.publisher) && { publisher: (media.publisher ?? occurrence.publisher) as string }),
+      ...((media.publisher ?? occurrence.publisher) && {
+        publisher: (media.publisher ?? occurrence.publisher) as string,
+      }),
       ...(media.references && { references: media.references }),
     });
   }
