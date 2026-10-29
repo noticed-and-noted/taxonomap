@@ -88,10 +88,10 @@ function locate() {
   }
   geoState.value = 'asking';
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
+    (position) => {
       geoState.value = 'idle';
       // Rounded to 3 dp (~100 m) before it is used anywhere.
-      setNearLocation(pos.coords.latitude, pos.coords.longitude);
+      setNearLocation(position.coords.latitude, position.coords.longitude);
     },
     (positionError) => {
       geoState.value = positionError.code === positionError.PERMISSION_DENIED ? 'denied' : 'unavailable';

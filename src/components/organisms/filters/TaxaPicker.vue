@@ -36,8 +36,8 @@ watch([taxa, list], () => nextTick(updateFade));
 
 // The list is sorted by key, so a newly added taxon (here or from the header
 // search) can land out of view once it scrolls; bring it into view.
-watch(keys, async (next, prev) => {
-  const added = next.find((addedKey) => !prev.includes(addedKey));
+watch(keys, async (next, previous) => {
+  const added = next.find((addedKey) => !previous.includes(addedKey));
   if (added === undefined) return;
   await nextTick();
   list.value?.querySelector(`[data-key="${added}"]`)?.scrollIntoView({ block: 'nearest' });

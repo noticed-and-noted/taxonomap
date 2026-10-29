@@ -74,7 +74,7 @@ function label(name: string, count: number) {
       <button
         v-for="group in FILTER_GROUPS"
         :key="group.id"
-        :ref="(el) => el && (buttons[group.id] = el as HTMLButtonElement)"
+        :ref="(element) => element && (buttons[group.id] = element as HTMLButtonElement)"
         :data-tour="`rail-${group.id}`"
         type="button"
         class="rail-btn"
@@ -98,7 +98,7 @@ function label(name: string, count: number) {
         <span class="sr-only"> all filters</span>
       </button>
       <button
-        :ref="(el) => el && (buttons.settings = el as HTMLButtonElement)"
+        :ref="(element) => element && (buttons.settings = element as HTMLButtonElement)"
         type="button"
         class="rail-btn rail-settings"
         data-tour="rail-settings"

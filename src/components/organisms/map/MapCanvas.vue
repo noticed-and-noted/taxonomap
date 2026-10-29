@@ -64,7 +64,7 @@ const unsupported = useStore($mapUnsupported);
 const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
 let map: MlMap | undefined;
-let occ: OccLayer | undefined;
+let occurrenceLayer: OccLayer | undefined;
 const cleanups: (() => void)[] = [];
 
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
@@ -122,7 +122,7 @@ function replaceHexes(collection: GeoJSON.FeatureCollection) {
  * me switching to pin mode on a reload, say) finds no source and would be lost.
  */
 function syncOverlays() {
-  replaceHexes(occ?.collection() ?? EMPTY);
+  replaceHexes(occurrenceLayer?.collection() ?? EMPTY);
   // The grid level is set as the map starts, usually before its style has loaded.
   paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
@@ -132,7 +132,7 @@ function syncOverlays() {
 
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
-    hexes: occ?.collection() ?? EMPTY,
+    hexes: occurrenceLayer?.collection() ?? EMPTY,
     level: $gridLevel.get(),
     selected: selectedGeoJson($hexGeometry.get(), $recordPlace.get()),
     near: nearData(),
@@ -151,9 +151,9 @@ function offGlobe(point: { x: number; y: number }): boolean {
 
 /** The hex cell under a screen point, if any. */
 function hexAt(point: { x: number; y: number }): Hex | undefined {
-  if (!map || !occ || offGlobe(point)) return undefined;
+  if (!map || !occurrenceLayer || offGlobe(point)) return undefined;
   const lngLat = map.unproject([point.x, point.y]);
-  return occ.cellAt([lngLat.lng, lngLat.lat]);
+  return occurrenceLayer.cellAt([lngLat.lng, lngLat.lat]);
 }
 
 function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
@@ -176,9 +176,9 @@ function hexPoint(lng: number, lat: number): HexPoint {
 /** Re-resolve a hex selected via the URL at its level, wherever it is; a link to a cell with no records drops it. */
 async function restoreHex() {
   const selected = $selectedHex.get();
-  if (!occ || !selected || $hexGeometry.get()) return;
+  if (!occurrenceLayer || !selected || $hexGeometry.get()) return;
   const [lng, lat, level = $gridLevel.get()] = selected;
-  const feature = await occ.findCell([lng, lat], level);
+  const feature = await occurrenceLayer.findCell([lng, lat], level);
   // Another hex was picked meanwhile.
   if ($selectedHex.get() !== selected) return;
   const geometry = feature && geometryOf(feature);
@@ -225,11 +225,11 @@ function coveredWithPanel(box: DOMRect) {
 
 /** The loaded cell with the most records that faces the viewer, clear of the floating chrome and the cell panel. */
 function busiestInView(): Hex | undefined {
-  if (!map || !occ) return undefined;
+  if (!map || !occurrenceLayer) return undefined;
   const box = map.getContainer().getBoundingClientRect();
   const covered = coveredWithPanel(box);
   let busiest: Hex | undefined;
-  for (const hex of occ.collection().features as Hex[]) {
+  for (const hex of occurrenceLayer.collection().features as Hex[]) {
     const centre = hexCentre(hex);
     const point = map.project(centre);
     const isClear =
@@ -345,7 +345,7 @@ const records = (count: number, text: string) => `${text} record${count === 1 ? 
 const hoverCounter = createHoverCounter((wkt, count) => {
   if (count === 0) {
     clearHover();
-    occ?.redraw();
+    occurrenceLayer?.redraw();
   } else if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(count, full(count)) };
 });
 
@@ -699,9 +699,9 @@ onMounted(async () => {
     pixelRatio: mapPixelRatio(),
   });
   keepGlobeTilesOnWrapJumps(map);
-  occ = createOccLayer(map, occLayerOptions());
+  occurrenceLayer = createOccLayer(map, occLayerOptions());
   void restoreHex();
-  cleanups.push(() => occ?.destroy());
+  cleanups.push(() => occurrenceLayer?.destroy());
   decorateMap(maplibre, element);
   listenToMap();
   listenToStores();

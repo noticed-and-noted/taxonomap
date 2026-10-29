@@ -64,7 +64,7 @@ onBeforeUnmount(() => clearTimeout(retryTimer));
   <img
     v-if="src && !broken"
     :key="attempt"
-    ref="el"
+    ref="element"
     :src="src"
     :crossorigin="photoCrossOrigin(src)"
     :alt="alt"
