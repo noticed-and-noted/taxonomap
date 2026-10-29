@@ -9,6 +9,7 @@ import { useId } from 'vue';
 import { RAMPS, type RampId } from '~/lib/ramp';
 import { $ramp, setRamp } from '~/stores/ramp';
 import { $reading, setReading, TEXT_SIZES, type ReadingPrefs } from '~/stores/reading';
+import UiIcon from './UiIcon.vue';
 
 /** In Settings: the map colours list sits beside it, so no dropdown or preview. */
 const props = defineProps<{ inSettings?: boolean }>();
@@ -77,16 +78,19 @@ const id = useId();
 
         <div v-if="!props.inSettings">
           <label :for="`${id}-ramp`" class="mb-1.5 block text-sm font-medium">Map colours</label>
-          <select
-            :id="`${id}-ramp`"
-            class="ramp-select"
-            :value="ramp"
-            @change="setRamp(($event.target as HTMLSelectElement).value as RampId)"
-          >
-            <optgroup v-for="group in RAMP_GROUPS" :key="group.label" :label="group.label">
-              <option v-for="option in group.ramps" :key="option.id" :value="option.id">{{ option.name }}</option>
-            </optgroup>
-          </select>
+          <div class="relative">
+            <select
+              :id="`${id}-ramp`"
+              class="ramp-select"
+              :value="ramp"
+              @change="setRamp(($event.target as HTMLSelectElement).value as RampId)"
+            >
+              <optgroup v-for="group in RAMP_GROUPS" :key="group.label" :label="group.label">
+                <option v-for="option in group.ramps" :key="option.id" :value="option.id">{{ option.name }}</option>
+              </optgroup>
+            </select>
+            <UiIcon name="chevron-down" class="ramp-chevron" />
+          </div>
         </div>
       </div>
 
@@ -160,12 +164,24 @@ const id = useId();
 .ramp-select {
   width: 100%;
   height: 2.75rem;
-  padding: 0 0.625rem;
+  padding: 0 2.25rem 0 0.625rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   font-size: 0.875rem;
+
+  /* The native arrow ignores padding in Safari, so it is drawn by .ramp-chevron instead. */
+  appearance: none;
+}
+
+.ramp-chevron {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  translate: 0 -50%;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
 .ramp-select:hover {
