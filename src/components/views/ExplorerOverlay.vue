@@ -349,8 +349,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   border-radius: inherit;
   background: color-mix(in srgb, var(--surface) 95%, transparent);
+  /* No backdrop blur: under a 95% fill it barely shows, yet it is redrawn every map frame. */
   box-shadow: var(--shadow);
-  backdrop-filter: blur(8px);
 }
 
 /* A tab on the dock's right edge slides it off-screen, leaving the tab visible. */

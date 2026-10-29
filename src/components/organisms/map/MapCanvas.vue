@@ -56,7 +56,7 @@ import {
 } from '~/stores/explorer';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
-import { $reading, prefersReducedMotion } from '~/stores/reading';
+import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
 import WebglNotice from './WebglNotice.vue';
 
 const container = ref<HTMLDivElement>();
@@ -71,8 +71,6 @@ const cleanups: (() => void)[] = [];
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
-// Lighter rendering draws one canvas pixel per CSS pixel: a 3× phone then fills 9× fewer.
-const mapPixelRatio = () => ($reading.get().lightRendering ? 1 : window.devicePixelRatio);
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>

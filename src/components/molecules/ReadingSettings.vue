@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Reading and display settings: text size, italics, spacing, motion and
- * lighter rendering, plus (outside Settings, which has its own list) the map
+ * Reading and display settings: text size, italics, spacing, motion and the
+ * map's render scale, plus (outside Settings, which has its own list) the map
  * colours. Changes apply to the whole page at once; the preview card shows them on a sample.
  */
 import { useStore } from '@nanostores/vue';
@@ -9,22 +9,17 @@ import { useId } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { RAMPS, type RampId } from '~/lib/ramp';
 import { $ramp, setRamp } from '~/stores/ramp';
-import { $reading, setReading, TEXT_SIZES, type ReadingPrefs } from '~/stores/reading';
+import { $reading, RENDER_SCALES, setReading, TEXT_SIZES, type ReadingPrefs } from '~/stores/reading';
 
 /** In Settings: the map colours list sits beside it, so no dropdown or preview. */
 const props = defineProps<{ inSettings?: boolean }>();
 
-type ToggleKey = Exclude<keyof ReadingPrefs, 'textSize'>;
+type ToggleKey = Exclude<keyof ReadingPrefs, 'textSize' | 'renderScale'>;
 
 const TOGGLES: { key: ToggleKey; label: string; hint: string }[] = [
   { key: 'noItalics', label: 'No italics', hint: 'Scientific names and quotes stay upright' },
   { key: 'wideSpacing', label: 'Wider spacing', hint: 'More room between lines, letters and words' },
   { key: 'reduceMotion', label: 'Reduce motion', hint: 'No animations or map flights' },
-  {
-    key: 'lightRendering',
-    label: 'Lighter rendering',
-    hint: 'For older or low-power devices: a less sharp map, no blur, map flights or chart animations',
-  },
 ];
 
 const RAMP_GROUPS = [
@@ -75,6 +70,25 @@ const id = useId();
             </span>
           </label>
         </div>
+
+        <fieldset :aria-describedby="`${id}-scale-hint`">
+          <legend class="mb-1.5 text-sm font-medium">Render scale</legend>
+          <div class="flex w-fit rounded-md border border-border bg-surface p-0.5">
+            <label v-for="scale in RENDER_SCALES" :key="scale.id" class="size-option">
+              <input
+                type="radio"
+                :name="`${id}-scale`"
+                class="sr-only"
+                :checked="reading.renderScale === scale.id"
+                @change="setReading({ renderScale: scale.id })"
+              />
+              <span>{{ scale.label }}</span>
+            </label>
+          </div>
+          <p :id="`${id}-scale-hint`" class="mt-1 text-xs text-muted">
+            How sharp the map is drawn. Low runs smoother on older phones.
+          </p>
+        </fieldset>
 
         <div v-if="!props.inSettings">
           <label :for="`${id}-ramp`" class="mb-1.5 block text-sm font-medium">Map colours</label>
