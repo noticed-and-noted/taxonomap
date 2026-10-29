@@ -65,12 +65,19 @@ const dock = ref<HTMLElement>();
 const dockHeight = ref(0);
 const dockClear = computed(() => (dockHidden.value ? '0px' : `calc(${dockHeight.value}px + 0.5rem)`));
 let dockObserver: ResizeObserver | undefined;
-// An empty map's notice lives in the legend: bring it back if it was slid away.
+// An empty map's notice lives in the legend: bring it back if it was slid away, and slide it away again once records return.
 const viewCheck = useStore($viewCheck);
+const restashOnRecords = ref(false);
 watch(
   () => viewCheck.value.isEmpty,
   (isEmpty) => {
-    if (isEmpty) dockStashed.value = false;
+    if (isEmpty) {
+      restashOnRecords.value = dockStashed.value;
+      dockStashed.value = false;
+      return;
+    }
+    if (restashOnRecords.value) dockStashed.value = true;
+    restashOnRecords.value = false;
   },
 );
 function toggleNear() {
@@ -104,6 +111,8 @@ const dockHidden = computed(() => dockStashed.value || sheetCoversDock.value);
 function toggleDock() {
   dockStashed.value = !dockHidden.value;
   sheetCoversDock.value = false;
+  // The viewer chose for themself: don't undo it when records return.
+  restashOnRecords.value = false;
 }
 const onSheetQuery = (event: MediaQueryListEvent) => (hasSheets.value = event.matches);
 

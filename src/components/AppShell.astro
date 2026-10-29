@@ -48,7 +48,8 @@ const { map = 'full', search } = Astro.props;
     position: relative;
     display: grid;
     height: 100dvh;
-    overflow: hidden;
+    /* clip, not hidden: hidden still lets focus and scrollIntoView scroll it, shifting the whole map page. */
+    overflow: clip;
   }
 
   /* The header floats over the full-bleed map. */

@@ -487,13 +487,38 @@ function publishBounds() {
   ]);
 }
 
+/** How far, in degrees, a corner may drift on its way to the screen and back. */
+const ROUND_TRIP_DEGREES = 0.01;
+
+/** Whether a point is on screen and on the globe's near side (far-side points unproject elsewhere). */
+function isOnScreen(map: MlMap, [lng, lat]: number[]): boolean {
+  const canvas = map.getCanvas();
+  const point = map.project([lng!, lat!]);
+  if (point.x < 0 || point.y < 0 || point.x > canvas.clientWidth || point.y > canvas.clientHeight) return false;
+  const back = map.unproject(point);
+  const lngDrift = Math.abs(((back.lng - lng! + 540) % 360) - 180);
+  return Math.abs(back.lat - lat!) < ROUND_TRIP_DEGREES && lngDrift < ROUND_TRIP_DEGREES;
+}
+
+/**
+ * Whether any cell is drawn in view. A whole-canvas query finds nothing under the globe
+ * once the canvas reaches past its rim, so then look for a cell corner on screen.
+ */
+function hasCellInView(map: MlMap): boolean {
+  if (map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length) return true;
+  const source = map.getLayer(HEX_LAYER)!.source;
+  return map.querySourceFeatures(source).some((feature) => {
+    const { geometry } = feature;
+    if (geometry.type !== 'Polygon') return false;
+    return geometry.coordinates.some((ring) => ring.some((corner) => isOnScreen(map, corner)));
+  });
+}
+
 /** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
 function publishEmpty() {
   if (!map || $mapLoad.get().loading) return;
   const hasLayer = Boolean(map.getLayer(HEX_LAYER));
-  $viewCheck.set({
-    isEmpty: !failed.value && hasLayer && !map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length,
-  });
+  $viewCheck.set({ isEmpty: !failed.value && hasLayer && !hasCellInView(map) });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
