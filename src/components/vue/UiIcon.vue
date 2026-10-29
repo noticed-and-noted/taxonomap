@@ -8,6 +8,10 @@ const PATHS = {
   'arrow-right': 'M5 12h14m-6-6 6 6-6 6',
   'arrow-left': 'M19 12H5m6-6-6 6 6 6',
   'arrow-up': 'M12 19V5m-6 6 6-6 6 6',
+  // Double-headed, for swipe hints.
+  'arrows-horizontal': 'M4 12h16M8 8l-4 4 4 4m8-8 4 4-4 4',
+  'arrows-vertical': 'M12 4v16M8 8l4-4 4 4m-8 8 4 4 4-4',
+  'arrows-all': 'M12 3v18M3 12h18M9 6l3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3',
   'chevron-right': 'm9 6 6 6-6 6',
   close: 'M6 6l12 12M18 6 6 18',
   filter: 'M4 7h16M7 12h10M10 17h4',
