@@ -8,7 +8,7 @@ import { $groupCounts, type FilterGroupId } from '~/stores/explorer';
 export { $groupCounts, type FilterGroupId };
 
 /** Below this width the rail is hidden and the filters live in the Filters sheet. */
-export const PHONE_QUERY = '(max-width: 639px)';
+export const PHONE_QUERY = '(max-width: 999.98px)';
 
 export interface FilterGroupMeta {
   id: FilterGroupId;

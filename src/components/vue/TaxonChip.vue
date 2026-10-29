@@ -123,7 +123,7 @@ onBeforeUnmount(() => resize.disconnect());
 /* Phone: end the scroll box at the Near me button, with the right padding inside it so the
    last chip's shadow tails off softly instead of clipping. It takes touches, since WebKit
    won't touch-scroll a pointer-events: none box. */
-@media (max-width: 639.98px) {
+@media (max-width: 999.98px) {
   .pills {
     --pad-right: 0.5rem; /* matches the Near me button's gap to Filters */
     --right-end: var(--pad-right);

@@ -31,6 +31,9 @@
 
   --ease-field: var(--ease);
   --shadow-panel: var(--shadow);
+
+  /* Below this the filter rail gives way to the Filters sheet (PHONE_QUERY in filterGroups.ts). */
+  --breakpoint-rail: 62.5rem;
 }
 
 @layer base {
