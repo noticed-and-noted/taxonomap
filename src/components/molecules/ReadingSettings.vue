@@ -5,11 +5,18 @@
  * colours. Changes apply to the whole page at once; the preview card shows them on a sample.
  */
 import { useStore } from '@nanostores/vue';
-import { useId } from 'vue';
+import { computed, onMounted, ref, useId } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { RAMPS, type RampId } from '~/lib/ramp';
 import { $ramp, setRamp } from '~/stores/ramp';
-import { $reading, RENDER_SCALES, setReading, TEXT_SIZES, type ReadingPrefs } from '~/stores/reading';
+import {
+  $reading,
+  renderScalesFor,
+  setReading,
+  TEXT_SIZES,
+  type ReadingPrefs,
+  type RenderScaleOption,
+} from '~/stores/reading';
 
 /** In Settings: the map colours list sits beside it, so no dropdown or preview. */
 const props = defineProps<{ inSettings?: boolean }>();
@@ -31,6 +38,15 @@ const RAMP_GROUPS = [
 const PREVIEW_STOPS = [1, 2, 3, 4, 5, 6, 7];
 
 const reading = useStore($reading);
+
+/** Render scales this screen can tell apart; Max (3×) waits for mount, as the server can't know the screen. */
+const renderScales = ref<RenderScaleOption[]>(renderScalesFor(2));
+onMounted(() => (renderScales.value = renderScalesFor(window.devicePixelRatio)));
+
+/** The saved scale or, where this screen can't show it, the highest one it offers (which draws the same). */
+const shownRenderScale = computed(
+  () => renderScales.value.find((scale) => scale.id === reading.value.renderScale)?.id ?? renderScales.value[0]?.id,
+);
 const ramp = useStore($ramp);
 const id = useId();
 </script>
@@ -71,15 +87,15 @@ const id = useId();
           </label>
         </div>
 
-        <fieldset :aria-describedby="`${id}-scale-hint`">
+        <fieldset v-if="renderScales.length > 1" :aria-describedby="`${id}-scale-hint`">
           <legend class="mb-1.5 text-sm font-medium">Render scale</legend>
           <div class="flex w-fit rounded-md border border-border bg-surface p-0.5">
-            <label v-for="scale in RENDER_SCALES" :key="scale.id" class="size-option">
+            <label v-for="scale in renderScales" :key="scale.id" class="size-option">
               <input
                 type="radio"
                 :name="`${id}-scale`"
                 class="sr-only"
-                :checked="reading.renderScale === scale.id"
+                :checked="shownRenderScale === scale.id"
                 @change="setReading({ renderScale: scale.id })"
               />
               <span>{{ scale.label }}</span>
