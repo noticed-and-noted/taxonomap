@@ -117,6 +117,28 @@ export function tilesFor(points: LngLat[], level: number): TileId[] {
   return [...seen.values()].sort((left, right) => dist(left) - dist(right));
 }
 
+/** Steps across a tile, as fractions of its width, for the points tilePoints samples. */
+const TILE_POINT_STEPS = [0, 0.5, 1];
+
+/** Latitude of a Mercator tile row edge (fractional rows allowed). */
+function rowLatitude(row: number, tileCount: number): number {
+  return (Math.atan(Math.sinh(Math.PI * (1 - (2 * row) / tileCount))) * 180) / Math.PI;
+}
+
+/**
+ * A 3 × 3 grid of points over a tile (corners, edge midpoints and centre),
+ * kept within the hexes' latitude clip, to test whether any of it is on screen.
+ */
+export function tilePoints(tile: TileId, level: number): LngLat[] {
+  const tileCount = 2 ** level;
+  return TILE_POINT_STEPS.flatMap((stepY) =>
+    TILE_POINT_STEPS.map((stepX): LngLat => {
+      const lat = rowLatitude(tile.y + stepY, tileCount);
+      return [((tile.x + stepX) / tileCount) * 360 - 180, Math.max(-MAX_LAT, Math.min(MAX_LAT, lat))];
+    }),
+  );
+}
+
 /** `tile` moved by whole tiles: x wraps at the antimeridian; null when the row falls off the map. */
 function offsetTile(tile: TileId, dx: number, dy: number, tileCount: number): TileId | null {
   const row = tile.y + dy;

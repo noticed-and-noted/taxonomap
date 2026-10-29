@@ -24,6 +24,7 @@ import {
   type MapColors,
 } from '~/lib/map/style';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
+import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
 import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { createRecordFit } from '~/lib/map/recordFit';
@@ -705,6 +706,7 @@ onMounted(async () => {
     fadeDuration: prefersReducedMotion() ? 0 : MAP_FADE_MS,
     pixelRatio: mapPixelRatio(),
   });
+  keepGlobeTilesOnWrapJumps(map);
   occ = createOccLayer(map, occLayerOptions());
   void restoreHex();
   cleanups.push(() => occ?.destroy());

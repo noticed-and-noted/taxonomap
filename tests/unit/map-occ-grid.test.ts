@@ -13,6 +13,7 @@ import {
   ringAround,
   shiftTiles,
   tileAt,
+  tilePoints,
   tilesFor,
   zoomDrop,
   type LngLat,
@@ -142,6 +143,17 @@ describe('ringAround and shiftTiles', () => {
         2,
       ),
     ).toEqual([{ x: 0, y: 0 }]);
+  });
+});
+
+describe('tilePoints', () => {
+  it('spans the tile from corner to corner, clipped short of the pole', () => {
+    const points = tilePoints({ x: 1, y: 0 }, 2);
+    expect(points).toHaveLength(9);
+    expect(points[0]).toEqual([-90, 85]);
+    expect(points[8]![0]).toBe(0);
+    expect(points[8]![1]).toBeCloseTo(66.513, 3);
+    expect(tileAt(points[4]!, 2)).toEqual({ x: 1, y: 0 });
   });
 });
 

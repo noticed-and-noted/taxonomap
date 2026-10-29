@@ -28,6 +28,7 @@ import {
   shiftTiles,
   tileAt,
   tileCoordinateKey,
+  tilePoints,
   tilesFor,
   type Hex,
   type LngLat,
@@ -49,6 +50,8 @@ const MOVE_EVERY_MS = 50;
  * densely (every ~64 px on a 1000 px map).
  */
 const SAMPLES = 17;
+/** How far (degrees) a point may move projecting to the screen and back and still count as on the near side. */
+const ROUND_TRIP_DEGREES = 0.5;
 
 /** Handle on the occurrence hexes the layer keeps loaded for a map. */
 export interface OccLayer {
@@ -245,6 +248,36 @@ class OccLayerController {
     return points;
   }
 
+  /** Whether a place is on the canvas and on the globe's near side (a far-side place does not round-trip). */
+  #isOnScreen([lng, lat]: LngLat): boolean {
+    const [width, height] = this.#size();
+    const point = this.#map.project([lng, lat]);
+    if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) return false;
+    const back = this.#map.unproject([point.x, point.y]);
+    return (
+      Math.abs(back.lat - lat) < ROUND_TRIP_DEGREES &&
+      Math.abs(((back.lng - lng + 540) % 360) - 180) < ROUND_TRIP_DEGREES
+    );
+  }
+
+  /**
+   * The tiles in view. Sampling the screen misses tiles squeezed into a few
+   * pixels (past a pole, at the globe's edge), so neighbours of the sampled
+   * tiles are tested directly, ring by ring, until none more are on screen.
+   */
+  #viewTiles(): TileId[] {
+    const level = this.#level;
+    const view = tilesFor(this.#viewPoints(), level);
+    let found = view;
+    while (found.length) {
+      found = ringAround(view, level).filter((tile) =>
+        tilePoints(tile, level).some((point) => this.#isOnScreen(point)),
+      );
+      view.push(...found);
+    }
+    return view;
+  }
+
   async #fetchTile(tile: TileId, level: number, signal: AbortSignal): Promise<Hex[] | undefined> {
     const url = occurrenceTileTemplate(this.#options.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt')
       .replace('{z}', String(level))
@@ -395,7 +428,7 @@ class OccLayerController {
   }
 
   #planView() {
-    this.#plan(tilesFor(this.#viewPoints(), this.#level));
+    this.#plan(this.#viewTiles());
   }
 
   /** While dragging: re-plan once other tiles come into view, at the level shown (zooming changes it at moveend). */
@@ -405,7 +438,7 @@ class OccLayerController {
     this.#lastMoveAt = now;
     const map = this.#map;
     if (this.#levelAt(map.getZoom(), map.getCenter().lat) !== this.#level) return;
-    const view = tilesFor(this.#viewPoints(), this.#level);
+    const view = this.#viewTiles();
     const shown = new Set(this.#want.view.map(tileCoordinateKey));
     const isSameView = view.length === shown.size && view.every((tile) => shown.has(tileCoordinateKey(tile)));
     if (!isSameView) this.#plan(view);
