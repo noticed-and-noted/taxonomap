@@ -1,10 +1,8 @@
 import pLimit from 'p-limit';
-
+import { DAY, HOUR } from '~/lib/util/time';
 import { BACKBONE_DATASET_KEY } from './config';
 import { http } from './http';
 import type { Distribution, NameUsage, Paged, Rank, SuggestResult, VernacularName } from './types';
-
-import { DAY, HOUR } from '~/lib/util/time';
 
 /** A backbone taxon. @throws GbifNotFoundError when GBIF has no such taxon. */
 export function getSpecies(key: number, signal?: AbortSignal): Promise<NameUsage> {

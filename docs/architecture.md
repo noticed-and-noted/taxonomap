@@ -23,6 +23,7 @@ Components follow atomic design. Each level may use the levels above it in this 
 | `src/stores/`                 |          | Nano Stores, the only channel between islands                                                                                   |
 | `src/lib/`                    |          | Framework-free logic: the GBIF client, map helpers, formatting, data loading                                                    |
 
-- An organism's helpers live beside it in its feature folder. Move a component up to `molecules/` once a second feature uses it.
+- An organism's sub-components, composables and helpers live beside it in its feature folder (`organisms/cell/useRecordNames.ts`), named after it (`HexRecordRow`). Move a component up to `molecules/` once a second feature uses it.
+- Atoms and molecules never fetch. Organisms and views may, through composables.
 - Data flows down as props and up as events inside an island; between islands it goes through stores.
 - The views folder is not called `pages/` so it isn't mistaken for Astro's file-based routes in `src/pages/`.

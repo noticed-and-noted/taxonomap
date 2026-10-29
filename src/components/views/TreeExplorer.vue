@@ -8,19 +8,18 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import SegmentedControl from '~/components/atoms/SegmentedControl.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
-import ThumbImage from '~/components/atoms/ThumbImage.vue';
-import UiIcon from '~/components/atoms/UiIcon.vue';
-import SearchInput from '~/components/molecules/SearchInput.vue';
+import TreeBreadcrumbs from '~/components/organisms/tree/TreeBreadcrumbs.vue';
 import TreeChart from '~/components/organisms/tree/TreeChart.vue';
+import TreeChildList from '~/components/organisms/tree/TreeChildList.vue';
+import TreeNodeDetails from '~/components/organisms/tree/TreeNodeDetails.vue';
 import TreeSkeleton from '~/components/organisms/tree/TreeSkeleton.vue';
-import { useScrollFade } from '~/composables/useScrollFade';
-import { normalise } from '~/lib/data/name-index';
 import { RANK_BY_CODE } from '~/lib/data/ranks';
-import { compact, full, RANK_LABELS } from '~/lib/format';
+import { compact, RANK_LABELS } from '~/lib/format';
 import { classifyError, type UiErrorKind, type UsableImage } from '~/lib/gbif';
 import { leadPhoto } from '~/lib/photos/taxon-photos';
-import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
+import { loadSpeciesManifest } from '~/lib/species/links';
 import {
   findNode,
   isExpandable,
@@ -36,9 +35,8 @@ import { $treeFocus, $treeLayout, $treeMetric } from '~/stores/tree';
 
 const focusKey = useStore($treeFocus);
 const layoutPref = useStore($treeLayout);
-const metric = useStore($treeMetric);
+const storedMetric = useStore($treeMetric);
 const taxonKey = useStore($taxonKey);
-const manifest = useStore($speciesManifest);
 
 const root = shallowRef<TreeNode | null>(null);
 const focus = shallowRef<TreeNode | null>(null);
@@ -52,9 +50,26 @@ const isPhotoLoading = ref(false);
 const narrow = ref(false);
 let mediaQuery: MediaQueryList | undefined;
 
-const layout = computed(() =>
-  layoutPref.value === 'auto' ? (narrow.value ? 'icicle' : 'sunburst') : layoutPref.value,
-);
+const METRIC_OPTIONS = [
+  { value: 'records', label: 'Records' },
+  { value: 'species', label: 'Species' },
+] as const;
+const LAYOUT_OPTIONS = [
+  { value: 'sunburst', label: 'Sunburst' },
+  { value: 'icicle', label: 'Icicle' },
+] as const;
+/** Narrow screens get the icicle unless the viewer chose a layout. */
+const NARROW_QUERY = '(max-width: 639.98px)';
+
+/** The chosen layout, or the screen's default; choosing one stores it. */
+const layout = computed({
+  get: () => (layoutPref.value === 'auto' ? (narrow.value ? 'icicle' : 'sunburst') : layoutPref.value),
+  set: (nextLayout: 'sunburst' | 'icicle') => $treeLayout.set(nextLayout),
+});
+const metric = computed({
+  get: () => storedMetric.value,
+  set: (nextMetric: 'records' | 'species') => $treeMetric.set(nextMetric),
+});
 const crumbs = computed(() => (focus.value ? pathTo(focus.value) : []));
 const detail = computed(() => selected.value ?? focus.value);
 const children = computed(() => {
@@ -63,19 +78,7 @@ const children = computed(() => {
 });
 const metricOf = (node: TreeNode) => (metric.value === 'records' ? node.records : node.species);
 
-const groupQuery = ref('');
-const visibleChildren = computed(() => {
-  const needle = normalise(groupQuery.value);
-  if (!needle) return children.value;
-  return children.value.filter((child) => normalise(`${child.common ?? ''} ${child.name}`).includes(needle));
-});
-// A filter typed for one group means nothing in the next.
-watch(focus, () => (groupQuery.value = ''));
-
-const groupList = ref<HTMLElement>();
-const { fadeTop: groupFadeTop, fadeBottom: groupFadeBottom, update: updateGroupFade } = useScrollFade(groupList);
-watch(visibleChildren, updateGroupFade, { flush: 'post' });
-
+/** Loads the baked tree and moves to the focus in the URL. */
 async function build() {
   error.value = null;
   const fresh = await loadBakedTree();
@@ -120,6 +123,7 @@ async function syncFocus() {
   }
 }
 
+/** Selects a node, and moves the tree into it when it has sub-groups (loading them first). */
 async function pick(node: TreeNode) {
   selected.value = node;
   if (!isExpandable(node)) return;
@@ -141,6 +145,7 @@ async function pick(node: TreeNode) {
   }
 }
 
+/** Moves the tree up to the focus's parent. */
 function up() {
   const parentNode = focus.value?.parent;
   if (!parentNode) return;
@@ -148,6 +153,7 @@ function up() {
   $treeFocus.set(parentNode.key === ROOT_KEY ? null : parentNode.key);
 }
 
+/** Moves the tree to a breadcrumb, selecting it. */
 function goTo(node: TreeNode) {
   focus.value = node;
   selected.value = node.key === ROOT_KEY ? null : node;
@@ -165,7 +171,7 @@ watch(selected, async (node) => {
     photo.value = image ?? null;
     if (!image) isPhotoLoading.value = false;
   } catch {
-    /* optional */
+    // The photo is decoration; without it the details still stand.
     if (selected.value === node) isPhotoLoading.value = false;
   }
 });
@@ -179,21 +185,21 @@ watch(focusKey, (key) => {
   else void syncFocus();
 });
 
-const setMetric = (nextMetric: 'records' | 'species') => $treeMetric.set(nextMetric);
-const setLayout = (nextLayout: 'sunburst' | 'icicle') => $treeLayout.set(nextLayout);
-
-onMounted(() => {
-  mediaQuery = window.matchMedia('(max-width: 639.98px)');
-  narrow.value = mediaQuery.matches;
-  mediaQuery.addEventListener('change', onMq);
-  void loadSpeciesManifest();
-  void build();
-});
-onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMq));
-function onMq() {
+/** Follows the screen crossing the narrow width. */
+function onNarrowChange() {
   narrow.value = !!mediaQuery?.matches;
 }
 
+onMounted(() => {
+  mediaQuery = window.matchMedia(NARROW_QUERY);
+  narrow.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', onNarrowChange);
+  void loadSpeciesManifest();
+  void build();
+});
+onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onNarrowChange));
+
+/** A node's share of its parent by the chosen metric, 0 to 1. */
 const share = (node: TreeNode) => {
   const parent = node.parent;
   const total = parent
@@ -211,62 +217,12 @@ const share = (node: TreeNode) => {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 id="tree-h" class="font-display text-2xl">Tree of life</h1>
       <div class="flex flex-wrap items-center gap-2 text-xs">
-        <fieldset class="seg">
-          <legend class="sr-only">Size by</legend>
-          <label :class="{ on: metric === 'records' }"
-            ><input
-              type="radio"
-              class="sr-only"
-              :checked="metric === 'records'"
-              @change="setMetric('records')"
-            />Records</label
-          >
-          <label :class="{ on: metric === 'species' }"
-            ><input
-              type="radio"
-              class="sr-only"
-              :checked="metric === 'species'"
-              @change="setMetric('species')"
-            />Species</label
-          >
-        </fieldset>
-        <fieldset class="seg">
-          <legend class="sr-only">Layout</legend>
-          <label :class="{ on: layout === 'sunburst' }"
-            ><input
-              type="radio"
-              class="sr-only"
-              :checked="layout === 'sunburst'"
-              @change="setLayout('sunburst')"
-            />Sunburst</label
-          >
-          <label :class="{ on: layout === 'icicle' }"
-            ><input
-              type="radio"
-              class="sr-only"
-              :checked="layout === 'icicle'"
-              @change="setLayout('icicle')"
-            />Icicle</label
-          >
-        </fieldset>
+        <SegmentedControl v-model="metric" legend="Size by" :options="METRIC_OPTIONS" />
+        <SegmentedControl v-model="layout" legend="Layout" :options="LAYOUT_OPTIONS" />
       </div>
     </div>
 
-    <nav aria-label="Tree position" class="text-xs">
-      <ol class="flex flex-wrap items-center gap-1">
-        <li v-for="(crumb, index) in crumbs" :key="crumb.key" class="flex items-center gap-1">
-          <button
-            type="button"
-            class="rounded px-1 py-0.5 text-muted hover:bg-surface-2 hover:text-text"
-            :aria-current="index === crumbs.length - 1 ? 'location' : undefined"
-            @click="goTo(crumb)"
-          >
-            {{ crumb.common ?? crumb.name }}
-          </button>
-          <span v-if="index < crumbs.length - 1" class="text-subtle" aria-hidden="true">›</span>
-        </li>
-      </ol>
-    </nav>
+    <TreeBreadcrumbs :crumbs="crumbs" @go="goTo" />
 
     <div v-if="error && !root" class="grid flex-1 place-items-center" role="alert">
       <div class="text-center">
@@ -339,120 +295,23 @@ const share = (node: TreeNode) => {
         class="flex flex-col gap-4 md:min-h-0 md:overflow-hidden rounded-lg border border-border bg-surface p-4"
         aria-label="Details"
       >
-        <div v-if="detail" class="flex gap-3">
-          <div class="relative size-20 shrink-0 overflow-hidden rounded-md bg-photo">
-            <SkeletonBlock v-if="isPhotoLoading" height="100%" class="absolute inset-0" label="Loading photo" />
-            <ThumbImage
-              v-if="photo"
-              :key="photo.url"
-              :image="photo"
-              size="200x"
-              class="relative size-full object-cover"
-              @loaded="isPhotoLoading = false"
-              @broken="isPhotoLoading = false"
-            />
-            <img
-              v-else-if="detail.rank === 'ROOT'"
-              src="/images/blue-marble.webp"
-              alt=""
-              title="The Blue Marble, Apollo 17 (NASA, public domain)"
-              class="size-full object-cover"
-            />
-          </div>
-          <div class="min-w-0">
-            <p class="text-[0.6875rem] uppercase tracking-wide text-subtle">
-              {{ RANK_LABELS[detail.rank] ?? 'All life' }}
-            </p>
-            <h2 class="truncate font-display text-xl leading-tight">{{ detail.common ?? detail.name }}</h2>
-            <p v-if="detail.common" class="sci-name truncate text-sm text-muted">{{ detail.name }}</p>
-            <p class="mt-1 text-xs text-muted">
-              {{ full(detail.records) }} records · {{ full(detail.species) }} species
-              <span v-if="detail.parent && detail.parent.rank !== 'ROOT'">
-                · {{ (share(detail) * 100).toFixed(1) }}% of {{ detail.parent.common ?? detail.parent.name }}</span
-              >
-            </p>
-          </div>
-        </div>
-        <div v-if="detail && detail.rank !== 'ROOT'" class="flex flex-wrap gap-2 text-xs">
-          <a :href="`/?taxon=${detail.key}`" class="rounded-md bg-accent px-2.5 py-1.5 font-medium text-accent-contrast"
-            >View on map</a
-          >
-          <a
-            :href="speciesPath(detail.key, manifest)"
-            class="rounded-md border border-border px-2.5 py-1.5 hover:border-accent"
-            >About page</a
-          >
-          <a
-            :href="`https://www.gbif.org/species/${detail.key}`"
-            target="_blank"
-            rel="noopener"
-            class="rounded-md border border-border px-2.5 py-1.5 hover:border-accent"
-            >GBIF <UiIcon name="external"
-          /></a>
-        </div>
-
-        <div class="flex flex-col md:min-h-0 md:flex-1">
-          <h3 class="mb-1.5 text-sm font-medium">
-            <template v-if="visibleChildren.length !== children.length">{{ visibleChildren.length }} of </template>
-            {{ children.length }} {{ children.length === 1 ? 'group' : 'groups' }} in {{ focus.common ?? focus.name }}
-          </h3>
-          <div v-if="children.length > 1" class="mb-2">
-            <SearchInput v-model="groupQuery" placeholder="Filter groups" aria-label="Filter groups" />
-          </div>
-          <!-- Padding gives the rows' focus ring room inside the scroll box. -->
-          <ol
-            ref="groupList"
-            class="fade-list -mx-1 max-h-[50dvh] space-y-0.5 overflow-y-auto p-1 text-sm md:max-h-none md:min-h-0 md:flex-1"
-            :class="{ 'fade-top': groupFadeTop, 'fade-bottom': groupFadeBottom }"
-            @scroll.passive="updateGroupFade"
-          >
-            <li v-for="child in visibleChildren" :key="child.key">
-              <button
-                type="button"
-                class="grid min-h-11 w-full grid-cols-[1fr_auto] items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-surface-2 md:min-h-0"
-                :aria-current="selected?.key === child.key ? 'true' : undefined"
-                :class="{ 'bg-accent-soft': selected?.key === child.key }"
-                @click="pick(child)"
-              >
-                <span class="min-w-0 truncate">
-                  {{ child.common ?? child.name }}
-                  <span v-if="child.common" class="sci-name text-xs text-subtle">{{ child.name }}</span>
-                  <span v-if="loadingKey === child.key" class="text-xs text-subtle"> · loading…</span>
-                </span>
-                <span class="text-xs tabular-nums text-muted">{{ compact(metricOf(child)) }}</span>
-              </button>
-            </li>
-          </ol>
-          <p v-if="!children.length" class="text-xs text-subtle">No sub-groups with records.</p>
-          <p v-else-if="!visibleChildren.length" class="text-xs text-subtle">
-            No groups match “{{ groupQuery }}”.
-            <button type="button" class="text-text underline" @click="groupQuery = ''">Clear filter</button>
-          </p>
-        </div>
+        <TreeNodeDetails
+          v-if="detail"
+          :node="detail"
+          :photo="photo"
+          :is-photo-loading="isPhotoLoading"
+          :share="share(detail)"
+          @photo-settled="isPhotoLoading = false"
+        />
+        <TreeChildList
+          :focus="focus"
+          :children="children"
+          :metric="metric"
+          :selected-key="selected?.key ?? null"
+          :loading-key="loadingKey"
+          @pick="pick"
+        />
       </aside>
     </div>
   </section>
 </template>
-
-<style scoped>
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2px;
-  background: var(--surface);
-}
-.seg label {
-  cursor: pointer;
-  padding: 0.25rem 0.625rem;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-}
-.seg label.on {
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-.seg label:has(:focus-visible) {
-  outline: 2px solid var(--focus);
-}
-</style>
