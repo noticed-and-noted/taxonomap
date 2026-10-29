@@ -52,4 +52,12 @@ describe('reading store', () => {
     reading.setReading({ reduceMotion: true });
     expect(reading.prefersReducedMotion()).toBe(true);
   });
+
+  it('lighter rendering marks the page and skips animation', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const reading = await store();
+    reading.setReading({ lightRendering: true });
+    expect(root().hasAttribute('data-light-rendering')).toBe(true);
+    expect(reading.prefersReducedMotion()).toBe(true);
+  });
 });

@@ -10,8 +10,8 @@
  *   once you let go;
  * - an inertia glide or a flight (easeTo/flyTo) starts loading where it will
  *   end as soon as it starts.
- * Tiles are decoded off the main thread (hexDecoder.ts). Only the view's
- * cells are drawn; the ring's wait in the cache until a pan brings them in.
+ * Tiles are decoded off the main thread (hexDecoder.ts). The ring's cells are
+ * drawn too, a frame after a new set, so a pan reveals cells already on the map.
  * Cells arriving for the view are passed on as changes (onChanges); a new
  * level or new filters swap the whole set once its view is loaded (onCells),
  * so the old hexes stay up until then.
@@ -28,11 +28,13 @@ import {
   shiftTiles,
   tileAt,
   tileCoordinateKey,
+  tilePoints,
   tilesFor,
   type Hex,
   type LngLat,
   type TileId,
 } from './occGrid';
+import { isOnScreen, placeAt } from './screen';
 
 /** Decoded tiles kept for panning back (the cells of a few screens). */
 const CACHE_TILES = 512;
@@ -234,15 +236,31 @@ class OccLayerController {
     const points: LngLat[] = [[map.getCenter().lng, map.getCenter().lat]];
     for (let column = 0; column < SAMPLES; column++) {
       for (let row = 0; row < SAMPLES; row++) {
-        const pixelX = (width * column) / (SAMPLES - 1);
-        const pixelY = (height * row) / (SAMPLES - 1);
-        const position = map.unproject([pixelX, pixelY]);
-        // Off the globe, unproject snaps to the horizon, so the point does not round-trip.
-        const back = map.project(position);
-        if (Math.hypot(back.x - pixelX, back.y - pixelY) <= 1) points.push([position.lng, position.lat]);
+        const place = placeAt(map, (width * column) / (SAMPLES - 1), (height * row) / (SAMPLES - 1));
+        if (place) points.push(place);
       }
     }
     return points;
+  }
+
+  /**
+   * The tiles in view. Sampling the screen misses tiles squeezed into a few
+   * pixels (past a pole, at the globe's edge), so neighbours of the sampled
+   * tiles are tested directly, ring by ring, until none more are on screen.
+   * Each ring grows only from the tiles the last one found.
+   */
+  #viewTiles(): TileId[] {
+    const level = this.#level;
+    const view = tilesFor(this.#viewPoints(), level);
+    const tested = new Set(view.map(tileCoordinateKey));
+    let found = view;
+    while (found.length) {
+      const untested = ringAround(found, level).filter((tile) => !tested.has(tileCoordinateKey(tile)));
+      for (const tile of untested) tested.add(tileCoordinateKey(tile));
+      found = untested.filter((tile) => tilePoints(tile, level).some((point) => isOnScreen(this.#map, point)));
+      view.push(...found);
+    }
+    return view;
   }
 
   async #fetchTile(tile: TileId, level: number, signal: AbortSignal): Promise<Hex[] | undefined> {
@@ -273,32 +291,38 @@ class OccLayerController {
   }
 
   /**
-   * The loaded cells of the view's tiles. The ring is merged in for its home
-   * counts but not drawn: sending its cells to MapLibre's worker as well
-   * roughly triples the copy that stalls a frame on every new level.
+   * The loaded cells of the view's tiles, and of the ring around them when
+   * `withRing`. The ring is always merged in for its home counts.
    */
-  #wantedCells(): Map<string, Hex> {
+  #wantedCells(withRing: boolean): Map<string, Hex> {
     const { filter, level, view, ring } = this.#want;
     const hexesOf = (tile: TileId) => this.#cache.get(tileKey(filter, level, tile)) ?? [];
     const inView = new Set(view.flatMap(hexesOf).map((hex) => hex.properties.id));
     const merged = mergeHexes([...view, ...ring].map(hexesOf));
     const { isEmpty } = this.#options;
-    for (const [id, hex] of merged) if (!inView.has(id) || isEmpty?.(hex)) merged.delete(id);
+    for (const [id, hex] of merged) if ((!withRing && !inView.has(id)) || isEmpty?.(hex)) merged.delete(id);
     return merged;
   }
 
-  /** Draw what is loaded for the view: a whole new set, or the changes since last time. */
+  /**
+   * Draw what is loaded for the view: a whole new set, or the changes since
+   * last time. A new set is the view alone, since sending the ring as well
+   * roughly triples the copy to MapLibre's worker that stalls a frame on a new
+   * level; changes add the ring, so a pan reveals cells already drawn.
+   */
   #draw() {
-    const next = this.#wantedCells();
     const { filter, level, view } = this.#want;
     if (this.#shown.filter !== filter || this.#shown.level !== level) {
       // A new set waits until its view is whole, so the old hexes stay up until then.
       if (!view.every((tile) => this.#cache.has(tileKey(filter, level, tile)))) return;
       this.#shown = { filter, level };
-      this.#cells = next;
+      this.#cells = this.#wantedCells(false);
       this.#options.onCells(this.collection());
+      // The ring follows as changes, next frame.
+      this.#drawSoon();
       return;
     }
+    const next = this.#wantedCells(true);
     const add: Hex[] = [];
     const remove: string[] = [];
     for (const [id, hex] of next) {
@@ -395,7 +419,7 @@ class OccLayerController {
   }
 
   #planView() {
-    this.#plan(tilesFor(this.#viewPoints(), this.#level));
+    this.#plan(this.#viewTiles());
   }
 
   /** While dragging: re-plan once other tiles come into view, at the level shown (zooming changes it at moveend). */
@@ -405,7 +429,7 @@ class OccLayerController {
     this.#lastMoveAt = now;
     const map = this.#map;
     if (this.#levelAt(map.getZoom(), map.getCenter().lat) !== this.#level) return;
-    const view = tilesFor(this.#viewPoints(), this.#level);
+    const view = this.#viewTiles();
     const shown = new Set(this.#want.view.map(tileCoordinateKey));
     const isSameView = view.length === shown.size && view.every((tile) => shown.has(tileCoordinateKey(tile)));
     if (!isSameView) this.#plan(view);

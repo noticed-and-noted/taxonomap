@@ -105,9 +105,10 @@ export function useHexSummary() {
   async function load() {
     const hexGeometry = geometry.value;
     reset();
+    // Clear the old cell's count so the panel shows its skeleton, not a stale number.
+    count.value = null;
     if (!hexGeometry) {
       cancel();
-      count.value = null;
       classes.value = [];
       return;
     }

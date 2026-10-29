@@ -31,6 +31,9 @@
 
   --ease-field: var(--ease);
   --shadow-panel: var(--shadow);
+
+  /* Below this the filter rail gives way to the Filters sheet (PHONE_QUERY in filterGroups.ts). */
+  --breakpoint-rail: 62.5rem;
 }
 
 @layer base {
@@ -352,4 +355,9 @@ html[data-reduce-motion]::view-transition-new(*) {
   animation-iteration-count: 1 !important;
   transition-duration: 0s !important;
   scroll-behavior: auto !important;
+}
+
+/* Lighter rendering: background blur is among the costliest effects on weak GPUs. */
+html[data-light-rendering] * {
+  backdrop-filter: none !important;
 }

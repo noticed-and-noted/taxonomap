@@ -128,7 +128,7 @@ The logo is the word **Taxonomap** hand-lettered from Patrick Hand, with a **fid
 - **The map is the page.** The header, rail, panels and legend float over it as separate pills with gaps (`--header-gap`), never as a solid bar. Wrappers are `pointer-events: none` so the gaps pass clicks through to the map; only the floating pieces are clickable.
 - **Header** (`SiteHeader.astro`): wordmark pill, search, nav pill (Map, Tree of life), theme toggle. Height `--header-height` (44 px).
 - **Footer** (`SiteFooter.astro`, content pages only): the wordmark linking home beside the privacy and terms links, at the species page width. A page's data credit (`.page-credit`) sits directly above it as one block under a single rule.
-- **Left rail** (`FilterRail.vue`): icon buttons with short labels (What, When, Where, How, Source, then Settings after a divider). Each opens a flyout beside the rail. The flyout's heading stays put and only its body scrolls.
+- **Left rail** (`FilterRail.vue`): icon buttons with short labels (What, When, Where, How, Source, then Settings after a divider). Each opens a flyout beside the rail. The flyout's heading stays put and only its body scrolls. Below 1000 px (the `rail` breakpoint) the rail gives way to a Filters button that opens the filters sheet.
 - **Text links**: a plain `<a>` with no class gets the house link style (underlined in `--accent`, accent on hover) from `global.css`. Don't restyle links per page; give a link a class only when it isn't a text link (a button, chip or nav item).
 - **Search boxes** use `SearchInput.vue`: the leading icon, a spinner while results load, and its own clear button (iOS Safari draws none). Don't hand-roll a `type="search"` input.
 - **Running text** on content pages (privacy, terms) sits in `.prose`, which restores heading, paragraph and list spacing.
@@ -145,6 +145,7 @@ Viewers can change how text reads from the welcome card ("Reading and display op
 - **No italics** (`data-no-italics`): everything upright, scientific names included.
 - **Wider spacing** (`data-wide-spacing`): WCAG 1.4.12 letter, word and line spacing. Check new layouts don't clip with it on.
 - **Reduce motion** (`data-reduce-motion`): the same as `prefers-reduced-motion`. In script, ask `prefersReducedMotion()` rather than the media query.
+- **Lighter rendering** (`data-light-rendering`): for low-power devices. The map draws at 1× pixel ratio, background blur (`backdrop-filter`) is off, and `prefersReducedMotion()` returns true so map flights jump and the tree of life's zooms snap. Don't rely on blur for legibility.
 - The welcome card also offers the map colours as a dropdown, colour-blind-safe ramps first (`colourBlindSafe` in `src/lib/ramp.ts`).
 
 ## Accessibility checklist

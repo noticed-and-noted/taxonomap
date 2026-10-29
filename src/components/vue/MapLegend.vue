@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { zoomDrop } from '~/lib/map/occGrid';
 import { nearestRecords, type NearestRecords } from '~/lib/map/taxonView';
 import { binLabels, rampColors } from '~/lib/ramp';
 import {
@@ -13,6 +14,7 @@ import {
   $panel,
   $railOpen,
   $viewCheck,
+  DEFAULT_VIEW,
 } from '~/stores/explorer';
 import { $ramp } from '~/stores/ramp';
 import { $activeFilterCount, FILTER_GROUPS, PHONE_QUERY } from './filterGroups';
@@ -92,8 +94,17 @@ const ariaLabel = computed(() =>
     : `Records per hexagon, on a logarithmic scale from ${labels.value[0]} to over ${labels.value[labels.value.length - 1]} at this zoom`,
 );
 
+/** Turn the globe to the nearest records, zoomed out to the whole globe so they're seen in context. */
 function flyToNearest() {
-  if (nearest.value) $flyTo.set({ kind: 'bounds', bbox: nearest.value.extent });
+  if (!nearest.value) return;
+  const [west, south, east, north] = nearest.value.extent;
+  const lat = (south + north) / 2;
+  // Compare globe sizes, not zooms: MapLibre lowers the zoom away from the equator to keep the globe's size.
+  const globeSize = Math.min(
+    view.value.zoom + zoomDrop(view.value.lat),
+    DEFAULT_VIEW.zoom + zoomDrop(DEFAULT_VIEW.lat),
+  );
+  $flyTo.set({ kind: 'point', lng: (west + east) / 2, lat, zoom: globeSize - zoomDrop(lat) });
 }
 
 /** Open the filters where this screen keeps them, at the first group with something set. */

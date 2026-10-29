@@ -22,6 +22,7 @@ export interface ReadingPrefs {
   noItalics: boolean;
   wideSpacing: boolean;
   reduceMotion: boolean;
+  lightRendering: boolean;
 }
 
 export const DEFAULT_READING: ReadingPrefs = {
@@ -29,6 +30,7 @@ export const DEFAULT_READING: ReadingPrefs = {
   noItalics: false,
   wideSpacing: false,
   reduceMotion: false,
+  lightRendering: false,
 };
 
 function saved(): ReadingPrefs {
@@ -41,6 +43,7 @@ function saved(): ReadingPrefs {
       noItalics: stored.noItalics === true,
       wideSpacing: stored.wideSpacing === true,
       reduceMotion: stored.reduceMotion === true,
+      lightRendering: stored.lightRendering === true,
     };
   } catch {
     // Storage blocked or a corrupt value: start from the defaults.
@@ -62,6 +65,7 @@ function apply(prefs: ReadingPrefs) {
   toggleAttribute('data-no-italics', prefs.noItalics && '');
   toggleAttribute('data-wide-spacing', prefs.wideSpacing && '');
   toggleAttribute('data-reduce-motion', prefs.reduceMotion && '');
+  toggleAttribute('data-light-rendering', prefs.lightRendering && '');
 }
 
 /**
@@ -79,7 +83,8 @@ export function setReading(change: Partial<ReadingPrefs>) {
   $reading.set(next);
 }
 
-/** Whether to skip animation: the system setting, or the viewer's choice here. */
+/** Whether to skip animation: the system setting, or the viewer's choice here (lighter rendering skips map flights too). */
 export function prefersReducedMotion(): boolean {
-  return $reading.get().reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const { reduceMotion, lightRendering } = $reading.get();
+  return reduceMotion || lightRendering || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

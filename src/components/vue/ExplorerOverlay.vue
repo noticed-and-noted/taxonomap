@@ -65,12 +65,19 @@ const dock = ref<HTMLElement>();
 const dockHeight = ref(0);
 const dockClear = computed(() => (dockHidden.value ? '0px' : `calc(${dockHeight.value}px + 0.5rem)`));
 let dockObserver: ResizeObserver | undefined;
-// An empty map's notice lives in the legend: bring it back if it was slid away.
+// An empty map's notice lives in the legend: bring it back if it was slid away, and slide it away again once records return.
 const viewCheck = useStore($viewCheck);
+const restashOnRecords = ref(false);
 watch(
   () => viewCheck.value.isEmpty,
   (isEmpty) => {
-    if (isEmpty) dockStashed.value = false;
+    if (isEmpty) {
+      restashOnRecords.value = dockStashed.value;
+      dockStashed.value = false;
+      return;
+    }
+    if (restashOnRecords.value) dockStashed.value = true;
+    restashOnRecords.value = false;
   },
 );
 function toggleNear() {
@@ -104,6 +111,8 @@ const dockHidden = computed(() => dockStashed.value || sheetCoversDock.value);
 function toggleDock() {
   dockStashed.value = !dockHidden.value;
   sheetCoversDock.value = false;
+  // The viewer chose for themself: don't undo it when records return.
+  restashOnRecords.value = false;
 }
 const onSheetQuery = (event: MediaQueryListEvent) => (hasSheets.value = event.matches);
 
@@ -157,14 +166,14 @@ onBeforeUnmount(() => {
     <OnboardingTour v-if="!tourSeen && !near && !mapUnsupported" />
     <ChecklistHint v-if="hintId && !near" :id="hintId" :key="hintId" />
     <div
-      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-sm:gap-0"
+      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-rail:gap-0"
     >
-      <div class="min-w-0 sm:flex-auto" :class="{ 'max-sm:mr-2': near }"><TaxonChip /></div>
+      <div class="min-w-0 rail:flex-auto" :class="{ 'max-rail:mr-2': near }"><TaxonChip /></div>
       <!-- Below the row, centred on the page, so the chips can fill the row. -->
-      <MapProgress v-if="!near" class="absolute left-1/2 top-9 -translate-x-1/2 sm:top-11" />
+      <MapProgress v-if="!near" class="absolute left-1/2 top-9 -translate-x-1/2 rail:top-11" />
       <div
         v-if="!near"
-        class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap sm:flex sm:flex-1"
+        class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap rail:flex rail:flex-1"
       >
         <button type="button" class="near-btn" data-tour="near" @click="toggleNear">
           <svg
@@ -179,11 +188,10 @@ onBeforeUnmount(() => {
           </svg>
           Near me
         </button>
-        <BasemapSwitcher />
       </div>
       <!-- Phone: Near me + Filters button (the rail is hidden). Grouped at the right, so Filters stays put while
            Near me fades. -->
-      <div class="ml-auto flex shrink-0 sm:hidden">
+      <div class="ml-auto flex shrink-0 rail:hidden">
         <Transition name="fade">
           <button
             v-if="!near || nearLeaving"
@@ -219,6 +227,8 @@ onBeforeUnmount(() => {
           Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
         </button>
       </div>
+      <!-- From tablet width up; Near me draws its own beside its panel. -->
+      <div v-if="!near" class="hidden shrink-0 max-rail:ml-2 sm:block"><BasemapSwitcher /></div>
     </div>
 
     <!-- Stays in Near me too, on wider screens; on phones an open sheet slides it away (sheetCoversDock). -->
@@ -229,7 +239,6 @@ onBeforeUnmount(() => {
     >
       <!-- Same edge tab as SidePanel's: tucked under the dock so its shadow falls across the join. -->
       <button
-        v-if="!near || hasSheets"
         type="button"
         class="stash-toggle absolute -z-10 left-full [clip-path:inset(-30px_-30px_-30px_0)] top-1/2 grid h-10 w-6 -translate-y-1/2 place-items-center rounded-r-md border border-l-0 border-border bg-surface text-muted shadow-panel hover:text-text"
         :aria-label="dockHidden ? 'Show legend' : 'Slide legend away'"
@@ -245,7 +254,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto sm:block"
+      class="rail-region pointer-events-none absolute bottom-3 left-3 top-14 hidden *:pointer-events-auto rail:block"
       :style="{ '--dock-clear': dockClear }"
     >
       <FilterRail />
@@ -300,11 +309,13 @@ onBeforeUnmount(() => {
         </template>
         <div v-if="filtersOpen" class="sm:space-y-4 md:pt-0 pt-4">
           <div v-if="filterTab === 'settings'" role="tabpanel" class="space-y-6">
-            <div>
+            <!-- From sm up the basemap pill sits on the map instead. -->
+            <div class="sm:hidden">
               <p class="mb-2 text-sm font-medium">Basemap</p>
               <BasemapSwitcher class="w-fit" />
             </div>
-            <div>
+            <!-- From sm up the header's theme pill shows instead (SiteHeader.astro). -->
+            <div class="sm:hidden">
               <p class="mb-2 text-sm font-medium">Theme</p>
               <ThemePicker />
             </div>
@@ -411,8 +422,8 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Phone-only controls (scoped display would otherwise beat a sm:hidden utility). */
-@media (min-width: 640px) {
+/* Phone-only controls (scoped display would otherwise beat a rail:hidden utility). */
+@media (min-width: 1000px) {
   .filters-btn,
   .near-phone {
     display: none;
@@ -466,6 +477,11 @@ onBeforeUnmount(() => {
 @media (min-width: 768px) {
   .near .top-bar {
     right: calc(var(--panel-width) + 1.5rem);
+    transition: right var(--dur-slow) var(--ease);
+  }
+  /* Follows NearExplorer's basemap switcher when the list is tucked to a strip (its .near-bar.tucked). */
+  .near:has(.near-bar.tucked) .top-bar {
+    right: 4.75rem;
   }
 }
 

@@ -4,10 +4,10 @@
  * filmstrip when there are several. Every photo shows its licence and creator,
  * and links to where it came from. Photos swap immediately, showing a skeleton
  * until the new one loads, and neighbours are preloaded so stepping through is
- * usually instant. Open it with the exposed `open(index)`. Up and down arrows call `onStepRow` (`@step-row`),
+ * usually instant. Open it with the exposed `open(index)`. Up and down arrows (or swipes) call `onStepRow` (`@step-row`),
  * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
-import { computed, nextTick, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { countRequest, photoCrossOrigin, retryWithoutCors, thumbnailUrl, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -137,12 +137,19 @@ function onKey(event: KeyboardEvent) {
 const areControlsHidden = ref(false);
 const toggleControls = () => (areControlsHidden.value = !areControlsHidden.value);
 
-/** Horizontal travel, in px, that makes a touch a swipe rather than a tap. */
+/** Travel, in px, that makes a touch a swipe rather than a tap. */
 const SWIPE_DISTANCE = 50;
 let swipeStart: { x: number; y: number } | null = null;
 
+/** Pinch-zoomed in, drags pan round the zoomed photo, so they aren't swipes. */
+const isPinchZoomed = ref(false);
+const trackPinchZoom = () => (isPinchZoomed.value = (window.visualViewport?.scale ?? 1) > 1);
+onMounted(() => window.visualViewport?.addEventListener('resize', trackPinchZoom));
+onBeforeUnmount(() => window.visualViewport?.removeEventListener('resize', trackPinchZoom));
+
 function onPointerDown(event: PointerEvent) {
-  swipeStart = event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : null;
+  const isSwipe = event.pointerType === 'touch' && !isPinchZoomed.value;
+  swipeStart = isSwipe ? { x: event.clientX, y: event.clientY } : null;
 }
 
 /** The browser took the gesture over (say, scrolling the filmstrip), so it isn't a swipe. */
@@ -150,14 +157,26 @@ function onPointerCancel() {
   swipeStart = null;
 }
 
-/** A mostly sideways swipe steps through the photos: left for the next, right for the previous. */
+/**
+ * A mostly sideways swipe steps through the photos: left for the next, right for the previous. A mostly upright one
+ * steps through the records, as the up and down arrows do: up for the next, down for the previous.
+ */
 function onPointerUp(event: PointerEvent) {
-  if (!swipeStart || props.images.length < 2) return;
+  if (!swipeStart) return;
   const deltaX = event.clientX - swipeStart.x;
   const deltaY = event.clientY - swipeStart.y;
   swipeStart = null;
-  if (Math.abs(deltaX) >= SWIPE_DISTANCE && Math.abs(deltaX) > Math.abs(deltaY)) step(deltaX < 0 ? 1 : -1);
+  if (Math.abs(deltaX) > Math.abs(deltaY)) {
+    if (Math.abs(deltaX) >= SWIPE_DISTANCE) step(deltaX < 0 ? 1 : -1);
+  } else if (Math.abs(deltaY) >= SWIPE_DISTANCE) props.onStepRow?.(deltaY < 0 ? 1 : -1);
 }
+
+/** The touch hint's arrows: up and down for records, left and right for photos, both when there are both. */
+const swipeIcon = computed(() => {
+  const hasPhotos = props.images.length > 1;
+  if (props.onStepRow) return hasPhotos ? 'arrows-all' : 'arrows-vertical';
+  return hasPhotos ? 'arrows-horizontal' : undefined;
+});
 
 function onBackdrop(event: MouseEvent) {
   if (event.target === dialog.value) dialog.value?.close();
@@ -179,7 +198,7 @@ defineExpose({ open });
     <div
       v-if="isOpen"
       class="stage absolute inset-0"
-      :class="{ 'controls-hidden': areControlsHidden }"
+      :class="{ 'controls-hidden': areControlsHidden, 'swipes-rows': onStepRow, 'pinch-zoomed': isPinchZoomed }"
       @click.self="toggleControls"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
@@ -293,6 +312,9 @@ defineExpose({ open });
             <span v-if="images.length > 1" class="keys-only"><kbd>←</kbd> <kbd>→</kbd> Photos</span>
             <span v-if="onStepRow" class="keys-only"><kbd>↑</kbd> <kbd>↓</kbd> Records</span>
             <span class="keys-only"><kbd>Esc</kbd> Close</span>
+            <span v-if="swipeIcon" class="touch-only flex items-center gap-1 whitespace-nowrap">
+              <UiIcon :name="swipeIcon" size="14" /> Swipe
+            </span>
             <span class="flex items-center gap-1 whitespace-nowrap">
               <UiIcon name="mouse" size="14" class="keys-only" /><UiIcon name="touch" size="14" class="touch-only" />
               Hide UI
@@ -448,9 +470,17 @@ kbd {
 .lightbox[open] {
   animation: pop var(--dur) var(--ease);
 }
-/* Sideways drags are swipes (see onPointerUp); the browser keeps vertical panning and pinch-zoom. */
+/* Sideways drags are swipes (see onPointerUp); the browser keeps vertical panning and pinch-zoom, unless upright
+   drags step through records too. */
 .stage {
   touch-action: pan-y pinch-zoom;
+}
+.stage.swipes-rows {
+  touch-action: pinch-zoom;
+}
+/* Zoomed in, the browser pans the zoomed page every way (onPointerDown skips swipes then). */
+.stage.pinch-zoomed {
+  touch-action: auto;
 }
 /* Visibility as well as opacity, so hidden controls can't be tabbed to or tapped. */
 .overlay,

@@ -24,12 +24,14 @@ import {
   type MapColors,
 } from '~/lib/map/style';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
+import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
 import { hexCentre, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { createRecordFit } from '~/lib/map/recordFit';
+import { fillsCanvas, isOnScreen } from '~/lib/map/screen';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
-import { prefersReducedMotion } from '~/stores/reading';
+import { $reading, prefersReducedMotion } from '~/stores/reading';
 import type { ScreenBox } from '~/lib/tour';
 import { PIN_CURSOR } from './pinCursors';
 import WebglNotice from './WebglNotice.vue';
@@ -68,6 +70,8 @@ const cleanups: (() => void)[] = [];
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
+// Lighter rendering draws one canvas pixel per CSS pixel: a 3× phone then fills 9× fewer.
+const mapPixelRatio = () => ($reading.get().lightRendering ? 1 : window.devicePixelRatio);
 const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
@@ -94,6 +98,8 @@ function setData(source: string, data: GeoJSON.GeoJSON) {
 
 /** The map's hex layer. */
 const HEX_LAYER = 'occ-fill';
+/** Below this the grid drops to level 0, whose single tile wraps onto itself and GBIF's cells overlap at the antimeridian. */
+const MIN_ZOOM = 1;
 
 /** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
@@ -487,13 +493,26 @@ function publishBounds() {
   ]);
 }
 
+/**
+ * Whether any cell is drawn in view. A whole-canvas query finds nothing under the globe
+ * once the canvas reaches past its rim, so only then look for a cell corner on screen.
+ */
+function hasCellInView(map: MlMap): boolean {
+  if (map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length) return true;
+  if (fillsCanvas(map)) return false;
+  const source = map.getLayer(HEX_LAYER)!.source;
+  return map.querySourceFeatures(source).some((feature) => {
+    const { geometry } = feature;
+    if (geometry.type !== 'Polygon') return false;
+    return geometry.coordinates.some((ring) => ring.some(([lng = 0, lat = 0]) => isOnScreen(map, [lng, lat])));
+  });
+}
+
 /** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
 function publishEmpty() {
   if (!map || $mapLoad.get().loading) return;
   const hasLayer = Boolean(map.getLayer(HEX_LAYER));
-  $viewCheck.set({
-    isEmpty: !failed.value && hasLayer && !map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length,
-  });
+  $viewCheck.set({ isEmpty: !failed.value && hasLayer && !hasCellInView(map) });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
@@ -593,6 +612,7 @@ function listenToStores() {
       fly(request);
       $flyTo.set(null);
     }),
+    $reading.listen(() => map?.setPixelRatio(mapPixelRatio())),
     $busiestHexRequest.subscribe((request) => {
       if (!request) return;
       $busiestHexRequest.set(null);
@@ -670,12 +690,15 @@ onMounted(async () => {
     style,
     center: [view.lng, view.lat],
     zoom: view.zoom,
+    minZoom: MIN_ZOOM,
     attributionControl: { compact: true },
     maxPitch: 0,
     dragRotate: false,
     renderWorldCopies: false,
     fadeDuration: prefersReducedMotion() ? 0 : MAP_FADE_MS,
+    pixelRatio: mapPixelRatio(),
   });
+  keepGlobeTilesOnWrapJumps(map);
   occ = createOccLayer(map, occLayerOptions());
   void restoreHex();
   cleanups.push(() => occ?.destroy());

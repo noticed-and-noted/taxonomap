@@ -30,6 +30,7 @@ import SearchInput from './SearchInput.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
 import ThumbImage from './ThumbImage.vue';
 import TreeChart from './TreeChart.vue';
+import TreeSkeleton from './TreeSkeleton.vue';
 import UiIcon from './UiIcon.vue';
 import { useScrollFade } from './useScrollFade';
 
@@ -284,7 +285,9 @@ const share = (node: TreeNode) => {
       role="status"
       aria-label="Loading the tree"
     >
-      <SkeletonBlock height="100%" rounded="full" class="aspect-square max-h-[70vh]" />
+      <div class="relative h-[55dvh] min-h-[20rem] md:h-auto md:min-h-[22rem]">
+        <TreeSkeleton :layout="layout" :narrow="narrow" />
+      </div>
       <SkeletonBlock height="20rem" />
     </div>
 
