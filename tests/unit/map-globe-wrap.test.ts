@@ -1,5 +1,5 @@
 /** Re-wrapping globe tiles to the world copy nearest the map's centre. */
-import { nearestWrap } from '~/lib/map/globeWrap';
+import { keepGlobeTilesOnWrapJumps, nearestWrap } from '~/lib/map/globeWrap';
 
 describe('nearestWrap', () => {
   it('keeps tiles within half a world of the centre in its own copy', () => {
@@ -17,5 +17,29 @@ describe('nearestWrap', () => {
     const columns = [0, 1, 2, 3];
     expect(columns.map((column) => nearestWrap(-100, column, 2))).toEqual([0, 0, 0, -1]);
     expect(columns.map((column) => nearestWrap(81, column, 2))).toEqual([1, 0, 0, 0]);
+  });
+});
+
+describe('keepGlobeTilesOnWrapJumps', () => {
+  /** Runs the fix against a map whose style holds just this tile manager. */
+  function patchThrough(manager: object) {
+    let onStyleData = () => {};
+    const map = {
+      style: { tileManagers: { hexes: manager } },
+      on: (_event: string, listener: () => void) => (onStyleData = listener),
+      off: () => {},
+    };
+    keepGlobeTilesOnWrapJumps(map as unknown as Parameters<typeof keepGlobeTilesOnWrapJumps>[0]);
+    onStyleData();
+  }
+
+  it('leaves MapLibre alone when its tile manager no longer has the expected internals', () => {
+    class RenamedTileManager {
+      transform = {};
+      handleWrapJump() {}
+    }
+    const originalWrapJump = RenamedTileManager.prototype.handleWrapJump;
+    patchThrough(new RenamedTileManager());
+    expect(RenamedTileManager.prototype.handleWrapJump).toBe(originalWrapJump);
   });
 });

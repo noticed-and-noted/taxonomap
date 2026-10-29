@@ -50,10 +50,23 @@ function rewrapToCentre(manager: TileManagerInternals, lng: number) {
   if (hasMoved) manager._resetTileReloadTimers();
 }
 
-/** Replaces handleWrapJump on the TileManager class, once; flat (mercator) rendering keeps MapLibre's own. */
+/** Whether the manager still has the internals the fix relies on; a MapLibre update may rename them. */
+function hasExpectedInternals(manager: TileManagerInternals): boolean {
+  return (
+    typeof manager.handleWrapJump === 'function' &&
+    typeof manager._resetTileReloadTimers === 'function' &&
+    typeof manager._inViewTiles?._tiles === 'object' &&
+    typeof manager.transform === 'object'
+  );
+}
+
+/**
+ * Replaces handleWrapJump on the TileManager class, once; flat (mercator) rendering keeps MapLibre's own,
+ * as does a MapLibre whose internals no longer match (the hexes then blink on polar pans, but nothing breaks).
+ */
 function patchTileManager(manager: TileManagerInternals) {
   const prototype = Object.getPrototypeOf(manager) as TileManagerInternals;
-  if (patchedPrototypes.has(prototype)) return;
+  if (patchedPrototypes.has(prototype) || !hasExpectedInternals(manager)) return;
   patchedPrototypes.add(prototype);
   const handleWrapJump = prototype.handleWrapJump;
   prototype.handleWrapJump = function (this: TileManagerInternals, lng: number) {

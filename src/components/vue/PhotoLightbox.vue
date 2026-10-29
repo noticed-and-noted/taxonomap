@@ -7,7 +7,7 @@
  * usually instant. Open it with the exposed `open(index)`. Up and down arrows (or swipes) call `onStepRow` (`@step-row`),
  * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
-import { computed, nextTick, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { countRequest, photoCrossOrigin, retryWithoutCors, thumbnailUrl, type UsableImage } from '~/lib/gbif';
 import LicenceBadge from './LicenceBadge.vue';
 import SkeletonBlock from './SkeletonBlock.vue';
@@ -141,8 +141,15 @@ const toggleControls = () => (areControlsHidden.value = !areControlsHidden.value
 const SWIPE_DISTANCE = 50;
 let swipeStart: { x: number; y: number } | null = null;
 
+/** Pinch-zoomed in, drags pan round the zoomed photo, so they aren't swipes. */
+const isPinchZoomed = ref(false);
+const trackPinchZoom = () => (isPinchZoomed.value = (window.visualViewport?.scale ?? 1) > 1);
+onMounted(() => window.visualViewport?.addEventListener('resize', trackPinchZoom));
+onBeforeUnmount(() => window.visualViewport?.removeEventListener('resize', trackPinchZoom));
+
 function onPointerDown(event: PointerEvent) {
-  swipeStart = event.pointerType === 'touch' ? { x: event.clientX, y: event.clientY } : null;
+  const isSwipe = event.pointerType === 'touch' && !isPinchZoomed.value;
+  swipeStart = isSwipe ? { x: event.clientX, y: event.clientY } : null;
 }
 
 /** The browser took the gesture over (say, scrolling the filmstrip), so it isn't a swipe. */
@@ -191,7 +198,7 @@ defineExpose({ open });
     <div
       v-if="isOpen"
       class="stage absolute inset-0"
-      :class="{ 'controls-hidden': areControlsHidden, 'swipes-rows': onStepRow }"
+      :class="{ 'controls-hidden': areControlsHidden, 'swipes-rows': onStepRow, 'pinch-zoomed': isPinchZoomed }"
       @click.self="toggleControls"
       @pointerdown="onPointerDown"
       @pointerup="onPointerUp"
@@ -470,6 +477,10 @@ kbd {
 }
 .stage.swipes-rows {
   touch-action: pinch-zoom;
+}
+/* Zoomed in, the browser pans the zoomed page every way (onPointerDown skips swipes then). */
+.stage.pinch-zoomed {
+  touch-action: auto;
 }
 /* Visibility as well as opacity, so hidden controls can't be tabbed to or tapped. */
 .overlay,

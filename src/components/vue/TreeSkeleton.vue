@@ -8,15 +8,24 @@ import { arc } from 'd3-shape';
 
 const props = defineProps<{ layout: 'sunburst' | 'icicle'; narrow: boolean }>();
 
-type Ghost = { rel: number; x0: number; x1: number };
+/** One made-up node: its depth below the focus, and its share of the circle or column (0 to 1). */
+type Ghost = { depth: number; x0: number; x1: number };
 
 const LEVELS = 3;
 const VIEW = 400;
 const RING = VIEW / 2 / (LEVELS + 1);
 const SWEEP_SECONDS = 1.8;
+const SWEEP_DURATION = `${SWEEP_SECONDS}s`;
 /** How far each icicle column lags the one before, as a share of the sweep. */
 const COLUMN_LAG = 0.15;
 const HEAD = 44;
+/** Gaps, in viewBox units, between neighbouring rings, cells and the narrow icicle's header. */
+const RING_GAP = 3;
+const CELL_GAP = 2;
+const HEAD_GAP = 6;
+/** Angle, in radians, between neighbouring arcs, measured at PAD_RADIUS. */
+const PAD_ANGLE = 0.012;
+const PAD_RADIUS = RING * 1.5;
 
 /** Branch weights per level: each entry splits its parent into those shares. */
 const BRANCHES: number[][] = [
@@ -26,8 +35,8 @@ const BRANCHES: number[][] = [
 ];
 const CHILD_COUNTS: number[][] = [[4], [2, 3, 2, 1], [3, 2, 2, 2, 3, 2, 2, 2]];
 
-function splitLevel(parents: Ghost[], weights: number[], counts: number[], rel: number): Ghost[] {
-  const out: Ghost[] = [];
+function splitLevel(parents: Ghost[], weights: number[], counts: number[], depth: number): Ghost[] {
+  const children: Ghost[] = [];
   let next = 0;
   parents.forEach((parent, parentIndex) => {
     const shares = weights.slice(next, next + (counts[parentIndex] ?? 1));
@@ -36,41 +45,41 @@ function splitLevel(parents: Ghost[], weights: number[], counts: number[], rel: 
     let start = parent.x0;
     for (const share of shares) {
       const end = start + ((parent.x1 - parent.x0) * share) / total;
-      out.push({ rel, x0: start, x1: end });
+      children.push({ depth, x0: start, x1: end });
       start = end;
     }
   });
-  return out;
+  return children;
 }
 
 const ghosts: Ghost[] = [];
-let level: Ghost[] = [{ rel: 0, x0: 0, x1: 1 }];
+let level: Ghost[] = [{ depth: 0, x0: 0, x1: 1 }];
 for (let depth = 0; depth < LEVELS; depth++) {
   level = splitLevel(level, BRANCHES[depth] ?? [], CHILD_COUNTS[depth] ?? [], depth + 1);
   ghosts.push(...level);
 }
 
-const arcGen = arc<Ghost>()
+const arcPath = arc<Ghost>()
   .startAngle((ghost) => ghost.x0 * 2 * Math.PI)
   .endAngle((ghost) => ghost.x1 * 2 * Math.PI)
-  .padAngle(0.012)
-  .padRadius(RING * 1.5)
-  .innerRadius((ghost) => ghost.rel * RING)
-  .outerRadius((ghost) => (ghost.rel + 1) * RING - 3);
+  .padAngle(PAD_ANGLE)
+  .padRadius(PAD_RADIUS)
+  .innerRadius((ghost) => ghost.depth * RING)
+  .outerRadius((ghost) => (ghost.depth + 1) * RING - RING_GAP);
 
 const delay = (seconds: number) => ({ animationDelay: `${(seconds * SWEEP_SECONDS).toFixed(2)}s` });
 const sunDelay = (ghost: Ghost) => delay(ghost.x0);
-const iceDelay = (ghost: Ghost) => delay(ghost.x0 + ghost.rel * COLUMN_LAG);
+const iceDelay = (ghost: Ghost) => delay(ghost.x0 + ghost.depth * COLUMN_LAG);
 
 const top = () => (props.narrow ? HEAD : 0);
 const columnWidth = () => VIEW / (props.narrow ? LEVELS : LEVELS + 1);
 function rect(ghost: Ghost) {
   const availableHeight = VIEW - top();
   return {
-    x: (props.narrow ? ghost.rel - 1 : ghost.rel) * columnWidth(),
+    x: (props.narrow ? ghost.depth - 1 : ghost.depth) * columnWidth(),
     y: top() + ghost.x0 * availableHeight,
-    width: columnWidth() - 2,
-    height: (ghost.x1 - ghost.x0) * availableHeight - 2,
+    width: columnWidth() - CELL_GAP,
+    height: (ghost.x1 - ghost.x0) * availableHeight - CELL_GAP,
   };
 }
 </script>
@@ -85,11 +94,11 @@ function rect(ghost: Ghost) {
     <path
       v-for="(ghost, index) in ghosts"
       :key="index"
-      :d="arcGen(ghost) ?? ''"
+      :d="arcPath(ghost) ?? ''"
       class="ghost"
       :style="sunDelay(ghost)"
     />
-    <circle :r="RING - 2" class="ghost still" />
+    <circle :r="RING - CELL_GAP" class="ghost still" />
   </svg>
   <svg
     v-else
@@ -98,8 +107,8 @@ function rect(ghost: Ghost) {
     class="absolute inset-0 size-full"
     aria-hidden="true"
   >
-    <rect v-if="narrow" :width="VIEW" :height="HEAD - 6" rx="4" class="ghost still" />
-    <rect v-else :width="columnWidth() - 2" :height="VIEW" rx="4" class="ghost still" />
+    <rect v-if="narrow" :width="VIEW" :height="HEAD - HEAD_GAP" rx="4" class="ghost still" />
+    <rect v-else :width="columnWidth() - CELL_GAP" :height="VIEW" rx="4" class="ghost still" />
     <rect
       v-for="(ghost, index) in ghosts"
       :key="index"
@@ -114,7 +123,7 @@ function rect(ghost: Ghost) {
 <style scoped>
 .ghost {
   fill: var(--surface-2);
-  animation: sweep 1.8s var(--ease) infinite;
+  animation: sweep v-bind(SWEEP_DURATION) var(--ease) infinite;
 }
 
 /* The focus (centre or first column) holds still, so the sweep has an anchor. */

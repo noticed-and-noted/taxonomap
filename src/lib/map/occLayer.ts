@@ -34,6 +34,7 @@ import {
   type LngLat,
   type TileId,
 } from './occGrid';
+import { isOnScreen, placeAt } from './screen';
 
 /** Decoded tiles kept for panning back (the cells of a few screens). */
 const CACHE_TILES = 512;
@@ -50,8 +51,6 @@ const MOVE_EVERY_MS = 50;
  * densely (every ~64 px on a 1000 px map).
  */
 const SAMPLES = 17;
-/** How far (degrees) a point may move projecting to the screen and back and still count as on the near side. */
-const ROUND_TRIP_DEGREES = 0.5;
 
 /** Handle on the occurrence hexes the layer keeps loaded for a map. */
 export interface OccLayer {
@@ -237,42 +236,28 @@ class OccLayerController {
     const points: LngLat[] = [[map.getCenter().lng, map.getCenter().lat]];
     for (let column = 0; column < SAMPLES; column++) {
       for (let row = 0; row < SAMPLES; row++) {
-        const pixelX = (width * column) / (SAMPLES - 1);
-        const pixelY = (height * row) / (SAMPLES - 1);
-        const position = map.unproject([pixelX, pixelY]);
-        // Off the globe, unproject snaps to the horizon, so the point does not round-trip.
-        const back = map.project(position);
-        if (Math.hypot(back.x - pixelX, back.y - pixelY) <= 1) points.push([position.lng, position.lat]);
+        const place = placeAt(map, (width * column) / (SAMPLES - 1), (height * row) / (SAMPLES - 1));
+        if (place) points.push(place);
       }
     }
     return points;
-  }
-
-  /** Whether a place is on the canvas and on the globe's near side (a far-side place does not round-trip). */
-  #isOnScreen([lng, lat]: LngLat): boolean {
-    const [width, height] = this.#size();
-    const point = this.#map.project([lng, lat]);
-    if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) return false;
-    const back = this.#map.unproject([point.x, point.y]);
-    return (
-      Math.abs(back.lat - lat) < ROUND_TRIP_DEGREES &&
-      Math.abs(((back.lng - lng + 540) % 360) - 180) < ROUND_TRIP_DEGREES
-    );
   }
 
   /**
    * The tiles in view. Sampling the screen misses tiles squeezed into a few
    * pixels (past a pole, at the globe's edge), so neighbours of the sampled
    * tiles are tested directly, ring by ring, until none more are on screen.
+   * Each ring grows only from the tiles the last one found.
    */
   #viewTiles(): TileId[] {
     const level = this.#level;
     const view = tilesFor(this.#viewPoints(), level);
+    const tested = new Set(view.map(tileCoordinateKey));
     let found = view;
     while (found.length) {
-      found = ringAround(view, level).filter((tile) =>
-        tilePoints(tile, level).some((point) => this.#isOnScreen(point)),
-      );
+      const untested = ringAround(found, level).filter((tile) => !tested.has(tileCoordinateKey(tile)));
+      for (const tile of untested) tested.add(tileCoordinateKey(tile));
+      found = untested.filter((tile) => tilePoints(tile, level).some((point) => isOnScreen(this.#map, point)));
       view.push(...found);
     }
     return view;

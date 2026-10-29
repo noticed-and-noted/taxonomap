@@ -23,7 +23,7 @@ const TOGGLES: { key: ToggleKey; label: string; hint: string }[] = [
   {
     key: 'lightRendering',
     label: 'Lighter rendering',
-    hint: 'For older or low-power devices: a less sharp map, no blur or map flights',
+    hint: 'For older or low-power devices: a less sharp map, no blur, map flights or chart animations',
   },
 ];
 
