@@ -20,8 +20,8 @@ async function load() {
   vi.resetModules();
   return {
     explorer: await import('~/stores/explorer'),
-    hex: await import('~/components/vue/useHexSummary'),
-    years: await import('~/components/vue/useYearHistogram'),
+    hex: await import('~/composables/useHexSummary'),
+    years: await import('~/composables/useYearHistogram'),
   };
 }
 
@@ -138,7 +138,7 @@ describe('useYearHistogram', () => {
 
 describe('useLatestLoad', () => {
   it('lets only the latest run publish, aborting the one before', async () => {
-    const { useLatestLoad } = await import('~/components/vue/useLatestLoad');
+    const { useLatestLoad } = await import('~/composables/useLatestLoad');
     const { result: latest, stop } = run(() => useLatestLoad());
     const signals: AbortSignal[] = [];
     let release!: () => void;
@@ -158,7 +158,7 @@ describe('useLatestLoad', () => {
   });
 
   it('reports the latest run’s failure', async () => {
-    const { useLatestLoad } = await import('~/components/vue/useLatestLoad');
+    const { useLatestLoad } = await import('~/composables/useLatestLoad');
     const { result: latest, stop } = run(() => useLatestLoad());
     await latest.run(async () => {
       throw new Error('boom');

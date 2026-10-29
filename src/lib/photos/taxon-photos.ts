@@ -18,7 +18,7 @@
  * taxon's rank is used. Taxa with no match fall back to source C.
  */
 import pLimit from 'p-limit';
-import { HOUR } from '~/lib/util/time';
+import { nameIndexIfLoaded } from '~/lib/data/name-index';
 import {
   findImages,
   http,
@@ -28,7 +28,7 @@ import {
   type Rank,
   type UsableImage,
 } from '~/lib/gbif';
-import { nameIndexIfLoaded } from '~/lib/data/name-index';
+import { HOUR } from '~/lib/util/time';
 import {
   curatedImages,
   getTaxa,

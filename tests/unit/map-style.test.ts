@@ -10,8 +10,8 @@ import {
   recordDotMinZoom,
   selectedGeoJson,
 } from '~/lib/map/style';
-import { json, stubNetwork } from './helpers/network';
 import { thresholdsAt } from '~/lib/ramp';
+import { json, stubNetwork } from './helpers/network';
 
 const COLORS = { accent: '#a', accentContrast: '#c', bg: '#b', land: '#l', text: '#t' };
 const HEXES: GeoJSON.FeatureCollection = {

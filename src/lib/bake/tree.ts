@@ -1,5 +1,5 @@
-import type { TreeNodeRow, TreeSnapshot } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
+import type { TreeNodeRow, TreeSnapshot } from '~/lib/data/types';
 import { englishName } from '~/lib/species/names';
 import { countedFacets, countedSpeciesCounts, listAllByRank, once, snapshotMeta, type NamedUsage } from './cache';
 

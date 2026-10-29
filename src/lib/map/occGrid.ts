@@ -7,8 +7,8 @@
  * the whole globe keeps the same ones; and zoomed in past the globe filling
  * the view, cells get coarser towards the poles, where Mercator cells would be tiny.
  */
-import type { PbfReader } from 'pbf';
 import type { VectorTile } from '@mapbox/vector-tile';
+import type { PbfReader } from 'pbf';
 
 /** Hexes across each GBIF tile. */
 export const HEX_PER_TILE = 28;

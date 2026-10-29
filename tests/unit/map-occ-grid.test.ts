@@ -1,7 +1,6 @@
 /** The occurrence hex grid: level from zoom, tiles for a view, GBIF tiles decoded to hexes. */
 import type Point from '@mapbox/point-geometry';
 import { fromVectorTileJs } from '@maplibre/vt-pbf';
-import { TILE_EXTENT, hexAt, mvt, type Px } from './helpers/tiles';
 import {
   adhocLevel,
   clipRingLat,
@@ -18,6 +17,7 @@ import {
   zoomDrop,
   type LngLat,
 } from '~/lib/map/occGrid';
+import { TILE_EXTENT, hexAt, mvt, type Px } from './helpers/tiles';
 
 describe('adhocLevel', () => {
   it('drops levels where adhoc geohash cells are wider than hexes, keeps the rest', () => {

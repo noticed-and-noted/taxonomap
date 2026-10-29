@@ -31,7 +31,7 @@ function gbif() {
 
 async function setup(withArea: boolean) {
   vi.resetModules();
-  const { useCellNameSearch } = await import('~/components/vue/useCellNameSearch');
+  const { useCellNameSearch } = await import('~/composables/useCellNameSearch');
   const query = ref('');
   const scope = effectScope();
   const search = scope.run(() =>

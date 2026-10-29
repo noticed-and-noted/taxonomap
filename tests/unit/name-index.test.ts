@@ -1,6 +1,6 @@
 import { NameIndex, normalise } from '~/lib/data/name-index';
-import { snapshots, stubNetwork } from './helpers/network';
 import type { NameRow } from '~/lib/data/types';
+import { snapshots, stubNetwork } from './helpers/network';
 
 const rows: NameRow[] = [
   [212, 'C', 'Aves', 'Birds', 900_000_000],

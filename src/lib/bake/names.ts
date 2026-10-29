@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getSpecies, getVernacularNames } from '~/lib/gbif/server';
-import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
+import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { isDev } from '~/lib/env';
-import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import type { VernacularName } from '~/lib/gbif';
+import { getSpecies, getVernacularNames } from '~/lib/gbif/server';
+import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { englishName, otherEnglishNames } from '~/lib/species/names';
 import {
   bakeDir,

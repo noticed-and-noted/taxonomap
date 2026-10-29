@@ -1,6 +1,6 @@
 /** Place search as you type: debounced, stale answers dropped. */
 import { effectScope } from 'vue';
-import { usePlaceSearch } from '~/components/vue/usePlaceSearch';
+import { usePlaceSearch } from '~/composables/usePlaceSearch';
 import { stubNetwork } from './helpers/network';
 
 const photon = (name: string) => ({ features: [{ geometry: { coordinates: [1, 2] }, properties: { name } }] });
