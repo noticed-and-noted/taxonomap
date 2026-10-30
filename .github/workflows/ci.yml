@@ -34,7 +34,7 @@ env:
 
 jobs:
   verify:
-    name: Lint, typecheck, unit tests
+    name: Lint, format, typecheck
     if: github.event.schedule != '0 4 * * 1' && github.event.schedule != '0 2 * * *'
     runs-on: ubuntu-latest
     steps:
@@ -48,6 +48,20 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm check
+
+  unit:
+    name: Unit tests
+    if: github.event.schedule != '0 4 * * 1' && github.event.schedule != '0 2 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
   bake:
     name: Bake GBIF data
@@ -82,8 +96,10 @@ jobs:
   build:
     name: Build
     # Waits for a manual bake so the deploy uses its data; bake is skipped on every other run.
-    needs: [verify, bake]
-    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.bake.result != 'failure' }}
+    needs: [verify, unit, bake]
+    if: >-
+      ${{ !cancelled() && needs.verify.result == 'success' && needs.unit.result == 'success' &&
+      needs.bake.result != 'failure' }}
     runs-on: ubuntu-latest
     env:
       PUBLIC_GBIF_API_BASE: ${{ vars.PUBLIC_GBIF_API_BASE || 'https://api.gbif.org' }}
@@ -129,8 +145,7 @@ jobs:
   e2e:
     name: Playwright journeys
     # The journeys build their own site against a fake GBIF (tests/e2e/fake), so they
-    # need neither the live build nor the network, and run alongside it.
-    needs: verify
+    # need neither the live build nor the network, and start straight away.
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
