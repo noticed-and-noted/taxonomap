@@ -149,10 +149,14 @@ jobs:
     name: Deploy to Cloudflare Pages
     needs: build
     # A skipped bake upstream would skip this job under the default success() check.
+    # Pull requests deploy a preview; those from forks are skipped, as they get no secrets.
     if: >-
-      !cancelled() && needs.build.result == 'success' &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      !cancelled() && needs.build.result == 'success' && (
+        (github.ref == 'refs/heads/main' &&
+         (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) ||
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name == github.repository)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -166,7 +170,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT || 'taxonomap' }} --branch=main
+          # Adds a "View deployment" link to the pull request.
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: >-
+            pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT || 'taxonomap' }}
+            --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'main' }}
 
   contract:
     name: GBIF contract tests (live)
