@@ -19,8 +19,10 @@ import type { HexGeometry } from '~/stores/explorer';
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 /** Zoomed out further, a record's area (or, outside a cell, its dot) says little more than its cell outline. */
-const RECORD_MIN_ZOOM = 7;
+export const RECORD_MIN_ZOOM = 7;
 export const RECORD_DOT_LAYER = 'selected-record';
+/** The obscured record's square: its fill and dashed edge. */
+export const RECORD_AREA_LAYERS = ['record-area', 'record-edge'] as const;
 const RECORD_DOT_RADIUS_PX = 6;
 const RECORD_DOT_STROKE_PX = 3;
 const RECORD_DOT_DIAMETER_PX = 2 * (RECORD_DOT_RADIUS_PX + RECORD_DOT_STROKE_PX);
@@ -112,14 +114,14 @@ function recordLayers(accent: string, bg: string): LayerSpecification[] {
   return [
     {
       ...base,
-      id: 'record-area',
+      id: RECORD_AREA_LAYERS[0],
       type: 'fill',
       filter: IS_RECORD_AREA,
       paint: { 'fill-color': accent, 'fill-opacity': 0.12 },
     },
     {
       ...base,
-      id: 'record-edge',
+      id: RECORD_AREA_LAYERS[1],
       type: 'line',
       filter: IS_RECORD_AREA,
       paint: { 'line-color': accent, 'line-width': 2, 'line-dasharray': [3, 2] },

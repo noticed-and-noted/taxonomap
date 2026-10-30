@@ -26,7 +26,9 @@ import {
   fillColor,
   geometryOf,
   nearGeoJson,
+  RECORD_AREA_LAYERS,
   RECORD_DOT_LAYER,
+  RECORD_MIN_ZOOM,
   recordDotMinZoom,
   selectedGeoJson,
   type MapColors,
@@ -126,7 +128,7 @@ function syncOverlays() {
   paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
   setData('near', nearData());
-  sizeRecordDot();
+  sizeRecordPlace();
 }
 
 function styleFor() {
@@ -554,28 +556,38 @@ function followRecord() {
     fitBox: (bbox, maxZoom) => flyToBounds({ kind: 'bounds', bbox, maxZoom }),
   });
   // The zoom where the grid turns finer moves with the centre's latitude and the filters.
-  recordMap.on('moveend', sizeRecordDot);
-  cleanups.push($recordPlace.listen(fit), $hexGeometry.listen(sizeRecordDot), $gridLevel.listen(sizeRecordDot), () =>
-    recordMap.off('moveend', sizeRecordDot),
+  recordMap.on('moveend', sizeRecordPlace);
+  cleanups.push(
+    $recordPlace.listen(fit),
+    $hexGeometry.listen(sizeRecordPlace),
+    $gridLevel.listen(sizeRecordPlace),
+    () => recordMap.off('moveend', sizeRecordPlace),
   );
 }
 
 /**
- * Show an expanded record's dot from the zoom where its cell is wide enough on screen to hold it, or from
- * the zoom where the grid turns finer than the selected cell if sooner: mid-gesture, before the new cells load.
+ * Show an expanded record's dot from the zoom where its cell is wide enough on screen to hold it, and an
+ * obscured record's square from RECORD_MIN_ZOOM; either from the zoom where the grid turns finer than the
+ * selected cell if sooner: mid-gesture, before the new cells load.
  */
-function sizeRecordDot() {
+function sizeRecordPlace() {
   if (!map?.getLayer(RECORD_DOT_LAYER)) return;
   const xs = $hexGeometry.get()?.ring.map((position) => map!.project(position).x);
   const cellWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
-  const widthMinZoom = recordDotMinZoom(map.getZoom(), cellWidth);
+  const finerMinZoom = cellWidth === null ? Infinity : gridFinerZoom();
+  const maxZoom = map.getMaxZoom() + 1;
+  map.setLayerZoomRange(RECORD_DOT_LAYER, Math.min(recordDotMinZoom(map.getZoom(), cellWidth), finerMinZoom), maxZoom);
+  for (const layer of RECORD_AREA_LAYERS)
+    map.setLayerZoomRange(layer, Math.min(RECORD_MIN_ZOOM, finerMinZoom), maxZoom);
+}
+
+/** The zoom where the grid at the map's latitude turns finer than the selected cell; Infinity if never or unknown. */
+function gridFinerZoom(): number {
   const selectedLevel = $selectedHex.get()?.[2];
-  const canGetFiner = cellWidth !== null && selectedLevel !== undefined && !!occurrenceLayer;
+  if (!map || !occurrenceLayer || selectedLevel === undefined) return Infinity;
+  const layer = occurrenceLayer;
   const centreLat = map.getCenter().lat;
-  const finerMinZoom = canGetFiner
-    ? zoomPastLevel((zoom) => occurrenceLayer!.levelAt(zoom, centreLat), selectedLevel, map.getMaxZoom())
-    : Infinity;
-  map.setLayerZoomRange(RECORD_DOT_LAYER, Math.min(widthMinZoom, finerMinZoom), map.getMaxZoom() + 1);
+  return zoomPastLevel((zoom) => layer.levelAt(zoom, centreLat), selectedLevel, map.getMaxZoom());
 }
 
 /** Page-level events: theme switches and client-side page swaps. */
