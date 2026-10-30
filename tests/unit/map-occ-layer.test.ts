@@ -227,6 +227,14 @@ describe('occurrence layer', () => {
     expect(asked.filter((request) => request.z === level)).toHaveLength(9);
   });
 
+  it('says the level it would show at a zoom, coarsened for adhoc filters', () => {
+    const callbackSet = callbacks();
+    const layer = createOccLayer(fakeMap().map, callbackSet.o);
+    expect(layer.levelAt(6.5, 0)).toBe(6);
+    callbackSet.setFilter({ hasImage: true });
+    expect(layer.levelAt(6.5, 0)).toBe(5);
+  });
+
   it('leaves out cells known to be empty, and drops them on redraw', async () => {
     network();
     const map = fakeMap();

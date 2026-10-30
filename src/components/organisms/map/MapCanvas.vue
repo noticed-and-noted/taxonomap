@@ -15,7 +15,7 @@ import { compact, full } from '~/lib/format';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
-import { hexCentre, type Hex } from '~/lib/map/occGrid';
+import { hexCentre, zoomPastLevel, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { PIN_CURSOR } from '~/lib/map/pinCursors';
 import { createRecordFit } from '~/lib/map/recordFit';
@@ -553,15 +553,29 @@ function followRecord() {
     coveredEdges: () => coveredEdges(recordMap),
     fitBox: (bbox, maxZoom) => flyToBounds({ kind: 'bounds', bbox, maxZoom }),
   });
-  cleanups.push($recordPlace.listen(fit), $hexGeometry.listen(sizeRecordDot));
+  // The zoom where the grid turns finer moves with the centre's latitude and the filters.
+  recordMap.on('moveend', sizeRecordDot);
+  cleanups.push($recordPlace.listen(fit), $hexGeometry.listen(sizeRecordDot), $gridLevel.listen(sizeRecordDot), () =>
+    recordMap.off('moveend', sizeRecordDot),
+  );
 }
 
-/** Show an expanded record's dot only from the zoom where its cell is wide enough on screen to hold it. */
+/**
+ * Show an expanded record's dot from the zoom where its cell is wide enough on screen to hold it, or from
+ * the zoom where the grid turns finer than the selected cell if sooner: mid-gesture, before the new cells load.
+ */
 function sizeRecordDot() {
   if (!map?.getLayer(RECORD_DOT_LAYER)) return;
   const xs = $hexGeometry.get()?.ring.map((position) => map!.project(position).x);
   const cellWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
-  map.setLayerZoomRange(RECORD_DOT_LAYER, recordDotMinZoom(map.getZoom(), cellWidth), map.getMaxZoom() + 1);
+  const widthMinZoom = recordDotMinZoom(map.getZoom(), cellWidth);
+  const selectedLevel = $selectedHex.get()?.[2];
+  const canGetFiner = cellWidth !== null && selectedLevel !== undefined && !!occurrenceLayer;
+  const centreLat = map.getCenter().lat;
+  const finerMinZoom = canGetFiner
+    ? zoomPastLevel((zoom) => occurrenceLayer!.levelAt(zoom, centreLat), selectedLevel, map.getMaxZoom())
+    : Infinity;
+  map.setLayerZoomRange(RECORD_DOT_LAYER, Math.min(widthMinZoom, finerMinZoom), map.getMaxZoom() + 1);
 }
 
 /** Page-level events: theme switches and client-side page swaps. */
