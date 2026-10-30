@@ -1,0 +1,34 @@
+name: Preview cleanup
+
+# Deletes a pull request's Cloudflare Pages previews (see the deploy job in ci.yml) once it closes.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete preview deployments
+    # Fork PRs never get a preview, nor the secrets to delete one.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT: ${{ vars.CF_PAGES_PROJECT || 'taxonomap' }}
+      BRANCH: pr-${{ github.event.number }}
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      # shortcut: the list holds only the newest 25 deployments, so a busy project could miss
+      # older ones for this branch; page through the Pages API if that starts to happen.
+      - shell: bash # adds pipefail, so a failed list fails the job
+        run: |
+          npx --yes wrangler@4 pages deployment list --project-name="$PROJECT" --environment=preview --json \
+            | jq -r --arg branch "$BRANCH" '.[] | select(.Branch == $branch) | .Id' \
+            | while read -r deployment_id; do
+                npx --yes wrangler@4 pages deployment delete "$deployment_id" --project-name="$PROJECT" --force < /dev/null
+              done
