@@ -14,6 +14,7 @@ const SEEK_STEP_SECONDS = 0.1;
 
 const audio = useTemplateRef<HTMLAudioElement>('audio');
 const isPlaying = ref(false);
+const isLoading = ref(false);
 const hasFailed = ref(false);
 const currentSeconds = ref(0);
 const durationSeconds = ref(0);
@@ -32,7 +33,10 @@ function clock(seconds: number): string {
 function togglePlay() {
   if (!audio.value) return;
   if (isPlaying.value) audio.value.pause();
-  else void audio.value.play().catch(markUnplayable);
+  else {
+    isLoading.value = audio.value.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+    void audio.value.play().catch(markUnplayable);
+  }
 }
 
 /** Shows the failure note when the browser can't play the file; a play cut short by a pause (AbortError) isn't one. */
@@ -65,7 +69,9 @@ function readDuration() {
         :src="sound.url"
         preload="none"
         @play="isPlaying = true"
-        @pause="isPlaying = false"
+        @pause="isPlaying = isLoading = false"
+        @waiting="isLoading = true"
+        @playing="isLoading = false"
         @timeupdate="currentSeconds = audio?.currentTime ?? 0"
         @loadedmetadata="readDuration"
         @durationchange="readDuration"
@@ -76,9 +82,15 @@ function readDuration() {
         class="play"
         :aria-label="isPlaying ? 'Pause sound' : 'Play sound'"
         :aria-pressed="isPlaying"
+        :aria-busy="isLoading"
         @click="togglePlay"
       >
-        <UiIcon :name="isPlaying ? 'pause' : 'play'" size="14" />
+        <span
+          v-if="isLoading"
+          class="size-3.5 animate-spin rounded-full border-2 border-border-strong border-t-accent motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+        <UiIcon v-else :name="isPlaying ? 'pause' : 'play'" size="14" />
       </button>
       <input
         type="range"
