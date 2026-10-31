@@ -237,6 +237,12 @@ function occurrenceSearch(params: URLSearchParams) {
       recordedBy: 'A. Birder',
       media: [
         { type: 'StillImage', identifier: `https://photos.example/${taxon.key}/${index}.jpg`, creator: 'A. Birder' },
+        {
+          type: 'Sound',
+          format: 'audio/vnd.wave',
+          identifier: `https://sounds.example/${taxon.key}/${index}.wav`,
+          creator: 'A. Recordist',
+        },
       ],
     };
   });
@@ -277,13 +283,40 @@ function speciesSearch(params: URLSearchParams) {
   return { offset, limit, endOfRecords: offset + limit >= found.length, count: found.length, results: page.map(usage) };
 }
 
-/* ---------- Tiles and images ---------- */
+/* ---------- Tiles, images and sounds ---------- */
 
 /** A 1 × 1 transparent PNG: every raster tile and photo. */
 const PNG = Uint8Array.from(
   atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='),
   (character) => character.charCodeAt(0),
 );
+
+const WAV_SAMPLE_RATE = 8000;
+const WAV_SECONDS = 3;
+const WAV_DATA_BYTES = WAV_SAMPLE_RATE * WAV_SECONDS;
+const WAV_HEADER_BYTES = 44;
+const SILENCE = 128;
+
+/** A few seconds of silent 8-bit mono WAV: every record's sound, long enough to pause and drag. */
+const WAV = (() => {
+  const bytes = new Uint8Array(WAV_HEADER_BYTES + WAV_DATA_BYTES).fill(SILENCE);
+  const header = new DataView(bytes.buffer);
+  const writeText = (offset: number, text: string) =>
+    [...text].forEach((character, index) => header.setUint8(offset + index, character.charCodeAt(0)));
+  writeText(0, 'RIFF');
+  header.setUint32(4, bytes.length - 8, true);
+  writeText(8, 'WAVEfmt ');
+  header.setUint32(16, 16, true);
+  header.setUint16(20, 1, true); // PCM
+  header.setUint16(22, 1, true); // mono
+  header.setUint32(24, WAV_SAMPLE_RATE, true);
+  header.setUint32(28, WAV_SAMPLE_RATE, true);
+  header.setUint16(32, 1, true);
+  header.setUint16(34, 8, true);
+  writeText(36, 'data');
+  header.setUint32(40, WAV_DATA_BYTES, true);
+  return bytes;
+})();
 
 /**
  * A density tile of hexes (about 28 across, as GBIF's are), each with
@@ -369,6 +402,7 @@ export function answer(url: URL): FakeResponse | undefined {
   // No Wikidata item for any key, so species pages show no Wikipedia intro.
   if (url.hostname === 'www.wikidata.org') return json({ query: { search: [] } });
   if (url.hostname === 'tile.gbif.org' || url.hostname === 'photos.example') return png();
+  if (url.hostname === 'sounds.example') return { status: 200, contentType: 'audio/wav', body: WAV };
   if (path === '/geocode')
     return json(
       params.get('q')?.toLowerCase().startsWith('london')

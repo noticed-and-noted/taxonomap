@@ -1,4 +1,5 @@
 /** Map explorer journeys, against the fake world (see fixtures.ts). */
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 test('the header search and the What filter add to one list of taxa', { tag: '@mobile' }, async ({ page }, info) => {
@@ -118,6 +119,93 @@ test('the cell panel lists records with their type, expands one and filters them
   await page.getByRole('option', { name: new RegExp(`^${name}`) }).click();
   await expect(search).toHaveValue(name);
   await expect(rows).toHaveCount(3);
+});
+
+/** Opens the cell panel's records and expands the first one. */
+async function expandFirstRecord(page: Page) {
+  await page.goto('/?taxon=212&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  await page.getByRole('tab', { name: 'Records' }).click();
+  await page.getByRole('table', { name: 'Records' }).locator('tbody tr').first().getByRole('button').click();
+}
+
+test('an expanded record plays its sound to the end, with its licence and credit', async ({ page }) => {
+  const soundRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).hostname === 'sounds.example') soundRequests.push(request.url());
+  });
+  await expandFirstRecord(page);
+  const play = page.getByRole('button', { name: 'Play sound' });
+  await expect(play).toBeVisible();
+  const credit = page.locator('p', { hasText: 'Sound ·' });
+  await expect(credit).toHaveText('Sound · CC-BY · © A. Recordist');
+  await expect(credit.getByRole('link', { name: 'CC-BY' })).toHaveAttribute('href', /licenses\/by\/4\.0/);
+  // The file comes from its publisher, so nothing is fetched until the viewer asks for it.
+  expect(soundRequests).toEqual([]);
+
+  await play.click();
+  await expect(page.getByRole('button', { name: 'Pause sound' })).toBeVisible();
+  // The short fake sound ends on its own: the button resets and the line is full.
+  await expect(play).toBeVisible();
+  await expect(page.getByText('0:03 / 0:03')).toBeVisible();
+  const position = page.getByRole('slider', { name: 'Position in sound' });
+  expect(await position.inputValue()).toBe(await position.getAttribute('max'));
+  expect(soundRequests).not.toEqual([]);
+});
+
+test('dragging the line moves the sound to that point', async ({ page }) => {
+  await expandFirstRecord(page);
+  // The line only knows the sound's length once it has started loading.
+  await page.getByRole('button', { name: 'Play sound' }).click();
+  await page.getByRole('button', { name: 'Pause sound' }).click();
+  await expect(page.getByText(/^0:00 \/ 0:03$/)).toBeVisible();
+
+  const line = page.getByRole('slider', { name: 'Position in sound' });
+  const box = (await line.boundingBox())!;
+  const middle = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.1, middle);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, middle, { steps: 5 });
+  await page.mouse.up();
+
+  await expect(page.getByText(/^0:01 \/ 0:03$/)).toBeVisible();
+  await expect(line).toHaveAttribute('aria-valuetext', '0:01');
+  const seconds = await page.locator('audio').evaluate((audio: HTMLAudioElement) => audio.currentTime);
+  expect(seconds).toBeGreaterThan(1.2);
+  expect(seconds).toBeLessThan(1.8);
+  await expect(page.getByRole('button', { name: 'Play sound' })).toBeVisible();
+});
+
+test("the line stays with the sound when its host can't seek", async ({ page }) => {
+  // Whole files only, no byte ranges: Chrome can't move such a sound.
+  await page.route('https://sounds.example/**', (route) =>
+    route.fallback({ headers: { ...route.request().headers(), range: '' } }),
+  );
+  await expandFirstRecord(page);
+  await page.getByRole('button', { name: 'Play sound' }).click();
+  await page.getByRole('button', { name: 'Pause sound' }).click();
+  await expect(page.getByText(/^0:00 \/ 0:03$/)).toBeVisible();
+
+  // Once the whole file is in, a refused seek changes nothing, so only the player can put the line right.
+  const NETWORK_IDLE = 1;
+  await expect
+    .poll(() => page.locator('audio').evaluate((audio: HTMLAudioElement) => audio.networkState))
+    .toBe(NETWORK_IDLE);
+  const line = page.getByRole('slider', { name: 'Position in sound' });
+  await line.focus();
+  await page.keyboard.press('End');
+
+  // The sound can't leave the start, so the line goes back there.
+  await expect(line).toHaveValue('0');
+  expect(await page.locator('audio').evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBe(0);
+  await expect(page.getByText(/^0:00 \/ 0:03$/)).toBeVisible();
+});
+
+test('a sound that fails to load says so', async ({ page }) => {
+  await page.route('https://sounds.example/**', (route) => route.fulfill({ status: 404 }));
+  await expandFirstRecord(page);
+  await page.getByRole('button', { name: 'Play sound' }).click();
+  await expect(page.getByText("This sound couldn't be played.")).toBeVisible();
+  await expect(page.getByRole('button', { name: /sound$/ })).toHaveCount(0);
 });
 
 test('the cell tooltip hides while the map is dragged', async ({ page }, info) => {

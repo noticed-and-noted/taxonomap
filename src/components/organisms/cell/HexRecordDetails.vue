@@ -1,14 +1,16 @@
 <script setup lang="ts">
 /**
  * An expanded record's details: its photo (opening the lightbox of all its photos), who recorded it,
- * how precise it is or which institution holds it, its source, and links to the species and to GBIF.
+ * how precise it is or which institution holds it, its source, its sound, and links to the species and to GBIF.
  */
 import { computed, type StyleValue } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import SoundPlayer from '~/components/molecules/SoundPlayer.vue';
 import type { Occurrence, UsableImage } from '~/lib/gbif';
+import { usableSounds } from '~/lib/gbif/licence';
 import { initials } from '~/lib/format';
 import { accuracy, institution } from '~/lib/record-fields';
 
@@ -34,6 +36,7 @@ const emit = defineEmits<{
 const photo = computed(() => props.photos[0]);
 const isObservation = computed(() => props.occurrence.basisOfRecord === 'HUMAN_OBSERVATION');
 const source = computed(() => props.occurrence.datasetName ?? props.occurrence.publisher);
+const sound = computed(() => usableSounds(props.occurrence)[0]);
 </script>
 
 <template>
@@ -126,6 +129,7 @@ const source = computed(() => props.occurrence.datasetName ?? props.occurrence.p
         </a>
       </dd>
     </dl>
+    <SoundPlayer v-if="sound" :key="sound.url" class="col-span-2" :sound="sound" />
   </div>
 </template>
 
