@@ -25,7 +25,11 @@ export interface HttpOptions {
 export interface RequestOptions {
   ttlMs?: number;
   signal?: AbortSignal;
+  /** False for a 200 body that is really a failure (a GraphQL error): it is retried like a 5xx and never cached. */
+  isComplete?: (body: unknown) => boolean;
 }
+
+type CompletenessCheck = RequestOptions['isComplete'];
 
 /** True once any response has been served from a stale cache entry. */
 export const $gbifStale = atom(false);
@@ -74,6 +78,17 @@ async function requestError(url: string, response: Response): Promise<GbifReques
   return new ErrorClass(url, response.status, detail);
 }
 
+/** One try: the response, or null if the network failed. A cancelled request throws. */
+async function tryOnce(transport: Transport, url: string, signal: AbortSignal): Promise<Response | null> {
+  countRequest('json');
+  try {
+    return await transport(url, { signal });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return null;
+  }
+}
+
 /**
  * A function that GETs a path from GBIF as JSON, retrying throttled and failed requests with back-off.
  * Throws GbifUnavailableError when retries run out, and the request's own error for a definitive failure.
@@ -86,17 +101,6 @@ function createRetryingFetcher(options: HttpOptions) {
    */
   let coolUntil = 0;
 
-  /** One try: the response, or null if the network failed. A cancelled request throws. */
-  async function tryOnce(url: string, signal: AbortSignal): Promise<Response | null> {
-    countRequest('json');
-    try {
-      return await options.transport(url, { signal });
-    } catch (error) {
-      if (signal.aborted) throw error;
-      return null;
-    }
-  }
-
   /** How long to wait before retrying a failed response; a 429 also starts the shared cool-down. */
   function retryDelay(response: Response, attempt: number): number {
     const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
@@ -108,8 +112,13 @@ function createRetryingFetcher(options: HttpOptions) {
     return delay;
   }
 
-  return async function fetchWithRetry(path: string, signal: AbortSignal): Promise<unknown> {
-    const url = `${options.base}${path}`;
+  return async function fetchWithRetry(
+    path: string,
+    signal: AbortSignal,
+    isComplete: CompletenessCheck = () => true,
+  ): Promise<unknown> {
+    // A full URL is another GBIF host (GraphQL); a path is the REST API's.
+    const url = /^https?:\/\//.test(path) ? path : `${options.base}${path}`;
     let lastStatus: number | undefined;
     let hasJustWaited = false;
     for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
@@ -120,10 +129,11 @@ function createRetryingFetcher(options: HttpOptions) {
       signal.throwIfAborted();
       hasJustWaited = false;
 
-      const response = await tryOnce(url, signal);
-      if (response?.ok) return response.json();
+      const response = await tryOnce(options.transport, url, signal);
+      const body: unknown = response?.ok ? await response.json() : undefined;
+      if (response?.ok && isComplete(body)) return body;
       lastStatus = response?.status;
-      if (response && !isRetryable(response.status)) throw await requestError(url, response);
+      if (response && !response.ok && !isRetryable(response.status)) throw await requestError(url, response);
       if (attempt < options.maxRetries) {
         await options.sleep(response ? retryDelay(response, attempt) : backoff(options, attempt));
         hasJustWaited = true;
@@ -186,7 +196,7 @@ function waitUnlessAborted<T>(request: SharedRequest, signal: AbortSignal, onLas
  */
 function createRequestSharing(
   cache: LruCache<unknown>,
-  fetchWithRetry: (path: string, signal: AbortSignal) => Promise<unknown>,
+  fetchWithRetry: (path: string, signal: AbortSignal, isComplete?: CompletenessCheck) => Promise<unknown>,
 ) {
   const inFlight = new Map<string, SharedRequest>();
 
@@ -195,12 +205,12 @@ function createRequestSharing(
     if (inFlight.get(url) === request) inFlight.delete(url);
   }
 
-  function start(url: string, ttlMs: number): SharedRequest {
+  function start(url: string, ttlMs: number, isComplete: CompletenessCheck): SharedRequest {
     const controller = new AbortController();
     const request: SharedRequest = {
       controller,
       waiting: 0,
-      promise: fetchWithRetry(url, controller.signal)
+      promise: fetchWithRetry(url, controller.signal, isComplete)
         .then((data) => {
           cache.set(url, data, ttlMs);
           return data;
@@ -216,8 +226,8 @@ function createRequestSharing(
 
   return {
     /** The request already in flight for the URL, or a new one; the caller is counted as waiting on it. */
-    join(url: string, ttlMs: number): SharedRequest {
-      const request = inFlight.get(url) ?? start(url, ttlMs);
+    join(url: string, ttlMs: number, isComplete?: CompletenessCheck): SharedRequest {
+      const request = inFlight.get(url) ?? start(url, ttlMs, isComplete);
       request.waiting++;
       return request;
     },
@@ -239,7 +249,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
   const sharing = createRequestSharing(cache, createRetryingFetcher(options));
 
   /**
-   * GET JSON from GBIF. Identical concurrent requests share one request;
+   * GET JSON from GBIF (`path` on the REST API, or a full URL on another GBIF host). Identical concurrent requests share one request;
    * fresh results come from the LRU; on persistent failure a stale copy is
    * returned and $gbifStale is raised. Aborting `requestOptions.signal` rejects
    * only this caller.
@@ -253,7 +263,7 @@ export function createHttp(overrides: Partial<HttpOptions> = {}) {
 
     const { signal } = requestOptions;
     signal?.throwIfAborted();
-    const request = sharing.join(url, requestOptions.ttlMs ?? options.defaultTtlMs);
+    const request = sharing.join(url, requestOptions.ttlMs ?? options.defaultTtlMs, requestOptions.isComplete);
     if (!signal) return request.promise as Promise<T>;
     return sharing.wait<T>(url, request, signal);
   }

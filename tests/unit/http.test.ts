@@ -32,6 +32,25 @@ describe('http client', () => {
     expect(calls).toEqual(['https://api.test/v1/x?a=1&b=2']);
   });
 
+  it('sends a full URL as it is, on its own host', async () => {
+    const { client, calls } = setup([json({ ok: 1 })]);
+    await client.getJson('https://graphql.test/graphql', { query: '{ a }' });
+    expect(calls).toEqual(['https://graphql.test/graphql?query=%7B%20a%20%7D']);
+  });
+
+  it('retries a body that is not complete, never caching it, and serves only a complete one', async () => {
+    const { client, calls } = setup([json({ errors: [] }), json({ data: 1 }), json({ errors: [] })]);
+    const isComplete = (body: unknown) => 'data' in (body as object);
+    await expect(client.getJson('/v1/x', undefined, { isComplete })).resolves.toEqual({ data: 1 });
+    expect(calls).toHaveLength(2);
+
+    const failing = setup([json({ errors: [] }), json({ errors: [] }), json({ errors: [] }), json({ errors: [] })]);
+    await expect(failing.client.getJson('/v1/y', undefined, { isComplete })).rejects.toBeInstanceOf(
+      GbifUnavailableError,
+    );
+    expect(failing.calls).toHaveLength(4);
+  });
+
   it('dedupes concurrent identical requests', async () => {
     const { client, calls } = setup([json({ n: 1 })]);
     const [first, second] = await Promise.all([client.getJson('/v1/x', { a: 1 }), client.getJson('/v1/x', { a: 1 })]);

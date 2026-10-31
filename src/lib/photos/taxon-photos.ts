@@ -3,7 +3,8 @@
  * list, best first, up to MAX_PHOTOS, from these sources in turn:
  *   A. iNaturalist's curated photos for the taxon (what its taxon page shows)
  *   B. iNaturalist's most-voted research-grade observations of it
- *   C. GBIF photos: the iNaturalist dataset first, then every dataset
+ *   C. GBIF photos: the iNaturalist dataset first, then every dataset (for
+ *      many taxa' lead photos at once, one GraphQL request per source)
  * Duplicates (the same photo from two sources) and photos without an open
  * licence are skipped.
  *
@@ -20,13 +21,18 @@
 import pLimit from 'p-limit';
 import { nameIndexIfLoaded } from '~/lib/data/name-index';
 import {
+  ALLOWED_LICENCE_ENUMS,
+  canBatchRank,
   findImages,
+  firstRecordsByTaxon,
   http,
   type HigherKeys,
   INATURALIST_DATASET_KEY,
+  type OccurrenceFilter,
   type OccurrenceSearch,
   type Rank,
   type UsableImage,
+  usableImages,
 } from '~/lib/gbif';
 import { HOUR } from '~/lib/util/time';
 import {
@@ -104,23 +110,18 @@ async function inatRecord(
 
 type InatRecord = Awaited<ReturnType<typeof inatRecord>>;
 
-/** Species per GBIF search for iNaturalist records: one with many records crowds the rest out of a bigger page. */
-const RECORD_BATCH = 5;
-
-/** The iNaturalist records GBIF holds of several species in one search; species it returns none for are left out. */
+/**
+ * One iNaturalist record GBIF holds of each of several species, in one request; species
+ * GBIF has none of are left out.
+ */
 async function inatRecords(keys: readonly number[], options: Opts): Promise<Map<number, InatRecord>> {
-  const response = await gbifLimit(() =>
-    http().getJson<OccurrenceSearch>(
-      '/v1/occurrence/search',
-      { speciesKey: keys, datasetKey: INATURALIST_DATASET_KEY, limit: 300 },
-      { ttlMs: 6 * HOUR, ...(options.signal && { signal: options.signal }) },
-    ),
+  const bySpecies = await gbifLimit(() =>
+    firstRecordsByTaxon(keys, 'SPECIES', { datasetKey: INATURALIST_DATASET_KEY }, { perTaxon: 1, ...options }),
   );
   const found = new Map<number, InatRecord>();
-  for (const result of response.results) {
-    const id = Number(result.taxonID);
-    if (result.speciesKey === undefined || !Number.isInteger(id) || id <= 0 || found.has(result.speciesKey)) continue;
-    found.set(result.speciesKey, { taxonId: id, ...(result.species && { species: result.species }) });
+  for (const [key, { name, records }] of bySpecies) {
+    const id = Number(records[0]?.taxonID);
+    if (Number.isInteger(id) && id > 0) found.set(key, { taxonId: id, ...(name && { species: name }) });
   }
   return found;
 }
@@ -149,29 +150,26 @@ function partitionKnown(taxa: readonly PhotoTaxon[]): { known: Map<number, numbe
   return { known, unknown };
 }
 
-/** Finds each unknown taxon's iNaturalist record on GBIF: species a few to a request, then singly for any that missed. */
+/**
+ * Finds each unknown taxon's iNaturalist record on GBIF: every species in one request, then
+ * singly for taxa above species, and for the species too if that request failed.
+ */
 async function searchRecords(unknown: readonly PhotoTaxon[], options: Opts): Promise<Map<number, InatRecord>> {
-  const searches = new Map<number, InatRecord>();
   const species = unknown.filter((taxon) => taxon.rank === 'SPECIES');
-  const batches: PhotoTaxon[][] = [];
   // A single species is no cheaper in a batch.
-  if (species.length > 1) {
-    for (let offset = 0; offset < species.length; offset += RECORD_BATCH) {
-      batches.push(species.slice(offset, offset + RECORD_BATCH));
-    }
-  }
-  await Promise.all(
-    batches.map(async (batch) => {
-      const found = await inatRecords(
-        batch.map((taxon) => taxon.key),
-        options,
-      ).catch(() => new Map<number, InatRecord>());
-      for (const [key, record] of found) searches.set(key, record);
-    }),
-  );
+  const batch =
+    species.length > 1
+      ? await inatRecords(
+          species.map((taxon) => taxon.key),
+          options,
+        ).catch(() => null)
+      : null;
+  const searches = new Map<number, InatRecord>(batch ?? []);
+  // A species the batch answered for but left out has no iNaturalist record to find.
+  const isAnswered = (taxon: PhotoTaxon) => batch !== null && taxon.rank === 'SPECIES';
   await Promise.all(
     unknown
-      .filter((taxon) => !searches.has(taxon.key))
+      .filter((taxon) => !isAnswered(taxon))
       .map(
         async (taxon) => void searches.set(taxon.key, await inatRecord(taxon, options).catch((): InatRecord => ({}))),
       ),
@@ -218,8 +216,8 @@ function candidateAtLevel(
 /**
  * Match GBIF taxa to iNaturalist taxa (null: no match). Also returns species names from the records.
  * An ID already known (remembered from before, or baked into the name index when it has loaded)
- * skips the GBIF search. Otherwise species are searched a few to a request, then one by one for
- * those that missed. A species GBIF holds no record of is searched for by name (iNaturalist,
+ * skips the GBIF search. Otherwise species are searched all in one request, and taxa above
+ * species one by one. A species GBIF holds no record of is searched for by name (iNaturalist,
  * one request each) when it has one; that match arrives later, so others needn't wait for it.
  */
 async function matchTaxa(
@@ -277,21 +275,42 @@ export async function resolveInatIds(taxa: readonly PhotoTaxon[], options: Opts 
   return ids;
 }
 
-// Source C: GBIF photos. The same requests whether for a list or a lead photo.
-const gbifInat = (key: number, options: Opts) =>
-  gbifLimit(() => findImages({ taxonKey: key, datasetKey: INATURALIST_DATASET_KEY }, { limit: 30, ...options }));
-const gbifAny = (key: number, options: Opts) =>
-  gbifLimit(() => findImages({ taxonKey: key }, { limit: 40, ...options }));
+/** Source C, GBIF photos: its copy of iNaturalist's records first, then every dataset. */
+const GBIF_PHOTO_SOURCES = [
+  { filter: { datasetKey: INATURALIST_DATASET_KEY }, limit: 30 },
+  { filter: {}, limit: 40 },
+] as const satisfies readonly { filter: OccurrenceFilter; limit: number }[];
 
-/** Sources in order, each fetched only when asked for. */
-function sources(key: number, match: InatTaxon | null, options: Opts): (() => Promise<UsableImage[]>)[] {
-  const swallow = (promise: Promise<UsableImage[]>) => promise.catch(() => [] as UsableImage[]);
+/**
+ * Records per taxon a batched lead-photo search reads, where a taxon's page reads a source's
+ * whole page. shortcut: a taxon whose first 3 licensed photo records hold no usable photo gets
+ * a later source's lead photo instead of its page's first; read more if that shows up.
+ */
+const LEAD_RECORDS_PER_TAXON = 3;
+
+/** A source's photos, or none when it fails: a failed source just hands over to the next. */
+const orNoImages = (promise: Promise<UsableImage[]>) => promise.catch(() => [] as UsableImage[]);
+
+/** Sources A and B, iNaturalist's own photos, each fetched only when asked for. */
+function inatSources(match: InatTaxon | null, options: Opts): (() => Promise<UsableImage[]>)[] {
   return [
     async () => (match ? curatedImages(match) : []),
-    () => swallow(match ? votedObservations(match.id, options.signal).then(observationImages) : Promise.resolve([])),
-    () => swallow(gbifInat(key, options).then((result) => result.images)),
-    () => swallow(gbifAny(key, options).then((result) => result.images)),
+    () => orNoImages(match ? votedObservations(match.id, options.signal).then(observationImages) : Promise.resolve([])),
   ];
+}
+
+/** All sources in order, each fetched only when asked for. */
+function sources(key: number, match: InatTaxon | null, options: Opts): (() => Promise<UsableImage[]>)[] {
+  const gbifSources = GBIF_PHOTO_SOURCES.map(
+    ({ filter, limit }) =>
+      () =>
+        orNoImages(
+          gbifLimit(() => findImages({ ...filter, taxonKey: key }, { limit, ...options })).then(
+            (result) => result.images,
+          ),
+        ),
+  );
+  return [...inatSources(match, options), ...gbifSources];
 }
 
 /** Identity for de-duplication: iNaturalist photo ID wherever the photo is served from. */
@@ -335,8 +354,8 @@ export async function taxonPhotos(taxon: PhotoTaxon, options: Opts = {}): Promis
 
 /**
  * Lead photos (each taxon's first photo) for many taxa: iNaturalist taxa
- * are fetched TAXA_BATCH per request, and the later sources are only asked
- * for taxa without a photo from an earlier one.
+ * are fetched TAXA_BATCH per request, and GBIF's photos (source C) only for
+ * taxa without one from iNaturalist, one request per rank and source.
  */
 export async function leadPhotos(
   taxa: readonly PhotoTaxon[],
@@ -344,11 +363,12 @@ export async function leadPhotos(
 ): Promise<{ images: Map<number, UsableImage>; names: Map<number, string> }> {
   const { matched, names } = await matchTaxa(taxa, options);
   const images = new Map<number, UsableImage>();
+
   const limit = pLimit(4);
   await Promise.all(
     taxa.map((taxon) =>
       limit(async () => {
-        for (const source of sources(taxon.key, (await matched.get(taxon.key)) ?? null, options)) {
+        for (const source of inatSources((await matched.get(taxon.key)) ?? null, options)) {
           if (options.signal?.aborted) return;
           const first = (await source())[0];
           if (first) return void images.set(taxon.key, first);
@@ -356,7 +376,74 @@ export async function leadPhotos(
       }),
     ),
   );
+
+  for (const gbifSource of GBIF_PHOTO_SOURCES) {
+    const missing = taxa.filter((taxon) => !images.has(taxon.key));
+    if (!missing.length || options.signal?.aborted) break;
+    const found = await gbifLeadPhotos(missing, gbifSource.filter, gbifSource.limit, options);
+    for (const [key, image] of found) images.set(key, image);
+  }
+
   return { images, names };
+}
+
+/** Each taxon's first GBIF photo under `filter`: one request per rank with several taxa, else the taxon page's own request. */
+async function gbifLeadPhotos(
+  taxa: readonly PhotoTaxon[],
+  filter: OccurrenceFilter,
+  pageSize: number,
+  options: Opts,
+): Promise<Map<number, UsableImage>> {
+  const byRank = Map.groupBy(taxa, (taxon) => taxon.rank);
+  const photosByRank = await Promise.all(
+    [...byRank].map(([rank, taxaOfRank]) =>
+      taxaOfRank.length > 1 && canBatchRank(rank)
+        ? batchedLeadPhotos(taxaOfRank, rank, filter, pageSize, options)
+        : singleLeadPhotos(taxaOfRank, filter, pageSize, options),
+    ),
+  );
+  return new Map(photosByRank.flatMap((photos) => [...photos]));
+}
+
+/** First photos of several taxa of one rank, from one request, or one request each when that fails. */
+async function batchedLeadPhotos(
+  taxa: readonly PhotoTaxon[],
+  rank: Rank,
+  filter: OccurrenceFilter,
+  pageSize: number,
+  options: Opts,
+): Promise<Map<number, UsableImage>> {
+  const keys = taxa.map((taxon) => taxon.key);
+  const photoFilter = { ...filter, hasImage: true, license: ALLOWED_LICENCE_ENUMS };
+  const byTaxon = await gbifLimit(() =>
+    firstRecordsByTaxon(keys, rank, photoFilter, { perTaxon: LEAD_RECORDS_PER_TAXON, ...options }),
+  ).catch(() => null);
+  // GraphQL failing doesn't stop the REST searches the taxa's own pages make.
+  if (!byTaxon) return options.signal?.aborted ? new Map() : singleLeadPhotos(taxa, filter, pageSize, options);
+
+  const photos = new Map<number, UsableImage>();
+  for (const [key, { records }] of byTaxon) {
+    const first = records.flatMap(usableImages)[0];
+    if (first) photos.set(key, first);
+  }
+  return photos;
+}
+
+/** First photos of taxa one request each, the same request as their pages make. */
+async function singleLeadPhotos(
+  taxa: readonly PhotoTaxon[],
+  filter: OccurrenceFilter,
+  pageSize: number,
+  options: Opts,
+): Promise<Map<number, UsableImage>> {
+  const firsts = await Promise.all(
+    taxa.map(async (taxon) => {
+      const search = gbifLimit(() => findImages({ ...filter, taxonKey: taxon.key }, { limit: pageSize, ...options }));
+      const [first] = await orNoImages(search.then((result) => result.images));
+      return [taxon.key, first] as const;
+    }),
+  );
+  return new Map(firsts.filter((entry): entry is readonly [number, UsableImage] => !!entry[1]));
 }
 
 /** One taxon's lead photo. */

@@ -30,6 +30,7 @@ pnpm dev             # http://localhost:4321
 | ----------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`      | JSON API base (browser and build)                                                                                           |
 | `PUBLIC_GBIF_TILE_BASE`                   | = API base                  | Map tile base                                                                                                               |
+| `PUBLIC_GBIF_GRAPHQL_BASE`                | `https://graphql.gbif.org`  | GraphQL API base: facets with names, records per taxon (browser and build)                                                  |
 | `PUBLIC_SITE_URL`                         | `https://app.taxonomap.com` | Canonical URLs, sitemap, Open Graph                                                                                         |
 | `GBIF_CONTACT_EMAIL`                      | none                        | Build-time `User-Agent: Taxonomap/<version> (contact: …)`                                                                   |
 | `GBIF_CACHE_TTL_HOURS`                    | `168`                       | Build-time disk-cache freshness                                                                                             |

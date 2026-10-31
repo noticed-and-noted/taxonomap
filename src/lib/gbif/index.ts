@@ -11,6 +11,7 @@ export * from './params';
 export * from './types';
 export * from './species';
 export * from './occurrence';
+export * from './graphql';
 export * from './images';
 export * from './maps';
 export * from './datasets';

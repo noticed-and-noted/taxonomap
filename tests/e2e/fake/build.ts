@@ -12,6 +12,7 @@ const env = {
   ...process.env,
   PUBLIC_GBIF_API_BASE: FAKE_BASE,
   PUBLIC_GBIF_TILE_BASE: FAKE_BASE,
+  PUBLIC_GBIF_GRAPHQL_BASE: FAKE_BASE,
   PUBLIC_BASEMAP_PLAIN_DARK: `${FAKE_BASE}/basemap/dark.json`,
   PUBLIC_BASEMAP_PLAIN_LIGHT: `${FAKE_BASE}/basemap/light.json`,
   PUBLIC_BASEMAP_SATELLITE: `${FAKE_BASE}/basemap/satellite/{z}/{y}/{x}.png`,

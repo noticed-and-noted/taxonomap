@@ -250,6 +250,67 @@ function occurrenceSearch(params: URLSearchParams) {
   return { offset: 0, limit, endOfRecords: results.length < limit, count, results, facets };
 }
 
+interface PredicatePart {
+  type: string;
+  key?: string;
+  value?: string;
+  values?: string[];
+  geometry?: string;
+  predicates?: PredicatePart[];
+}
+
+/** REST query parameters for a GraphQL predicate (the reverse of the app's toPredicate). */
+function predicateParams(predicate: PredicatePart, params = new URLSearchParams()): URLSearchParams {
+  if (predicate.type === 'within') params.append('geometry', predicate.geometry!);
+  else if (predicate.type === 'equals') params.set(predicate.key!, predicate.value!);
+  else if (predicate.type === 'in') for (const value of predicate.values!) params.append(predicate.key!, value);
+  for (const part of predicate.predicates ?? []) predicateParams(part, params);
+  return params;
+}
+
+/** GraphQL spells the country facet differently. */
+const REST_FACET: Record<string, string> = { countryCode: 'country' };
+
+/** A facet value's name, as GraphQL attaches it: the taxon's, or the dataset's title. */
+function facetLabel(field: string, key: string) {
+  if (field === 'datasetKey') return { dataset: { title: DATASETS.find((dataset) => dataset.key === key)?.title } };
+  const taxon = field.endsWith('Key') ? byKey.get(Number(key)) : undefined;
+  return taxon ? { taxon: { scientificName: taxon.name } } : {};
+}
+
+/**
+ * GBIF's GraphQL API, answered by the REST fake: facet counts with names
+ * (namedOccurrenceFacets), or a taxon facet with each value's first records
+ * (firstRecordsByTaxon).
+ */
+function graphql(params: URLSearchParams) {
+  const query = params.get('query') ?? '';
+  const variables = JSON.parse(params.get('variables') ?? '{}') as { predicate: PredicatePart };
+  const search = predicateParams(variables.predicate);
+  const fields = [...query.matchAll(/(\w+)\(size: (\d+)\) \{ key/g)].map(([, field, size]) => ({
+    field: field!,
+    size: Number(size),
+  }));
+  const perTaxon = /documents\(size: (\d+)\) \{ results/.exec(query)?.[1];
+  const facet: Record<string, unknown[]> = {};
+  for (const { field, size } of fields) {
+    const rest = REST_FACET[field] ?? field;
+    const facetSearch = new URLSearchParams(search);
+    facetSearch.set('facet', rest);
+    facetSearch.set(`${rest}.facetLimit`, String(size));
+    const counts = occurrenceSearch(facetSearch).facets[0]?.counts ?? [];
+    facet[field] = counts.map(({ name, count }) => {
+      const bucket = { key: name, count, ...facetLabel(field, name) };
+      if (!perTaxon) return bucket;
+      const recordSearch = new URLSearchParams(search);
+      recordSearch.set('taxonKey', name);
+      recordSearch.set('limit', perTaxon);
+      return { ...bucket, occurrences: { documents: { results: occurrenceSearch(recordSearch).results } } };
+    });
+  }
+  return { data: { occurrenceSearch: { documents: { total: occurrenceSearch(search).count }, facet } } };
+}
+
 function speciesSearch(params: URLSearchParams) {
   const limit = Number(params.get('limit') ?? 20);
   if (params.get('facet') === 'higherTaxonKey') {
@@ -422,6 +483,7 @@ export function answer(url: URL): FakeResponse | undefined {
   if (path.startsWith('/basemap/')) return path.endsWith('.json') ? missing() : png();
 
   if (path === '/v1/occurrence/search') return json(occurrenceSearch(params));
+  if (path === '/graphql') return json(graphql(params));
   if (path === '/v1/species/search') return json(speciesSearch(params));
   if (path === '/v1/species/suggest') {
     const text = (params.get('q') ?? '').toLowerCase();

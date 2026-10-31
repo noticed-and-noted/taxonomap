@@ -33,7 +33,7 @@ function useNameLookups(species: () => readonly SpeciesRow[], tableNames: Ref<Re
   const pendingNames = shallowRef(new Set<number>());
   const askedNames = new Set<number>();
 
-  /** Names for species the table hasn't named (cached, as on species pages), a batch at a time. */
+  /** Names for species the table hasn't named, one request a batch. */
   async function nameSpecies(keys: Iterable<number | undefined>, signal?: AbortSignal) {
     const missing = [...new Set(keys)].filter(
       (key): key is number => key !== undefined && !tableNames.value.has(key) && !lateNames.value.has(key),

@@ -2,8 +2,8 @@
  * Data for the selected hex, with no N+1 calls:
  *  1. one facet request (limit=0): total count, classes, months and the top species
  *  2. picking a group: one facet request for that group's top species (cached per cell)
- *  3. names from the baked index; rows show now, then one batched search
- *     names misses (see species/groups.ts)
+ *  3. names from the baked index, then from the facet itself (GBIF's GraphQL
+ *     API names each value; see species/groups.ts)
  *  4. photos, and any names still missing, are looked up by the table as rows
  *     scroll into view
  * Selecting another cell aborts the previous load's remaining requests.
@@ -12,9 +12,9 @@ import { useStore } from '@nanostores/vue';
 import { ref, shallowRef, watch } from 'vue';
 import { loadSnapshot } from '~/lib/data/load';
 import { loadNameIndex } from '~/lib/data/name-index';
-import { MONTHS_IN_YEAR, monthCounts, occurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
+import { MONTHS_IN_YEAR, monthCounts, namedOccurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
 import { rememberCount } from '~/lib/map/cellCounts';
-import { nameFromRecords, namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
+import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
 import { useLatestLoad } from './useLatestLoad';
 
@@ -33,16 +33,11 @@ function useSpeciesLists() {
   /** This cell's lists already loaded, by group. */
   let lists = new Map<number | null, SpeciesRow[]>();
 
-  /** Show rows now, then again once the batched search has named the index's misses. */
-  async function show(key: number | null, rows: SpeciesRow[], signal: AbortSignal) {
-    const set = (speciesRows: SpeciesRow[]) => {
-      lists.set(key, speciesRows);
-      if (group.value === key) species.value = speciesRows;
-      if (key === null) cellSpecies.value = speciesRows;
-    };
-    set(rows);
-    const named = await nameFromRecords(rows, signal);
-    if (!signal.aborted) set(named);
+  /** Keep a group's rows, and show them if that group is picked. */
+  function show(key: number | null, rows: SpeciesRow[]) {
+    lists.set(key, rows);
+    if (group.value === key) species.value = rows;
+    if (key === null) cellSpecies.value = rows;
   }
 
   /** Forget everything, for a new cell. */
@@ -68,7 +63,7 @@ function useSpeciesLists() {
 function fetchCellFacets(hexFilter: OccurrenceFilter, signal: AbortSignal) {
   void loadSnapshot('tree');
   void loadNameIndex();
-  return occurrenceFacets(hexFilter, ['classKey', 'month', 'speciesKey'], {
+  return namedOccurrenceFacets(hexFilter, ['classKey', 'month', 'speciesKey'], {
     facetLimit: HEX_CLASSES,
     limits: { speciesKey: HEX_SPECIES },
     signal,
@@ -124,7 +119,7 @@ export function useHexSummary() {
       const { groups, rows } = await fetchCellLists(hexFilter, result, signal);
       if (signal.aborted) return;
       classes.value = groups;
-      await show(null, rows, signal);
+      show(null, rows);
     });
   }
 
@@ -135,7 +130,7 @@ export function useHexSummary() {
     if (select(key)) return;
     await run(async (signal) => {
       const rows = await fetchGroupRows(filter.value, hexGeometry.wkt, key, signal);
-      if (!signal.aborted) await show(key, rows, signal);
+      if (!signal.aborted) show(key, rows);
     });
   }
 

@@ -50,6 +50,18 @@ describe('node transport', () => {
     expect(fetcher.peak()).toBe(5);
   });
 
+  it('does not cache a GraphQL answer with errors, which GBIF sends as a 200', async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      seen.push(url);
+      return new Response(JSON.stringify({ data: { occurrenceSearch: null }, errors: [{ message: '400' }] }));
+    }) as typeof fetch;
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl, refresh: false });
+    await transport('https://graphql.test/graphql?query=x');
+    await transport('https://graphql.test/graphql?query=x');
+    expect(seen).toHaveLength(2);
+  });
+
   it('does not cache throttled responses', async () => {
     const fetcher = fakeFetch(429);
     const transport = createNodeTransport({ cacheDir: dir, fetchImpl: fetcher.impl, refresh: false });

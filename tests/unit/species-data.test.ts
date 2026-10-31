@@ -1,5 +1,5 @@
 /** Everything a species page shows, and links to species pages. */
-import { facets, json, stubNetwork } from './helpers/network';
+import { isGraphql, json, namedFacets, predicateOf, stubNetwork } from './helpers/network';
 
 const ROBIN = {
   key: 2492462,
@@ -19,52 +19,40 @@ const ROBIN = {
 function gbif(usage: Record<string, unknown> = ROBIN, redListCode = 'LC') {
   return stubNetwork((url) => {
     const path = url.pathname;
-    const params = url.searchParams;
     if (path === '/v1/species/2492462') return usage;
     if (path === '/v1/species/2492462/vernacularNames')
       return { results: [{ vernacularName: 'European Robin', language: 'eng' }] };
     if (path === '/v1/species/2492462/synonyms')
       return { results: [{ scientificName: 'Motacilla rubecula' }, { scientificName: 'Motacilla rubecula' }] };
-    if (path === '/v1/species/2492460/children')
-      return {
-        results: [
-          { key: 2492462, scientificName: 'Erithacus rubecula' },
-          { key: 7, canonicalName: 'Erithacus akahige', scientificName: 'Erithacus akahige (Temminck)' },
-        ],
-      };
-    if (path === '/v1/occurrence/search' && params.get('taxonKey') === '2492460')
-      return facets(0, 'SPECIES_KEY', [
-        [2492462, 100],
-        [7, 5],
+    if (isGraphql(url) && predicateOf(url)['taxonKey']?.[0] === '2492460')
+      return namedFacets(0, 'speciesKey', [
+        [2492462, 100, 'Erithacus rubecula'],
+        [7, 5, 'Erithacus akahige'],
         [8, 1],
       ]);
-    if (path === '/v1/occurrence/search')
+    if (isGraphql(url))
       return {
-        count: 1234,
-        results: [],
-        facets: [
-          {
-            field: 'YEAR',
-            counts: [
-              { name: '2020', count: 3 },
-              { name: '1999', count: 1 },
-            ],
+        data: {
+          occurrenceSearch: {
+            documents: { total: 1234 },
+            facet: {
+              year: [
+                { key: 2020, count: 3 },
+                { key: 1999, count: 1 },
+              ],
+              month: [{ key: 5, count: 9 }],
+              countryCode: [{ key: 'GB', count: 7 }],
+              datasetKey: [
+                { key: 'ds1', count: 6, dataset: { title: 'Garden birds' } },
+                { key: 'ds2', count: 1, dataset: null },
+              ],
+            },
           },
-          { field: 'MONTH', counts: [{ name: '5', count: 9 }] },
-          { field: 'COUNTRY', counts: [{ name: 'GB', count: 7 }] },
-          {
-            field: 'DATASET_KEY',
-            counts: [
-              { name: 'ds1', count: 6 },
-              { name: 'ds2', count: 1 },
-            ],
-          },
-        ],
+        },
       };
     if (path === '/v1/species/2492462/iucnRedListCategory') return { code: redListCode, iucnTaxonID: '22710' };
     if (path === '/v1/species/2492462/distributions')
       return { results: [{ country: 'IE', establishmentMeans: 'INTRODUCED', source: 'GRIIS - Ireland' }] };
-    if (path === '/v1/dataset/ds1') return { key: 'ds1', title: 'Garden birds' };
     return undefined;
   });
 }
@@ -113,7 +101,7 @@ describe('loadSpeciesData', () => {
       siblings: [{ key: 7, scientificName: 'Erithacus akahige', commonName: 'Japanese robin', count: 5 }],
     });
     expect(data.months[4]).toBe(9);
-    expect(calls.length).toBeLessThanOrEqual(11);
+    expect(calls.length).toBeLessThanOrEqual(8);
   });
 
   it('lists a sibling without a common name when neither the index nor GBIF has one', async () => {
@@ -145,7 +133,7 @@ describe('loadSpeciesData with sparse answers', () => {
   it('fills gaps from the lookup and leaves out what GBIF does not have', async () => {
     stubNetwork((url) => {
       if (url.pathname === '/v1/species/1') return { key: 1, scientificName: 'Alpha beta', rank: 'SPECIES' };
-      if (url.pathname === '/v1/occurrence/search') return { count: 2, results: [] };
+      if (isGraphql(url)) return { data: { occurrenceSearch: { documents: { total: 2 }, facet: {} } } };
       return bad();
     });
     const { loadSpeciesData } = await load();
@@ -168,8 +156,10 @@ describe('loadSpeciesData with sparse answers', () => {
         return { key: 2, scientificName: 'Alpha gamma', rank: 'SPECIES', genusKey: 9 };
       if (url.pathname === '/v1/species/3')
         return { key: 3, scientificName: 'Alpha delta', rank: 'SPECIES', genusKey: 10 };
-      if (url.pathname === '/v1/species/9/children') return { results: [] };
-      if (url.pathname === '/v1/occurrence/search') return { count: 0, results: [] };
+      if (isGraphql(url) && predicateOf(url)['taxonKey']?.[0] === '9')
+        return namedFacets(1, 'speciesKey', [[2, 1, 'Alpha gamma']]);
+      if (isGraphql(url) && predicateOf(url)['taxonKey']?.[0] === '10') return bad();
+      if (isGraphql(url)) return namedFacets(0, 'speciesKey', []);
       return bad();
     });
     const { loadSpeciesData } = await load();
