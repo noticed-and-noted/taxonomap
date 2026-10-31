@@ -23,11 +23,19 @@ export interface NamedFacetCount extends FacetCount {
   label?: string;
 }
 
+/** A taxon's first matching records, and GBIF's scientific name for it. */
+export interface TaxonRecords {
+  name?: string;
+  records: Occurrence[];
+}
+
+/** The envelope of every GraphQL answer: data, errors, or (when part of it failed) both. */
 interface GraphqlResponse<T> {
   data?: T | null;
   errors?: { message: string }[];
 }
 
+/** One facet value as GraphQL sends it, with the label its selection asked for. */
 interface FacetBucket {
   key: string | number;
   count: number;
@@ -35,8 +43,29 @@ interface FacetBucket {
   dataset?: { title?: string } | null;
 }
 
+/** One taxon facet value with its first records (firstRecordsByTaxon). */
+interface RecordsBucket {
+  key: string;
+  taxon?: { scientificName?: string } | null;
+  occurrences: { documents: { results: GraphqlRecord[] } };
+}
+
+/** A record as GraphQL sends it, with nulls for missing values. */
+type GraphqlRecord = { [Field in keyof Occurrence]?: Occurrence[Field] | null };
+
 /** REST facet names GraphQL spells differently. */
 const GRAPHQL_FACET: Partial<Record<FacetField, string>> = { country: 'countryCode' };
+
+/** The facet that buckets records by their taxon at each rank. */
+const RANK_FACET: Partial<Record<Rank, FacetField>> = {
+  KINGDOM: 'kingdomKey',
+  PHYLUM: 'phylumKey',
+  CLASS: 'classKey',
+  ORDER: 'orderKey',
+  FAMILY: 'familyKey',
+  GENUS: 'genusKey',
+  SPECIES: 'speciesKey',
+};
 
 const DEFAULT_FACET_LIMIT = 200;
 
@@ -81,15 +110,15 @@ function isFullyAnswered(body: unknown): boolean {
 
 /**
  * Runs one GraphQL query.
- * @param isComplete Whether a 200 body is a real answer; anything else is retried and never cached.
+ * @param options.isComplete Whether a 200 body is a real answer; anything else is retried and never cached.
  * @throws GbifUnavailableError when GBIF keeps answering with errors, and the HTTP client's errors.
  */
 async function runQuery<T>(
   query: string,
   variables: object,
-  signal?: AbortSignal,
-  isComplete: (body: unknown) => boolean = isFullyAnswered,
+  options: { signal?: AbortSignal | undefined; isComplete?: (body: unknown) => boolean } = {},
 ): Promise<T> {
+  const { signal, isComplete = isFullyAnswered } = options;
   const response = await http().getJson<GraphqlResponse<T>>(
     `${GBIF_GRAPHQL_BASE}/graphql`,
     { query, variables: JSON.stringify(variables) },
@@ -98,16 +127,18 @@ async function runQuery<T>(
   return response.data as T;
 }
 
-/** One facet's selection: counts, plus the name or title GBIF can attach. */
-function facetSelection(field: FacetField, size: number): string {
-  const label = Object.values(RANK_FACET).includes(field)
-    ? ' taxon { scientificName }'
-    : field === 'datasetKey'
-      ? ' dataset { title }'
-      : '';
-  return `${GRAPHQL_FACET[field] ?? field}(size: ${size}) { key count${label} }`;
+/** What GBIF can attach to a facet's values: the taxon's name, or the dataset's title. */
+function labelSelection(field: FacetField): string {
+  if (Object.values(RANK_FACET).includes(field)) return ' taxon { scientificName }';
+  return field === 'datasetKey' ? ' dataset { title }' : '';
 }
 
+/** One facet's selection: counts, plus the name or title GBIF can attach. */
+function facetSelection(field: FacetField, size: number): string {
+  return `${GRAPHQL_FACET[field] ?? field}(size: ${size}) { key count${labelSelection(field)} }`;
+}
+
+/** A facet bucket as the REST API's facet count, with its label. */
 function toNamedCount(bucket: FacetBucket): NamedFacetCount {
   const label = bucket.taxon?.scientificName ?? bucket.dataset?.title;
   // Year and month keys come back as numbers; REST (and every caller) has strings.
@@ -126,35 +157,26 @@ export async function namedOccurrenceFacets(
 ): Promise<{ count: number; facets: Record<string, NamedFacetCount[]> }> {
   const sizeOf = (field: FacetField) => options.limits?.[field] ?? options.facetLimit ?? DEFAULT_FACET_LIMIT;
   const selections = facets.map((field) => facetSelection(field, sizeOf(field))).join(' ');
-  const query = `query Facets($predicate: Predicate) { occurrenceSearch(predicate: $predicate) { documents(size: 0) { total } facet { ${selections} } } }`;
+  const query = `
+    query Facets($predicate: Predicate) {
+      occurrenceSearch(predicate: $predicate) {
+        documents(size: 0) { total }
+        facet { ${selections} }
+      }
+    }`;
+
   const data = await runQuery<{
     occurrenceSearch: { documents: { total: number }; facet: Record<string, FacetBucket[] | null> };
-  }>(query, { predicate: toPredicate(filterToParams(filter)) }, options.signal);
+  }>(query, { predicate: toPredicate(filterToParams(filter)) }, { signal: options.signal });
+
   const { documents, facet } = data.occurrenceSearch;
   const byField = facets.map((field) => [field, (facet[GRAPHQL_FACET[field] ?? field] ?? []).map(toNamedCount)]);
   return { count: documents.total, facets: Object.fromEntries(byField) };
 }
 
-/** The facet that buckets records by their taxon at each rank. */
-const RANK_FACET: Partial<Record<Rank, FacetField>> = {
-  KINGDOM: 'kingdomKey',
-  PHYLUM: 'phylumKey',
-  CLASS: 'classKey',
-  ORDER: 'orderKey',
-  FAMILY: 'familyKey',
-  GENUS: 'genusKey',
-  SPECIES: 'speciesKey',
-};
-
 /** Whether firstRecordsByTaxon can batch taxa of this rank. */
 export function canBatchRank(rank: Rank): boolean {
   return rank in RANK_FACET;
-}
-
-/** A taxon's first matching records, and GBIF's scientific name for it. */
-export interface TaxonRecords {
-  name?: string;
-  records: Occurrence[];
 }
 
 /**
@@ -173,34 +195,37 @@ export async function firstRecordsByTaxon(
 ): Promise<Map<number, TaxonRecords>> {
   const facet = RANK_FACET[rank];
   if (!facet) throw new Error(`GBIF can't batch records of rank ${rank}`);
+
   const { license, ...occurrenceFilter } = filter;
   const params = { ...filterToParams({ ...occurrenceFilter, taxonKeys: keys }), license };
-  const query = `query FirstRecords($predicate: Predicate) { occurrenceSearch(predicate: $predicate) { facet { ${facet}(size: ${keys.length}) { key taxon { scientificName } occurrences { documents(size: ${options.perTaxon}) { results { ${RECORD_FIELDS} } } } } } } }`;
-  const data = await runQuery<{
-    occurrenceSearch: { facet: Record<string, RecordsBucket[]> };
-  }>(query, { predicate: toPredicate(params) }, options.signal);
+  const records = `occurrences { documents(size: ${options.perTaxon}) { results { ${RECORD_FIELDS} } } }`;
+  const query = `
+    query FirstRecords($predicate: Predicate) {
+      occurrenceSearch(predicate: $predicate) {
+        facet { ${facet}(size: ${keys.length}) { key taxon { scientificName } ${records} } }
+      }
+    }`;
+
+  const data = await runQuery<{ occurrenceSearch: { facet: Record<string, RecordsBucket[]> } }>(
+    query,
+    { predicate: toPredicate(params) },
+    { signal: options.signal },
+  );
+
   const buckets = data.occurrenceSearch.facet[facet] ?? [];
-  const byTaxon = new Map<number, TaxonRecords>();
-  for (const bucket of buckets) {
-    const key = Number(bucket.key);
-    // GraphQL records leave their taxon keys null, but the bucket says whose they are.
-    const speciesKey = rank === 'SPECIES' ? key : undefined;
-    const records = bucket.occurrences.documents.results.map((record) => toOccurrence(record, speciesKey));
-    const name = bucket.taxon?.scientificName;
-    byTaxon.set(key, { records, ...(name && { name }) });
-  }
-  return byTaxon;
+  return new Map(buckets.map((bucket) => [Number(bucket.key), toTaxonRecords(bucket, rank)]));
 }
 
-interface RecordsBucket {
-  key: string;
-  taxon?: { scientificName?: string } | null;
-  occurrences: { documents: { results: GraphqlRecord[] } };
+/** A bucket's records, each given the bucket's species key, and the taxon's name. */
+function toTaxonRecords(bucket: RecordsBucket, rank: Rank): TaxonRecords {
+  // GraphQL records leave their taxon keys null, but the bucket says whose they are.
+  const speciesKey = rank === 'SPECIES' ? Number(bucket.key) : undefined;
+  const records = bucket.occurrences.documents.results.map((record) => toOccurrence(record, speciesKey));
+  const name = bucket.taxon?.scientificName;
+  return { records, ...(name && { name }) };
 }
 
-/** A record as GraphQL sends it, with nulls for missing values. */
-type GraphqlRecord = { [Field in keyof Occurrence]?: Occurrence[Field] | null };
-
+/** A GraphQL record as the REST API's occurrence: nulls left out, and the species key filled in when known. */
 function toOccurrence(record: GraphqlRecord, speciesKey: number | undefined): Occurrence {
   const present = Object.entries(record).filter(([, value]) => value !== null);
   const occurrence = Object.fromEntries(present) as unknown as Occurrence;
@@ -217,6 +242,7 @@ export async function vernacularNamesByTaxon(
   signal?: AbortSignal,
 ): Promise<Map<number, VernacularName[]>> {
   if (!keys.length) return new Map();
+
   const lookups = keys.map(
     (key) => `k${key}: taxonInfo(key: "${key}") { vernacularNames { vernacularName language } }`,
   );
@@ -224,9 +250,9 @@ export async function vernacularNamesByTaxon(
   const data = await runQuery<Record<string, { vernacularNames?: VernacularName[] | null } | null>>(
     `query VernacularNames { ${lookups.join(' ')} }`,
     {},
-    signal,
-    hasData,
+    { signal, isComplete: hasData },
   );
+
   const byTaxon = new Map<number, VernacularName[]>();
   for (const key of keys) {
     const taxon = data[`k${key}`];

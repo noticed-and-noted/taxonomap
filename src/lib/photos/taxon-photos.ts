@@ -288,13 +288,14 @@ const GBIF_PHOTO_SOURCES = [
  */
 const LEAD_RECORDS_PER_TAXON = 3;
 
-const swallow = (promise: Promise<UsableImage[]>) => promise.catch(() => [] as UsableImage[]);
+/** A source's photos, or none when it fails: a failed source just hands over to the next. */
+const orNoImages = (promise: Promise<UsableImage[]>) => promise.catch(() => [] as UsableImage[]);
 
 /** Sources A and B, iNaturalist's own photos, each fetched only when asked for. */
 function inatSources(match: InatTaxon | null, options: Opts): (() => Promise<UsableImage[]>)[] {
   return [
     async () => (match ? curatedImages(match) : []),
-    () => swallow(match ? votedObservations(match.id, options.signal).then(observationImages) : Promise.resolve([])),
+    () => orNoImages(match ? votedObservations(match.id, options.signal).then(observationImages) : Promise.resolve([])),
   ];
 }
 
@@ -303,7 +304,7 @@ function sources(key: number, match: InatTaxon | null, options: Opts): (() => Pr
   const gbifSources = GBIF_PHOTO_SOURCES.map(
     ({ filter, limit }) =>
       () =>
-        swallow(
+        orNoImages(
           gbifLimit(() => findImages({ ...filter, taxonKey: key }, { limit, ...options })).then(
             (result) => result.images,
           ),
@@ -362,6 +363,7 @@ export async function leadPhotos(
 ): Promise<{ images: Map<number, UsableImage>; names: Map<number, string> }> {
   const { matched, names } = await matchTaxa(taxa, options);
   const images = new Map<number, UsableImage>();
+
   const limit = pLimit(4);
   await Promise.all(
     taxa.map((taxon) =>
@@ -374,12 +376,14 @@ export async function leadPhotos(
       }),
     ),
   );
-  for (const { filter, limit: pageSize } of GBIF_PHOTO_SOURCES) {
+
+  for (const gbifSource of GBIF_PHOTO_SOURCES) {
     const missing = taxa.filter((taxon) => !images.has(taxon.key));
     if (!missing.length || options.signal?.aborted) break;
-    const found = await gbifLeadPhotos(missing, filter, pageSize, options);
+    const found = await gbifLeadPhotos(missing, gbifSource.filter, gbifSource.limit, options);
     for (const [key, image] of found) images.set(key, image);
   }
+
   return { images, names };
 }
 
@@ -390,16 +394,15 @@ async function gbifLeadPhotos(
   pageSize: number,
   options: Opts,
 ): Promise<Map<number, UsableImage>> {
-  const byRank = new Map<Rank, PhotoTaxon[]>();
-  for (const taxon of taxa) byRank.set(taxon.rank, [...(byRank.get(taxon.rank) ?? []), taxon]);
-  const found = await Promise.all(
-    [...byRank].map(([rank, group]) =>
-      group.length > 1 && canBatchRank(rank)
-        ? batchedLeadPhotos(group, rank, filter, pageSize, options)
-        : singleLeadPhotos(group, filter, pageSize, options),
+  const byRank = Map.groupBy(taxa, (taxon) => taxon.rank);
+  const photosByRank = await Promise.all(
+    [...byRank].map(([rank, taxaOfRank]) =>
+      taxaOfRank.length > 1 && canBatchRank(rank)
+        ? batchedLeadPhotos(taxaOfRank, rank, filter, pageSize, options)
+        : singleLeadPhotos(taxaOfRank, filter, pageSize, options),
     ),
   );
-  return new Map(found.flatMap((photos) => [...photos]));
+  return new Map(photosByRank.flatMap((photos) => [...photos]));
 }
 
 /** First photos of several taxa of one rank, from one request, or one request each when that fails. */
@@ -417,6 +420,7 @@ async function batchedLeadPhotos(
   ).catch(() => null);
   // GraphQL failing doesn't stop the REST searches the taxa's own pages make.
   if (!byTaxon) return options.signal?.aborted ? new Map() : singleLeadPhotos(taxa, filter, pageSize, options);
+
   const photos = new Map<number, UsableImage>();
   for (const [key, { records }] of byTaxon) {
     const first = records.flatMap(usableImages)[0];
@@ -435,7 +439,7 @@ async function singleLeadPhotos(
   const firsts = await Promise.all(
     taxa.map(async (taxon) => {
       const search = gbifLimit(() => findImages({ ...filter, taxonKey: taxon.key }, { limit: pageSize, ...options }));
-      const [first] = await swallow(search.then((result) => result.images));
+      const [first] = await orNoImages(search.then((result) => result.images));
       return [taxon.key, first] as const;
     }),
   );
