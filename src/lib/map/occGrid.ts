@@ -77,6 +77,26 @@ export function gridLevel(zoom: number, lat: number, width: number, height: numb
   return level(equatorZoom - (close ? Math.floor(drop + 1e-9) : 0));
 }
 
+/** How closely zoomPastLevel finds a switch: well under a frame of a wheel zoom. */
+const SWITCH_ZOOM_PRECISION = 0.01;
+
+/**
+ * The lowest zoom, to within SWITCH_ZOOM_PRECISION above it, at which the grid is finer than `level`.
+ * @param levelAt The grid level at a zoom, rising (or level) as the zoom does.
+ * @returns Infinity if the grid is no finer even at `maxZoom`.
+ */
+export function zoomPastLevel(levelAt: (zoom: number) => number, level: number, maxZoom: number): number {
+  if (levelAt(maxZoom) <= level) return Infinity;
+  let below = 0;
+  let above = maxZoom;
+  while (above - below > SWITCH_ZOOM_PRECISION) {
+    const middle = (below + above) / 2;
+    if (levelAt(middle) > level) above = middle;
+    else below = middle;
+  }
+  return above;
+}
+
 /**
  * GBIF's adhoc tiles (any refinement filter) snap records to geohash cells,
  * finer only every 2–3 zooms (measured: steps at 4, 7, 10, 12, 14). Unless a

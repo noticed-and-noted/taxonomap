@@ -74,6 +74,8 @@ export interface OccLayer {
   cellAt(point: LngLat): Hex | undefined;
   /** The cell containing a point at any grid level, wherever it is, loading its tile and the ring around it. */
   findCell(point: LngLat, level: number): Promise<Hex | undefined>;
+  /** The grid level the layer would show at this zoom and centre latitude, under the current filters. */
+  levelAt(zoom: number, lat: number): number;
   /** Draw again, e.g. after `isEmpty` learns of more empty cells. */
   redraw(): void;
   /** Stop loading and restore the map's methods the layer wrapped. */
@@ -207,7 +209,7 @@ class OccLayerController {
   constructor(map: MlMap, options: OccLayerOptions) {
     this.#map = map;
     this.#options = options;
-    this.#level = this.#levelAt(map.getZoom(), map.getCenter().lat);
+    this.#level = this.levelAt(map.getZoom(), map.getCenter().lat);
     this.#want = { filter: '', level: this.#level, view: [], ring: [] };
     options.onLevel(this.#level);
 
@@ -235,7 +237,7 @@ class OccLayerController {
     return [canvas.clientWidth, canvas.clientHeight] as const;
   }
 
-  #levelAt(zoom: number, lat: number) {
+  levelAt(zoom: number, lat: number) {
     const hexLevel = gridLevel(zoom, lat, ...this.#size());
     return needsAdhoc(this.#options.filter()) ? adhocLevel(hexLevel) : hexLevel;
   }
@@ -476,7 +478,7 @@ class OccLayerController {
     if (now - this.#lastMoveAt < MOVE_EVERY_MS) return;
     this.#lastMoveAt = now;
     const map = this.#map;
-    if (this.#levelAt(map.getZoom(), map.getCenter().lat) !== this.#level) return;
+    if (this.levelAt(map.getZoom(), map.getCenter().lat) !== this.#level) return;
     const view = this.#viewTiles();
     const shown = new Set(this.#want.view.map(tileCoordinateKey));
     const isSameView = view.length === shown.size && view.every((tile) => shown.has(tileCoordinateKey(tile)));
@@ -487,7 +489,7 @@ class OccLayerController {
     this.#ahead = [];
     this.#later = [];
     const map = this.#map;
-    const next = this.#levelAt(map.getZoom(), map.getCenter().lat);
+    const next = this.levelAt(map.getZoom(), map.getCenter().lat);
     if (next !== this.#level) {
       // Old-level tiles would hold the fetch slots the new view needs; a flight's look-ahead is at the new level, so it stays.
       this.#cancel((level) => level !== next);
@@ -517,7 +519,7 @@ class OccLayerController {
   #lookAhead(moveOptions: EaseToOptions | FlyToOptions) {
     const map = this.#map;
     const target = this.#destinationOf(moveOptions);
-    const level = this.#levelAt(moveOptions.zoom ?? map.getZoom(), target[1]);
+    const level = this.levelAt(moveOptions.zoom ?? map.getZoom(), target[1]);
     const filterId = this.#filterKey();
     if (level === this.#level) {
       const from = tileAt([map.getCenter().lng, map.getCenter().lat], level);
@@ -584,6 +586,7 @@ export function createOccLayer(map: MlMap, options: OccLayerOptions): OccLayer {
     collection: () => layer.collection(),
     cellAt: (point) => layer.cellAt(point),
     findCell: (point, level) => layer.findCell(point, level),
+    levelAt: (zoom, lat) => layer.levelAt(zoom, lat),
     redraw: () => layer.redraw(),
     destroy: () => layer.destroy(),
   };

@@ -16,6 +16,7 @@ import {
   tilePoints,
   tilesFor,
   zoomDrop,
+  zoomPastLevel,
   type LngLat,
 } from '~/lib/map/occGrid';
 import { TILE_EXTENT, hexAt, mvt, type Px } from './helpers/tiles';
@@ -86,6 +87,21 @@ describe('gridLevel', () => {
 
   it('uses the zoom as is once the map is flat', () => {
     expect(level(12.5, 70)).toBe(12);
+  });
+});
+
+describe('zoomPastLevel', () => {
+  const MAX_ZOOM = 22;
+
+  it('finds the zoom where the grid turns finer, at or just past the switch', () => {
+    const atLondon = (zoom: number) => gridLevel(zoom, 51.5, 1024, 768);
+    const switchZoom = zoomPastLevel(atLondon, 6, MAX_ZOOM);
+    expect(atLondon(switchZoom)).toBe(7);
+    expect(atLondon(switchZoom - 0.01)).toBe(6);
+  });
+
+  it('is Infinity when the grid never gets finer', () => {
+    expect(zoomPastLevel(() => 14, 14, MAX_ZOOM)).toBe(Infinity);
   });
 });
 
