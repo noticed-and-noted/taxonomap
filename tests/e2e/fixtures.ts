@@ -45,11 +45,20 @@ export const test = base.extend<{ external: string[]; showTour: boolean; seenTou
             refused.push(url.href);
             return route.abort('blockedbyclient');
           }
+          const body = Buffer.from(out.body);
+          const cors = { 'access-control-allow-origin': '*' };
+          // Media players ask for byte ranges, and Chrome only lets a sound seek when they're honoured.
+          const range = /^bytes=(\d+)-(\d*)$/.exec(route.request().headers()['range'] ?? '');
+          if (!range || out.status !== 200) {
+            return route.fulfill({ status: out.status, contentType: out.contentType, body, headers: cors });
+          }
+          const start = Number(range[1]);
+          const end = range[2] ? Number(range[2]) : body.length - 1;
           return route.fulfill({
-            status: out.status,
+            status: 206,
             contentType: out.contentType,
-            body: Buffer.from(out.body),
-            headers: { 'access-control-allow-origin': '*' },
+            body: body.subarray(start, end + 1),
+            headers: { ...cors, 'accept-ranges': 'bytes', 'content-range': `bytes ${start}-${end}/${body.length}` },
           });
         },
       );

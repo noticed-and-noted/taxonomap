@@ -1,4 +1,4 @@
-import { attribution, parseLicence, usableImages } from '~/lib/gbif/licence';
+import { attribution, parseLicence, usableImages, usableSounds } from '~/lib/gbif/licence';
 import type { Occurrence } from '~/lib/gbif/types';
 
 describe('licence', () => {
@@ -61,6 +61,24 @@ describe('licence', () => {
   it('lets unlicensed media inherit a ShareAlike record licence', () => {
     const images = usableImages(occ('https://creativecommons.org/licenses/by-sa/4.0/', [{ identifier: 'x.jpg' }]));
     expect(images.map((image) => image.licence)).toEqual(['CC-BY-SA']);
+  });
+
+  it('keeps licensed audio files as sounds, with the record licence as a fallback', () => {
+    const sounds = usableSounds({
+      ...occ('CC0_1_0', [
+        { type: 'Sound', identifier: 'a.mp3', format: 'audio/mpeg', creator: 'Ann' },
+        { type: 'Sound', identifier: 'b.wav', license: 'http://creativecommons.org/licenses/by-nc/4.0/' },
+        { type: 'Sound', identifier: 'https://sounds.test/page', format: 'text/html' }, // a page, not a file
+        { type: 'Sound', identifier: 'c.mp3', license: 'https://creativecommons.org/publicdomain/mark/1.0/' }, // own CC, unknown
+        { type: 'StillImage', identifier: 'd.jpg' }, // not a sound
+        { type: 'Sound' }, // no URL
+      ]),
+      rightsHolder: 'Record RH',
+    });
+    expect(sounds).toEqual([
+      { url: 'a.mp3', licence: 'CC0', creator: 'Ann', rightsHolder: 'Record RH' },
+      { url: 'b.wav', licence: 'CC-BY-NC', rightsHolder: 'Record RH' },
+    ]);
   });
 
   it('takes the rights holder and publisher from the media, else the record, with any references', () => {

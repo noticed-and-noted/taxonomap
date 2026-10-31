@@ -48,11 +48,6 @@ export function typeCode(occurrence: Occurrence): string {
   return TYPE_CODES[occurrence.basisOfRecord ?? ''] ?? '—';
 }
 
-/** Institution and catalogue number, for specimens. */
-export function institution(occurrence: Occurrence): string {
-  return [occurrence.institutionCode, occurrence.catalogNumber].filter(Boolean).join(' ');
-}
-
 /** How precise the point is ("Within 1 km"), noting when the observer blurred it; '' when unknown. */
 export function accuracy(occurrence: Occurrence): string {
   const metres = occurrence.coordinateUncertaintyInMeters;

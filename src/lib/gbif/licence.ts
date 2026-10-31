@@ -113,6 +113,35 @@ export function usableImages(occurrence: Occurrence): GbifImage[] {
   return images;
 }
 
+/** A sound on a GBIF occurrence record, played straight from its publisher (iNaturalist, xeno-canto…). */
+export interface UsableSound {
+  url: string;
+  licence: AllowedLicence;
+  creator?: string;
+  rightsHolder?: string;
+}
+
+/** A record's playable sounds, licensed by the same rule as usableImages. */
+export function usableSounds(occurrence: Occurrence): UsableSound[] {
+  const recordLicence = parseLicence(occurrence.license);
+  return (occurrence.media ?? []).flatMap((media) => {
+    if (media.type !== 'Sound' || !media.identifier) return [];
+    // Some identifiers are a web page about the sound, not the file itself.
+    if (media.format && !media.format.startsWith('audio/')) return [];
+    const licence = mediaLicence(media, recordLicence);
+    if (!licence) return [];
+    const rightsHolder = media.rightsHolder ?? occurrence.rightsHolder;
+    return [
+      {
+        url: media.identifier,
+        licence,
+        ...(media.creator && { creator: media.creator }),
+        ...(rightsHolder && { rightsHolder }),
+      },
+    ];
+  });
+}
+
 /** Whether a licence string names a specific CC licence (allowed or not). */
 export function isCreativeCommons(raw: string | undefined | null): boolean {
   return !!raw && /creativecommons\.org\/(licenses|publicdomain)\/|^\s*cc[ _-]?(0|by)/i.test(raw);

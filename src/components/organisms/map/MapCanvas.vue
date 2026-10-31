@@ -131,6 +131,9 @@ function syncOverlays() {
   sizeRecordPlace();
 }
 
+/** The viewer's choices a style is built from, as one comparable value. */
+const currentStyleChoice = () => `${$basemap.get()} ${theme()}`;
+
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
     hexes: occurrenceLayer?.collection() ?? EMPTY,
@@ -632,6 +635,7 @@ onMounted(async () => {
   const maplibre = await loadMapLibre();
   if (!container.value) return;
   const view = $mapView.get();
+  const styleChoice = currentStyleChoice();
   const style = await styleFor();
   const element = container.value;
   if (!element) return;
@@ -657,6 +661,8 @@ onMounted(async () => {
   listenToStores();
   followRecord();
   listenToPage();
+  // A basemap or theme picked while the first style loaded came before the listeners above.
+  if (currentStyleChoice() !== styleChoice) void rebuildStyle();
 });
 
 onBeforeUnmount(() => {

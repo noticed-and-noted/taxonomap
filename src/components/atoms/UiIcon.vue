@@ -23,6 +23,8 @@ const PATHS = {
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 1 1 0-18zM12 11v5M12 8h.01',
   // A picture frame: mountain and sun.
   photo: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM4 16l5-5 6 6m-1-3 2-2 4 4M15 8h.01',
+  play: 'M8 5v14l11-7z',
+  pause: 'M8 5v14M16 5v14',
   // Split into buttons; FILLS highlights the left one, for click hints.
   mouse: 'M10 3h4a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zM12 3v8M6 11h12',
   // A pointing finger, for tap hints.
@@ -32,6 +34,7 @@ const PATHS = {
 
 /** Solid parts drawn under an icon's strokes. */
 const FILLS: Partial<Record<keyof typeof PATHS, string>> = {
+  play: 'M8 5v14l11-7z',
   mouse: 'M12 3h-2a4 4 0 0 0-4 4v4h6z',
 };
 

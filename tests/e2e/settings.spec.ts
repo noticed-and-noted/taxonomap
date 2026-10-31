@@ -21,6 +21,20 @@ test('map colours are saved in the browser and the basemap in the URL', async ({
   await satelliteTile;
 });
 
+test('a basemap picked while the map is still loading is the one it shows', async ({ page }) => {
+  const STYLE_DELAY_MS = 1500;
+  // Holding back the plain style keeps the map loading while the switcher is already usable.
+  await page.route(/\/basemap\/\w+\.json$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, STYLE_DELAY_MS));
+    await route.fallback();
+  });
+  await page.goto('/');
+  const satelliteTile = page.waitForRequest(/\/basemap\/satellite\//);
+  await page.getByText('Satellite', { exact: true }).click();
+  await expect(page).toHaveURL(/base=satellite/);
+  await satelliteTile;
+});
+
 test('the phone Filters sheet holds the theme picker', { tag: '@mobile' }, async ({ page }, info) => {
   test.skip(info.project.name !== 'mobile', 'desktop has the header toggle instead');
   await page.goto('/');
