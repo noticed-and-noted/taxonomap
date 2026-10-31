@@ -395,25 +395,28 @@ async function gbifLeadPhotos(
   const found = await Promise.all(
     [...byRank].map(([rank, group]) =>
       group.length > 1 && canBatchRank(rank)
-        ? batchedLeadPhotos(group, rank, filter, options)
+        ? batchedLeadPhotos(group, rank, filter, pageSize, options)
         : singleLeadPhotos(group, filter, pageSize, options),
     ),
   );
   return new Map(found.flatMap((photos) => [...photos]));
 }
 
-/** First photos of several taxa of one rank, from one request; none when it fails. */
+/** First photos of several taxa of one rank, from one request, or one request each when that fails. */
 async function batchedLeadPhotos(
   taxa: readonly PhotoTaxon[],
   rank: Rank,
   filter: OccurrenceFilter,
+  pageSize: number,
   options: Opts,
 ): Promise<Map<number, UsableImage>> {
   const keys = taxa.map((taxon) => taxon.key);
   const photoFilter = { ...filter, hasImage: true, license: ALLOWED_LICENCE_ENUMS };
   const byTaxon = await gbifLimit(() =>
     firstRecordsByTaxon(keys, rank, photoFilter, { perTaxon: LEAD_RECORDS_PER_TAXON, ...options }),
-  ).catch(() => new Map());
+  ).catch(() => null);
+  // GraphQL failing doesn't stop the REST searches the taxa's own pages make.
+  if (!byTaxon) return options.signal?.aborted ? new Map() : singleLeadPhotos(taxa, filter, pageSize, options);
   const photos = new Map<number, UsableImage>();
   for (const [key, { records }] of byTaxon) {
     const first = records.flatMap(usableImages)[0];

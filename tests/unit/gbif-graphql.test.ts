@@ -105,6 +105,23 @@ describe('namedOccurrenceFacets', () => {
     expect(calls.filter(isGraphql)).toHaveLength(5);
     vi.useRealTimers();
   });
+
+  it('retries an answer whose search came back null beside an error', async () => {
+    vi.useFakeTimers();
+    let isBroken = true;
+    const calls = stubNetwork(() => ({
+      data: { occurrenceSearch: isBroken ? null : { documents: { total: 1 }, facet: {} } },
+      ...(isBroken && { errors: [{ message: '400: Bad Request' }] }),
+    }));
+    const api = await gbif();
+    const failing = api.namedOccurrenceFacets({}, ['month']).catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+    expect(await failing).toBeInstanceOf(api.GbifUnavailableError);
+    isBroken = false;
+    await expect(api.namedOccurrenceFacets({}, ['month'])).resolves.toEqual({ count: 1, facets: { month: [] } });
+    expect(calls.filter(isGraphql)).toHaveLength(5);
+    vi.useRealTimers();
+  });
 });
 
 describe('firstRecordsByTaxon', () => {

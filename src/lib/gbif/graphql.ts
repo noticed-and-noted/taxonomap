@@ -38,16 +38,6 @@ interface FacetBucket {
 /** REST facet names GraphQL spells differently. */
 const GRAPHQL_FACET: Partial<Record<FacetField, string>> = { country: 'countryCode' };
 
-const TAXON_FACETS = new Set<FacetField>([
-  'kingdomKey',
-  'phylumKey',
-  'classKey',
-  'orderKey',
-  'familyKey',
-  'genusKey',
-  'speciesKey',
-]);
-
 const DEFAULT_FACET_LIMIT = 200;
 
 /** The record fields batched lookups read: enough for an iNaturalist match and for usableImages. */
@@ -83,22 +73,34 @@ function hasData(body: unknown): boolean {
   return !!(body as GraphqlResponse<unknown> | null)?.data;
 }
 
+/** True when every top-level field came back: GBIF answers a field it failed on (a 400 or 5xx upstream) with null. */
+function isFullyAnswered(body: unknown): boolean {
+  const data = (body as GraphqlResponse<Record<string, unknown>> | null)?.data;
+  return !!data && Object.values(data).every((field) => field !== null);
+}
+
 /**
  * Runs one GraphQL query.
- * @throws GbifUnavailableError when GBIF keeps answering with errors only, and the HTTP client's errors.
+ * @param isComplete Whether a 200 body is a real answer; anything else is retried and never cached.
+ * @throws GbifUnavailableError when GBIF keeps answering with errors, and the HTTP client's errors.
  */
-async function runQuery<T>(query: string, variables: object, signal?: AbortSignal): Promise<T> {
+async function runQuery<T>(
+  query: string,
+  variables: object,
+  signal?: AbortSignal,
+  isComplete: (body: unknown) => boolean = isFullyAnswered,
+): Promise<T> {
   const response = await http().getJson<GraphqlResponse<T>>(
     `${GBIF_GRAPHQL_BASE}/graphql`,
     { query, variables: JSON.stringify(variables) },
-    { ttlMs: HOUR, isComplete: hasData, ...(signal && { signal }) },
+    { ttlMs: HOUR, isComplete, ...(signal && { signal }) },
   );
   return response.data as T;
 }
 
 /** One facet's selection: counts, plus the name or title GBIF can attach. */
 function facetSelection(field: FacetField, size: number): string {
-  const label = TAXON_FACETS.has(field)
+  const label = Object.values(RANK_FACET).includes(field)
     ? ' taxon { scientificName }'
     : field === 'datasetKey'
       ? ' dataset { title }'
@@ -218,11 +220,12 @@ export async function vernacularNamesByTaxon(
   const lookups = keys.map(
     (key) => `k${key}: taxonInfo(key: "${key}") { vernacularNames { vernacularName language } }`,
   );
-  // An unknown key answers null beside the others' names, so it doesn't fail the batch.
+  // An unknown key answers null (and a 404 error) beside the others' names, so it doesn't fail the batch.
   const data = await runQuery<Record<string, { vernacularNames?: VernacularName[] | null } | null>>(
     `query VernacularNames { ${lookups.join(' ')} }`,
     {},
     signal,
+    hasData,
   );
   const byTaxon = new Map<number, VernacularName[]>();
   for (const key of keys) {

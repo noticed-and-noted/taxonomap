@@ -49,6 +49,17 @@ const DEFAULT_CACHE_TTL_HOURS = 168;
 const DEFAULT_CONCURRENCY = 5;
 const MAX_RETRY_PAUSE_MS = 2 * MINUTE;
 
+/** True for a GraphQL answer with errors: GBIF sends it as a 200, and a retry may answer in full. */
+function isGraphqlFailure(url: string, body: string): boolean {
+  if (new URL(url).pathname !== '/graphql') return false;
+  try {
+    return (JSON.parse(body) as { errors?: unknown }).errors !== undefined;
+  } catch {
+    // Not JSON at all, so nothing worth keeping.
+    return true;
+  }
+}
+
 interface DiskCache {
   read(url: string): Promise<CachedResponse | undefined>;
   write(entry: CachedResponse): Promise<void>;
@@ -107,7 +118,9 @@ export function createNodeTransport(options: NodeTransportOptions = {}): Transpo
     if (response.status !== 200 && response.status !== 404) return response;
     const body = await response.text();
     const contentType = response.headers.get('content-type') ?? 'application/json';
-    await cache.write({ url, status: response.status, contentType, body, fetchedAt: Date.now() });
+    if (!isGraphqlFailure(url, body)) {
+      await cache.write({ url, status: response.status, contentType, body, fetchedAt: Date.now() });
+    }
     return new Response(body, { status: response.status, headers: { 'content-type': contentType } });
   }
 

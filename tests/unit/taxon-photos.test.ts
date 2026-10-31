@@ -22,6 +22,8 @@ interface World {
   fail?: { records?: number[]; voted?: number[]; names?: string[] };
   /** Species GBIF's batched iNaturalist record search (GraphQL) leaves out, or `all` to make it fail. */
   crowdedOut?: number[] | 'all';
+  /** Make GBIF's batched lead-photo search (GraphQL) fail. */
+  isPhotoBatchDown?: boolean;
   /** iNaturalist taxa found by name search. */
   byName?: Record<string, InatTaxon>;
   /** A baked name index, as /data/names.json serves it. */
@@ -73,6 +75,7 @@ function graphql(world: World, params: URLSearchParams): Response {
   const part = (key: string) => parts.find((candidate) => candidate.key === key);
   const isPhotoSearch = !!part('mediaType');
   if (!isPhotoSearch && world.crowdedOut === 'all') return new Response('bad', { status: 400 });
+  if (isPhotoSearch && world.isPhotoBatchDown) return new Response('bad', { status: 400 });
   const out = (world.crowdedOut ?? []) as number[];
   const recordsOf = (key: number): object[] => {
     if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, 3);
@@ -471,6 +474,19 @@ describe('finding iNaturalist taxa cheaply', () => {
     const photoSearches = calls.filter((call) => call.includes('mediaType'));
     expect(photoSearches).toHaveLength(2);
     expect(calls.some((call) => url(call).pathname === '/v1/occurrence/search')).toBe(false);
+  });
+
+  it('searches GBIF photos one taxon at a time when the batched search fails', async () => {
+    const calls = network({
+      ...base,
+      gbifInat: { 1: [occ(10, 'a.jpg')] },
+      gbifAny: { 2: [occ(20, 'b.jpg')] },
+      isPhotoBatchDown: true,
+    });
+    const { leadPhotos } = await load();
+    const { images } = await leadPhotos(species(1, 2));
+    expect([1, 2].map((key) => label(images.get(key)!))).toEqual(['gbif:a.jpg', 'gbif:b.jpg']);
+    expect(calls.some((call) => url(call).pathname === '/v1/occurrence/search')).toBe(true);
   });
 
   it('trusts the batch about the species it left out, and searches one by one only when it fails', async () => {
