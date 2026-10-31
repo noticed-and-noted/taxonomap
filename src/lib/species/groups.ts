@@ -7,7 +7,7 @@
  *   names              → baked index, then the facet's own names (GBIF's GraphQL API names
  *                         each value); the table calls `resolveNames` for any still missing
  *                         (cached detail lookups, 2 at a time) and `commonNames` for rows in
- *                         view without a common name
+ *                         view without a common name (1 GraphQL request a batch)
  *   photos             → the table calls `photosForKeys` for rows in view: each species'
  *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
@@ -17,11 +17,12 @@ import { loadSnapshot } from '~/lib/data/load';
 import { loadNameIndex } from '~/lib/data/name-index';
 import {
   getSpecies,
-  getVernacularNames,
   namedOccurrenceFacets,
+  vernacularNamesByTaxon,
   type NamedFacetCount,
   type OccurrenceFilter,
   type UsableImage,
+  type VernacularName,
 } from '~/lib/gbif';
 import { leadPhotos } from '~/lib/photos/taxon-photos';
 import { englishName } from './names';
@@ -136,22 +137,18 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
 }
 
 /**
- * English common names, picked as the species page picks them (same cached
- * request), a few at a time. Keys with no English name are left out.
+ * English common names, picked by `englishName()` from one batched GraphQL
+ * request. Keys with no English name are left out.
  */
 export async function commonNames(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
-  const limit = pLimit(CONCURRENCY);
   const names = new Map<number, string>();
-  await Promise.all(
-    keys.map((key) =>
-      limit(async () => {
-        if (signal?.aborted) return;
-        const vernaculars = await getVernacularNames(key, signal).catch(() => null);
-        const name = vernaculars && englishName(vernaculars.results, key);
-        if (name) names.set(key, name);
-      }),
-    ),
-  );
+  if (signal?.aborted) return names;
+  // Rows without a common name still show their scientific name.
+  const vernaculars = await vernacularNamesByTaxon(keys, signal).catch(() => new Map<number, VernacularName[]>());
+  for (const [key, taxonNames] of vernaculars) {
+    const name = englishName(taxonNames, key);
+    if (name) names.set(key, name);
+  }
   return names;
 }
 

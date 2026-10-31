@@ -1,4 +1,4 @@
-/** GBIF's GraphQL API: predicates from REST filters, named facets, and records per taxon. */
+/** GBIF's GraphQL API: predicates from REST filters, named facets, records and common names per taxon. */
 import { isGraphql, stubNetwork } from './helpers/network';
 
 async function gbif() {
@@ -154,5 +154,26 @@ describe('firstRecordsByTaxon', () => {
     const api = await gbif();
     expect([api.canBatchRank('GENUS'), api.canBatchRank('SUBSPECIES')]).toEqual([true, false]);
     await expect(api.firstRecordsByTaxon([1], 'SUBSPECIES', {}, { perTaxon: 1 })).rejects.toThrow(/SUBSPECIES/);
+  });
+});
+
+describe('vernacularNamesByTaxon', () => {
+  it('looks up every taxon in one request, leaving out those GBIF does not know', async () => {
+    const robin = { vernacularName: 'Robin', language: 'eng' };
+    const calls = stubNetwork(() => ({ data: { k7: { vernacularNames: [robin] }, k8: null, k9: {} } }));
+    const api = await gbif();
+    expect([...(await api.vernacularNamesByTaxon([7, 8, 9]))]).toEqual([
+      [7, [robin]],
+      [9, []],
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(sent(calls[0]!).query).toContain('k8: taxonInfo(key: "8") { vernacularNames { vernacularName language } }');
+  });
+
+  it('sends nothing for no taxa', async () => {
+    const calls = stubNetwork(() => undefined);
+    const api = await gbif();
+    expect((await api.vernacularNamesByTaxon([])).size).toBe(0);
+    expect(calls).toHaveLength(0);
   });
 });

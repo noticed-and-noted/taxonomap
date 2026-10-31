@@ -1,7 +1,7 @@
 /**
  * GBIF's GraphQL API, for what the REST API needs many requests for: facets
- * that carry each taxon's name or dataset's title, and the first records of
- * each of many taxa. Queries go as GET, so the HTTP cache, request sharing,
+ * that carry each taxon's name or dataset's title, the first records of each
+ * of many taxa, and many taxa's common names. Queries go as GET, so the HTTP cache, request sharing,
  * retries and the build's disk cache all apply, and the browser may cache
  * them (GBIF sends max-age).
  */
@@ -10,7 +10,7 @@ import { GBIF_GRAPHQL_BASE } from './config';
 import { http } from './http';
 import { filterToParams, type FacetField, type OccurrenceFilter } from './occurrence';
 import type { Params } from './params';
-import type { FacetCount, Occurrence, Rank } from './types';
+import type { FacetCount, Occurrence, Rank, VernacularName } from './types';
 
 export type Predicate =
   | { type: 'and' | 'or'; predicates: Predicate[] }
@@ -203,4 +203,31 @@ function toOccurrence(record: GraphqlRecord, speciesKey: number | undefined): Oc
   const present = Object.entries(record).filter(([, value]) => value !== null);
   const occurrence = Object.fromEntries(present) as unknown as Occurrence;
   return speciesKey === undefined ? occurrence : { ...occurrence, speciesKey };
+}
+
+/**
+ * Every common name of each taxon, in all languages, from one request however many taxa.
+ * GBIF's GraphQL draws on fewer checklists than REST's vernacularNames, so the name
+ * `englishName()` picks can differ from a species page's. Taxa GBIF doesn't know are left out.
+ */
+export async function vernacularNamesByTaxon(
+  keys: readonly number[],
+  signal?: AbortSignal,
+): Promise<Map<number, VernacularName[]>> {
+  if (!keys.length) return new Map();
+  const lookups = keys.map(
+    (key) => `k${key}: taxonInfo(key: "${key}") { vernacularNames { vernacularName language } }`,
+  );
+  // An unknown key answers null beside the others' names, so it doesn't fail the batch.
+  const data = await runQuery<Record<string, { vernacularNames?: VernacularName[] | null } | null>>(
+    `query VernacularNames { ${lookups.join(' ')} }`,
+    {},
+    signal,
+  );
+  const byTaxon = new Map<number, VernacularName[]>();
+  for (const key of keys) {
+    const taxon = data[`k${key}`];
+    if (taxon) byTaxon.set(key, taxon.vernacularNames ?? []);
+  }
+  return byTaxon;
 }

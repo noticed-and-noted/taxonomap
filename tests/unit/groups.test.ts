@@ -142,16 +142,23 @@ describe('without the baked data', () => {
 });
 
 describe('commonNames', () => {
-  it('picks each English name, leaving out failures and species without one', async () => {
-    stubNetwork((url) => {
-      if (url.pathname === '/v1/species/1/vernacularNames')
-        return { results: [{ vernacularName: 'robin', language: 'eng' }] };
-      if (url.pathname === '/v1/species/2/vernacularNames')
-        return { results: [{ vernacularName: 'moineau', language: 'fra' }] };
-      return json({}, 400);
-    });
+  it('picks each English name from one request, leaving out unknown species and those without one', async () => {
+    const calls = stubNetwork(() => ({
+      data: {
+        k1: { vernacularNames: [{ vernacularName: 'robin', language: 'eng' }] },
+        k2: { vernacularNames: [{ vernacularName: 'moineau', language: 'fra' }] },
+        k3: null,
+      },
+    }));
     const { commonNames } = await load();
     expect([...(await commonNames([1, 2, 3]))]).toEqual([[1, 'Robin']]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('names none when the request fails', async () => {
+    stubNetwork(() => json({}, 400));
+    const { commonNames } = await load();
+    expect((await commonNames([1, 2])).size).toBe(0);
   });
 
   it('skips the remaining lookups once superseded', async () => {
