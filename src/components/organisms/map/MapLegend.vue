@@ -19,6 +19,7 @@ import {
   $viewCheck,
   DEFAULT_VIEW,
 } from '~/stores/explorer';
+import { $nearMode } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 
 /** Below this the grid is too coarse (cells ~400 km) to say more than "nearby". */
@@ -29,6 +30,7 @@ const viewCheck = useStore($viewCheck);
 const isEmpty = computed(() => viewCheck.value.isEmpty);
 const view = useStore($mapView);
 const filter = useStore($occurrenceFilter);
+const isNearMode = useStore($nearMode);
 const colors = ref<string[]>(rampColors());
 // Bins follow the hex grid level (cells cover more ground when zoomed out).
 const labels = computed(() => binLabels(level.value));
@@ -77,7 +79,8 @@ const isEmptyAnywhere = computed(() => isEmpty.value && nearest.value === null);
 /** The notice's button, if any: nothing while checking or before the nearest records are known. */
 const action = computed(() => {
   if (isChecking.value || !isEmpty.value) return null;
-  if (nearest.value) return 'fly';
+  // Near me stays on its pin, so it offers no fly.
+  if (nearest.value) return isNearMode.value ? null : 'fly';
   return isEmptyAnywhere.value ? 'edit' : null;
 });
 
