@@ -1,13 +1,5 @@
 import type { Occurrence } from '~/lib/gbif';
-import {
-  aboutKey,
-  accuracy,
-  institution,
-  recordDate,
-  recordScientificName,
-  typeCode,
-  typeLabel,
-} from '~/lib/record-fields';
+import { aboutKey, accuracy, recordDate, recordScientificName, typeCode, typeLabel } from '~/lib/record-fields';
 
 const record = (fields: Partial<Occurrence>) => ({ key: 1, ...fields }) as Occurrence;
 
@@ -35,11 +27,6 @@ describe('record fields', () => {
     expect(typeCode(record({ basisOfRecord: 'FOSSIL_SPECIMEN' }))).toBe('FOS');
     expect(typeCode(record({}))).toBe('—');
     expect(typeLabel(record({}))).toBe('Unknown');
-  });
-
-  it('joins institution code and catalogue number', () => {
-    expect(institution(record({ institutionCode: 'NHMUK', catalogNumber: '123' }))).toBe('NHMUK 123');
-    expect(institution(record({}))).toBe('');
   });
 
   it('notes when the observer blurred the point', () => {

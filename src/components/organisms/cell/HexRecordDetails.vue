@@ -1,18 +1,18 @@
 <script setup lang="ts">
 /**
  * An expanded record's details: its photo (opening the lightbox of all its photos), who recorded it,
- * how precise it is or which institution holds it, its source, its sound, and links to the species and to GBIF.
+ * how precise it is, who published it, its source, its sound, and links to the species and to GBIF.
  */
-import { computed, type StyleValue } from 'vue';
+import { computed, ref, watch, type StyleValue } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import SoundPlayer from '~/components/molecules/SoundPlayer.vue';
-import type { Occurrence, UsableImage } from '~/lib/gbif';
+import { getOrganization, type Occurrence, type UsableImage } from '~/lib/gbif';
 import { usableSounds } from '~/lib/gbif/licence';
 import { initials } from '~/lib/format';
-import { accuracy, institution } from '~/lib/record-fields';
+import { accuracy } from '~/lib/record-fields';
 
 const props = defineProps<{
   occurrence: Occurrence;
@@ -37,6 +37,20 @@ const photo = computed(() => props.photos[0]);
 const isObservation = computed(() => props.occurrence.basisOfRecord === 'HUMAN_OBSERVATION');
 const source = computed(() => props.occurrence.datasetName ?? props.occurrence.publisher);
 const sound = computed(() => usableSounds(props.occurrence)[0]);
+const publisher = ref<string>();
+
+// Records carry only the publishing organisation's key, so its name is looked up.
+watch(
+  () => props.occurrence.publishingOrgKey,
+  async (key) => {
+    publisher.value = undefined;
+    if (!key) return;
+    // A failed lookup just leaves the row out; the GBIF link still credits the publisher.
+    const organization = await getOrganization(key).catch(() => null);
+    if (key === props.occurrence.publishingOrgKey) publisher.value = organization?.title;
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -89,15 +103,13 @@ const sound = computed(() => usableSounds(props.occurrence)[0]);
         <dt class="text-subtle">Recorded by</dt>
         <dd>{{ occurrence.recordedBy }}</dd>
       </div>
-      <template v-if="isObservation">
-        <div v-if="accuracy(occurrence)">
-          <dt class="text-subtle">Accuracy</dt>
-          <dd>{{ accuracy(occurrence) }}</dd>
-        </div>
-      </template>
-      <div v-else-if="institution(occurrence)">
-        <dt class="text-subtle">Institution</dt>
-        <dd>{{ institution(occurrence) }}</dd>
+      <div v-if="isObservation && accuracy(occurrence)">
+        <dt class="text-subtle">Accuracy</dt>
+        <dd>{{ accuracy(occurrence) }}</dd>
+      </div>
+      <div v-if="publisher">
+        <dt class="text-subtle">Publisher</dt>
+        <dd>{{ publisher }}</dd>
       </div>
       <div v-if="source">
         <dt class="text-subtle">Source</dt>

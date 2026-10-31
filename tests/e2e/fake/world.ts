@@ -216,6 +216,7 @@ function occurrenceSearch(params: URLSearchParams) {
     return {
       key: 4_000_000_000 + taxon.key * 10 + Math.floor(index / species.length),
       datasetKey: DATASETS[0]!.key,
+      publishingOrgKey: 'garden-bird-club',
       publisher: 'Garden Bird Club',
       license: 'http://creativecommons.org/licenses/by/4.0/legalcode',
       ...Object.fromEntries(
