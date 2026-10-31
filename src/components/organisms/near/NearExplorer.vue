@@ -24,7 +24,6 @@ import {
   type ClassGroup,
   type SpeciesRow,
 } from '~/lib/near/data';
-import { nameFromRecords } from '~/lib/species/groups';
 import { loadSpeciesManifest } from '~/lib/species/links';
 import { $flyTo, $mapMode, $occurrenceFilter } from '~/stores/explorer';
 import {
@@ -117,14 +116,8 @@ async function loadArea() {
     if (signal.aborted) return;
     total.value = summary.records;
     classes.value = summary.classes;
-    await showSpecies(rows, signal);
+    species.value = rows;
   });
-}
-
-async function showSpecies(rows: SpeciesRow[], signal: AbortSignal) {
-  species.value = rows;
-  const named = await nameFromRecords(rows, signal);
-  if (!signal.aborted) species.value = named;
 }
 
 /** Narrow the species list to one group (null for all); one request each time. */
@@ -135,7 +128,7 @@ async function pickGroup(key: number | null) {
   species.value = [];
   await runArea(async (signal) => {
     const rows = await speciesNear(searchArea, key, signal);
-    if (!signal.aborted) await showSpecies(rows, signal);
+    if (!signal.aborted) species.value = rows;
   });
 }
 

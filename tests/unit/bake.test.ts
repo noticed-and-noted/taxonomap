@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NamesSnapshot } from '~/lib/data/types';
-import { facets, json, stubNetwork } from './helpers/network';
+import { facets, isGraphql, json, predicateOf, stubNetwork } from './helpers/network';
 
 vi.mock('~/lib/gbif/server', () => import('~/lib/gbif'));
 
@@ -268,6 +268,15 @@ describe('bake with iNaturalist IDs', () => {
   const inat = (url: URL) => {
     if (url.host === 'api.inaturalist.org' && url.pathname === '/v2/taxa') return { results: [] };
     if (url.host === 'api.inaturalist.org') return { results: [{ id: 777, name: 'Species number10', rank_level: 10 }] };
+    if (isGraphql(url)) {
+      const asked = predicateOf(url)['taxonKey'] ?? [];
+      const bucket = {
+        key: '10',
+        taxon: { scientificName: 'Species number10' },
+        occurrences: { documents: { results: [{ key: 1, taxonID: '777' }] } },
+      };
+      return { data: { occurrenceSearch: { facet: { speciesKey: asked.includes('10') ? [bucket] : [] } } } };
+    }
     const keys = [...url.searchParams.getAll('speciesKey'), ...url.searchParams.getAll('taxonKey')];
     if (url.searchParams.has('datasetKey'))
       return {
@@ -317,8 +326,10 @@ describe('bake with iNaturalist IDs', () => {
       writeFileSync(join(dir, 'names.json'), JSON.stringify({ names: [[11, 'S', 'Species number11', null, 1, 555]] }));
       const calls = gbif(inat);
       await (await bake({ BAKE_DIR: dir, NAME_INDEX_SIZE: '3', INAT_IDS_REFRESH: '1' })).bakeToDisk();
-      const recordSearches = calls.filter((url) => url.searchParams.has('datasetKey'));
-      expect(recordSearches.flatMap((url) => url.searchParams.getAll('speciesKey'))).toContain('11');
+      const asked = calls.flatMap((url) =>
+        isGraphql(url) ? (predicateOf(url)['taxonKey'] ?? []) : url.searchParams.getAll('taxonKey'),
+      );
+      expect(asked).toContain('11');
     } finally {
       rmSync(dir, { recursive: true });
     }

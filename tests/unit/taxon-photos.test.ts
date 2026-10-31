@@ -20,7 +20,7 @@ interface World {
   voted: Record<number, Obs[]>;
   /** GBIF keys whose record lookup fails, iNaturalist taxa whose observations fail, and names whose search fails. */
   fail?: { records?: number[]; voted?: number[]; names?: string[] };
-  /** Species GBIF's batched record search (several speciesKeys) leaves out, or `all` to make it fail. */
+  /** Species GBIF's batched iNaturalist record search (GraphQL) leaves out, or `all` to make it fail. */
   crowdedOut?: number[] | 'all';
   /** iNaturalist taxa found by name search. */
   byName?: Record<string, InatTaxon>;
@@ -56,6 +56,41 @@ const occ = (key: number, url: string) => ({
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
 
+interface PredicatePart {
+  key?: string;
+  value?: string;
+  values?: string[];
+}
+
+/**
+ * GBIF's GraphQL API: records bucketed per taxon, from the iNaturalist record search (no
+ * mediaType) or a lead-photo search (first 3 photo records per taxon).
+ */
+function graphql(world: World, params: URLSearchParams): Response {
+  const facet = /facet \{ (\w+)\(/.exec(params.get('query') ?? '')![1]!;
+  const parts = (JSON.parse(params.get('variables')!) as { predicate: { predicates: PredicatePart[] } }).predicate
+    .predicates;
+  const part = (key: string) => parts.find((candidate) => candidate.key === key);
+  const isPhotoSearch = !!part('mediaType');
+  if (!isPhotoSearch && world.crowdedOut === 'all') return new Response('bad', { status: 400 });
+  const out = (world.crowdedOut ?? []) as number[];
+  const recordsOf = (key: number): object[] => {
+    if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, 3);
+    const record = world.records[key];
+    return record && !out.includes(key) ? [{ key: 1, datasetKey: 'd', ...record }] : [];
+  };
+  const buckets = part('taxonKey')!
+    .values!.map(Number)
+    .flatMap((key) => {
+      const results = recordsOf(key);
+      const name = world.records[key]?.species;
+      return results.length
+        ? [{ key: String(key), taxon: name ? { scientificName: name } : null, occurrences: { documents: { results } } }]
+        : [];
+    });
+  return json({ data: { occurrenceSearch: { facet: { [facet]: buckets } } } });
+}
+
 function network(world: World) {
   const calls: string[] = [];
   vi.stubGlobal('fetch', async (raw: string) => {
@@ -63,23 +98,7 @@ function network(world: World) {
     const parsedUrl = new URL(raw, 'http://site.test');
     const params = parsedUrl.searchParams;
     if (parsedUrl.pathname === '/data/names.json') return json({ v: 1, generated: '', names: world.names ?? [] });
-    if (
-      parsedUrl.host === 'api.gbif.org' &&
-      parsedUrl.pathname === '/v1/occurrence/search' &&
-      params.has('speciesKey')
-    ) {
-      if (world.crowdedOut === 'all') return new Response('bad', { status: 400 });
-      const out = (world.crowdedOut ?? []) as number[];
-      const results = params
-        .getAll('speciesKey')
-        .map(Number)
-        .flatMap((key) =>
-          world.records[key] && !out.includes(key)
-            ? [{ key: 1, datasetKey: 'd', speciesKey: key, ...world.records[key] }]
-            : [],
-        );
-      return json({ results, count: results.length, endOfRecords: true });
-    }
+    if (parsedUrl.host === 'graphql.gbif.org') return graphql(world, params);
     if (parsedUrl.host === 'api.gbif.org' && parsedUrl.pathname === '/v1/occurrence/search') {
       const key = Number(params.get('taxonKey'));
       if (params.get('limit') === '1') {
@@ -408,15 +427,20 @@ const speciesTaxa = (...ids: number[]) =>
   Object.fromEntries(ids.map((id) => [id, taxon(id, 10, [photo(id * 10)], [1, id])]));
 const recordsFor = (...keys: number[]) => Object.fromEntries(keys.map((key) => [key, { taxonID: String(key + 100) }]));
 const url = (raw: string) => new URL(raw, 'http://site.test');
+/** The batched iNaturalist record searches (GraphQL, without the photo searches' mediaType). */
 const batched = (calls: string[]) =>
-  calls.filter((call) => url(call).pathname === '/v1/occurrence/search' && url(call).searchParams.has('speciesKey'));
+  calls.filter((call) => url(call).pathname === '/graphql' && !call.includes('mediaType'));
+const batchedKeys = (call: string) =>
+  (
+    JSON.parse(url(call).searchParams.get('variables')!) as { predicate: { predicates: PredicatePart[] } }
+  ).predicate.predicates.find((part) => part.key === 'taxonKey')!.values!.length;
 const single = (calls: string[]) => calls.filter((call) => url(call).searchParams.get('limit') === '1');
 
 describe('finding iNaturalist taxa cheaply', () => {
   const base = { records: {}, taxa: {}, voted: {}, gbifInat: {}, gbifAny: {} };
   const species = (...keys: number[]) => keys.map((key) => ({ key, rank: 'SPECIES' as const }));
 
-  it('searches GBIF for several species’ iNaturalist records five to a request', async () => {
+  it('searches GBIF for every species’ iNaturalist records in one request', async () => {
     const keys = [1, 2, 3, 4, 5, 6, 7];
     const calls = network({
       ...base,
@@ -425,18 +449,37 @@ describe('finding iNaturalist taxa cheaply', () => {
     });
     const loaded = await load();
     const { images } = await loaded.leadPhotos(species(...keys));
-    expect(batched(calls).map((call) => new URL(call).searchParams.getAll('speciesKey').length)).toEqual([5, 2]);
+    expect(batched(calls).map(batchedKeys)).toEqual([7]);
     expect(single(calls)).toHaveLength(0);
     expect(keys.map((key) => label(images.get(key)!))).toEqual(keys.map((key) => `inat:${(key + 100) * 10}`));
   });
 
-  it('searches one by one for the species a batch left out or failed on', async () => {
+  it('finds GBIF photos for the species iNaturalist has none of in one request per source', async () => {
+    const calls = network({
+      ...base,
+      gbifInat: { 1: [occ(10, 'a.jpg')] },
+      gbifAny: { 2: [{ ...occ(20, 'b.jpg'), media: [{ type: 'Sound', identifier: 'x.mp3' }] }, occ(21, 'c.jpg')] },
+    });
+    const { leadPhotos } = await load();
+    const { images } = await leadPhotos(species(1, 2, 3));
+    expect([1, 2, 3].map((key) => images.get(key) && label(images.get(key)!))).toEqual([
+      'gbif:a.jpg',
+      // The first record holds no photo, so the lead is the next record's.
+      'gbif:c.jpg',
+      undefined,
+    ]);
+    const photoSearches = calls.filter((call) => call.includes('mediaType'));
+    expect(photoSearches).toHaveLength(2);
+    expect(calls.some((call) => url(call).pathname === '/v1/occurrence/search')).toBe(false);
+  });
+
+  it('trusts the batch about the species it left out, and searches one by one only when it fails', async () => {
     const keys = [1, 2, 3];
     const world = { ...base, records: recordsFor(...keys), taxa: speciesTaxa(101, 102, 103) };
     const calls = network({ ...world, crowdedOut: [2] });
     const { leadPhotos } = await load();
     await leadPhotos(species(...keys));
-    expect(single(calls).map((call) => new URL(call).searchParams.get('taxonKey'))).toEqual(['2']);
+    expect(single(calls)).toHaveLength(0);
 
     vi.unstubAllGlobals();
     const failed = network({ ...world, crowdedOut: 'all' });
@@ -466,7 +509,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     });
     const loaded = await load();
     const { images, names } = await loaded.leadPhotos(species(1, 2, 3, 4));
-    expect(single(calls)).toHaveLength(3);
+    expect(single(calls)).toHaveLength(0);
     expect([...images.keys()]).toEqual([2]);
     expect(names.size).toBe(0);
   });

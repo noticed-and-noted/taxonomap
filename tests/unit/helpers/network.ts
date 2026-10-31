@@ -46,3 +46,31 @@ export const facets = (count: number, field: string, counts: [string | number, n
 
 /** All values of a repeated query parameter, as numbers. */
 export const nums = (url: URL, key: string) => url.searchParams.getAll(key).map(Number);
+
+/** A GBIF GraphQL facet response for one field; a row's third value is its taxon's name. */
+export const namedFacets = (total: number, field: string, buckets: [string | number, number, string?][]) => ({
+  data: {
+    occurrenceSearch: {
+      documents: { total },
+      facet: {
+        [field]: buckets.map(([key, count, name]) => ({
+          key: String(key),
+          count,
+          taxon: name ? { scientificName: name } : null,
+        })),
+      },
+    },
+  },
+});
+
+/** Whether a request is a GraphQL query. */
+export const isGraphql = (url: URL) => url.pathname === '/graphql';
+
+/** The flat `{ key: values }` of a GraphQL request's predicate (its top-level `equals` and `in` parts). */
+export function predicateOf(url: URL): Record<string, string[]> {
+  const { predicate } = JSON.parse(url.searchParams.get('variables') ?? '{}') as {
+    predicate?: { predicates?: { key?: string; value?: string; values?: string[] }[] };
+  };
+  const parts = (predicate?.predicates ?? []).filter((part) => part.key);
+  return Object.fromEntries(parts.map((part) => [part.key!, part.values ?? [part.value!]]));
+}

@@ -2,7 +2,7 @@
 /** The panel data composables, run in a Vue effect scope against a fake GBIF. */
 import { effectScope, nextTick } from 'vue';
 import type { TreeNodeRow } from '~/lib/data/types';
-import { facets, snapshots, stubNetwork } from './helpers/network';
+import { facets, isGraphql, namedFacets, predicateOf, snapshots, stubNetwork } from './helpers/network';
 
 const TREE: TreeNodeRow[] = [{ k: 212, n: 'Aves', c: 'Birds', r: 'C', o: 1, s: 1 }];
 const YEARS = {
@@ -36,16 +36,19 @@ afterEach(() => vi.unstubAllGlobals());
 describe('useHexSummary', () => {
   it('loads the selected cell: count, months, groups and species', async () => {
     const calls = stubNetwork((url) => {
-      if (url.pathname !== '/v1/occurrence/search') return snapshots({ tree: TREE, names: [] })(url);
-      if (url.searchParams.has('classKey')) return facets(4, 'SPECIES_KEY', [[2, 4]]);
+      if (!isGraphql(url)) return snapshots({ tree: TREE, names: [] })(url);
+      if (predicateOf(url)['classKey']) return namedFacets(4, 'speciesKey', [[2, 4, 'Pica pica']]);
       return {
-        count: 40,
-        results: [],
-        facets: [
-          { field: 'CLASS_KEY', counts: [{ name: '212', count: 40 }] },
-          { field: 'MONTH', counts: [{ name: '3', count: 7 }] },
-          { field: 'SPECIES_KEY', counts: [{ name: '1', count: 4 }] },
-        ],
+        data: {
+          occurrenceSearch: {
+            documents: { total: 40 },
+            facet: {
+              classKey: [{ key: '212', count: 40, taxon: { scientificName: 'Aves' } }],
+              month: [{ key: 3, count: 7 }],
+              speciesKey: [{ key: '1', count: 4, taxon: { scientificName: 'Turdus merula' } }],
+            },
+          },
+        },
       };
     });
     const { explorer, hex } = await load();
@@ -53,17 +56,18 @@ describe('useHexSummary', () => {
     expect(summary.count.value).toBeNull();
     explorer.$hexGeometry.set(CELL);
     await vi.waitFor(() => expect(summary.species.value).toHaveLength(1));
+    expect(summary.species.value[0]).toMatchObject({ key: 1, scientificName: 'Turdus merula' });
     expect(summary.count.value).toBe(40);
     expect(summary.months.value[2]).toBe(7);
     expect(summary.classes.value).toEqual([{ key: 212, name: 'Aves', common: 'Birds', records: 40 }]);
     expect(summary.loading.value).toBe(false);
-    // Every facet request is limited to the cell (the name lookup is not).
-    const facetCalls = calls.filter((url) => url.searchParams.has('facet'));
-    expect(facetCalls.length).toBeGreaterThan(0);
-    expect(facetCalls.every((url) => url.searchParams.get('geometry') === CELL.wkt)).toBe(true);
-    // Totals, groups, months and species in one request.
+    // Totals, groups, months and named species in one request, limited to the cell.
+    const facetCalls = calls.filter(isGraphql);
     expect(facetCalls).toHaveLength(1);
-    expect(facetCalls[0]!.searchParams.getAll('facet')).toEqual(['classKey', 'month', 'speciesKey']);
+    expect(facetCalls[0]!.searchParams.get('variables')).toContain(JSON.stringify(CELL.wkt));
+    expect(facetCalls[0]!.searchParams.get('query')).toMatch(
+      /classKey\(size: 50\).*month\(size: 50\).*speciesKey\(size: 200\)/,
+    );
 
     // Picking a group asks once for its species; going back to all uses the loaded list.
     await summary.pickGroup(212);
@@ -73,9 +77,9 @@ describe('useHexSummary', () => {
     await summary.pickGroup(null);
     expect(summary.species.value.map((row) => row.key)).toEqual([1]);
     await summary.pickGroup(212);
-    const groupCalls = calls.filter((url) => url.searchParams.get('classKey') === '212');
+    const groupCalls = calls.filter((url) => isGraphql(url) && predicateOf(url)['classKey']?.[0] === '212');
     expect(groupCalls).toHaveLength(1);
-    expect(groupCalls[0]!.searchParams.get('geometry')).toBe(CELL.wkt);
+    expect(groupCalls[0]!.searchParams.get('variables')).toContain(JSON.stringify(CELL.wkt));
     stop();
   });
 
@@ -90,9 +94,7 @@ describe('useHexSummary', () => {
   });
 
   it('clears when the cell is deselected', async () => {
-    stubNetwork((url) =>
-      url.pathname === '/v1/occurrence/search' ? facets(5, 'CLASS_KEY', []) : snapshots({ tree: TREE })(url),
-    );
+    stubNetwork((url) => (isGraphql(url) ? namedFacets(5, 'classKey', []) : snapshots({ tree: TREE })(url)));
     const { explorer, hex } = await load();
     const { result: summary, stop } = run(() => hex.useHexSummary());
     explorer.$hexGeometry.set(CELL);

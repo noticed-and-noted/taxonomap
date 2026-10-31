@@ -5,7 +5,7 @@
 
 # Taxonomap
 
-A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, built for birders, naturalists, recorders and educators. Pages are pre-rendered at build time, interactive parts hydrate as Vue islands, and the browser calls `api.gbif.org` directly. There is no application server.
+A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, built for birders, naturalists, recorders and educators. Pages are pre-rendered at build time, interactive parts hydrate as Vue islands, and the browser calls GBIF (`api.gbif.org`, and `graphql.gbif.org` for named facets) directly. There is no application server.
 
 Live at [app.taxonomap.com](https://app.taxonomap.com).
 

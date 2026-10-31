@@ -7,6 +7,6 @@
 Configure the repository with:
 
 - **Secrets:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-- **Variables:** `CF_PAGES_PROJECT`, `GBIF_CONTACT_EMAIL`, `PUBLIC_SITE_URL`, and optionally `PUBLIC_GBIF_API_BASE`, `PUBLIC_GBIF_TILE_BASE`, `SPECIES_PRERENDER_COUNT`
+- **Variables:** `CF_PAGES_PROJECT`, `GBIF_CONTACT_EMAIL`, `PUBLIC_SITE_URL`, and optionally `PUBLIC_GBIF_API_BASE`, `PUBLIC_GBIF_TILE_BASE`, `PUBLIC_GBIF_GRAPHQL_BASE`, `SPECIES_PRERENDER_COUNT`
 
 **Request meter.** In dev, or with `?debug=requests` on any build, a small panel counts the tile, JSON and image requests made this session.

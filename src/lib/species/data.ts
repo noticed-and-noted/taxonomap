@@ -2,8 +2,9 @@
  * Everything a species page shows, loaded with a fixed, small number of
  * GBIF requests (no per-record loops):
  *   detail · vernacular names · synonyms · one facet request (years, months,
- *   countries, datasets) · one facet request for the genus (siblings ranked
- *   by records) · children of the genus (names) · dataset titles for the top 5.
+ *   countries, datasets with their titles) · one facet request for the genus
+ *   (siblings ranked by records, with their names) · siblings' common names.
+ * The facets come from GBIF's GraphQL API, which names each value.
  * Photos are not part of it: the gallery and cards fetch them in the browser
  * (see ~/lib/photos/taxon-photos).
  *
@@ -11,8 +12,6 @@
  * the /species/view fallback calls it in the browser.
  */
 import {
-  getChildren,
-  getDataset,
   getDistributions,
   getRedListCategory,
   getSpecies,
@@ -20,7 +19,8 @@ import {
   getVernacularNames,
   MONTHS_IN_YEAR,
   monthCounts,
-  occurrenceFacets,
+  namedOccurrenceFacets,
+  type NamedFacetCount,
   type NameUsage,
   type Rank,
 } from '~/lib/gbif';
@@ -111,14 +111,11 @@ export function speciesSlug(usage: Pick<NameUsage, 'canonicalName' | 'scientific
 /** The most-recorded other species of the same genus, with common names where known. */
 async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promise<SiblingSpecies[]> {
   if (!usage.genusKey) return [];
-  const [facets, children] = await Promise.all([
-    occurrenceFacets({ taxonKey: usage.genusKey }, ['speciesKey'], { facetLimit: 12 }),
-    getChildren(usage.genusKey, { limit: 200 }),
-  ]);
-  const names = new Map(children.results.map((child) => [child.key, child.canonicalName ?? child.scientificName]));
+  const facets = await namedOccurrenceFacets({ taxonKey: usage.genusKey }, ['speciesKey'], { facetLimit: 12 });
   const top = (facets.facets['speciesKey'] ?? [])
-    .map((facet) => ({ key: Number(facet.name), count: facet.count }))
-    .filter((sibling) => sibling.key !== usage.key && names.has(sibling.key))
+    .flatMap(({ name, count, label }) =>
+      label && Number(name) !== usage.key ? [{ key: Number(name), count, scientificName: label }] : [],
+    )
     .slice(0, SIBLING_LIMIT);
   if (!top.length) return [];
   // The baked index misses many species, so fall back to their GBIF vernacular names.
@@ -129,7 +126,7 @@ async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promi
         englishName((await getVernacularNames(sibling.key).catch(() => ({ results: [] }))).results, sibling.key);
       return {
         key: sibling.key,
-        scientificName: names.get(sibling.key) as string,
+        scientificName: sibling.scientificName,
         count: sibling.count,
         ...(siblingCommonName && { commonName: siblingCommonName }),
       };
@@ -155,14 +152,9 @@ async function distributionOf(usage: NameUsage): Promise<DistributionSummary | n
   return summariseDistributions(results);
 }
 
-/** The top datasets with their titles (GBIF is asked per dataset; one it can't find is "Unnamed dataset"). */
-function namedDatasets(counts: { name: string; count: number }[]) {
-  return Promise.all(
-    counts.map(async (entry) => {
-      const dataset = await getDataset(entry.name).catch(() => null);
-      return { key: entry.name, title: dataset?.title ?? 'Unnamed dataset', count: entry.count };
-    }),
-  );
+/** A dataset facet value with its title ("Unnamed dataset" when GBIF has none). */
+function datasetTitle(facet: NamedFacetCount) {
+  return { key: facet.name, title: facet.label ?? 'Unnamed dataset', count: facet.count };
 }
 
 /**
@@ -176,7 +168,7 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
   const [vernaculars, synonyms, facets, siblings, redList, distribution] = await Promise.all([
     getVernacularNames(key).catch(() => ({ results: [] })),
     getSynonyms(key, SYNONYM_LIMIT).catch(() => ({ results: [] })),
-    occurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
+    namedOccurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
       limits: { year: 700, month: MONTHS_IN_YEAR, country: 10, datasetKey: 5 },
     }),
     siblingsOf(usage, commonName).catch(() => []),
@@ -205,7 +197,7 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
       .sort((left, right) => left[0] - right[0]),
     months: monthCounts(facets.facets['month']),
     countries: (facets.facets['country'] ?? []).map((facet) => [facet.name, facet.count] as [string, number]),
-    datasets: await namedDatasets(facets.facets['datasetKey'] ?? []),
+    datasets: (facets.facets['datasetKey'] ?? []).map(datasetTitle),
     siblings,
     generated: new Date().toISOString(),
   };

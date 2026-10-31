@@ -1,9 +1,9 @@
 /**
  * Data for "What's near me":
  *   classes in the area      → 1 facet request
- *   species in the area      → 1 facet request per leading class, then 1 batched name search (see species/groups.ts)
+ *   species in the area      → 1 facet request per leading class, named by the facet (see species/groups.ts)
  */
-import { circleToWkt, occurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
+import { circleToWkt, namedOccurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
 import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
 
 export type { ClassGroup, SpeciesRow };
@@ -31,7 +31,10 @@ export async function classesNear(
   area: Area,
   signal?: AbortSignal,
 ): Promise<{ records: number; classes: ClassGroup[] }> {
-  const result = await occurrenceFacets(nearFilter(area), ['classKey'], { facetLimit: 50, ...(signal && { signal }) });
+  const result = await namedOccurrenceFacets(nearFilter(area), ['classKey'], {
+    facetLimit: 50,
+    ...(signal && { signal }),
+  });
   return { records: result.count, classes: await namedClasses(result.facets['classKey'] ?? []) };
 }
 

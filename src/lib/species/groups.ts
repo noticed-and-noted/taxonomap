@@ -4,10 +4,10 @@
  *   classes            → 1 facet request (callers fold it into one they make anyway)
  *   top species        → 1 facet request, AND'd with classKey for one group
  *                         (skipped when the caller's request already had the facet)
- *   names              → baked index; then `nameFromRecords`, up to 10 batched record searches
- *                         for misses, run after the rows are shown; the table calls
- *                         `resolveNames` for any it still needs (cached detail lookups, 2 at a time)
- *                         and `commonNames` for rows in view without a common name
+ *   names              → baked index, then the facet's own names (GBIF's GraphQL API names
+ *                         each value); the table calls `resolveNames` for any still missing
+ *                         (cached detail lookups, 2 at a time) and `commonNames` for rows in
+ *                         view without a common name
  *   photos             → the table calls `photosForKeys` for rows in view: each species'
  *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
@@ -18,9 +18,8 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import {
   getSpecies,
   getVernacularNames,
-  occurrenceFacets,
-  searchOccurrences,
-  type FacetCount,
+  namedOccurrenceFacets,
+  type NamedFacetCount,
   type OccurrenceFilter,
   type UsableImage,
 } from '~/lib/gbif';
@@ -60,103 +59,58 @@ function classNameMap() {
   return classNames;
 }
 
-/** Name a classKey facet (tree snapshot first, cached detail call otherwise). */
-export async function namedClasses(counts: readonly FacetCount[]): Promise<ClassGroup[]> {
+/** Name a classKey facet (tree snapshot first, then the facet's own name, then a cached detail call). */
+export async function namedClasses(counts: readonly NamedFacetCount[]): Promise<ClassGroup[]> {
   const names = await classNameMap();
   return Promise.all(
     counts.map(async (facet): Promise<ClassGroup> => {
       const key = Number(facet.name);
-      let name = names.get(key);
-      if (!name) {
-        const usage = await getSpecies(key).catch(() => null);
-        name = { name: usage?.canonicalName ?? usage?.scientificName ?? `Class ${key}` };
-      }
+      const name: { name: string; common?: string } =
+        names.get(key) ?? (facet.label ? { name: facet.label } : await classNameFromGbif(key));
       return { key, name: name.name, ...(name.common && { common: name.common }), records: facet.count };
     }),
   );
 }
 
+/** A class's name from its GBIF detail record, for the rare class the facet left unnamed. */
+async function classNameFromGbif(key: number): Promise<{ name: string }> {
+  const usage = await getSpecies(key).catch(() => null);
+  return { name: usage?.canonicalName ?? usage?.scientificName ?? `Class ${key}` };
+}
+
 /**
  * Top species for a filter (add `classKey` for one group), most-recorded first, named
- * from the baked index (see nameFromRecords for the rest). One facet request, or none
- * when the caller already has the speciesKey facet (`known`).
+ * from the baked index, then by the facet itself. One facet request, or none when the
+ * caller already has the speciesKey facet (`known`).
  */
 export async function topSpecies(
   filter: OccurrenceFilter,
-  options: { limit?: number; signal?: AbortSignal; known?: readonly FacetCount[] } = {},
+  options: { limit?: number; signal?: AbortSignal; known?: readonly NamedFacetCount[] } = {},
 ): Promise<SpeciesRow[]> {
   const { limit = 200, signal, known } = options;
   signal?.throwIfAborted();
   const counts =
     known ??
-    (await occurrenceFacets(filter, ['speciesKey'], { facetLimit: limit, ...(signal && { signal }) })).facets[
+    (await namedOccurrenceFacets(filter, ['speciesKey'], { facetLimit: limit, ...(signal && { signal }) })).facets[
       'speciesKey'
     ] ??
     [];
-  const rows = counts.map((facet) => ({ key: Number(facet.name), records: facet.count }));
-  if (!rows.length) return [];
+  if (!counts.length) return [];
 
-  // Wait for the whole index: without it nearly every row misses.
+  // Wait for the whole index: its names match the species pages', and it has common names.
   const nameIndex = await loadNameIndex();
   signal?.throwIfAborted();
-  const scientificNames = new Map<number, string>();
-  const common = new Map<number, string>();
-  for (const row of rows) {
-    const name = nameIndex?.get(row.key);
-    if (name) scientificNames.set(row.key, name.scientificName);
-    if (name?.commonName) common.set(row.key, name.commonName);
-  }
-  return rows.map((row) => {
-    const commonName = common.get(row.key);
-    const name = scientificNames.get(row.key);
+  return counts.map((facet): SpeciesRow => {
+    const key = Number(facet.name);
+    const indexed = nameIndex?.get(key);
+    const name = indexed?.scientificName ?? facet.label;
     return {
-      ...row,
-      scientificName: name ?? `Species ${row.key}`,
-      ...(commonName && { commonName }),
+      key,
+      records: facet.count,
+      scientificName: name ?? `Species ${key}`,
+      ...(indexed?.commonName && { commonName: indexed.commonName }),
       ...(!name && { unnamed: true as const }),
     };
-  });
-}
-
-/** Most species keys and records one batched search asks for (GBIF's page limit is 300). */
-const RECORD_SEARCH_KEYS = 150;
-const RECORD_SEARCH_LIMIT = 300;
-/** Batched searches per load: each one drops the species already named, so rarer ones get records. */
-const RECORD_SEARCH_ROUNDS = 10;
-
-/** Scientific names from one record search over `keys` (records carry their species name). */
-async function namesInRecords(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
-  const response = await searchOccurrences(
-    { speciesKeys: keys.slice(0, RECORD_SEARCH_KEYS) },
-    { limit: RECORD_SEARCH_LIMIT },
-    signal,
-  ).catch(() => null);
-  const names = new Map<number, string>();
-  for (const occurrence of response?.results ?? [])
-    if (occurrence.speciesKey !== undefined && occurrence.species) names.set(occurrence.speciesKey, occurrence.species);
-  return names;
-}
-
-/**
- * Names for rows the index missed, from a few batched record searches. Common
- * species fill a search's records, so each round asks only for the species still
- * unnamed. Returns `rows` itself when it names none.
- */
-export async function nameFromRecords(rows: SpeciesRow[], signal?: AbortSignal): Promise<SpeciesRow[]> {
-  const scientificNames = new Map<number, string>();
-  let misses = rows.filter((row) => row.unnamed).map((row) => row.key);
-  for (let round = 0; round < RECORD_SEARCH_ROUNDS && misses.length; round++) {
-    const found = await namesInRecords(misses, signal);
-    if (!found.size) break;
-    for (const [key, name] of found) scientificNames.set(key, name);
-    misses = misses.filter((key) => !found.has(key));
-  }
-  if (!scientificNames.size) return rows;
-  return rows.map((row) => {
-    const name = row.unnamed && scientificNames.get(row.key);
-    if (!name) return row;
-    const { unnamed: _unused, ...named } = row;
-    return { ...named, scientificName: name };
   });
 }
 
