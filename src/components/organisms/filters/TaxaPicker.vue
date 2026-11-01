@@ -7,41 +7,27 @@
  * content below and scrolls.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, nextTick, ref, useId, watch } from 'vue';
+import { computed, nextTick, ref, useId } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
-import UiIcon from '~/components/atoms/UiIcon.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
+import SelectedList, { SCROLL_AFTER } from '~/components/molecules/SelectedList.vue';
 import { useNameSearch } from '~/composables/useNameSearch';
-import { useScrollFade } from '~/composables/useScrollFade';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import type { NameHit } from '~/lib/gbif';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
 import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
 import { markDone } from '~/stores/onboarding';
-import { $taxa, addTaxon, removeTaxon, taxonFromHit } from '~/stores/taxon';
+import { $taxa, addTaxon, removeTaxon, taxonFromHit, type TaxonInfo } from '~/stores/taxon';
 
 const MAX_OPTIONS = 20;
-/** Past this many selected taxa, the list scrolls instead of growing. */
-const SCROLL_AFTER = 5;
 const uniqueId = useId();
 const listId = `${uniqueId}-taxa-list`;
 
 const keys = useStore($taxonKeys);
 const taxa = useStore($taxa);
 const manifest = useStore($speciesManifest);
-const list = ref<HTMLUListElement>();
-const { fadeTop, fadeBottom, update: updateFade } = useScrollFade(list);
-watch([taxa, list], () => nextTick(updateFade));
-
-// The list is sorted by key, so a newly added taxon (here or from the header
-// search) can land out of view once it scrolls; bring it into view.
-watch(keys, async (next, previous) => {
-  const added = next.find((addedKey) => !previous.includes(addedKey));
-  if (added === undefined) return;
-  await nextTick();
-  list.value?.querySelector(`[data-key="${added}"]`)?.scrollIntoView({ block: 'nearest' });
-});
+const nameOf = (taxon: TaxonInfo) => taxon.commonName ?? taxon.scientificName;
 
 const query = ref('');
 const active = ref(-1);
@@ -106,15 +92,15 @@ function onKey(event: KeyboardEvent) {
       <button v-if="taxa.length" type="button" class="link-btn" @click="clearAll">Clear</button>
     </div>
 
-    <ul
+    <SelectedList
       v-if="taxa.length"
-      ref="list"
-      class="selected-list fade-list mb-2 space-y-1"
-      :class="{ scrolls: taxa.length > SCROLL_AFTER, 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
-      :aria-label="`Selected taxa (${taxa.length})`"
-      @scroll.passive="updateFade"
+      class="mb-2"
+      :items="taxa"
+      label="Selected taxa"
+      :remove-label="(taxon) => `Remove ${nameOf(taxon)}`"
+      @remove="removeTaxon"
     >
-      <li v-for="taxon in taxa" :key="taxon.key" :data-key="taxon.key" class="selected-row">
+      <template #default="{ item: taxon }">
         <Transition name="name-in" @leave="(_element, done) => done()">
           <SkeletonBlock v-if="taxon.loading" width="8rem" height="0.75rem" rounded="full" label="Loading taxon name" />
           <span v-else class="min-w-0 truncate">
@@ -122,23 +108,15 @@ function onKey(event: KeyboardEvent) {
               :href="speciesPath(taxon.key, manifest)"
               class="taxon-link"
               :class="taxon.commonName ? 'font-medium' : 'sci-name'"
-              :title="`About ${taxon.commonName ?? taxon.scientificName}`"
-              >{{ taxon.commonName ?? taxon.scientificName }}</a
+              :title="`About ${nameOf(taxon)}`"
+              >{{ nameOf(taxon) }}</a
             >
             <span v-if="taxon.commonName" class="sci-name ml-1 text-xs text-muted">{{ taxon.scientificName }}</span>
           </span>
         </Transition>
         <span class="ml-auto shrink-0 text-[0.6875rem] text-subtle">{{ rankLabel(taxon.rank) }}</span>
-        <button
-          type="button"
-          class="remove-btn"
-          :aria-label="`Remove ${taxon.commonName ?? taxon.scientificName}`"
-          @click="removeTaxon(taxon.key)"
-        >
-          <UiIcon name="close" size="0.875rem" />
-        </button>
-      </li>
-    </ul>
+      </template>
+    </SelectedList>
     <p v-else class="mb-2 text-muted">All life.</p>
 
     <div class="relative">
@@ -214,44 +192,9 @@ function onKey(event: KeyboardEvent) {
   text-decoration: underline;
 }
 
-/* About five and a half rows (2rem each, 0.25rem apart): the cut-off row shows there is more. */
-.selected-list.scrolls {
-  max-height: 12.25rem;
-  overflow-y: auto;
-  padding-right: 0.25rem;
-  scrollbar-width: thin;
-}
-
-.selected-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2rem;
-  padding: 0 0.25rem 0 0.625rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-}
-
 .taxon-link:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-.remove-btn {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  font-size: 1rem;
-  line-height: 1;
-  color: var(--text-muted);
-}
-.remove-btn:hover {
-  color: var(--text);
-  background: var(--surface-3);
 }
 
 .options {

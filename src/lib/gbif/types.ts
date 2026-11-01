@@ -174,6 +174,9 @@ export interface Organization {
   homepage?: string[];
 }
 
+/** A publishing organisation's key and name. */
+export type OrganizationSuggestion = Pick<Organization, 'key' | 'title'>;
+
 export interface MapCapabilities {
   minLat: number;
   maxLat: number;
