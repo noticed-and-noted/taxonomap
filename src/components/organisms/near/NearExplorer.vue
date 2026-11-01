@@ -110,7 +110,6 @@ async function loadArea() {
     error.value = null;
     return;
   }
-  $flyTo.set({ kind: 'point', lng: searchArea.lng, lat: searchArea.lat, zoom: zoomForRadius(searchArea.radiusKm) });
   await runArea(async (signal) => {
     const [summary, rows] = await Promise.all([classesNear(searchArea, signal), speciesNear(searchArea, null, signal)]);
     if (signal.aborted) return;
@@ -134,11 +133,19 @@ async function pickGroup(key: number | null) {
 
 const setTab = (nextTab: 'species' | 'recent') => $nearTab.set(nextTab);
 
+/** Frame the pin and radius; filter changes leave the view where it is. */
+function flyToArea() {
+  if (!at.value) return;
+  $flyTo.set({ kind: 'point', lng: at.value.lng, lat: at.value.lat, zoom: zoomForRadius(radius.value) });
+}
+
 watch(area, () => void loadArea(), { deep: true });
+watch([at, radius], flyToArea);
 
 onMounted(() => {
   $mapMode.set('pin');
   void loadSpeciesManifest();
+  flyToArea();
   void loadArea();
 });
 

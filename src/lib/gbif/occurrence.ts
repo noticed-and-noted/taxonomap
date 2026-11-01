@@ -19,6 +19,8 @@ export interface Refinements {
   iucn?: readonly IucnCategory[] | undefined;
   /** GBIF date range "YYYY-MM-DD,YYYY-MM-DD" ("*" for an open end). */
   eventDate?: string | undefined;
+  /** Publishing organisation keys (publishingOrg), OR'd. */
+  publishers?: readonly string[] | undefined;
 }
 
 /** Query parameters for the refinement filters (media, basis of record, and so on). */
@@ -33,6 +35,7 @@ export function refinementParams(refinements: Refinements): Params {
     coordinateUncertaintyInMeters: refinements.maxUncertaintyM ? `0,${refinements.maxUncertaintyM}` : undefined,
     iucnRedListCategory: refinements.iucn,
     eventDate: refinements.eventDate,
+    publishingOrg: refinements.publishers,
   };
 }
 

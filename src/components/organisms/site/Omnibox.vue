@@ -24,6 +24,7 @@ import { boundsAround, recordsView } from '~/lib/map/taxonView';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
 import { $fitOnSearch } from '~/stores/fit-search';
+import { $nearMode } from '~/stores/near';
 import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
@@ -246,7 +247,8 @@ async function pickTaxon(hit: NameHit) {
     return;
   }
   markDone('search');
-  if ($fitOnSearch.get()) void flyToTaxon(hit.key);
+  // Near me keeps the map on its pin.
+  if ($fitOnSearch.get() && !$nearMode.get()) void flyToTaxon(hit.key);
 }
 
 /** Closest the map zooms in on a picked taxon, so a species known from one spot still shows its surroundings. */

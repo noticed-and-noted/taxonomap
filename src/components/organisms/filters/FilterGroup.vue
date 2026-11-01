@@ -29,6 +29,7 @@ import {
 } from '~/stores/explorer';
 import { markDone } from '~/stores/onboarding';
 import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
+import PublisherPicker from './PublisherPicker.vue';
 import TaxaPicker from './TaxaPicker.vue';
 import TimeSlider from './TimeSlider.vue';
 import WhenMenu from './WhenMenu.vue';
@@ -210,6 +211,8 @@ const clearDates = () => $dateRange.set(null);
     </template>
 
     <template v-else-if="group === 'how'">
+      <PublisherPicker />
+
       <fieldset>
         <legend class="group-label">Record type</legend>
         <label v-for="recordBasis in BASIS_OF_RECORD" :key="recordBasis" class="check-row">

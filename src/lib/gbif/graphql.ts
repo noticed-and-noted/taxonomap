@@ -1,16 +1,17 @@
 /**
  * GBIF's GraphQL API, for what the REST API needs many requests for: facets
  * that carry each taxon's name or dataset's title, the first records of each
- * of many taxa, and many taxa's common names. Queries go as GET, so the HTTP cache, request sharing,
+ * of many taxa, many taxa's common names, and publishers with their record counts. Queries go as GET, so the HTTP cache, request sharing,
  * retries and the build's disk cache all apply, and the browser may cache
  * them (GBIF sends max-age).
  */
+import { normalise } from '~/lib/data/name-index';
 import { HOUR } from '~/lib/util/time';
 import { GBIF_GRAPHQL_BASE } from './config';
 import { http } from './http';
 import { filterToParams, type FacetField, type OccurrenceFilter } from './occurrence';
 import type { Params } from './params';
-import type { FacetCount, Occurrence, Rank, VernacularName } from './types';
+import type { FacetCount, Occurrence, OrganizationSuggestion, Rank, VernacularName } from './types';
 
 export type Predicate =
   | { type: 'and' | 'or'; predicates: Predicate[] }
@@ -230,6 +231,53 @@ function toOccurrence(record: GraphqlRecord, speciesKey: number | undefined): Oc
   const present = Object.entries(record).filter(([, value]) => value !== null);
   const occurrence = Object.fromEntries(present) as unknown as Occurrence;
   return speciesKey === undefined ? occurrence : { ...occurrence, speciesKey };
+}
+
+/** Most publishers findPublishers returns. */
+export const MAX_PUBLISHER_RESULTS = 10;
+
+/** Publishers asked for: room for those whose name matches only inside a word. */
+const PUBLISHERS_TO_FILTER = 20;
+
+/** A publisher to offer, with its records under the filter. */
+export interface PublisherHit extends OrganizationSuggestion {
+  count: number;
+}
+
+/** Whether every typed word starts a word of the name ("inat" matches iNaturalist, not Coordinated). */
+export function nameMatches(name: string, query: string): boolean {
+  const nameWords = normalise(name).split(' ');
+  return normalise(query)
+    .split(' ')
+    .every((typed) => nameWords.some((word) => word.startsWith(typed)));
+}
+
+/**
+ * Publishers whose name matches what's typed, word by word, most records first, with their
+ * records under the filter. Only publishers with records there are listed, so never a
+ * sign-up GBIF rejected (it can't publish).
+ */
+export async function findPublishers(
+  query: string,
+  filter: OccurrenceFilter,
+  signal?: AbortSignal,
+): Promise<PublisherHit[]> {
+  const data = await runQuery<{
+    occurrencePublisherSuggest: { key: string; count: number; publisher: { title: string } }[];
+  }>(
+    `query Publishers($q: String, $predicate: Predicate) {
+      occurrencePublisherSuggest(q: $q, size: ${PUBLISHERS_TO_FILTER}, predicate: $predicate) {
+        key count publisher { title }
+      }
+    }`,
+    { q: query.trim(), predicate: toPredicate(filterToParams(filter)) },
+    { signal },
+  );
+
+  return data.occurrencePublisherSuggest
+    .map((hit) => ({ key: hit.key, title: hit.publisher.title, count: hit.count }))
+    .filter((hit) => nameMatches(hit.title, query))
+    .slice(0, MAX_PUBLISHER_RESULTS);
 }
 
 /**

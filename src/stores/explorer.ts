@@ -8,6 +8,7 @@ import { parseRange, rangeFilter, rangeLabel, serializeRange, type DateRange } f
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTHS } from '~/lib/format';
 import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
 import type { ScreenBox } from '~/lib/tour';
+import { $publisherKeys, $publisherNames, publisherName } from './publisher';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
@@ -355,6 +356,7 @@ export const FILTERS: readonly Filter[] = [
     (basisOfRecord) => ({ basisOfRecord }),
     (basis) => BASIS_LABELS[basis]!,
   ),
+  list($publisherKeys, 'how', (publishers) => ({ publishers }), publisherName),
   flag($hasPhoto, 'how', { hasImage: true }, 'Has photo'),
   flag($hasSound, 'how', { hasSound: true }, 'Has sound'),
 ];
@@ -373,8 +375,11 @@ export const $occurrenceFilter = computed(filterValues, (values): OccurrenceFilt
   return out;
 });
 
-/** The set filters (other than taxa) as pills, with the rail group each sits in. */
-export const $filterPills = computed(filterValues, (values) =>
+/**
+ * The set filters (other than taxa) as pills, with the rail group each sits in.
+ * Publisher names arrive after their keys, so the pills follow those too.
+ */
+export const $filterPills = computed([filterValues, $publisherNames], (values) =>
   FILTERS.flatMap((filterDef, index) =>
     filterDef.pills && filterDef.isSet(values[index])
       ? filterDef

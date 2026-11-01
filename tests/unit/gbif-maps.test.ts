@@ -93,6 +93,32 @@ describe('datasets and organisations', () => {
     await api.getOrganization('o1');
     expect(calls.map((url) => url.pathname)).toEqual(['/v1/dataset/d1', '/v1/organization/o1']);
   });
+
+  it('match publisher names word by word, not inside words', async () => {
+    const api = await gbif();
+    expect(api.nameMatches('iNaturalist.org', 'inat')).toBe(true);
+    expect(api.nameMatches('Natural History Museum Aarhus', 'natural history mus')).toBe(true);
+    expect(api.nameMatches('BCCM - Belgian Coordinated Collections', 'inat')).toBe(false);
+    expect(api.nameMatches('Muséum national', 'museum')).toBe(true);
+  });
+
+  it('find matching publishers with their counts under the filter, from one request', async () => {
+    const calls = stubNetwork(() => ({
+      data: {
+        occurrencePublisherSuggest: [
+          { key: 'real', count: 170, publisher: { title: 'iNaturalist.org' } },
+          { key: 'inside', count: 9, publisher: { title: 'Belgian Coordinated Collections' } },
+        ],
+      },
+    }));
+    const api = await gbif();
+    await expect(api.findPublishers(' inat ', { continents: ['EUROPE'] })).resolves.toEqual([
+      { key: 'real', title: 'iNaturalist.org', count: 170 },
+    ]);
+    const variables = JSON.parse(calls[0]!.searchParams.get('variables')!);
+    expect(variables.q).toBe('inat');
+    expect(variables.predicate.predicates).toEqual([{ type: 'in', key: 'continent', values: ['EUROPE'] }]);
+  });
 });
 
 describe('occurrence filters', () => {

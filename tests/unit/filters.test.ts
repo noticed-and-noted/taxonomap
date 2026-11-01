@@ -1,5 +1,7 @@
 import { filterToParams, hasRefinements, needsAdhoc, refinementParams, toQueryString } from '~/lib/gbif';
 
+const PUBLISHER = '28eb1a3f-1c15-4a95-931a-4af90ecb574d';
+
 describe('refinements', () => {
   it('maps every refinement to its GBIF search parameter', () => {
     const queryString = toQueryString(
@@ -30,6 +32,11 @@ describe('refinements', () => {
     expect(needsAdhoc({ months: [6] })).toBe(true);
     expect(needsAdhoc({ hasSound: true })).toBe(true);
     expect(needsAdhoc({ maxUncertaintyM: 10 })).toBe(true);
+    expect(needsAdhoc({ publishers: [PUBLISHER] })).toBe(true);
+  });
+
+  it('sends publishers as a repeated publishingOrg', () => {
+    expect(refinementParams({ publishers: [PUBLISHER] }).publishingOrg).toEqual([PUBLISHER]);
   });
 
   it('sends several taxa as a repeated taxonKey', () => {
@@ -127,6 +134,23 @@ describe('explorer filter stores', () => {
       'Fossil specimen',
     ]);
     explorer.clearFilters();
+  });
+
+  it('name publisher pills once their names are known, and clear them one at a time', async () => {
+    const explorer = await import('~/stores/explorer');
+    const publisher = await import('~/stores/publisher');
+    explorer.clearFilters();
+    publisher.addPublisher({ key: PUBLISHER, title: 'iNaturalist.org' });
+    expect(explorer.$occurrenceFilter.get()).toEqual({ publishers: [PUBLISHER] });
+    expect(explorer.$filterPills.get().map((pill) => [pill.group, pill.text])).toEqual([['how', 'iNaturalist.org']]);
+    explorer.$filterPills.get()[0]?.clear();
+    expect(publisher.$publisherKeys.get()).toEqual([]);
+  });
+
+  it('read only organisation keys from a publisher link', async () => {
+    const { codecs } = await import('~/stores/url-sync');
+    const codec = codecs.stringSet('publisher', { pattern: /^[0-9a-f-]{36}$/, limit: 1 });
+    expect(codec.parse(`not-a-key,${PUBLISHER},${PUBLISHER}`)).toEqual([PUBLISHER]);
   });
 
   it('read a pre-multi-select taxon link as a one-item list', async () => {

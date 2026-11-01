@@ -255,6 +255,20 @@ export const codecs = {
       ...options,
     };
   },
+  /** Comma-separated set of strings matching `pattern`, sorted for stable URLs, at most `limit` items. */
+  stringSet(
+    key: string,
+    { pattern, limit = Infinity }: { pattern: RegExp; limit?: number },
+    options: Partial<UrlCodec<string[]>> = {},
+  ): UrlCodec<string[]> {
+    return {
+      key,
+      default: [],
+      parse: (raw) => [...new Set(raw.split(',').filter((value) => pattern.test(value)))].sort().slice(0, limit),
+      serialize: (value) => [...value].sort().join(','),
+      ...options,
+    };
+  },
   string(key: string, options: Partial<UrlCodec<string | null>> & { pattern?: RegExp } = {}): UrlCodec<string | null> {
     const { pattern, ...rest } = options;
     return {
