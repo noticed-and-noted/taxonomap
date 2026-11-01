@@ -85,7 +85,8 @@ function isInView(map: MlMap, ring: GeoJSON.Position[], covered: CoveredEdges): 
   });
 }
 
-function boundsOf(ring: GeoJSON.Position[]): [number, number, number, number] {
+/** A ring's bounding box, as [west, south, east, north]. */
+export function boundsOf(ring: GeoJSON.Position[]): [number, number, number, number] {
   const lngs = ring.map((position) => position[0]!);
   const lats = ring.map((position) => position[1]!);
   return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
