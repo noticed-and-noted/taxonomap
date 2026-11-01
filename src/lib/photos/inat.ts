@@ -1,16 +1,19 @@
 /**
  * iNaturalist API (v2, keyless, CORS-enabled): taxa with their curated
- * photos, and research-grade observations sorted by votes. The client reuses
+ * photos and English common names, and research-grade observations sorted by votes. The client reuses
  * the GBIF client's retry, cache and in-flight dedupe, behind a throttle:
  * iNaturalist asks for about one request a second, so short bursts are
  * allowed and then requests are spaced out.
  */
+import { env } from '~/lib/env';
 import { createHttp, type Transport } from '~/lib/gbif/http';
 import { parseLicence, type InatImage } from '~/lib/gbif/licence';
 import { LruCache } from '~/lib/gbif/lru';
+import { tidy } from '~/lib/species/names';
 import { HOUR } from '~/lib/util/time';
 
-export const INAT_API_BASE = 'https://api.inaturalist.org';
+/** iNaturalist's API base (`PUBLIC_INAT_API_BASE`), so a build can be pointed at a stand-in. */
+export const INAT_API_BASE = (env['PUBLIC_INAT_API_BASE'] || 'https://api.inaturalist.org').replace(/\/+$/, '');
 
 /** Most taxa per /taxa request. */
 export const TAXA_BATCH = 30;
@@ -75,6 +78,8 @@ export interface InatTaxon {
   id: number;
   name: string;
   rank_level: number;
+  /** iNaturalist's English common name (asked for with LOCALE). */
+  preferred_common_name?: string | null;
   ancestor_ids?: number[];
   taxon_photos?: { photo: InatPhoto }[];
 }
@@ -85,7 +90,13 @@ interface InatObservation {
   photos?: InatPhoto[];
 }
 
-const TAXON_FIELDS = `id,name,rank_level,ancestor_ids,taxon_photos.photo.${PHOTO_FIELDS.replaceAll(',', ',taxon_photos.photo.')}`;
+/**
+ * Common names in English, whatever language the browser asks for, so every visitor sees the
+ * same name (and the same cache key).
+ */
+const LOCALE = 'en';
+
+const TAXON_FIELDS = `id,name,rank_level,preferred_common_name,ancestor_ids,taxon_photos.photo.${PHOTO_FIELDS.replaceAll(',', ',taxon_photos.photo.')}`;
 
 /** Taxa already fetched, by ID, so overlapping batches don't fetch them twice; capped so long sessions don't grow without end. */
 const taxa = new LruCache<InatTaxon>(2000);
@@ -102,7 +113,7 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
     if (chunk.every((id) => taxa.get(String(id)) !== undefined)) continue;
     const response = await inat.getJson<{ results: InatTaxon[] }>(
       `/v2/taxa/${chunk.join(',')}`,
-      { fields: TAXON_FIELDS },
+      { fields: TAXON_FIELDS, locale: LOCALE },
       { ...(signal && { signal }) },
     );
     for (const taxon of response.results) taxa.set(String(taxon.id), taxon, Infinity);
@@ -122,12 +133,18 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
 export async function searchTaxon(name: string, signal?: AbortSignal): Promise<InatTaxon | null> {
   const response = await inat.getJson<{ results: InatTaxon[] }>(
     '/v2/taxa',
-    { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS },
+    { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS, locale: LOCALE },
     { ...(signal && { signal }) },
   );
   const found = response.results.find((taxon) => taxon.name.toLowerCase() === name.toLowerCase());
   if (found) taxa.set(String(found.id), found, Infinity);
   return found ?? null;
+}
+
+/** iNaturalist's English name for a taxon, tidied like every other name; null when it has none. */
+export function inatCommonName(taxon: InatTaxon | null | undefined): string | null {
+  const name = taxon?.preferred_common_name?.trim();
+  return name ? tidy(name) : null;
 }
 
 /** Research-grade observations of a taxon with an openly licensed photo, most-voted first. */

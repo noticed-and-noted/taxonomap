@@ -1,10 +1,12 @@
 /**
  * Display info (names + rank) for the selected taxa, derived from
- * $taxonKeys. Uses the baked name index first, then cached GBIF calls.
+ * $taxonKeys. Uses the baked name index first, then GBIF for the taxon and
+ * iNaturalist (or GBIF) for its common name.
  */
 import { atom, onMount } from 'nanostores';
 import { nameIndexWithin } from '~/lib/data/name-index';
 import { getSpecies, getVernacularNames, type NameHit, type Rank } from '~/lib/gbif';
+import { inatNames } from '~/lib/photos/taxon-photos';
 import { englishName } from '~/lib/species/names';
 import { $taxonKeys, clearHexSelection, MAX_TAXA } from './explorer';
 
@@ -17,18 +19,27 @@ export interface TaxonInfo {
   loading?: true;
 }
 
-/** Names for a taxon key: the baked name index first, then the taxon and its common names from GBIF (cached). */
+/**
+ * A taxon's English name: iNaturalist's (no request when remembered from a visit before, and
+ * shared with the taxon's photo lookup otherwise), else the pick from GBIF's names (cached).
+ */
+async function taxonCommonName(key: number, rank: Rank): Promise<string | null> {
+  const fromInat = await inatNames([{ key, rank }]).catch(() => null);
+  const inatName = fromInat?.get(key);
+  if (inatName) return inatName;
+  // A taxon without its common name still beats no taxon.
+  const vernaculars = await getVernacularNames(key).catch(() => null);
+  return englishName(vernaculars?.results ?? [], key);
+}
+
+/** Names for a taxon key: the baked name index first, then the taxon from GBIF and its common name (cached). */
 export async function lookupTaxon(key: number): Promise<TaxonInfo | null> {
   const nameIndex = await nameIndexWithin();
   const hit = nameIndex?.get(key);
   if (hit) return taxonFromHit(hit);
   try {
-    const [usage, vernaculars] = await Promise.all([
-      getSpecies(key),
-      // A taxon without its common name still beats no taxon.
-      getVernacularNames(key).catch(() => null),
-    ]);
-    const commonName = englishName(vernaculars?.results ?? [], key);
+    const usage = await getSpecies(key);
+    const commonName = await taxonCommonName(key, usage.rank);
     return {
       key,
       scientificName: usage.canonicalName ?? usage.scientificName,

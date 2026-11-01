@@ -3,13 +3,15 @@
  * the baked index lacked it, and its common name when the index had none.
  * Photos are fetched for rows in view; names and common names for rows in
  * view, or for every row when `needAllNames` (sorting by name, searching).
- * Photos go first because their records carry names too. Each
+ * Photos go first because their records carry names too, and the iNaturalist
+ * taxa they fetch carry common names, so a row with a photo lookup needs no
+ * common-name request of its own (only GBIF's, if iNaturalist has none). Each
  * key is asked for once per data set; a new data set (`dataset` changes)
  * forgets the last one's lookups and aborts them.
  */
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import type { UsableImage } from '~/lib/gbif';
-import { commonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
+import { commonNames, gbifCommonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 
 /** Common names looked up per batch, so a search's matches appear as they arrive. */
 const COMMON_NAME_BATCH = 20;
@@ -88,7 +90,8 @@ type LookupState = ReturnType<typeof useLookupState>;
 /** Looks up common names the index had none for, a batch at a time so they show as they arrive. */
 async function lookUpCommonNames(keys: number[], state: LookupState) {
   const mine = state.sync();
-  const ask = keys.filter((key) => !state.asked.common.has(key));
+  // A row whose photo was looked up was named by that lookup.
+  const ask = keys.filter((key) => !state.asked.common.has(key) && !state.asked.photo.has(key));
   for (const key of ask) state.asked.common.add(key);
   if (ask.length) await trackNames(state, () => lookUpCommonNamesInBatches(ask, mine, state));
 }
@@ -112,7 +115,25 @@ async function lookUpCommonNamesInBatches(ask: number[], mine: AbortController |
   }
 }
 
-/** Looks up lead photos (whose records also name species) for rows in view. */
+/**
+ * Merges the common names a photo lookup found, then asks GBIF for the rows iNaturalist didn't name.
+ * @param keys The rows the photo lookup was for that have no common name.
+ */
+async function mergePhotoCommonNames(
+  keys: readonly number[],
+  found: ReadonlyMap<number, string>,
+  mine: AbortController | undefined,
+  state: LookupState,
+) {
+  if (!state.isCurrent(mine)) return;
+  mergeInto(state.lateCommon, found);
+  const unnamed = keys.filter((key) => !found.has(key));
+  if (!unnamed.length) return;
+  const fromGbif = await gbifCommonNames(unnamed, mine?.signal);
+  if (state.isCurrent(mine)) mergeInto(state.lateCommon, fromGbif);
+}
+
+/** Looks up lead photos (whose records also name species, and whose iNaturalist taxa give common names) for rows in view. */
 async function lookUpPhotos(
   photos: number[],
   rows: () => readonly SpeciesRow[],
@@ -120,7 +141,20 @@ async function lookUpPhotos(
   state: LookupState,
 ) {
   const named = new Map(rows().flatMap((row) => (row.unnamed ? [] : [[row.key, row.scientificName] as const])));
-  const found = await photosForKeys(photos, mine?.signal, named);
+  const withCommonName = new Set(rows().flatMap((row) => (row.commonName ? [row.key] : [])));
+  const needCommon = photos.filter((key) => !withCommonName.has(key) && !state.asked.common.has(key));
+  for (const key of needCommon) state.asked.common.add(key);
+  let commonNamesMerged: Promise<void> | undefined;
+  const mergeCommonNames = (commonNames: ReadonlyMap<number, string>) => {
+    commonNamesMerged = mergePhotoCommonNames(needCommon, commonNames, mine, state);
+    if (needCommon.length) void trackNames(state, () => commonNamesMerged!);
+  };
+  const found = await photosForKeys(photos, mine?.signal, named, mergeCommonNames).catch((error: unknown) => {
+    // No iNaturalist taxa, so no names from them: GBIF's names still come.
+    if (!commonNamesMerged) mergeCommonNames(new Map());
+    throw error;
+  });
+  await commonNamesMerged;
   if (!state.isCurrent(mine)) return undefined;
   mergeInto(state.latePhotos, found.images);
   state.photoDone.value = new Set([...state.photoDone.value, ...photos]);
@@ -175,11 +209,11 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
     (needAllNames() ? rows() : inViewRows.value).filter((row) => !row.commonName).map((row) => row.key),
   );
 
-  // Common names run alongside photos: neither needs the other.
-  watch(needCommon, (keys) => lookUpCommonNames(keys, state), { immediate: true });
+  // Photos first, so a row they will name isn't asked for twice; common names for the rest run alongside.
   watch([needPhotos, needNames], ([photoKeys, nameKeys]) => lookUpPhotosAndNames(photoKeys, nameKeys, rows, state), {
     immediate: true,
   });
+  watch(needCommon, (keys) => lookUpCommonNames(keys, state), { immediate: true });
 
   const { lateCommon, lateNames, noName, latePhotos, photoDone, namesInFlight } = state;
   return {

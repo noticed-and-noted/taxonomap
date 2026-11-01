@@ -25,7 +25,8 @@ export async function bakeToDisk(onStep?: (key: string) => void): Promise<string
   startFreshBake();
   const dir = bakeDir();
   await mkdir(dir, { recursive: true });
-  const snapshots = { years: bakeYears, names: bakeNames, tree: bakeTree, 'species-list': bakeSpeciesList };
+  // The species list before the names, which index every species with a page; the tree reads the names.
+  const snapshots = { years: bakeYears, 'species-list': bakeSpeciesList, names: bakeNames, tree: bakeTree };
   for (const [key, bake] of Object.entries(snapshots)) {
     // Each step's progress bar starts from zero.
     bakeProgress.clear();

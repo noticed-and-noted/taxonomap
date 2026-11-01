@@ -5,7 +5,7 @@
  * thin) follow once typing pauses (`SEARCH_DEBOUNCE_MS`). Each new query aborts the last.
  */
 import { computed, onScopeDispose, ref } from 'vue';
-import { bakedIndexProvider, matchHit, nameIndexWithin } from '~/lib/data/name-index';
+import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
 import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
 import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
@@ -62,6 +62,12 @@ function rankByMatch(hits: NameHit[], text: string): NameHit[] {
   return scored.sort((first, second) => second.score - first.score).map(({ hit }) => hit);
 }
 
+/** A live hit named as the index names it (iNaturalist's name, baked), so a taxon shows one name everywhere. */
+function withIndexedName(hit: NameHit): NameHit {
+  const indexed = nameIndexIfLoaded()?.get(hit.key)?.commonName;
+  return indexed && indexed !== hit.commonName ? { ...hit, commonName: indexed } : hit;
+}
+
 /** Asks GBIF's live providers, best matches first; `failed` is true when every one of them did. */
 async function askLiveProviders(text: string, indexHitCount: number, signal: AbortSignal) {
   const results = await Promise.allSettled([
@@ -70,7 +76,7 @@ async function askLiveProviders(text: string, indexHitCount: number, signal: Abo
   ]);
   return {
     hits: rankByMatch(
-      results.flatMap((result) => (result.status === 'fulfilled' ? result.value : [])),
+      results.flatMap((result) => (result.status === 'fulfilled' ? result.value.map(withIndexedName) : [])),
       text,
     ),
     failed: results.every((result) => result.status === 'rejected'),

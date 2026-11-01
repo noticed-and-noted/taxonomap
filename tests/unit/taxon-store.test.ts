@@ -49,6 +49,25 @@ describe('lookupTaxon', () => {
     await expect(lookupTaxon(1)).resolves.toBeNull();
   });
 
+  it('names a taxon as iNaturalist does, without asking GBIF for its names', async () => {
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v1/species/359') return { key: 359, scientificName: 'Mammalia', rank: 'CLASS' };
+      if (url.pathname === '/v1/occurrence/search' && url.searchParams.get('datasetKey'))
+        return { results: [{ key: 1, taxonID: '40151' }], count: 1, endOfRecords: true };
+      if (url.host === 'api.inaturalist.org' && url.pathname === '/v2/taxa/40151')
+        return { results: [{ id: 40151, name: 'Mammalia', rank_level: 50, preferred_common_name: 'Mammals' }] };
+      return snapshots({ names: NAMES })(url);
+    });
+    const { lookupTaxon } = await load();
+    await expect(lookupTaxon(359)).resolves.toEqual({
+      key: 359,
+      scientificName: 'Mammalia',
+      rank: 'CLASS',
+      commonName: 'Mammals',
+    });
+    expect(calls.some((url) => url.pathname.endsWith('/vernacularNames'))).toBe(false);
+  });
+
   it('keeps a taxon whose common names fail to load', async () => {
     stubNetwork((url) => {
       if (url.pathname === '/v1/species/44') return { key: 44, scientificName: 'Chordata', rank: 'PHYLUM' };

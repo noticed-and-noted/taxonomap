@@ -561,9 +561,10 @@ describe('finding iNaturalist taxa cheaply', () => {
     const world = { ...base, records: recordsFor(1, 2), taxa: speciesTaxa(101, 102) };
     network(world);
     await (await load()).leadPhotos(species(1, 2));
+    // Each with iNaturalist's name, null here: these taxa have none.
     expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
-      [1, 101],
-      [2, 102],
+      [1, 101, null],
+      [2, 102, null],
     ]);
 
     vi.unstubAllGlobals();
@@ -618,8 +619,8 @@ describe('finding iNaturalist taxa cheaply', () => {
       'gbif:j.jpg',
     ]);
     expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
-      [2, 102],
-      [1, 901],
+      [2, 102, null],
+      [1, 901, null],
     ]);
   });
 
@@ -680,7 +681,7 @@ describe('remembered iNaturalist IDs', () => {
     vi.stubGlobal('localStorage', undefined);
     const loaded = await load();
     expect(loaded.knownInatId(1)).toBeUndefined();
-    loaded.rememberInatIds(new Map([[1, 11]]));
+    loaded.rememberInatMatches(new Map([[1, { id: 11 }]]));
     expect(loaded.knownInatId(1)).toBe(11);
     loaded.forgetInatId(1);
     expect(loaded.knownInatId(1)).toBeUndefined();
@@ -708,12 +709,12 @@ describe('remembered iNaturalist IDs', () => {
     const store = stubStorage();
     const setItem = vi.spyOn(localStorage, 'setItem');
     const loaded = await load();
-    loaded.rememberInatIds(new Map([[1, 11]]));
-    loaded.rememberInatIds(new Map([[1, 11]]));
-    loaded.rememberInatIds(
+    loaded.rememberInatMatches(new Map([[1, { id: 11 }]]));
+    loaded.rememberInatMatches(new Map([[1, { id: 11 }]]));
+    loaded.rememberInatMatches(
       new Map([
-        [2, 22],
-        [1, 12],
+        [2, { id: 22 }],
+        [1, { id: 12 }],
       ]),
     );
     loaded.forgetInatId(9);
@@ -722,10 +723,44 @@ describe('remembered iNaturalist IDs', () => {
     expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([[1, 12]]);
   });
 
+  it('remembers names beside IDs, keeping a name while the ID stays the same', async () => {
+    const store = stubStorage();
+    const loaded = await load();
+    loaded.rememberInatMatches(
+      new Map([
+        [1, { id: 11, name: 'Robin' }],
+        [2, { id: 22, name: null }],
+      ]),
+    );
+    loaded.rememberInatMatches(new Map([[1, { id: 11 }]]));
+    expect(loaded.knownInatName(1)).toBe('Robin');
+    expect(loaded.knownInatName(2)).toBeNull();
+    expect(loaded.knownInatName(3)).toBeUndefined();
+    loaded.rememberInatMatches(new Map([[1, { id: 12 }]]));
+    expect(loaded.knownInatName(1)).toBeUndefined();
+    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
+      [2, 22, null],
+      [1, 12],
+    ]);
+  });
+
+  it('reads stored names, ignoring ones that are not text', async () => {
+    stubStorage({
+      'inat-ids-v2': JSON.stringify([
+        [1, 11, 'Robin'],
+        [2, 22, null],
+        [3, 33, 5],
+      ]),
+    });
+    const loaded = await load();
+    expect([1, 2, 3].map(loaded.knownInatName)).toEqual(['Robin', null, undefined]);
+    expect(loaded.knownInatId(3)).toBe(33);
+  });
+
   it('keeps the newest 3000', async () => {
     const store = stubStorage();
     const loaded = await load();
-    loaded.rememberInatIds(new Map(Array.from({ length: 3002 }, (_unused, index) => [index, index + 1])));
+    loaded.rememberInatMatches(new Map(Array.from({ length: 3002 }, (_unused, index) => [index, { id: index + 1 }])));
     const kept = JSON.parse(store.get('inat-ids-v2')!) as [number, number][];
     expect(kept).toHaveLength(3000);
     expect(kept[0]).toEqual([2, 3]);
@@ -740,7 +775,65 @@ describe('remembered iNaturalist IDs', () => {
       },
     });
     const loaded = await load();
-    loaded.rememberInatIds(new Map([[1, 11]]));
+    loaded.rememberInatMatches(new Map([[1, { id: 11 }]]));
     expect(loaded.knownInatId(1)).toBe(11);
+  });
+});
+
+describe('iNaturalist common names', () => {
+  const base = { records: {}, taxa: {}, voted: {}, gbifInat: {}, gbifAny: {} };
+  const species = (...keys: number[]) => keys.map((key) => ({ key, rank: 'SPECIES' as const }));
+  const named = (id: number, name: string | null): InatTaxon => ({
+    ...taxon(id, 10, [photo(id * 10)]),
+    preferred_common_name: name,
+  });
+  const world = {
+    ...base,
+    records: recordsFor(1, 2),
+    taxa: { 101: named(101, 'european robin'), 102: named(102, null) },
+  };
+  const inatCalls = (calls: string[]) => calls.filter((call) => url(call).host === 'api.inaturalist.org');
+
+  it('come with the lead photos, from the same requests, in English and tidied', async () => {
+    const calls = network(world);
+    const heard: ReadonlyMap<number, string>[] = [];
+    const { commonNames } = await (
+      await load()
+    ).leadPhotos(species(1, 2), { onCommonNames: (names) => void heard.push(names) });
+    expect(commonNames).toEqual(new Map([[1, 'European robin']]));
+    expect(heard).toEqual([commonNames]);
+    const taxaCall = url(inatCalls(calls)[0]!);
+    expect(taxaCall.searchParams.get('locale')).toBe('en');
+    expect(taxaCall.searchParams.get('fields')).toContain('preferred_common_name');
+    expect(inatCalls(calls)).toHaveLength(1);
+  });
+
+  it('are remembered, so the next visit names a taxon without a request', async () => {
+    const store = stubStorage();
+    network(world);
+    expect(await (await load()).inatNames(species(1, 2))).toEqual(
+      new Map([
+        [1, 'European robin'],
+        [2, null],
+      ]),
+    );
+
+    vi.unstubAllGlobals();
+    stubStorage(Object.fromEntries(store));
+    const calls = network(world);
+    expect(await (await load()).inatNames(species(1, 2))).toEqual(
+      new Map([
+        [1, 'European robin'],
+        [2, null],
+      ]),
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it('are never searched for by name: a species with no iNaturalist record just has none', async () => {
+    const calls = network({ ...base, byName: { Nobody: named(9, 'Somebody') } });
+    const names = await (await load()).inatNames([{ key: 3, rank: 'SPECIES', name: 'Nobody' }]);
+    expect(names).toEqual(new Map([[3, null]]));
+    expect(calls.some((call) => url(call).pathname === '/v2/taxa')).toBe(false);
   });
 });

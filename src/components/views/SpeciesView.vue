@@ -17,6 +17,7 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
+import { withInatName } from '~/lib/species/inat-name';
 import { loadSpeciesManifest, similarItems, speciesPath, type SpeciesManifest } from '~/lib/species/links';
 import { wikipediaIntro, type WikipediaIntro } from '~/lib/species/wikipedia';
 
@@ -52,8 +53,11 @@ async function load() {
   void loadIntro(speciesKey);
   try {
     const nameIndex = await loadNameIndex();
-    data.value = await loadSpeciesData(speciesKey, (taxonKey) => nameIndex?.get(taxonKey)?.commonName ?? null);
-    const loaded = data.value;
+    const indexedName = (taxonKey: number) => nameIndex?.get(taxonKey)?.commonName ?? null;
+    const speciesData = await loadSpeciesData(speciesKey, indexedName);
+    // The index holds iNaturalist's names already; otherwise ask, sharing the gallery's match.
+    const loaded = indexedName(speciesKey) ? speciesData : await withInatName(speciesData);
+    data.value = loaded;
     document.title = `${loaded.commonName ? `${loaded.commonName} (${loaded.canonicalName})` : loaded.canonicalName} · Taxonomap`;
   } catch (failure) {
     const kind = classifyError(failure);

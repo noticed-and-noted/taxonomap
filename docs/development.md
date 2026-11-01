@@ -26,20 +26,21 @@ pnpm dev             # http://localhost:4321
 
 ## Environment variables
 
-| Variable                                  | Default                     | Used for                                                                                                                    |
-| ----------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`      | JSON API base (browser and build)                                                                                           |
-| `PUBLIC_GBIF_TILE_BASE`                   | = API base                  | Map tile base                                                                                                               |
-| `PUBLIC_GBIF_GRAPHQL_BASE`                | `https://graphql.gbif.org`  | GraphQL API base: facets with names, records per taxon (browser and build)                                                  |
-| `PUBLIC_SITE_URL`                         | `https://app.taxonomap.com` | Canonical URLs, sitemap, Open Graph                                                                                         |
-| `GBIF_CONTACT_EMAIL`                      | none                        | Build-time `User-Agent: Taxonomap/<version> (contact: …)`                                                                   |
-| `GBIF_CACHE_TTL_HOURS`                    | `168`                       | Build-time disk-cache freshness                                                                                             |
-| `GBIF_CACHE_REFRESH`                      | `0`                         | `1` ignores the disk cache for this build                                                                                   |
-| `SPECIES_PRERENDER_COUNT`                 | `2000`                      | Number of pre-rendered species pages                                                                                        |
-| `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)         | Species in the baked common-name index (`/data/names.json`), each with its iNaturalist taxon ID when the bake can match one |
-| `INAT_IDS_REFRESH`                        | `0`                         | `1` makes `pnpm bake` look up every iNaturalist ID again, instead of reusing the last bake's                                |
-| `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `photon`                    | Place search provider (`photon`, or `nominatim` on your own instance); searched as you type, debounced                      |
-| `PUBLIC_BASEMAP_*`                        | see `.env.example`          | Override the Plain (dark/light) and Satellite basemaps                                                                      |
+| Variable                                  | Default                       | Used for                                                                                                                                                                      |
+| ----------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_GBIF_API_BASE`                    | `https://api.gbif.org`        | JSON API base (browser and build)                                                                                                                                             |
+| `PUBLIC_GBIF_TILE_BASE`                   | = API base                    | Map tile base                                                                                                                                                                 |
+| `PUBLIC_GBIF_GRAPHQL_BASE`                | `https://graphql.gbif.org`    | GraphQL API base: facets with names, records per taxon (browser and build)                                                                                                    |
+| `PUBLIC_INAT_API_BASE`                    | `https://api.inaturalist.org` | iNaturalist API base: photos and common names (browser and build)                                                                                                             |
+| `PUBLIC_SITE_URL`                         | `https://app.taxonomap.com`   | Canonical URLs, sitemap, Open Graph                                                                                                                                           |
+| `GBIF_CONTACT_EMAIL`                      | none                          | Build-time `User-Agent: Taxonomap/<version> (contact: …)`                                                                                                                     |
+| `GBIF_CACHE_TTL_HOURS`                    | `168`                         | Build-time disk-cache freshness                                                                                                                                               |
+| `GBIF_CACHE_REFRESH`                      | `0`                           | `1` ignores the disk cache for this build                                                                                                                                     |
+| `SPECIES_PRERENDER_COUNT`                 | `2000`                        | Number of pre-rendered species pages                                                                                                                                          |
+| `NAME_INDEX_SIZE`                         | `6000` (dev: `300`)           | Species in the baked common-name index (`/data/names.json`), each with its iNaturalist taxon ID and name when the bake can match one; every pre-rendered species is added too |
+| `INAT_IDS_REFRESH`                        | `0`                           | `1` makes `pnpm bake` look up every iNaturalist ID again, instead of reusing the last bake's (names are always fetched afresh, by ID)                                         |
+| `PUBLIC_GEOCODER` / `PUBLIC_GEOCODER_URL` | `photon`                      | Place search provider (`photon`, or `nominatim` on your own instance); searched as you type, debounced                                                                        |
+| `PUBLIC_BASEMAP_*`                        | see `.env.example`            | Override the Plain (dark/light) and Satellite basemaps                                                                                                                        |
 
 `PUBLIC_*` values are inlined into the client bundle. Point the two bases at a caching proxy to change where requests go, with no code changes.
 

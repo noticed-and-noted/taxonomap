@@ -108,7 +108,7 @@ export function speciesSlug(usage: Pick<NameUsage, 'canonicalName' | 'scientific
   return slugify(usage.canonicalName ?? usage.scientificName);
 }
 
-/** The most-recorded other species of the same genus, with common names where known. */
+/** The most-recorded other species of the same genus, with common names where known (the baked index first). */
 async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promise<SiblingSpecies[]> {
   if (!usage.genusKey) return [];
   const facets = await namedOccurrenceFacets({ taxonKey: usage.genusKey }, ['speciesKey'], { facetLimit: 12 });
@@ -118,7 +118,8 @@ async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promi
     )
     .slice(0, SIBLING_LIMIT);
   if (!top.length) return [];
-  // The baked index misses many species, so fall back to their GBIF vernacular names.
+  // The baked index (iNaturalist's names) misses many species, so fall back to their GBIF vernacular names;
+  // the similar-species cards swap in iNaturalist's from the photo lookup they make anyway.
   return Promise.all(
     top.map(async (sibling) => {
       const siblingCommonName =
@@ -160,7 +161,7 @@ function datasetTitle(facet: NamedFacetCount) {
 /**
  * Everything a species page shows, from GBIF.
  * @param key GBIF species key.
- * @param commonName Looks up a common name when GBIF lists none (e.g. from the baked name index).
+ * @param commonName Looks up the common name to show ahead of GBIF's (the baked name index, which holds iNaturalist's).
  * @throws GbifNotFoundError when GBIF has no such taxon.
  */
 export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
@@ -176,7 +177,7 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     distributionOf(usage),
   ]);
 
-  const common = englishName(vernaculars.results, key) ?? commonName(key) ?? undefined;
+  const common = commonName(key) ?? englishName(vernaculars.results, key) ?? undefined;
   return {
     key,
     slug: speciesSlug(usage),

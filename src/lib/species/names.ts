@@ -29,7 +29,7 @@ export function isEnglish(name: VernacularName): boolean {
 const IOC_NAMES: Readonly<Record<string, string>> = iocNames;
 
 /**
- * The English name shown everywhere: IOC's for birds, otherwise the most frequent.
+ * GBIF's English name, shown wherever iNaturalist's isn't known: IOC's for birds, otherwise the most frequent.
  * @param key GBIF taxon key the names belong to.
  */
 export function englishName(names: readonly VernacularName[], key: number): string | null {
@@ -71,13 +71,18 @@ const COMBINED_NAME_SEPARATORS = /[/()]/;
 const NOTE_MARKER = '.';
 
 /**
- * The other English names worth searching by, most frequent first, after `englishName`'s pick.
+ * The other English names worth searching by, most frequent first, after the name shown.
  * A name that extends one already kept ("Gulls" after "Gull") is dropped, since prefix search finds it anyway.
  * @param max Most names to return.
  * @param key GBIF taxon key the names belong to.
+ * @param main The name shown (iNaturalist's, when it has one); `englishName`'s pick by default.
  */
-export function otherEnglishNames(names: readonly VernacularName[], max: number, key: number): string[] {
-  const main = englishName(names, key);
+export function otherEnglishNames(
+  names: readonly VernacularName[],
+  max: number,
+  key: number,
+  main: string | null = englishName(names, key),
+): string[] {
   if (!main) return [];
   const parts = names
     .filter(isEnglish)
