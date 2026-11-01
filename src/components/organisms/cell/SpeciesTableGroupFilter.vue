@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The species table's Filter button and its popover, which narrows the table to one group
- * (the parent loads that group's rows). Closes on Escape, Done or a press outside.
+ * (the parent loads that group's rows). Closes on a pick, Escape, Done or a press outside.
  */
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useScrollFade } from '~/composables/useScrollFade';
@@ -39,6 +39,12 @@ const barWidth = (share: number) => `${Math.max(MIN_BAR_PERCENT, share * 100)}%`
 function close(refocus = false) {
   isOpen.value = false;
   if (refocus) button.value?.focus();
+}
+
+/** Applies a group, or null for all, and closes the popover. */
+function pick(groupKey: number | null) {
+  group.value = groupKey;
+  close(true);
 }
 
 /** Closes the popover when a press lands outside it and its button. */
@@ -103,18 +109,18 @@ onBeforeUnmount(() => (isOpen.value = false));
         :class="{ 'fade-top': fadeTop, 'fade-bottom': fadeBottom }"
         @scroll.passive="updateFade"
       >
-        <label class="group-opt">
-          <input type="radio" :name="`${id}-group`" :checked="group === null" class="sr-only" @change="group = null" />
+        <!-- Buttons, not radios: arrowing through radios would pick, and so close, at every step. -->
+        <button type="button" class="group-opt" :aria-pressed="group === null" @click="pick(null)">
           <span class="min-w-0 flex-1 truncate">All groups</span>
-        </label>
-        <label v-for="groupOption in groupOptions" :key="groupOption.key" class="group-opt">
-          <input
-            type="radio"
-            :name="`${id}-group`"
-            :checked="group === groupOption.key"
-            class="sr-only"
-            @change="group = groupOption.key"
-          />
+        </button>
+        <button
+          v-for="groupOption in groupOptions"
+          :key="groupOption.key"
+          type="button"
+          class="group-opt"
+          :aria-pressed="group === groupOption.key"
+          @click="pick(groupOption.key)"
+        >
           <span class="min-w-0 flex-1 truncate">{{ groupOption.common ?? groupOption.name }}</span>
           <span class="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
             <span
@@ -126,7 +132,7 @@ onBeforeUnmount(() => (isOpen.value = false));
           <span class="w-11 shrink-0 text-right text-xs tabular-nums text-muted">{{
             compact(groupOption.records)
           }}</span>
-        </label>
+        </button>
       </div>
     </fieldset>
     <div class="flex justify-end border-t border-border pt-2 text-xs">
@@ -137,22 +143,23 @@ onBeforeUnmount(() => (isOpen.value = false));
 
 <style scoped>
 .group-opt {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
   padding: 0.25rem 0.375rem;
   border-radius: var(--radius);
+  text-align: left;
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease);
 }
 .group-opt:hover {
   background: var(--surface-2);
 }
-.group-opt:has(:checked) {
+.group-opt[aria-pressed='true'] {
   background: var(--accent-soft);
 }
-.group-opt:has(:focus-visible) {
+.group-opt:focus-visible {
   outline: 2px solid var(--focus);
 }
 </style>

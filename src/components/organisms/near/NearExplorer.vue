@@ -15,6 +15,8 @@ import MapProgress from '~/components/organisms/map/MapProgress.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { full } from '~/lib/format';
 import { RADIUS_STEPS_KM } from '~/lib/gbif';
+import { circleRing } from '~/lib/gbif/params';
+import { boundsOf } from '~/lib/map/recordFit';
 import {
   classesNear,
   NEAR_SPECIES,
@@ -133,10 +135,16 @@ async function pickGroup(key: number | null) {
 
 const setTab = (nextTab: 'species' | 'recent') => $nearTab.set(nextTab);
 
-/** Frame the pin and radius; filter changes leave the view where it is. */
+/** Frame the pin and radius, zooming out if the panels leave too little room; filter changes leave the view where it is. */
 function flyToArea() {
   if (!at.value) return;
-  $flyTo.set({ kind: 'point', lng: at.value.lng, lat: at.value.lat, zoom: zoomForRadius(radius.value) });
+  const { lat, lng } = at.value;
+  $flyTo.set({
+    kind: 'bounds',
+    bbox: boundsOf(circleRing(lat, lng, radius.value)),
+    maxZoom: zoomForRadius(radius.value),
+    centre: [lng, lat],
+  });
 }
 
 watch(area, () => void loadArea(), { deep: true });

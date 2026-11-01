@@ -43,11 +43,9 @@ test('lists species in a sortable table that one group can narrow', async ({ pag
   await page.getByRole('button', { name: /^Species/ }).click();
   await expect(page.getByRole('columnheader', { name: /Species/ })).toHaveAttribute('aria-sort', 'ascending');
   await page.getByRole('button', { name: 'Filter' }).click();
-  // The radio is sr-only under its label text, so click the label as a person would.
   const filters = page.getByRole('dialog', { name: 'Filter species' });
-  await filters.locator('label', { hasText: 'Mammals' }).click();
-  await expect(filters.getByRole('radio', { name: /Mammals/ })).toBeChecked();
-  await page.keyboard.press('Escape');
+  await filters.getByRole('button', { name: /Mammals/ }).click();
+  await expect(filters).toBeHidden();
   await expect(page.getByRole('button', { name: /Filter · 1/ })).toBeVisible();
   // The group's own species are loaded, not just the area's list filtered.
   await expect(page.getByRole('link', { name: /Red Fox/ })).toBeVisible();
