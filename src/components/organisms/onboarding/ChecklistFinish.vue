@@ -2,9 +2,9 @@
 /**
  * The "Try this" finish: the logo's fiddlehead grows in one stroke, up the
  * stem and round into its coil, then its bud and leaflets open. The stem and
- * coil are the logo's two strokes (SiteHeader.astro) joined into one line,
- * with the coil's transform worked into its coordinates. It holds still until
- * `playing`, so it can wait for the box to finish folding open.
+ * coil are the logo's two strokes (docs/brand/fern-mark-dark.svg) joined into
+ * one line. It holds still until `playing`, so it can wait for the box to
+ * finish folding open.
  */
 defineProps<{ playing: boolean }>();
 </script>
@@ -15,11 +15,20 @@ defineProps<{ playing: boolean }>();
       <path
         class="fern-line"
         pathLength="1"
-        d="M40 58C40 48 40 37 32 37A13.5 13.5 0 0 1 32 10A10.5 10.5 0 0 1 32 31A6 6 0 0 1 32 19"
+        d="M40.08 58C40.08 47.97 39.88 38.33 32 37.14C28.68 36.65 24.99 35.58 22.45 33.05C19.92 30.51 18.5 27.08 18.5 23.5C18.5 19.92 19.92 16.49 22.45 13.95C24.99 11.42 28.42 10 32 10C34.78 10 37.4 11.15 39.37 13.12C41.34 15.09 42.37 18.16 42.37 20.95C42.37 23.73 41.05 26.38 38.96 28C36.86 29.62 34.81 29.86 32.43 29.86C31.14 29.86 28.72 29.42 27.3 28C25.88 26.58 24.95 24.42 24.95 22.83C24.95 21.24 25.78 19.01 26.9 17.88C28.03 16.76 30.2 15.62 32.43 16.05"
       />
-      <circle class="fern-bud" cx="32.4" cy="19" r="2.7" />
-      <path class="fern-leaf left" d="M40 51C35 50 31 47 30 43C35 43 38 46 40 51Z" />
-      <path class="fern-leaf right" d="M40 46C44 44 48 44 51 41C50 46 45 48 40 46Z" />
+      <path
+        class="fern-bud"
+        d="M33.47 18.93C34.9 18.93 35.97 17.85 35.97 16.43C35.97 15.35 35.17 13.93 33.47 13.93C32.04 13.93 30.97 15 30.97 16.43C30.97 17.85 32.04 18.93 33.47 18.93Z"
+      />
+      <path
+        class="fern-leaf left"
+        d="M38.56 49.18C33.93 49.84 29.69 49.28 28.46 43.83C31.66 47.01 34.58 42.45 38.56 49.18Z"
+      />
+      <path
+        class="fern-leaf right"
+        d="M40.05 46.02C45.52 40.34 46.54 44.08 50.23 40.7C49.5 45.39 45.22 48.42 40.05 46.02Z"
+      />
     </svg>
     <p class="font-display text-base" aria-hidden="true">You've found your way around</p>
     <p class="text-xs text-muted" aria-hidden="true">All seven done. Happy exploring.</p>
