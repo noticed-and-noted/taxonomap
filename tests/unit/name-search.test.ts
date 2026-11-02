@@ -154,7 +154,7 @@ describe('useNameSearch', () => {
     const calls = gbif();
     const search = await setup({ max: 8 });
     search.search('ro');
-    await vi.waitFor(() => expect(search.hits.value).toHaveLength(2));
+    await vi.waitFor(() => expect(search.hits.value).toHaveLength(3));
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     expect(calls.some((url) => url.pathname.startsWith('/v1/'))).toBe(false);
     search.search('r');
@@ -187,6 +187,12 @@ describe('useNameSearch without baked names', () => {
           results: [
             { key: 6, scientificName: 'Coprinus', rank: 'GENUS' },
             {
+              key: 7,
+              scientificName: 'Coprinus plicatilis',
+              rank: 'SPECIES',
+              vernacularNames: [],
+            },
+            {
               key: 5,
               scientificName: 'Coprinus comatus',
               rank: 'SPECIES',
@@ -213,11 +219,11 @@ describe('useNameSearch without baked names', () => {
     const search = scope.run(() => useNameSearch({ max: 8 }))!;
     search.search('shaggy inkcap');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
-    await vi.waitFor(() => expect(search.hits.value).toHaveLength(2));
+    await vi.waitFor(() => expect(search.hits.value).toHaveLength(3));
     const species = search.hits.value.find((hit) => hit.key === 5);
     expect(species).toMatchObject({ commonName: 'Shaggy Inkcap' });
     expect(species?.matchedName).toBeUndefined();
-    // The genus keeps GBIF's name: its iNaturalist match would cost an ancestor lookup.
+    // Only a species GBIF already names is looked up: the genus and the unnamed species are left as they are.
     expect(asked).toEqual([[5]]);
     scope.stop();
     vi.doUnmock('~/lib/photos/taxon-photos');

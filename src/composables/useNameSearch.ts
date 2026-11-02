@@ -75,12 +75,13 @@ function renamed({ matchedName: _staleMatch, ...hit }: NameHit, name: string): N
 /**
  * The first `room` live hits named as iNaturalist names them, so a taxon shows one name everywhere:
  * the baked index's where it has one, else iNaturalist's own. Only hits that can reach the list are
- * looked up (species only), and names already remembered cost nothing. A failed lookup leaves GBIF's names.
+ * looked up (species GBIF already names), and names already remembered cost nothing. A failed lookup leaves GBIF's names.
  */
 async function withPreferredNames(hits: readonly NameHit[], room: number, signal: AbortSignal): Promise<NameHit[]> {
   const shown = hits.slice(0, room);
-  // Species only: a higher taxon's iNaturalist match costs an ancestor lookup on top of the rest.
-  const unindexed = shown.filter((hit) => hit.rank === 'SPECIES' && !indexedName(hit));
+  // Species GBIF already gives a common name: only those need the right name, and a species GBIF
+  // names has usually a record on iNaturalist's dataset, where an obscure one costs a slow empty search.
+  const unindexed = shown.filter((hit) => hit.rank === 'SPECIES' && hit.commonName && !indexedName(hit));
   // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
   const fromInat = await inatNames(unindexed, { signal }).catch(() => new Map<number, string | null>());
   const named = shown.map((hit) => {
