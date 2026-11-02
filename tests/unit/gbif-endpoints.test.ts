@@ -146,37 +146,6 @@ describe('live name providers', () => {
     ]);
   });
 
-  it('name search asks every name field for accepted names, and gives each hit its English names', async () => {
-    const calls = stubNetwork(() => ({
-      results: [
-        {
-          key: 1,
-          scientificName: 'Coccinella septempunctata Linnaeus, 1758',
-          canonicalName: 'Coccinella septempunctata',
-          rank: 'SPECIES',
-          vernacularNames: [{ vernacularName: 'Seven-spot ladybird', language: 'eng' }],
-        },
-        { key: 2, scientificName: 'Karagama', rank: 'GENUS' },
-      ],
-    }));
-    const api = await gbif();
-    expect(await api.gbifSearchProvider.search(' ladybird ')).toEqual([
-      {
-        key: 1,
-        scientificName: 'Coccinella septempunctata',
-        rank: 'SPECIES',
-        commonName: 'Seven-spot ladybird',
-        englishNames: ['Seven-spot ladybird'],
-        source: 'search',
-      },
-      { key: 2, scientificName: 'Karagama', rank: 'GENUS', source: 'search' },
-    ]);
-    const asked = new URL(calls[0]!, 'http://site.test').searchParams;
-    expect(asked.get('q')).toBe('ladybird');
-    expect(asked.get('status')).toBe('ACCEPTED');
-    expect(asked.has('qField')).toBe(false);
-  });
-
   it('vernacular search shows the main English name, not a rarer alias that matched', async () => {
     const english = (vernacularName: string) => ({ vernacularName, language: 'eng' });
     stubNetwork(() => ({

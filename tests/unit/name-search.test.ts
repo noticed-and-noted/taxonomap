@@ -10,20 +10,19 @@ const NAMES: NameRow[] = [
   [9510564, 'S', 'Turdus migratorius', 'American robin', 10],
 ];
 
-function gbif(options: { searchFails?: boolean } = {}) {
+function gbif(options: { suggestFails?: boolean } = {}) {
   return stubNetwork((url) => {
-    if (url.pathname === '/v1/species/search') {
-      if (options.searchFails) return json({}, 400);
-      return {
-        results: [
-          { key: 2492462, scientificName: 'Erithacus rubecula', rank: 'SPECIES' },
-          { key: 1, scientificName: 'Robinia', rank: 'GENUS' },
-          { key: 2, scientificName: 'Robinsonia', rank: 'GENUS' },
-          { key: 3, scientificName: 'Robsonius', rank: 'GENUS' },
-          { key: 4, scientificName: 'Robertus', rank: 'GENUS' },
-        ],
-      };
+    if (url.pathname === '/v1/species/suggest') {
+      if (options.suggestFails) return json({}, 400);
+      return [
+        { key: 2492462, scientificName: 'Erithacus rubecula', rank: 'SPECIES' },
+        { key: 1, scientificName: 'Robinia', rank: 'GENUS' },
+        { key: 2, scientificName: 'Robinsonia', rank: 'GENUS' },
+        { key: 3, scientificName: 'Robsonius', rank: 'GENUS' },
+        { key: 4, scientificName: 'Robertus', rank: 'GENUS' },
+      ];
     }
+    if (url.pathname === '/v1/species/search') return json({}, 400);
     return snapshots({ names: NAMES })(url);
   });
 }
@@ -55,10 +54,8 @@ describe('useNameSearch', () => {
     // Index hits first; with index answers, only three live hits are kept (one a duplicate).
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564, 1, 2]));
     expect(search.loading.value).toBe(false);
-    // One search covers scientific and common names, so suggest is never asked.
-    expect(calls.filter((url) => url.pathname.startsWith('/v1/species/')).map((url) => url.pathname)).toEqual([
-      '/v1/species/search',
-    ]);
+    // Fewer than five index hits, so vernacular search was asked too (and its failure tolerated).
+    expect(calls.some((url) => url.pathname === '/v1/species/search')).toBe(true);
     expect(search.failed.value).toBe(false);
     search.stop();
   });
@@ -83,8 +80,8 @@ describe('useNameSearch', () => {
     search.stop();
   });
 
-  it('flags a failure when the name search fails', async () => {
-    gbif({ searchFails: true });
+  it('flags a failure only when every live provider fails', async () => {
+    gbif({ suggestFails: true });
     const search = await setup({ max: 8 });
     search.search('zzzz');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
@@ -101,6 +98,7 @@ describe('useNameSearch', () => {
       vernacularNames: [{ vernacularName, language: 'eng' }],
     });
     stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
       if (url.pathname === '/v1/species/search') {
         return {
           results: [
@@ -128,6 +126,7 @@ describe('useNameSearch', () => {
       vernacularNames: names.map((vernacularName) => ({ vernacularName, language: 'eng' })),
     });
     stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
       if (url.pathname === '/v1/species/search') {
         return {
           results: [
@@ -182,6 +181,7 @@ describe('sortByRank', () => {
 describe('useNameSearch without baked names', () => {
   it("names live hits as iNaturalist does, keeping GBIF's name searchable", async () => {
     stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
       if (url.pathname === '/v1/species/search') {
         return {
           results: [
