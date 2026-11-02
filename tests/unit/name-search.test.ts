@@ -175,3 +175,39 @@ describe('sortByRank', () => {
     expect(sorted.map((entry) => entry.key)).toEqual([5, 2, 1, 4, 3]);
   });
 });
+
+describe('useNameSearch without baked names', () => {
+  it("names live hits as iNaturalist does, keeping GBIF's name searchable", async () => {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
+      if (url.pathname === '/v1/species/search') {
+        return {
+          results: [
+            {
+              key: 5,
+              scientificName: 'Coprinus comatus',
+              rank: 'SPECIES',
+              vernacularNames: [
+                { vernacularName: "Lawyer's Wig", language: 'eng' },
+                { vernacularName: 'Shaggy Inkcap', language: 'eng' },
+              ],
+            },
+          ],
+        };
+      }
+      return snapshots({ names: [] })(url);
+    });
+    vi.resetModules();
+    vi.doMock('~/lib/photos/taxon-photos', () => ({ inatNames: async () => new Map([[5, 'Shaggy Inkcap']]) }));
+    const { useNameSearch } = await import('~/composables/useNameSearch');
+    const scope = effectScope();
+    const search = scope.run(() => useNameSearch({ max: 8 }))!;
+    search.search('shaggy inkcap');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value).toHaveLength(1));
+    expect(search.hits.value[0]).toMatchObject({ commonName: 'Shaggy Inkcap' });
+    expect(search.hits.value[0]?.matchedName).toBeUndefined();
+    scope.stop();
+    vi.doUnmock('~/lib/photos/taxon-photos');
+  });
+});

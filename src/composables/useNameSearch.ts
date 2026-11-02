@@ -7,6 +7,7 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
 import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
+import { inatNames } from '~/lib/photos/taxon-photos';
 import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
 /** Shortest query searched at all, and the shortest sent to GBIF. */
@@ -62,10 +63,27 @@ function rankByMatch(hits: NameHit[], text: string): NameHit[] {
   return scored.sort((first, second) => second.score - first.score).map(({ hit }) => hit);
 }
 
-/** A live hit named as the index names it (iNaturalist's name, baked), so a taxon shows one name everywhere. */
-function withIndexedName(hit: NameHit): NameHit {
-  const indexed = nameIndexIfLoaded()?.get(hit.key)?.commonName;
-  return indexed && indexed !== hit.commonName ? { ...hit, commonName: indexed } : hit;
+/** The name the baked index gives a taxon (iNaturalist's), when it holds one. */
+const indexedName = (hit: NameHit) => nameIndexIfLoaded()?.get(hit.key)?.commonName;
+
+/** A live hit named `name`; GBIF's own name stays searchable as another English name. */
+function renamed({ matchedName: _staleMatch, ...hit }: NameHit, name: string): NameHit {
+  const gbifNames = hit.commonName ? [hit.commonName] : [];
+  return { ...hit, commonName: name, englishNames: [...(hit.englishNames ?? []), ...gbifNames] };
+}
+
+/**
+ * Live hits named as iNaturalist names them, so a taxon shows one name everywhere: the baked
+ * index's where it has one, else iNaturalist's own. A failed lookup leaves GBIF's names.
+ */
+async function withPreferredNames(hits: readonly NameHit[], signal: AbortSignal): Promise<NameHit[]> {
+  const unindexed = hits.filter((hit) => !indexedName(hit));
+  // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
+  const fromInat = await inatNames(unindexed, { signal }).catch(() => new Map<number, string | null>());
+  return hits.map((hit) => {
+    const name = indexedName(hit) ?? fromInat.get(hit.key);
+    return name && name !== hit.commonName ? renamed(hit, name) : hit;
+  });
 }
 
 /** Asks GBIF's live providers, best matches first; `failed` is true when every one of them did. */
@@ -74,11 +92,9 @@ async function askLiveProviders(text: string, indexHitCount: number, signal: Abo
     gbifSuggestProvider.search(text, signal),
     indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal) : Promise.resolve([]),
   ]);
+  const found = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
   return {
-    hits: rankByMatch(
-      results.flatMap((result) => (result.status === 'fulfilled' ? result.value.map(withIndexedName) : [])),
-      text,
-    ),
+    hits: rankByMatch(await withPreferredNames(found, signal), text),
     failed: results.every((result) => result.status === 'rejected'),
   };
 }
