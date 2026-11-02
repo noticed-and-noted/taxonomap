@@ -2,8 +2,7 @@
 /**
  * Preview of the highlighted header-search result: photo, rank, record count
  * and up to two actions (add/select if offered, and its About page, for any rank). Data loads after a short
- * pause on a result, so arrowing through the list stays cheap; both requests
- * go through the cached client.
+ * pause on a result, so arrowing through the list stays cheap, and goes through the cached client.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
@@ -11,7 +10,7 @@ import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
-import { leadPhoto } from '~/lib/photos/taxon-photos';
+import { leadPhotos } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
 
 const props = defineProps<{
@@ -38,16 +37,25 @@ const name = computed(() => props.hit.commonName ?? props.hit.scientificName);
 const load = debounce(async (hit: NameHit) => {
   const mine = ++sequence;
   imageLoading.value = true;
-  const [imageResult, total] = await Promise.allSettled([
-    leadPhoto({ key: hit.key, rank: hit.rank }),
-    // The baked index knows counts; live suggestions need one cheap count request.
-    hit.count === undefined ? occurrenceFacets({ taxonKey: hit.key }, []) : Promise.resolve(null),
-  ]);
+  // The baked index knows counts; a live suggestion's rides along with its photo search.
+  const isCountNeeded = hit.count === undefined;
+  const lead = await leadPhotos([{ key: hit.key, rank: hit.rank }], {
+    isInatForSpeciesOnly: true,
+    withCounts: isCountNeeded,
+  }).catch(() => null);
   if (mine !== sequence) return;
-  image.value = imageResult.status === 'fulfilled' ? imageResult.value : undefined;
-  liveCount.value = total.status === 'fulfilled' && total.value ? total.value.count : null;
+  image.value = lead?.images.get(hit.key);
+  liveCount.value = lead?.counts.get(hit.key) ?? null;
+  if (isCountNeeded && liveCount.value === null) liveCount.value = await countOf(hit);
+  if (mine !== sequence) return;
   imageLoading.value = false;
 }, 200);
+
+/** A taxon's record count when the photo search didn't bring it (an iNaturalist photo was found), or null. */
+async function countOf(hit: NameHit): Promise<number | null> {
+  const total = await occurrenceFacets({ taxonKey: hit.key }, []).catch(() => null);
+  return total?.count ?? null;
+}
 
 watch(
   () => props.hit.key,

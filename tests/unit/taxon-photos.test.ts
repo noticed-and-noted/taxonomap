@@ -16,6 +16,8 @@ interface World {
   records: Record<number, { taxonID?: string; species?: string }>;
   gbifInat: Record<number, object[]>;
   gbifAny: Record<number, object[]>;
+  /** GBIF key → how many records GBIF holds of the taxon. */
+  counts?: Record<number, number>;
   taxa: Record<number, InatTaxon>;
   voted: Record<number, Obs[]>;
   /** GBIF keys whose record lookup fails, and iNaturalist taxa whose observations fail. */
@@ -73,6 +75,18 @@ function graphql(world: World, params: URLSearchParams): Response {
     const parts = predicate.predicates;
     const part = (key: string) => parts.find((candidate) => candidate.key === key);
     const isPhotoSearch = !!part('mediaType');
+    const isCountSearch = parts.every((candidate) => candidate.key === 'taxonKey');
+    if (isCountSearch) {
+      const counted = part('taxonKey')!
+        .values!.map(Number)
+        .filter((key) => world.counts?.[key] !== undefined);
+      return counted.map((key) => ({
+        key: String(key),
+        count: world.counts![key],
+        taxon: null,
+        occurrences: { documents: { results: [] } },
+      }));
+    }
     if (!isPhotoSearch && world.crowdedOut === 'all') return null;
     if (isPhotoSearch && world.isPhotoBatchDown) return null;
     const out = (world.crowdedOut ?? []) as number[];
@@ -104,7 +118,9 @@ function graphql(world: World, params: URLSearchParams): Response {
   // One search per rank, each with its own predicate, when the query mixes ranks.
   const ranked = [...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)/g)];
   if (ranked.length) {
-    const data = Object.fromEntries(ranked.map(([, alias, name]) => [alias!, respond(alias!, variables[name!]!)]));
+    const data = Object.fromEntries(
+      ranked.map(([, alias, name]) => [alias!, respond(alias!.split('_')[0]!, variables[name!]!)]),
+    );
     return Object.values(data).includes(null) ? new Response('bad', { status: 400 }) : json({ data });
   }
   const facet = /facet \{ (\w+)\(/.exec(query)![1]!;
@@ -470,7 +486,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     expect(keys.map((key) => label(images.get(key)!))).toEqual(keys.map((key) => `inat:${(key + 100) * 10}`));
   });
 
-  it('finds GBIF photos for the species iNaturalist has none of in one request per source', async () => {
+  it('finds GBIF photos for the species iNaturalist has none of in one request for every source', async () => {
     const calls = network({
       ...base,
       gbifInat: { 1: [occ(10, 'a.jpg')] },
@@ -485,8 +501,23 @@ describe('finding iNaturalist taxa cheaply', () => {
       undefined,
     ]);
     const photoSearches = calls.filter((call) => call.includes('mediaType'));
-    expect(photoSearches).toHaveLength(2);
+    expect(photoSearches).toHaveLength(1);
     expect(calls.some((call) => url(call).pathname === '/v1/occurrence/search')).toBe(false);
+  });
+
+  it('matches only species to iNaturalist when asked, and brings the counts with the GBIF photos', async () => {
+    const calls = network({
+      ...base,
+      gbifAny: { 9: [occ(90, 'g.jpg')] },
+      counts: { 9: 123 },
+    });
+    const { leadPhotos } = await load();
+    const lead = await leadPhotos([{ key: 9, rank: 'GENUS' }], { isInatForSpeciesOnly: true, withCounts: true });
+    expect(label(lead.images.get(9)!)).toBe('gbif:g.jpg');
+    expect(lead.counts).toEqual(new Map([[9, 123]]));
+    // No iNaturalist record lookup for the genus, and one GBIF request for photos and count together.
+    expect(single(calls)).toHaveLength(0);
+    expect(calls.filter((call) => url(call).pathname === '/graphql')).toHaveLength(1);
   });
 
   it('searches GBIF photos one taxon at a time when the batched search fails', async () => {
@@ -535,7 +566,7 @@ describe('finding iNaturalist taxa cheaply', () => {
       { key: 3, rank: 'FAMILY' },
     ]);
     expect(batched(calls)).toHaveLength(1);
-    expect(url(batched(calls)[0]!).searchParams.get('query')).toMatch(/speciesKey: .*genusKey: .*familyKey: /);
+    expect(url(batched(calls)[0]!).searchParams.get('query')).toMatch(/speciesKey_0: .*genusKey_0: .*familyKey_0: /);
     expect(single(calls)).toHaveLength(0);
   });
 

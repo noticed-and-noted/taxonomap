@@ -27,6 +27,8 @@ export interface NamedFacetCount extends FacetCount {
 /** A taxon's first matching records, and GBIF's scientific name for it. */
 export interface TaxonRecords {
   name?: string;
+  /** How many records match, when the search asked for it (firstRecordsBySearches). */
+  count?: number;
   records: Occurrence[];
 }
 
@@ -47,6 +49,7 @@ interface FacetBucket {
 /** One taxon facet value with its first records (firstRecordsByTaxon). */
 interface RecordsBucket {
   key: string;
+  count?: number;
   taxon?: { scientificName?: string } | null;
   occurrences: { documents: { results: GraphqlRecord[] } };
 }
@@ -224,47 +227,74 @@ export async function firstRecordsByTaxon(
   return new Map(buckets.map((bucket) => [Number(bucket.key), toTaxonRecords(bucket, rank)]));
 }
 
+/** One of firstRecordsBySearches' searches: the filter its records match, and how many of each taxon's to read. */
+export interface RecordsSearch {
+  filter: OccurrenceFilter & { license?: readonly string[] };
+  perTaxon: number;
+}
+
 /**
- * Like firstRecordsByTaxon for taxa of mixed ranks, still from one request (of one rank it is just that): each rank is a search
- * of its own in the query, so a family's many genera can't crowd a genus out of its facet.
+ * Like firstRecordsByTaxon for taxa of mixed ranks and several filters, still from one request: each
+ * rank and filter is a search of its own in the query, so a family's many genera can't crowd a genus
+ * out of its facet. Each taxon also carries its `count` of matching records.
+ * @returns One map per search, in the order given.
  * @throws Error when GBIF can't batch a taxon's rank (see canBatchRank).
  */
-export async function firstRecordsByRanks(
+export async function firstRecordsBySearches(
   taxa: readonly { key: number; rank: Rank }[],
-  filter: OccurrenceFilter & { license?: readonly string[] },
-  options: { perTaxon: number; signal?: AbortSignal },
-): Promise<Map<number, TaxonRecords>> {
+  searches: readonly RecordsSearch[],
+  options: { signal?: AbortSignal },
+): Promise<Map<number, TaxonRecords>[]> {
   const keysByRank = new Map<Rank, number[]>();
   for (const { key, rank } of taxa) {
     if (!canBatchRank(rank)) throw new Error(`GBIF can't batch records of rank ${rank}`);
     keysByRank.set(rank, [...(keysByRank.get(rank) ?? []), key]);
   }
-
   const ranks = [...keysByRank.keys()];
-  if (ranks.length === 1) return firstRecordsByTaxon(keysByRank.get(ranks[0]!)!, ranks[0]!, filter, options);
+  const [only] = searches;
+  if (ranks.length === 1 && searches.length === 1 && only) {
+    return [await firstRecordsByTaxon(keysByRank.get(ranks[0]!)!, ranks[0]!, only.filter, { ...only, ...options })];
+  }
 
-  const variables = Object.fromEntries(
-    ranks.map((rank) => [`predicate${rank}`, taxaPredicate(keysByRank.get(rank)!, filter)]),
+  const parts = searches.flatMap((search, index) =>
+    ranks.map((rank) => ({ search, rank, index, keys: keysByRank.get(rank)! })),
   );
-  const searches = ranks.map((rank) => {
-    const facet = RANK_FACET[rank]!;
-    const size = keysByRank.get(rank)!.length;
-    const buckets = `${facet}(size: ${size}) { key taxon { scientificName } ${recordsSelection(options.perTaxon)} }`;
-    return `${facet}: occurrenceSearch(predicate: $predicate${rank}) { facet { ${buckets} } }`;
-  });
-  const declarations = ranks.map((rank) => `$predicate${rank}: Predicate`).join(', ');
-  const query = `query FirstRecords(${declarations}) { ${searches.join(' ')} }`;
+  const data = await runQuery<Record<string, { facet: Record<string, RecordsBucket[]> }>>(
+    rankedQuery(parts),
+    Object.fromEntries(parts.map((part) => [variableOf(part), taxaPredicate(part.keys, part.search.filter)])),
+    options,
+  );
 
-  const data = await runQuery<Record<string, { facet: Record<string, RecordsBucket[]> }>>(query, variables, {
-    signal: options.signal,
-  });
-
-  const found = new Map<number, TaxonRecords>();
-  for (const rank of ranks) {
-    const facet = RANK_FACET[rank]!;
-    for (const bucket of data[facet]?.facet[facet] ?? []) found.set(Number(bucket.key), toTaxonRecords(bucket, rank));
+  const found = searches.map(() => new Map<number, TaxonRecords>());
+  for (const part of parts) {
+    const facet = RANK_FACET[part.rank]!;
+    for (const bucket of data[aliasOf(part)]?.facet[facet] ?? []) {
+      found[part.index]!.set(Number(bucket.key), toTaxonRecords(bucket, part.rank));
+    }
   }
   return found;
+}
+
+/** One search of a mixed query: a filter's records of the taxa of one rank. */
+interface RankedPart {
+  search: RecordsSearch;
+  rank: Rank;
+  index: number;
+  keys: readonly number[];
+}
+
+const aliasOf = ({ rank, index }: RankedPart) => `${RANK_FACET[rank]}_${index}`;
+const variableOf = ({ rank, index }: RankedPart) => `predicate${rank}_${index}`;
+
+/** A query with a search for each part, answered under its alias. */
+function rankedQuery(parts: readonly RankedPart[]): string {
+  const declarations = parts.map((part) => `$${variableOf(part)}: Predicate`).join(', ');
+  const searches = parts.map((part) => {
+    const facet = RANK_FACET[part.rank]!;
+    const buckets = `${facet}(size: ${part.keys.length}) { key count taxon { scientificName } ${recordsSelection(part.search.perTaxon)} }`;
+    return `${aliasOf(part)}: occurrenceSearch(predicate: $${variableOf(part)}) { facet { ${buckets} } }`;
+  });
+  return `query FirstRecords(${declarations}) { ${searches.join(' ')} }`;
 }
 
 /** A bucket's records, each given the bucket's species key, and the taxon's name. */
@@ -273,7 +303,7 @@ function toTaxonRecords(bucket: RecordsBucket, rank: Rank): TaxonRecords {
   const speciesKey = rank === 'SPECIES' ? Number(bucket.key) : undefined;
   const records = bucket.occurrences.documents.results.map((record) => toOccurrence(record, speciesKey));
   const name = bucket.taxon?.scientificName;
-  return { records, ...(name && { name }) };
+  return { records, ...(name && { name }), ...(bucket.count !== undefined && { count: bucket.count }) };
 }
 
 /** A GraphQL record as the REST API's occurrence: nulls left out, and the species key filled in when known. */

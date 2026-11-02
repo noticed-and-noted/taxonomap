@@ -167,35 +167,47 @@ describe('firstRecordsByTaxon', () => {
     });
   });
 
-  it('searches taxa of several ranks in one request, a predicate of its own for each', async () => {
-    const bucket = (key: string, name: string, taxonID: string) => ({
+  it('searches taxa of several ranks and filters in one request, each with its own predicate', async () => {
+    const bucket = (key: string, name: string, taxonID: string, count: number) => ({
       key,
+      count,
       taxon: { scientificName: name },
       occurrences: { documents: { results: [{ key: 1, taxonID }] } },
     });
     const calls = stubNetwork(() => ({
       data: {
-        speciesKey: { facet: { speciesKey: [bucket('7', 'Erithacus rubecula', '13094')] } },
-        genusKey: { facet: { genusKey: [bucket('9', 'Larus', '4388')] } },
+        speciesKey_0: { facet: { speciesKey: [bucket('7', 'Erithacus rubecula', '13094', 3)] } },
+        genusKey_0: { facet: { genusKey: [bucket('9', 'Larus', '4388', 2)] } },
+        speciesKey_1: { facet: { speciesKey: [bucket('7', 'Erithacus rubecula', '13094', 50)] } },
+        genusKey_1: { facet: { genusKey: [] } },
       },
     }));
     const api = await gbif();
-    const records = await api.firstRecordsByRanks(
+    const [photos, everything] = await api.firstRecordsBySearches(
       [
         { key: 7, rank: 'SPECIES' },
         { key: 9, rank: 'GENUS' },
         { key: 8, rank: 'SPECIES' },
       ],
-      { datasetKey: 'inat' },
-      { perTaxon: 1 },
+      [
+        { filter: { datasetKey: 'inat' }, perTaxon: 1 },
+        { filter: {}, perTaxon: 0 },
+      ],
+      {},
     );
     expect(calls.filter(isGraphql)).toHaveLength(1);
-    expect([...records.keys()]).toEqual([7, 9]);
-    expect(records.get(9)?.name).toBe('Larus');
+    expect([...photos!.keys()]).toEqual([7, 9]);
+    expect(photos!.get(9)?.name).toBe('Larus');
+    expect(everything!.get(7)?.count).toBe(50);
     const { query, variables } = sent(calls[0]!);
-    expect(query).toContain('speciesKey: occurrenceSearch(predicate: $predicateSPECIES)');
-    expect(query).toContain('genusKey(size: 1)');
-    expect(Object.keys(variables)).toEqual(['predicateSPECIES', 'predicateGENUS']);
+    expect(query).toContain('speciesKey_0: occurrenceSearch(predicate: $predicateSPECIES_0)');
+    expect(query).toContain('documents(size: 0)');
+    expect(Object.keys(variables)).toEqual([
+      'predicateSPECIES_0',
+      'predicateGENUS_0',
+      'predicateSPECIES_1',
+      'predicateGENUS_1',
+    ]);
   });
 
   it('batches the main ranks only', async () => {
