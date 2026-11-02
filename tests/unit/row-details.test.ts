@@ -7,16 +7,30 @@ const lookups = vi.hoisted(() => ({
   photos: [] as number[][],
   names: [] as number[][],
   common: [] as number[][],
+  gbif: [] as number[][],
 }));
 
 vi.mock('~/lib/species/groups', () => ({
-  photosForKeys: async (keys: number[]) => {
+  photosForKeys: async (
+    keys: number[],
+    _signal: unknown,
+    _names: unknown,
+    onCommonNames?: (names: ReadonlyMap<number, string>) => void,
+  ) => {
     lookups.photos.push(keys);
+    // Key 3's iNaturalist taxon has a common name; the others' have none.
+    const commonNames = new Map(keys.filter((key) => key === 3).map((key) => [key, 'iNaturalist three']));
+    onCommonNames?.(commonNames);
     // Key 1 has a photo (whose record names it); the others have none.
     return {
       images: new Map(keys.filter((key) => key === 1).map((key) => [key, { url: `p${key}`, licence: 'CC0' }])),
       names: new Map(keys.filter((key) => key === 1).map((key) => [key, 'Named by photo'])),
+      commonNames,
     };
+  },
+  gbifCommonNames: async (keys: number[]) => {
+    lookups.gbif.push(keys);
+    return new Map(keys.filter((key) => key === 6).map((key) => [key, 'GBIF six']));
   },
   resolveNames: async (keys: number[]) => {
     lookups.names.push(keys);
@@ -52,6 +66,7 @@ beforeEach(() => {
   lookups.photos = [];
   lookups.names = [];
   lookups.common = [];
+  lookups.gbif = [];
 });
 
 describe('useRowDetails', () => {
@@ -78,15 +93,29 @@ describe('useRowDetails', () => {
     stop();
   });
 
-  it('looks up common names for rows in view that have none', async () => {
+  it('names rows in view from their photo lookup, asking GBIF only for those iNaturalist does not name', async () => {
     const { unnamed: _unnamed, ...five } = row(5, { commonName: 'Indexed five' });
-    const rows = [row(3), five];
+    const rows = [row(3), five, row(6)];
     const { d, inView, stop } = await setup(rows);
     expect(d.commonName(rows[0]!)).toBeUndefined();
-    inView.value = new Set([3, 5]);
-    await vi.waitFor(() => expect(d.commonName(rows[0]!)).toBe('Common three'));
-    expect(lookups.common).toEqual([[3]]);
+    inView.value = new Set([3, 5, 6]);
+    await vi.waitFor(() => expect(d.commonName(rows[2]!)).toBe('GBIF six'));
+    expect(d.commonName(rows[0]!)).toBe('iNaturalist three');
     expect(d.commonName(rows[1]!)).toBe('Indexed five');
+    expect(lookups.gbif).toEqual([[6]]);
+    // The photo lookup named them, so no common-name lookup of their own.
+    expect(lookups.common).toEqual([]);
+    stop();
+  });
+
+  it('looks up common names for rows that get no photo lookup', async () => {
+    const rows = [row(3, { image: { url: 'p3', licence: 'CC0' } as NonNullable<SpeciesRow['image']> }), row(4)];
+    const { d, inView, all, stop } = await setup(rows);
+    inView.value = new Set([3]);
+    all.value = true;
+    await vi.waitFor(() => expect(d.commonName(rows[0]!)).toBe('Common three'));
+    expect(lookups.photos).toEqual([]);
+    expect(lookups.common).toEqual([[3, 4]]);
     stop();
   });
 

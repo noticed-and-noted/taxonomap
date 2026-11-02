@@ -293,6 +293,44 @@ describe('bake with iNaturalist IDs', () => {
     expect(names.filter((row) => row.length === 6).map((row) => [row[0], row[5]])).toEqual([[10, 777]]);
   });
 
+  it('names species and the taxa above them as iNaturalist does, keeping GBIF’s names to search by', async () => {
+    const taxa: Record<number, object> = {
+      777: {
+        id: 777,
+        name: 'Species number10',
+        rank_level: 10,
+        preferred_common_name: 'tenth bird',
+        ancestor_ids: [48460, 3, 777],
+      },
+      3: { id: 3, name: 'Aves', rank_level: 50, preferred_common_name: 'Birds' },
+      48460: { id: 48460, name: 'Life', rank_level: 100, preferred_common_name: 'Life' },
+    };
+    const calls = gbif((url) => {
+      // The backbone listings (which name a datasetKey too) aren't iNaturalist record searches.
+      if (url.pathname === '/v1/species/search') return undefined;
+      if (url.host !== 'api.inaturalist.org' || url.pathname === '/v2/taxa') return inat(url);
+      const ids = url.pathname.slice('/v2/taxa/'.length).split(',').map(Number);
+      return { results: ids.flatMap((id) => taxa[id] ?? []) };
+    });
+    const baked = await bake({ NAME_INDEX_SIZE: '3' });
+    const { names } = await baked.bakeNames();
+    expect(names.find((row) => row[0] === 10)).toEqual([
+      10,
+      'S',
+      'Species number10',
+      'Tenth bird',
+      9000,
+      777,
+      ['Some bird'],
+    ]);
+    expect(names.find((row) => row[0] === 212)?.[3]).toBe('Birds');
+    expect((await baked.bakeTree()).nodes.find((node) => node.k === 212)?.c).toBe('Birds');
+    // The ranks above are named from the species' ancestors, fetched by ID: never searched for by name.
+    const inatCalls = calls.filter((url) => url.host === 'api.inaturalist.org');
+    expect(inatCalls.flatMap((url) => url.searchParams.get('q') ?? [])).not.toContain('Aves');
+    expect(inatCalls.at(-1)?.pathname).toBe('/v2/taxa/3,48460');
+  });
+
   it('keeps the IDs the last bake found, looking up only the species without one', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'baked-'));
     try {
@@ -365,15 +403,17 @@ describe('bake against a messier GBIF', () => {
   });
 
   it('indexes names with families, skipping taxa GBIF no longer knows', async () => {
-    // Birds get one new key (11, gone from GBIF); 13 is past their share.
+    // Birds get one new key (11, gone from GBIF); 13 is past their share, but has a page, as has 15.
     messyGbif();
     const baked = await bake({ NAME_INDEX_SIZE: '2' });
     const { names } = await baked.bakeNames();
     expect(names).toEqual([
       [10, 'S', 'Species 10', null, 9000],
       [1, 'K', 'Animalia Linnaeus', null, 5000],
+      [13, 'S', 'Species 13', null, 5000],
       [2, 'P', 'Chordata', null, 4000],
       [14, 'S', 'Species 14', null, 4000],
+      [15, 'S', 'Species 15', null, 3000],
       [40, 'F', 'Turdidae Rafinesque', null, 2000],
     ]);
     expect((await baked.bakedCommonNames())(10)).toBeNull();
@@ -437,7 +477,7 @@ describe('bake to disk', () => {
       const steps: string[] = [];
       const saved = await first.bakeToDisk((key) => steps.push(key));
       const list = await first.bakeSpeciesList();
-      expect(saved).toEqual(['years', 'names', 'tree', 'species-list']);
+      expect(saved).toEqual(['years', 'species-list', 'names', 'tree']);
       expect(steps).toEqual(saved);
       // The last step's GBIF requests, all counted and all finished.
       const gbifProgress = first.bakeProgress.get('GBIF');

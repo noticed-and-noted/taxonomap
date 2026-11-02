@@ -1,23 +1,21 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { CODE_BY_RANK } from '~/lib/data/ranks';
 import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { isDev } from '~/lib/env';
 import type { VernacularName } from '~/lib/gbif';
 import { getSpecies, getVernacularNames } from '~/lib/gbif/server';
-import { resolveInatIds } from '~/lib/photos/taxon-photos';
+import { inatCommonName } from '~/lib/photos/inat';
 import { englishName, otherEnglishNames } from '~/lib/species/names';
 import {
-  bakeDir,
   countedFacets,
   listAllByRank,
   lookupLimit,
   once,
-  queueRequests,
   rethrowUnlessMissing,
   snapshotMeta,
   type NamedUsage,
 } from './cache';
+import { higherTaxonKey, INAT_RANK_LEVEL, inatHigherNames, inatSpeciesTaxa } from './inat';
+import { bakeSpeciesList } from './species-list';
 
 const DEFAULT_INDEX_SIZE = 6000;
 const DEV_INDEX_SIZE = 300;
@@ -33,7 +31,6 @@ const DEV_GENERA_IN_INDEX = 30;
 const OTHER_NAMES_PER_ROW = 4;
 /** Higher taxa with fewer records than this are not worth a search suggestion. */
 const MIN_HIGHER_TAXON_RECORDS = 1000;
-const INAT_LOOKUP_CHUNK = 300;
 
 /**
  * Groups naturalists search by common name. The top species of each group
@@ -53,7 +50,8 @@ const SPECIES_GROUPS: { key: number; label: string; share: number }[] = [
 
 /**
  * Index size. Each species costs two small, disk-cached GBIF requests
- * (detail + vernacular names), shared with the species pages.
+ * (detail + vernacular names), shared with the species pages, and a thirtieth
+ * of an iNaturalist request for its taxon and English name.
  */
 function indexSize(): number {
   const fromEnv = Number(process.env['NAME_INDEX_SIZE']);
@@ -82,6 +80,8 @@ async function topSpeciesKeys(total: number): Promise<Map<number, number>> {
     const result = await countedFacets({ taxonKey: group.key }, ['speciesKey'], { facetLimit: want * 2 });
     add(result.facets['speciesKey'], want);
   }
+  // Every species with a page is in the index too, so its page has iNaturalist's name and search finds it.
+  for (const species of await bakeSpeciesList()) if (!counts.has(species.key)) counts.set(species.key, species.count);
   return counts;
 }
 
@@ -127,108 +127,88 @@ async function higherRankUsages(lookupKeys: readonly number[]): Promise<Map<numb
   return usages;
 }
 
-/**
- * A name-index row: the English name by the same rule as everywhere else, plus the other English
- * names when there are any (with a null iNaturalist ID before them, filled in later for species).
- */
-function nameRow(
-  key: number,
-  rank: RankCode,
-  scientificName: string,
-  vernaculars: readonly VernacularName[],
-  count: number,
-): NameRow {
-  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW, key);
-  const commonName = englishName(vernaculars, key);
-  return others.length
-    ? [key, rank, scientificName, commonName, count, null, others]
-    : [key, rank, scientificName, commonName, count];
+/** A taxon to make a name-index row for: its GBIF names, and iNaturalist's when it has one. */
+interface RowSource {
+  key: number;
+  rank: RankCode;
+  scientificName: string;
+  vernaculars: readonly VernacularName[];
+  count: number;
+  inatName?: string | null;
+  inatId?: number;
 }
 
-/** Name-index rows for kingdoms down to the busiest families and genera. */
-async function higherRanks(): Promise<NameRow[]> {
+/**
+ * A name-index row: iNaturalist's English name, else GBIF's by the same rule as everywhere else,
+ * plus GBIF's other English names when there are any, so search still finds a species by them.
+ */
+function nameRow({ key, rank, scientificName, vernaculars, count, inatName, inatId }: RowSource): NameRow {
+  const commonName = inatName ?? englishName(vernaculars, key);
+  const others = otherEnglishNames(vernaculars, OTHER_NAMES_PER_ROW, key, commonName);
+  const row: NameRow = [key, rank, scientificName, commonName, count];
+  if (inatId !== undefined || others.length) row.push(inatId ?? null);
+  if (others.length) row.push(others);
+  return row;
+}
+
+/**
+ * Name-index rows for kingdoms down to the busiest families and genera.
+ * @param inatNames iNaturalist's English names of the species' ancestors (see inatHigherNames).
+ */
+async function higherRanks(inatNames: ReadonlyMap<string, string>): Promise<NameRow[]> {
   const { counts, lookupKeys } = await higherRankCounts();
   const usages = await higherRankUsages(lookupKeys);
   const rows: NameRow[] = [];
   for (const [key, count] of counts) {
     const usage = usages.get(key);
     const rank = usage && CODE_BY_RANK[usage.rank];
-    if (!usage || !rank || count < MIN_HIGHER_TAXON_RECORDS) continue;
-    rows.push(nameRow(key, rank, usage.canonicalName ?? usage.scientificName, usage.vernacularNames ?? [], count));
+    if (!usage || !rank || rank === 'S' || count < MIN_HIGHER_TAXON_RECORDS) continue;
+    const scientificName = usage.canonicalName ?? usage.scientificName;
+    const inatName = inatNames.get(higherTaxonKey(INAT_RANK_LEVEL[rank], scientificName)) ?? null;
+    rows.push(nameRow({ key, rank, scientificName, vernaculars: usage.vernacularNames ?? [], count, inatName }));
   }
   return rows;
 }
 
-/**
- * The iNaturalist IDs the last `pnpm bake` found. Matches are stable and iNaturalist allows about one
- * request a second, so a re-bake only looks up species without one. `INAT_IDS_REFRESH=1` looks up all.
- */
-async function previousInatIds(): Promise<Map<number, number>> {
-  if (process.env['INAT_IDS_REFRESH'] === '1') return new Map();
+/** A species' GBIF names, or null for one GBIF doesn't know. */
+async function speciesSource(key: number, count: number): Promise<RowSource | null> {
   try {
-    const { names } = JSON.parse(await readFile(join(bakeDir(), 'names.json'), 'utf8')) as NamesSnapshot;
-    return new Map(names.flatMap((row): [number, number][] => (row[5] ? [[row[0], row[5]]] : [])));
-  } catch {
-    // No earlier bake, or one we can't read: look every species up.
-    return new Map();
+    const [usage, vernaculars] = await Promise.all([getSpecies(key), getVernacularNames(key)]);
+    const scientificName = usage.canonicalName ?? usage.scientificName;
+    return { key, rank: 'S', scientificName, vernaculars: vernaculars.results, count };
+  } catch (error) {
+    return rethrowUnlessMissing(error);
   }
 }
 
 /**
- * iNaturalist's taxon for each species, so the browser skips the search that finds it.
- * A chunk that fails is left without IDs; the browser finds those itself.
+ * Name-index rows for the given species, named by iNaturalist where it has them (with their
+ * iNaturalist IDs), and the English names of the taxa above them. Species GBIF doesn't know are skipped.
  */
-async function inatIds(rows: readonly NameRow[]): Promise<Map<number, number>> {
-  const ids = await previousInatIds();
-  const unmatched = rows.filter((row) => !ids.has(row[0]));
-  // Counted per chunk, all queued up front, so the progress bar shows how far through it is.
-  const finishChunk = queueRequests('iNaturalist', Math.ceil(unmatched.length / INAT_LOOKUP_CHUNK));
-  for (let offset = 0; offset < unmatched.length; offset += INAT_LOOKUP_CHUNK) {
-    const chunk = unmatched
-      .slice(offset, offset + INAT_LOOKUP_CHUNK)
-      .map((row) => ({ key: row[0], rank: 'SPECIES' as const, name: row[2] }));
-    try {
-      for (const [key, id] of await resolveInatIds(chunk)) ids.set(key, id);
-    } catch (error) {
-      console.warn(`iNaturalist IDs skipped for species ${offset}-${offset + chunk.length}:`, error);
-    } finally {
-      finishChunk();
-    }
-  }
-  return ids;
-}
-
-/** Name-index rows for the given species, with iNaturalist IDs where found. Species GBIF doesn't know are skipped. */
-async function speciesRows(counts: Map<number, number>): Promise<NameRow[]> {
+async function speciesRows(
+  counts: Map<number, number>,
+): Promise<{ rows: NameRow[]; higherNames: Map<string, string> }> {
   const limit = lookupLimit();
-  const rows = await Promise.all(
-    [...counts].map(([key, count]) =>
-      limit(async (): Promise<NameRow | null> => {
-        try {
-          const [usage, vernaculars] = await Promise.all([getSpecies(key), getVernacularNames(key)]);
-          return nameRow(key, 'S', usage.canonicalName ?? usage.scientificName, vernaculars.results, count);
-        } catch (error) {
-          return rethrowUnlessMissing(error);
-        }
-      }),
-    ),
+  const sources = await Promise.all([...counts].map(([key, count]) => limit(() => speciesSource(key, count))));
+  const known = sources.filter((source): source is RowSource => source !== null);
+  const { ids, taxa } = await inatSpeciesTaxa(
+    known.map((source) => ({ key: source.key, name: source.scientificName })),
   );
-  const named = rows.filter((row): row is NameRow => row !== null);
-  const ids = await inatIds(named);
-  return named.map((row): NameRow => {
-    const id = ids.get(row[0]);
-    if (id === undefined) return row;
-    const withId: NameRow = [...row];
-    withId[5] = id;
-    return withId;
+  const rows = known.map((source) => {
+    const inatId = ids.get(source.key);
+    if (inatId === undefined) return nameRow(source);
+    return nameRow({ ...source, inatId, inatName: inatCommonName(taxa.get(source.key)) });
   });
+  return { rows, higherNames: await inatHigherNames([...taxa.values()]) };
 }
 
 /** The search index of taxon names: higher ranks plus the most-recorded species, busiest first. */
 export function bakeNames(): Promise<NamesSnapshot> {
   return once('names', async () => {
-    const [higher, species] = await Promise.all([higherRanks(), topSpeciesKeys(indexSize()).then(speciesRows)]);
-    const names = [...higher, ...species].sort((left, right) => right[4] - left[4]);
+    // Species first: their iNaturalist taxa name the ranks above them.
+    const species = await topSpeciesKeys(indexSize()).then(speciesRows);
+    const higher = await higherRanks(species.higherNames);
+    const names = [...higher, ...species.rows].sort((left, right) => right[4] - left[4]);
     return { ...snapshotMeta(), names };
   });
 }

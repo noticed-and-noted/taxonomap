@@ -221,6 +221,7 @@ jobs:
           name: dist
           path: dist
       - uses: cloudflare/wrangler-action@v3
+        id: pages
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -229,6 +230,29 @@ jobs:
           command: >-
             pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT || 'taxonomap' }}
             --branch=${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'main' }}
+      # Only the pull request's newest commit keeps a preview: drop the earlier ones, on Cloudflare and GitHub.
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+      # No pnpm here: only wrangler, through npx, so no package-manager cache to set up.
+      - if: github.event_name == 'pull_request'
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - if: github.event_name == 'pull_request'
+        run: .github/scripts/prune-previews.sh
+        env:
+          KEEP: latest
+          KEEP_ID: ${{ steps.pages.outputs.pages-deployment-id }}
+          PROJECT: ${{ vars.CF_PAGES_PROJECT || 'taxonomap' }}
+          BRANCH: pr-${{ github.event.number }}
+          HEAD_REF: ${{ github.head_ref }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   contract:
     name: GBIF contract tests (live)

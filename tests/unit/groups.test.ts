@@ -142,6 +142,70 @@ describe('without the baked data', () => {
 });
 
 describe('commonNames', () => {
+  const inatNames = vi.fn<(taxa: { key: number }[]) => Promise<Map<number, string | null>>>();
+
+  /** groups with iNaturalist's names mocked, so only GBIF's fallback request reaches the network. */
+  async function loadWithInat() {
+    vi.resetModules();
+    vi.doMock('~/lib/photos/taxon-photos', async (original) => ({
+      ...(await original<typeof import('~/lib/photos/taxon-photos')>()),
+      inatNames,
+    }));
+    return import('~/lib/species/groups');
+  }
+
+  afterEach(() => {
+    vi.doUnmock('~/lib/photos/taxon-photos');
+    inatNames.mockReset();
+  });
+
+  it('takes iNaturalist’s names, asking GBIF in one request only for the species it does not name', async () => {
+    inatNames.mockResolvedValue(
+      new Map([
+        [1, 'European robin'],
+        [2, null],
+        [3, null],
+      ]),
+    );
+    const calls = stubNetwork(() => ({
+      data: { k2: { vernacularNames: [{ vernacularName: 'house sparrow', language: 'eng' }] }, k3: null },
+    }));
+    const { commonNames } = await loadWithInat();
+    expect([...(await commonNames([1, 2, 3]))]).toEqual([
+      [1, 'European robin'],
+      [2, 'House sparrow'],
+    ]);
+    expect(inatNames.mock.calls[0]![0].map((taxon) => taxon.key)).toEqual([1, 2, 3]);
+    expect(calls).toHaveLength(1);
+    const query = calls[0]!.searchParams.get('query') ?? '';
+    expect([query.includes('k1:'), query.includes('k2:'), query.includes('k3:')]).toEqual([false, true, true]);
+  });
+
+  it('asks GBIF nothing when iNaturalist names every species', async () => {
+    inatNames.mockResolvedValue(new Map([[1, 'European robin']]));
+    const calls = stubNetwork(() => ({ data: {} }));
+    const { commonNames } = await loadWithInat();
+    expect([...(await commonNames([1]))]).toEqual([[1, 'European robin']]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('falls back to GBIF’s names when iNaturalist fails', async () => {
+    inatNames.mockRejectedValue(new Error('down'));
+    stubNetwork(() => ({ data: { k1: { vernacularNames: [{ vernacularName: 'robin', language: 'eng' }] } } }));
+    const { commonNames } = await loadWithInat();
+    expect([...(await commonNames([1]))]).toEqual([[1, 'Robin']]);
+  });
+
+  it('skips the remaining lookups once superseded', async () => {
+    const calls = stubNetwork(() => ({ results: [] }));
+    const { commonNames } = await loadWithInat();
+    expect((await commonNames([1, 2], AbortSignal.abort())).size).toBe(0);
+    expect(inatNames).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('gbifCommonNames', () => {
   it('picks each English name from one request, leaving out unknown species and those without one', async () => {
     const calls = stubNetwork(() => ({
       data: {
@@ -150,45 +214,14 @@ describe('commonNames', () => {
         k3: null,
       },
     }));
-    const { commonNames } = await load();
-    expect([...(await commonNames([1, 2, 3]))]).toEqual([[1, 'Robin']]);
+    const { gbifCommonNames } = await load();
+    expect([...(await gbifCommonNames([1, 2, 3]))]).toEqual([[1, 'Robin']]);
     expect(calls).toHaveLength(1);
   });
 
   it('names none when the request fails', async () => {
     stubNetwork(() => json({}, 400));
-    const { commonNames } = await load();
-    expect((await commonNames([1, 2])).size).toBe(0);
-  });
-
-  it('skips the remaining lookups once superseded', async () => {
-    const calls = stubNetwork(() => ({ results: [] }));
-    const { commonNames } = await load();
-    expect((await commonNames([1, 2], AbortSignal.abort())).size).toBe(0);
-    expect(calls).toHaveLength(0);
-  });
-});
-
-describe('photosForKeys', () => {
-  afterEach(() => vi.doUnmock('~/lib/photos/taxon-photos'));
-
-  it('asks for each species’ lead photo, passing the signal on', async () => {
-    const leadPhotos = vi.fn(async () => ({ images: new Map(), names: new Map() }));
-    vi.resetModules();
-    vi.doMock('~/lib/photos/taxon-photos', () => ({ leadPhotos }));
-    const { photosForKeys } = await import('~/lib/species/groups');
-    const { signal } = new AbortController();
-    await photosForKeys([1, 2], signal, new Map([[2, 'Two two']]));
-    await photosForKeys([3]);
-    expect(leadPhotos.mock.calls).toEqual([
-      [
-        [
-          { key: 1, rank: 'SPECIES' },
-          { key: 2, rank: 'SPECIES', name: 'Two two' },
-        ],
-        { signal },
-      ],
-      [[{ key: 3, rank: 'SPECIES' }], {}],
-    ]);
+    const { gbifCommonNames } = await load();
+    expect((await gbifCommonNames([1, 2])).size).toBe(0);
   });
 });

@@ -1,21 +1,39 @@
 /**
- * GBIF taxon key → iNaturalist taxon ID, remembered across visits. A match is
- * stable and costs a GBIF search (or an iNaturalist one) to find, so each
- * browser finds it once. Held in localStorage, newest last, capped.
+ * GBIF taxon key → iNaturalist taxon ID and English name, remembered across visits. A match is
+ * stable and costs a GBIF search (or an iNaturalist one) to find, so each browser finds it once;
+ * remembering the name too means a row named before needs no request at all. Held in
+ * localStorage, newest last, capped.
  */
 // v2: v1 could hold wrong matches for groups iNaturalist ranks differently (GBIF's order Cetacea).
+// Entries are [key, id] or [key, id, name | null]: v2's pairs still read, just without a name.
 const STORAGE_KEY = 'inat-ids-v2';
 const MAX_ENTRIES = 3000;
 
-let cachedIds: Map<number, number> | undefined;
+/** A remembered match: the name is null when iNaturalist has none, and absent when not yet seen. */
+export interface InatMatch {
+  id: number;
+  name?: string | null;
+}
 
-/** Reads the saved pairs, ignoring anything malformed or unreadable (no storage, or not ours). */
-function loadStored(): Map<number, number> {
-  const stored = new Map<number, number>();
+type StoredEntry = [number, number, (string | null)?];
+
+let cachedMatches: Map<number, InatMatch> | undefined;
+
+/** One stored entry as a match, or null when it is malformed. */
+function parseEntry([taxonKey, inatId, name]: StoredEntry): [number, InatMatch] | null {
+  if (!Number.isInteger(taxonKey) || !Number.isInteger(inatId)) return null;
+  const hasName = typeof name === 'string' || name === null;
+  return [taxonKey, { id: inatId, ...(hasName && { name }) }];
+}
+
+/** Reads the saved entries, ignoring anything malformed or unreadable (no storage, or not ours). */
+function loadStored(): Map<number, InatMatch> {
+  const stored = new Map<number, InatMatch>();
   try {
-    const pairs = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as [number, number][];
-    for (const [taxonKey, inatId] of pairs) {
-      if (Number.isInteger(taxonKey) && Number.isInteger(inatId)) stored.set(taxonKey, inatId);
+    const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as StoredEntry[];
+    for (const entry of entries) {
+      const parsed = Array.isArray(entry) ? parseEntry(entry) : null;
+      if (parsed) stored.set(...parsed);
     }
   } catch {
     /* no storage, or not ours: start empty */
@@ -23,38 +41,56 @@ function loadStored(): Map<number, number> {
   return stored;
 }
 
-function read(): Map<number, number> {
-  cachedIds ??= loadStored();
-  return cachedIds;
+function read(): Map<number, InatMatch> {
+  cachedMatches ??= loadStored();
+  return cachedMatches;
 }
 
 function save() {
+  const entries = [...read()].map(([taxonKey, match]): StoredEntry =>
+    match.name === undefined ? [taxonKey, match.id] : [taxonKey, match.id, match.name],
+  );
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...read()]));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   } catch {
     /* storage full or blocked: remembered for this visit only */
   }
 }
 
 /** The remembered iNaturalist taxon ID for a GBIF taxon key, if any. */
-export const knownInatId = (key: number): number | undefined => read().get(key);
+export const knownInatId = (key: number): number | undefined => read().get(key)?.id;
+
+/**
+ * The remembered iNaturalist name for a GBIF taxon key: a name, null when iNaturalist has
+ * none, or undefined when it hasn't been seen.
+ */
+export const knownInatName = (key: number): string | null | undefined => read().get(key)?.name;
 
 /** Drops a remembered match, e.g. one iNaturalist no longer recognises. */
 export function forgetInatId(key: number): void {
   if (read().delete(key)) save();
 }
 
+/** Whether `next` adds nothing to what is remembered as `current`. */
+function isSame(current: InatMatch | undefined, next: InatMatch): boolean {
+  return current?.id === next.id && (next.name === undefined || current.name === next.name);
+}
+
 /**
- * Remembers newly found matches, evicting the oldest beyond the cap.
- * @param found GBIF taxon key → iNaturalist taxon ID.
+ * Remembers newly found matches, evicting the oldest beyond the cap. A match without a name
+ * keeps the name already remembered for the same ID.
+ * @param found GBIF taxon key → iNaturalist match.
  */
-export function rememberInatIds(found: ReadonlyMap<number, number>): void {
+export function rememberInatMatches(found: ReadonlyMap<number, InatMatch>): void {
   const current = read();
   let hasChanged = false;
-  for (const [taxonKey, inatId] of found) {
-    if (current.get(taxonKey) === inatId) continue;
+  for (const [taxonKey, match] of found) {
+    const previous = current.get(taxonKey);
+    if (isSame(previous, match)) continue;
+    const keptName = previous?.id === match.id ? previous.name : undefined;
+    const name = match.name === undefined ? keptName : match.name;
     current.delete(taxonKey);
-    current.set(taxonKey, inatId);
+    current.set(taxonKey, { id: match.id, ...(name !== undefined && { name }) });
     hasChanged = true;
   }
   if (!hasChanged) return;

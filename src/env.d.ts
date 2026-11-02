@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly PUBLIC_GBIF_API_BASE?: string;
   readonly PUBLIC_GBIF_TILE_BASE?: string;
   readonly PUBLIC_GBIF_GRAPHQL_BASE?: string;
+  readonly PUBLIC_INAT_API_BASE?: string;
   readonly PUBLIC_SITE_URL?: string;
   readonly PUBLIC_GEOCODER?: 'nominatim' | 'photon';
   readonly PUBLIC_GEOCODER_URL?: string;

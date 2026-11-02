@@ -38,13 +38,14 @@ import { HOUR } from '~/lib/util/time';
 import {
   curatedImages,
   getTaxa,
+  inatCommonName,
   inatPhotoId,
   observationImages,
   searchTaxon,
   votedObservations,
   type InatTaxon,
 } from './inat';
-import { forgetInatId, knownInatId, rememberInatIds } from './inat-ids';
+import { forgetInatId, type InatMatch, knownInatId, knownInatName, rememberInatMatches } from './inat-ids';
 
 export const MAX_PHOTOS = 20;
 
@@ -57,6 +58,9 @@ export interface PhotoTaxon {
 }
 
 type Opts = { signal?: AbortSignal };
+
+/** A match as remembered: its ID and English name. */
+const asMatch = (taxon: InatTaxon): InatMatch => ({ id: taxon.id, name: inatCommonName(taxon) });
 
 /** iNaturalist rank levels for the GBIF ranks we can match. */
 const RANK_LEVEL: Partial<Record<Rank, number>> = {
@@ -132,7 +136,7 @@ type Match = InatTaxon | null | Promise<InatTaxon | null>;
 /** Search iNaturalist for a species by name, remembering a hit; null on none or on failure. */
 async function byName(key: number, name: string, options: Opts): Promise<InatTaxon | null> {
   const found = await searchTaxon(name, options.signal).catch(() => null);
-  if (found) rememberInatIds(new Map([[key, found.id]]));
+  if (found) rememberInatMatches(new Map([[key, asMatch(found)]]));
   return found;
 }
 
@@ -213,12 +217,42 @@ function candidateAtLevel(
   return lineage.find(isMatch) ?? null;
 }
 
+/** What matchTaxa has fetched: the GBIF record searches, and iNaturalist's candidates and their ancestors. */
+interface MatchContext {
+  known: ReadonlyMap<number, number>;
+  searches: ReadonlyMap<number, InatRecord>;
+  candidates: ReadonlyMap<number, InatTaxon>;
+  ancestors: ReadonlyMap<number, InatTaxon>;
+  options: Opts;
+}
+
+/** One taxon's match from what was fetched; a match found is added to `found`. */
+function settleMatch(taxon: PhotoTaxon, context: MatchContext, found: Map<number, InatMatch>): Match {
+  const knownId = context.known.get(taxon.key);
+  if (knownId) {
+    const remembered = context.candidates.get(knownId) ?? null;
+    // A remembered ID iNaturalist no longer has: look it up afresh next time.
+    if (remembered) found.set(taxon.key, asMatch(remembered));
+    else forgetInatId(taxon.key);
+    return remembered;
+  }
+  const level = RANK_LEVEL[taxon.rank];
+  if (!level) return null;
+  const record = context.searches.get(taxon.key);
+  const candidate = record?.taxonId === undefined ? undefined : context.candidates.get(record.taxonId);
+  const match = candidateAtLevel(candidate, level, context.ancestors, record?.rankName);
+  if (match) found.set(taxon.key, asMatch(match));
+  const isNameSearchable = !match && !candidate && taxon.name && taxon.rank === 'SPECIES';
+  return isNameSearchable ? byName(taxon.key, taxon.name!, context.options) : match;
+}
+
 /**
  * Match GBIF taxa to iNaturalist taxa (null: no match). Also returns species names from the records.
  * An ID already known (remembered from before, or baked into the name index when it has loaded)
  * skips the GBIF search. Otherwise species are searched all in one request, and taxa above
  * species one by one. A species GBIF holds no record of is searched for by name (iNaturalist,
  * one request each) when it has one; that match arrives later, so others needn't wait for it.
+ * Every match is remembered with its English name, so a later name lookup needs no request.
  */
 async function matchTaxa(
   taxa: readonly PhotoTaxon[],
@@ -232,36 +266,50 @@ async function matchTaxa(
   ];
   const candidates = await getTaxa(candidateIds, options.signal);
   const ancestors = await lookupAncestors(unknown, searches, candidates, options);
+  const context: MatchContext = { known, searches, candidates, ancestors, options };
 
   const names = new Map<number, string>();
   const matched = new Map<number, Match>();
-  const found = new Map<number, number>();
+  const found = new Map<number, InatMatch>();
   for (const taxon of taxa) {
-    const level = RANK_LEVEL[taxon.rank];
-    const record = searches.get(taxon.key);
-    if (record?.species) names.set(taxon.key, record.species);
-
-    const knownId = known.get(taxon.key);
-    if (knownId) {
-      const remembered = candidates.get(knownId) ?? null;
-      // A remembered ID iNaturalist no longer has: look it up afresh next time.
-      if (!remembered) forgetInatId(taxon.key);
-      matched.set(taxon.key, remembered);
-      continue;
-    }
-    if (!level) {
-      matched.set(taxon.key, null);
-      continue;
-    }
-
-    const candidate = record?.taxonId === undefined ? undefined : candidates.get(record.taxonId);
-    const match = candidateAtLevel(candidate, level, ancestors, record?.rankName);
-    if (match) found.set(taxon.key, match.id);
-    const isNameSearchable = !match && !candidate && taxon.name && taxon.rank === 'SPECIES';
-    matched.set(taxon.key, isNameSearchable ? byName(taxon.key, taxon.name!, options) : match);
+    const species = searches.get(taxon.key)?.species;
+    if (species) names.set(taxon.key, species);
+    matched.set(taxon.key, settleMatch(taxon, context, found));
   }
-  rememberInatIds(found);
+  rememberInatMatches(found);
   return { matched, names };
+}
+
+/** Each matched taxon's English name, once every match (name searches included) has settled. */
+async function matchedCommonNames(matched: ReadonlyMap<number, Match>): Promise<Map<number, string>> {
+  const settled = await Promise.all([...matched].map(async ([key, pending]) => [key, await pending] as const));
+  return new Map(
+    settled.flatMap(([key, taxon]): [number, string][] => {
+      const name = inatCommonName(taxon);
+      return name ? [[key, name]] : [];
+    }),
+  );
+}
+
+/**
+ * iNaturalist's English name for each taxon: null when it has none or matches nothing. A name
+ * remembered from before costs nothing; the rest are matched as for photos, but never searched
+ * for by name (a request each), and their iNaturalist taxa come 30 to a request, shared with
+ * the photos of the same taxa.
+ */
+export async function inatNames(taxa: readonly PhotoTaxon[], options: Opts = {}): Promise<Map<number, string | null>> {
+  const names = new Map<number, string | null>();
+  const toMatch: PhotoTaxon[] = [];
+  for (const taxon of taxa) {
+    const remembered = knownInatName(taxon.key);
+    if (remembered === undefined) toMatch.push({ key: taxon.key, rank: taxon.rank });
+    else names.set(taxon.key, remembered);
+  }
+  if (!toMatch.length) return names;
+  const { matched } = await matchTaxa(toMatch, options);
+  const found = await matchedCommonNames(matched);
+  for (const taxon of toMatch) names.set(taxon.key, found.get(taxon.key) ?? null);
+  return names;
 }
 
 /** iNaturalist's species for GBIF species, by GBIF key; the ones it has none for are left out. */
@@ -352,16 +400,29 @@ export async function taxonPhotos(taxon: PhotoTaxon, options: Opts = {}): Promis
   return photos;
 }
 
+/** Options for leadPhotos: `onCommonNames` hears iNaturalist's names as soon as the taxa are matched, before the photos. */
+type LeadPhotoOpts = Opts & { onCommonNames?: (commonNames: ReadonlyMap<number, string>) => void };
+
+/** Lead photos, with the species names from GBIF's records and iNaturalist's English names. */
+export interface LeadPhotos {
+  images: Map<number, UsableImage>;
+  names: Map<number, string>;
+  commonNames: Map<number, string>;
+}
+
 /**
  * Lead photos (each taxon's first photo) for many taxa: iNaturalist taxa
  * are fetched TAXA_BATCH per request, and GBIF's photos (source C) only for
  * taxa without one from iNaturalist, one request per rank and source.
+ * The same iNaturalist taxa carry the English names, so those cost nothing more.
  */
-export async function leadPhotos(
-  taxa: readonly PhotoTaxon[],
-  options: Opts = {},
-): Promise<{ images: Map<number, UsableImage>; names: Map<number, string> }> {
+export async function leadPhotos(taxa: readonly PhotoTaxon[], options: LeadPhotoOpts = {}): Promise<LeadPhotos> {
   const { matched, names } = await matchTaxa(taxa, options);
+  // Alongside the photos: a name search still running shouldn't hold the other taxa's photos back.
+  const commonNamesFound = matchedCommonNames(matched).then((commonNames) => {
+    options.onCommonNames?.(commonNames);
+    return commonNames;
+  });
   const images = new Map<number, UsableImage>();
 
   const limit = pLimit(4);
@@ -384,7 +445,7 @@ export async function leadPhotos(
     for (const [key, image] of found) images.set(key, image);
   }
 
-  return { images, names };
+  return { images, names, commonNames: await commonNamesFound };
 }
 
 /** Each taxon's first GBIF photo under `filter`: one request per rank with several taxa, else the taxon page's own request. */

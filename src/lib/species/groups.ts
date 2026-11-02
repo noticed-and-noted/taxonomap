@@ -6,8 +6,10 @@
  *                         (skipped when the caller's request already had the facet)
  *   names              → baked index, then the facet's own names (GBIF's GraphQL API names
  *                         each value); the table calls `resolveNames` for any still missing
- *                         (cached detail lookups, 2 at a time) and `commonNames` for rows in
- *                         view without a common name (1 GraphQL request a batch)
+ *                         (cached detail lookups, 2 at a time)
+ *   common names       → baked index (iNaturalist's names, baked), then iNaturalist's taxa,
+ *                         which the photo lookups fetch anyway; `commonNames` for rows that get
+ *                         no photo lookup, with GBIF's names for species iNaturalist doesn't name
  *   photos             → the table calls `photosForKeys` for rows in view: each species'
  *                         lead photo, iNaturalist taxa batched 30 a request (also supplies names)
  * Every step takes an AbortSignal so a superseded load stops sending requests.
@@ -24,7 +26,7 @@ import {
   type UsableImage,
   type VernacularName,
 } from '~/lib/gbif';
-import { leadPhotos } from '~/lib/photos/taxon-photos';
+import { inatNames, type LeadPhotos, leadPhotos } from '~/lib/photos/taxon-photos';
 import { englishName } from './names';
 
 export interface ClassGroup {
@@ -137,12 +139,29 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
 }
 
 /**
- * English common names, picked by `englishName()` from one batched GraphQL
- * request. Keys with no English name are left out.
+ * English common names: iNaturalist's (none when remembered from before, else one batched GBIF
+ * record search and one iNaturalist request per 30), then `gbifCommonNames` for the keys
+ * iNaturalist doesn't name. Keys with no English name are left out.
  */
 export async function commonNames(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
+  if (signal?.aborted) return new Map();
+  const fromInat = await inatNames(
+    keys.map((key) => ({ key, rank: 'SPECIES' as const })),
+    { ...(signal && { signal }) },
+  ).catch(() => new Map<number, string | null>());
+  const names = new Map([...fromInat].flatMap(([key, name]): [number, string][] => (name ? [[key, name]] : [])));
+  const unnamed = keys.filter((key) => !names.has(key));
+  if (!unnamed.length) return names;
+  return new Map([...names, ...(await gbifCommonNames(unnamed, signal))]);
+}
+
+/**
+ * GBIF's English common names, picked by `englishName()` from one batched GraphQL
+ * request: the fallback for taxa iNaturalist doesn't name. Keys with no English name are left out.
+ */
+export async function gbifCommonNames(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
   const names = new Map<number, string>();
-  if (signal?.aborted) return names;
+  if (signal?.aborted || !keys.length) return names;
   // Rows without a common name still show their scientific name.
   const vernaculars = await vernacularNamesByTaxon(keys, signal).catch(() => new Map<number, VernacularName[]>());
   for (const [key, taxonNames] of vernaculars) {
@@ -154,16 +173,18 @@ export async function commonNames(keys: readonly number[], signal?: AbortSignal)
 
 /**
  * Each species' lead photo (see leadPhotos), so a row shows the same photo
- * as the first one on the page it links to. Also supplies species names.
+ * as the first one on the page it links to. Also supplies species names, and
+ * iNaturalist's common names (to `onCommonNames` as soon as they are known).
  * `names` (scientific, by key) lets a species GBIF holds no iNaturalist record of be found by name.
  */
 export function photosForKeys(
   keys: readonly number[],
   signal?: AbortSignal,
   names: ReadonlyMap<number, string> = new Map(),
-): Promise<{ images: Map<number, UsableImage>; names: Map<number, string> }> {
+  onCommonNames?: (commonNames: ReadonlyMap<number, string>) => void,
+): Promise<LeadPhotos> {
   return leadPhotos(
     keys.map((key) => ({ key, rank: 'SPECIES' as const, ...(names.has(key) && { name: names.get(key)! }) })),
-    { ...(signal && { signal }) },
+    { ...(signal && { signal }), ...(onCommonNames && { onCommonNames }) },
   );
 }
