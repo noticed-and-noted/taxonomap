@@ -21,9 +21,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           sparse-checkout: .github/scripts
+      # No pnpm here: only wrangler, through npx, so no package-manager cache to set up.
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
+          package-manager-cache: false
       - run: .github/scripts/prune-previews.sh
         env:
           KEEP: none
