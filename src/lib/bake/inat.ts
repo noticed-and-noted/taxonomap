@@ -1,18 +1,19 @@
 /**
  * iNaturalist's taxa for the baked name index (Node only): each species' taxon, found once and
  * then reused by ID, and the English names of the higher taxa above them. Names come from the
- * taxa themselves (`preferred_common_name`), fetched 30 to a request by ID, so the higher ranks
+ * taxa themselves (`preferred_common_name`), fetched 100 to a request by ID, so the higher ranks
  * cost no name searches: a species' taxon lists its ancestors' IDs.
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { NamesSnapshot } from '~/lib/data/types';
-import { getTaxa, inatCommonName, type InatTaxon, TAXA_BATCH } from '~/lib/photos/inat';
+import { getTaxonNames, inatCommonName, type InatTaxon, TAXON_NAMES_BATCH } from '~/lib/photos/inat-server';
 import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { bakeDir, queueRequests } from './cache';
 
 const INAT = 'iNaturalist';
-const INAT_LOOKUP_CHUNK = 300;
+/** Species matched per call. Small, as a species GBIF has no iNaturalist record of costs a search a second, and the bar only moves between calls. */
+const INAT_LOOKUP_CHUNK = 50;
 
 /** iNaturalist rank levels of the ranks above species the index names. */
 export const INAT_RANK_LEVEL = { K: 70, P: 60, C: 50, O: 40, F: 30, G: 20 } as const;
@@ -38,18 +39,19 @@ async function previousInatIds(): Promise<Map<number, number>> {
   }
 }
 
-/** Splits `items` into chunks of INAT_LOOKUP_CHUNK, the most one call holds in iNaturalist's taxon cache at once. */
-function chunks<Item>(items: readonly Item[]): Item[][] {
+/** Splits `items` into chunks of `size`. */
+function chunks<Item>(items: readonly Item[], size: number): Item[][] {
   const groups: Item[][] = [];
-  for (let offset = 0; offset < items.length; offset += INAT_LOOKUP_CHUNK) {
-    groups.push(items.slice(offset, offset + INAT_LOOKUP_CHUNK));
-  }
+  for (let offset = 0; offset < items.length; offset += size) groups.push(items.slice(offset, offset + size));
   return groups;
 }
 
 /** IDs for the species the last bake didn't match. A chunk that fails is left without; the browser finds those itself. */
 async function matchNewSpecies(species: readonly SpeciesToMatch[], ids: Map<number, number>): Promise<void> {
-  const unmatched = chunks(species.filter((entry) => !ids.has(entry.key)));
+  const unmatched = chunks(
+    species.filter((entry) => !ids.has(entry.key)),
+    INAT_LOOKUP_CHUNK,
+  );
   // Counted per chunk, all queued up front, so the progress bar shows how far through it is.
   const finishChunk = queueRequests(INAT, unmatched.length);
   for (const chunk of unmatched) {
@@ -65,21 +67,20 @@ async function matchNewSpecies(species: readonly SpeciesToMatch[], ids: Map<numb
 }
 
 /**
- * iNaturalist's taxa by ID, TAXA_BATCH to a request, counted in the progress bar.
- * A chunk that fails is left out, so its taxa keep GBIF's names.
+ * iNaturalist's taxa by ID, TAXON_NAMES_BATCH to a request, counted in the progress bar.
+ * A request that fails is left out, so its taxa keep GBIF's names.
  */
 async function taxaById(ids: Iterable<number>): Promise<Map<number, InatTaxon>> {
-  const groups = chunks([...new Set(ids)]);
+  // Sorted, so the same IDs always make the same requests and the disk cache can answer them.
+  const sortedIds = [...new Set(ids)].sort((left, right) => left - right);
+  const groups = chunks(sortedIds, TAXON_NAMES_BATCH);
   const finishChunk = queueRequests(INAT, groups.length);
   const taxa = new Map<number, InatTaxon>();
   for (const group of groups) {
     try {
-      for (const [id, taxon] of await getTaxa(group)) taxa.set(id, taxon);
+      for (const [id, taxon] of await getTaxonNames(group)) taxa.set(id, taxon);
     } catch (error) {
-      console.warn(
-        `iNaturalist taxa skipped for ${group.length} IDs (${Math.ceil(group.length / TAXA_BATCH)} requests):`,
-        error,
-      );
+      console.warn(`iNaturalist taxa skipped for ${group.length} IDs:`, error);
     } finally {
       finishChunk();
     }

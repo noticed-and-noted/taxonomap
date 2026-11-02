@@ -1,5 +1,6 @@
 /** The iNaturalist token bucket: requests cancelled while queued give up their turn. */
 import { throttle } from '~/lib/photos/inat';
+import { stubNetwork } from './helpers/network';
 
 afterEach(() => vi.useRealTimers());
 
@@ -47,5 +48,39 @@ describe('throttle', () => {
     await vi.advanceTimersByTimeAsync(1000);
     await fresh;
     expect(sent).toEqual(['a', 'fresh']);
+  });
+});
+
+describe('getTaxonNames', () => {
+  it('asks for many taxa in one request, sorted, with only the name fields', async () => {
+    const calls = stubNetwork(() => ({
+      results: [
+        { id: 5, name: 'Five', rank_level: 10 },
+        { id: 40, name: 'Forty', rank_level: 10 },
+      ],
+    }));
+    vi.resetModules();
+    const { getTaxonNames } = await import('~/lib/photos/inat');
+    const taxa = await getTaxonNames([40, 5, 5]);
+    expect([...taxa.keys()]).toEqual([5, 40]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pathname).toBe('/v2/taxa');
+    expect(calls[0]?.searchParams.get('id')).toBe('5,40');
+    expect(calls[0]?.searchParams.get('per_page')).toBe('2');
+    expect(calls[0]?.searchParams.get('fields')).not.toContain('taxon_photos');
+  });
+});
+
+describe('getTaxonNames with a replaced taxon', () => {
+  it('fetches the taxa the list hides by path', async () => {
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v2/taxa') return { results: [{ id: 5, name: 'Five', rank_level: 10 }] };
+      return { results: [{ id: 40, name: 'Forty', rank_level: 10, preferred_common_name: 'Old name' }] };
+    });
+    vi.resetModules();
+    const { getTaxonNames } = await import('~/lib/photos/inat');
+    const taxa = await getTaxonNames([40, 5]);
+    expect([...taxa.keys()].sort()).toEqual([40, 5]);
+    expect(calls.map((call) => call.pathname)).toEqual(['/v2/taxa', '/v2/taxa/40']);
   });
 });

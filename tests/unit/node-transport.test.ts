@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createNodeTransport, userAgent } from '~/lib/gbif/node-transport';
+import { createNodeTransport, userAgent, withDiskCache } from '~/lib/gbif/node-transport';
 
 let dir: string;
 beforeEach(async () => {
@@ -141,5 +141,22 @@ describe('node transport options', () => {
     await vi.advanceTimersByTimeAsync(1000);
     await second;
     expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(1000);
+  });
+});
+
+describe('disk cache in front of another transport', () => {
+  it('answers a repeat request from disk and stores only 200s', async () => {
+    const fetcher = fakeFetch();
+    const cached = withDiskCache((url) => fetcher.impl(url), { cacheDir: dir, refresh: false });
+    await cached('https://api.test/v1/a');
+    const repeat = await cached('https://api.test/v1/a');
+    expect(await repeat.json()).toEqual({ url: 'https://api.test/v1/a' });
+    expect(fetcher.seen).toHaveLength(1);
+
+    const failing = fakeFetch(429);
+    const uncached = withDiskCache((url) => failing.impl(url), { cacheDir: dir, refresh: false });
+    await uncached('https://api.test/v1/b');
+    await uncached('https://api.test/v1/b');
+    expect(failing.seen).toHaveLength(2);
   });
 });

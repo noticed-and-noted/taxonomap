@@ -7,6 +7,7 @@
  */
 import { env } from '~/lib/env';
 import { createHttp, type Transport } from '~/lib/gbif/http';
+import type { Params } from '~/lib/gbif/params';
 import { parseLicence, type InatImage } from '~/lib/gbif/licence';
 import { LruCache } from '~/lib/gbif/lru';
 import { tidy } from '~/lib/species/names';
@@ -15,8 +16,11 @@ import { HOUR } from '~/lib/util/time';
 /** iNaturalist's API base (`PUBLIC_INAT_API_BASE`), so a build can be pointed at a stand-in. */
 export const INAT_API_BASE = (env['PUBLIC_INAT_API_BASE'] || 'https://api.inaturalist.org').replace(/\/+$/, '');
 
-/** Most taxa per /taxa request. */
+/** Most taxa per /taxa/{ids} request. */
 export const TAXA_BATCH = 30;
+
+/** Most taxa per getTaxonNames request (iNaturalist's `per_page` allows 200). */
+export const TAXON_NAMES_BATCH = 100;
 
 const BURST = 5;
 const PER_SECOND = 1;
@@ -56,11 +60,17 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
   };
 }
 
-const inat = createHttp({
-  base: INAT_API_BASE,
-  transport: throttle((url, requestInit) => globalThis.fetch(url, requestInit)),
-  defaultTtlMs: 6 * HOUR,
-});
+const throttledFetch = throttle((url, requestInit) => globalThis.fetch(url, requestInit));
+
+/** The client for iNaturalist: `transport` under the shared cache and retries. */
+const createInat = (transport: Transport) => createHttp({ base: INAT_API_BASE, transport, defaultTtlMs: 6 * HOUR });
+
+let inat = createInat(throttledFetch);
+
+/** Lets the build put a disk cache in front of the throttled fetch (see inat-server). */
+export function configureInat(wrap: (throttled: Transport) => Transport): void {
+  inat = createInat(wrap(throttledFetch));
+}
 
 /** Every Creative Commons photo licence (see parseLicence for the rule). */
 const PHOTO_LICENCES = 'cc0,cc-by,cc-by-nc,cc-by-sa,cc-by-nd,cc-by-nc-sa,cc-by-nc-nd';
@@ -78,7 +88,7 @@ export interface InatTaxon {
   id: number;
   name: string;
   rank_level: number;
-  /** iNaturalist's English common name (asked for with LOCALE). */
+  /** iNaturalist's English common name (asked for with NAME_PARAMS). */
   preferred_common_name?: string | null;
   ancestor_ids?: number[];
   taxon_photos?: { photo: InatPhoto }[];
@@ -91,12 +101,15 @@ interface InatObservation {
 }
 
 /**
- * Common names in English, whatever language the browser asks for, so every visitor sees the
- * same name (and the same cache key).
+ * Common names in English as iNaturalist names them for the United Kingdom (place 6857), whatever
+ * language the browser asks for, so every visitor sees the same name (and the same cache key).
+ * The place does the work: `locale` alone gives every English variant the US name.
  */
-const LOCALE = 'en';
+const NAME_PARAMS = { locale: 'en', preferred_place_id: 6857 } as const;
 
 const TAXON_FIELDS = `id,name,rank_level,preferred_common_name,ancestor_ids,taxon_photos.photo.${PHOTO_FIELDS.replaceAll(',', ',taxon_photos.photo.')}`;
+
+const TAXON_NAME_FIELDS = 'id,name,rank_level,preferred_common_name,ancestor_ids';
 
 /** Taxa already fetched, by ID, so overlapping batches don't fetch them twice; capped so long sessions don't grow without end. */
 const taxa = new LruCache<InatTaxon>(2000);
@@ -113,7 +126,7 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
     if (chunk.every((id) => taxa.get(String(id)) !== undefined)) continue;
     const response = await inat.getJson<{ results: InatTaxon[] }>(
       `/v2/taxa/${chunk.join(',')}`,
-      { fields: TAXON_FIELDS, locale: LOCALE },
+      { fields: TAXON_FIELDS, ...NAME_PARAMS },
       { ...(signal && { signal }) },
     );
     for (const taxon of response.results) taxa.set(String(taxon.id), taxon, Infinity);
@@ -126,6 +139,36 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
   );
 }
 
+/** Taxa by ID from `path`, with only their names and ancestors. */
+async function fetchTaxonNames(path: string, params: Params): Promise<InatTaxon[]> {
+  const response = await inat.getJson<{ results: InatTaxon[] }>(path, {
+    ...params,
+    fields: TAXON_NAME_FIELDS,
+    ...NAME_PARAMS,
+  });
+  return response.results;
+}
+
+/**
+ * Taxa by ID with only their names and ancestors, up to TAXON_NAMES_BATCH in one request. Unlike
+ * getTaxa it asks for no photos and keeps no cache of its own, so a build can name thousands of
+ * taxa cheaply. The list endpoint hides inactive taxa (ones iNaturalist has since replaced), which
+ * a species' remembered ID can still point at, so those are fetched by path, TAXA_BATCH at a time.
+ * @param ids At most TAXON_NAMES_BATCH IDs; the caller splits longer lists.
+ */
+export async function getTaxonNames(ids: readonly number[]): Promise<Map<number, InatTaxon>> {
+  const wanted = [...new Set(ids)].sort((left, right) => left - right);
+  const listed = await fetchTaxonNames('/v2/taxa', { id: wanted.join(','), per_page: wanted.length });
+  const found = new Map(listed.map((taxon) => [taxon.id, taxon]));
+
+  const hidden = wanted.filter((id) => !found.has(id));
+  for (let offset = 0; offset < hidden.length; offset += TAXA_BATCH) {
+    const chunk = hidden.slice(offset, offset + TAXA_BATCH);
+    for (const taxon of await fetchTaxonNames(`/v2/taxa/${chunk.join(',')}`, {})) found.set(taxon.id, taxon);
+  }
+  return found;
+}
+
 /**
  * The species iNaturalist names `name`, found by name: one request each, so
  * only for species GBIF holds no iNaturalist record of. Null when there is none.
@@ -133,7 +176,7 @@ export async function getTaxa(ids: readonly number[], signal?: AbortSignal): Pro
 export async function searchTaxon(name: string, signal?: AbortSignal): Promise<InatTaxon | null> {
   const response = await inat.getJson<{ results: InatTaxon[] }>(
     '/v2/taxa',
-    { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS, locale: LOCALE },
+    { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS, ...NAME_PARAMS },
     { ...(signal && { signal }) },
   );
   const found = response.results.find((taxon) => taxon.name.toLowerCase() === name.toLowerCase());

@@ -804,6 +804,7 @@ describe('iNaturalist common names', () => {
     expect(heard).toEqual([commonNames]);
     const taxaCall = url(inatCalls(calls)[0]!);
     expect(taxaCall.searchParams.get('locale')).toBe('en');
+    expect(taxaCall.searchParams.get('preferred_place_id')).toBe('6857');
     expect(taxaCall.searchParams.get('fields')).toContain('preferred_common_name');
     expect(inatCalls(calls)).toHaveLength(1);
   });
