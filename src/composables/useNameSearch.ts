@@ -73,38 +73,45 @@ function renamed({ matchedName: _staleMatch, ...hit }: NameHit, name: string): N
 }
 
 /**
- * Live hits named as iNaturalist names them, so a taxon shows one name everywhere: the baked
- * index's where it has one, else iNaturalist's own. A failed lookup leaves GBIF's names.
+ * The first `room` live hits named as iNaturalist names them, so a taxon shows one name everywhere:
+ * the baked index's where it has one, else iNaturalist's own. Only hits that can reach the list are
+ * looked up, and names already remembered cost nothing. A failed lookup leaves GBIF's names.
  */
-async function withPreferredNames(hits: readonly NameHit[], signal: AbortSignal): Promise<NameHit[]> {
-  const unindexed = hits.filter((hit) => !indexedName(hit));
+async function withPreferredNames(hits: readonly NameHit[], room: number, signal: AbortSignal): Promise<NameHit[]> {
+  const shown = hits.slice(0, room);
+  const unindexed = shown.filter((hit) => !indexedName(hit));
   // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
   const fromInat = await inatNames(unindexed, { signal }).catch(() => new Map<number, string | null>());
-  return hits.map((hit) => {
+  const named = shown.map((hit) => {
     const name = indexedName(hit) ?? fromInat.get(hit.key);
     return name && name !== hit.commonName ? renamed(hit, name) : hit;
   });
+  return [...named, ...hits.slice(room)];
 }
 
 /** Asks GBIF's live providers, best matches first; `failed` is true when every one of them did. */
-async function askLiveProviders(text: string, indexHitCount: number, signal: AbortSignal) {
+async function askLiveProviders(text: string, indexHitCount: number, max: number, signal: AbortSignal) {
   const results = await Promise.allSettled([
     gbifSuggestProvider.search(text, signal),
     indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal) : Promise.resolve([]),
   ]);
   const found = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  // Ranked first, so the lookup spends its requests on the hits that will show, not on all of GBIF's.
+  const liveRoom = Math.max(0, max - indexHitCount);
+  const named = await withPreferredNames(rankByMatch(found, text), liveRoom, signal);
   return {
-    hits: rankByMatch(await withPreferredNames(found, signal), text),
+    hits: [...rankByMatch(named.slice(0, liveRoom), text), ...named.slice(liveRoom)],
     failed: results.every((result) => result.status === 'rejected'),
   };
 }
 
 /**
  * Live GBIF suggestions for the latest query: debounced, one search in flight, the previous one aborted.
+ * @param max Most hits the list shows, which caps how many live hits are renamed.
  * @param prepare Runs first and resolves to how many hits the local index has, which decides whether
  *   the poorly ranked vernacular search is worth asking.
  */
-function useLiveHits(prepare: (text: string) => Promise<number>) {
+function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
   const hits = ref<NameHit[]>([]);
   /** Live providers are being asked (or will be, once the debounce settles). */
   const loading = ref(false);
@@ -123,7 +130,7 @@ function useLiveHits(prepare: (text: string) => Promise<number>) {
     failed.value = false;
     const indexHitCount = await prepare(text);
     if (mine.signal.aborted) return;
-    const live = await askLiveProviders(text, indexHitCount, mine.signal);
+    const live = await askLiveProviders(text, indexHitCount, max, mine.signal);
     if (mine.signal.aborted) return;
     hits.value = live.hits;
     failed.value = live.failed;
@@ -157,7 +164,7 @@ export function useNameSearch(options: NameSearchOptions) {
 
   // Let the local index answer first, so live results never reorder the list
   // under the pointer, and decide on the vernacular search with it loaded.
-  const live = useLiveHits(async (text) => {
+  const live = useLiveHits(options.max, async (text) => {
     await nameIndexWithin(INDEX_WAIT_MS);
     await runIndex(text);
     return indexHits.value.length;
