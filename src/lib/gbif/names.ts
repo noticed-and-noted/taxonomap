@@ -1,6 +1,6 @@
 import { englishName, isEnglish } from '~/lib/species/names';
 
-import { searchVernacular, suggestSpecies } from './species';
+import { searchNames, searchVernacular, suggestSpecies } from './species';
 import type { Rank } from './types';
 
 /**
@@ -20,7 +20,7 @@ export interface NameHit {
   englishNames?: string[];
   /** The other English name that matched the query, shown beside the main one. */
   matchedName?: string;
-  source: 'index' | 'suggest' | 'vernacular';
+  source: 'index' | 'suggest' | 'vernacular' | 'search';
 }
 
 export interface NameSearchProvider {
@@ -43,23 +43,38 @@ export const gbifSuggestProvider: NameSearchProvider = {
   },
 };
 
+/** A search result as a hit: its main English name, and every English name so it can be ranked by the one that matched. */
+function toNameHit(
+  hit: Awaited<ReturnType<typeof searchNames>>['results'][number],
+  source: NameHit['source'],
+): NameHit {
+  const names = hit.vernacularNames ?? [];
+  const common = englishName(names, hit.key);
+  const englishNames = names.filter(isEnglish).map((name) => name.vernacularName);
+  return {
+    key: hit.key,
+    scientificName: hit.canonicalName ?? hit.scientificName,
+    rank: hit.rank,
+    ...(common && { commonName: common }),
+    ...(englishNames.length && { englishNames }),
+    source,
+  };
+}
+
 export const gbifVernacularProvider: NameSearchProvider = {
   id: 'gbif-vernacular',
   async search(query, signal) {
     const response = await searchVernacular(query, { limit: 10 }, signal);
-    return response.results.map((hit) => {
-      const names = hit.vernacularNames ?? [];
-      const common = englishName(names, hit.key);
-      const englishNames = names.filter(isEnglish).map((name) => name.vernacularName);
-      return {
-        key: hit.key,
-        scientificName: hit.canonicalName ?? hit.scientificName,
-        rank: hit.rank,
-        ...(common && { commonName: common }),
-        ...(englishNames.length && { englishNames }),
-        source: 'vernacular' as const,
-      };
-    });
+    return response.results.map((hit) => toNameHit(hit, 'vernacular'));
+  },
+};
+
+/** One search of every name field: scientific and common names together. */
+export const gbifSearchProvider: NameSearchProvider = {
+  id: 'gbif-search',
+  async search(query, signal) {
+    const response = await searchNames(query, { limit: 20 }, signal);
+    return response.results.map((hit) => toNameHit(hit, 'search'));
   },
 };
 

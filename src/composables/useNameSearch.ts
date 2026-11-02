@@ -1,12 +1,11 @@
 /**
  * Species and group search, shared by the header search and the What
  * filter's picker. Once typing pauses (`SEARCH_DEBOUNCE_MS`) the baked common-name
- * index answers, and live GBIF providers (scientific suggest, plus vernacular search
- * when the index is thin) follow. Each new query aborts the last.
+ * index answers, and GBIF's name search (scientific and common names) follows. Each new query aborts the last.
  */
 import { computed, onScopeDispose, ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
-import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
+import { gbifSearchProvider, type NameHit } from '~/lib/gbif';
 import { inatNames } from '~/lib/photos/taxon-photos';
 import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
@@ -29,8 +28,6 @@ export interface NameSearchOptions {
 
 /** Live scientific matches are mostly noise once the index has answers, so only a few are kept then. */
 const MAX_LIVE_HITS_WITH_INDEX = 3;
-/** Vernacular search ranks poorly, so it is only asked when the index has fewer hits than this. */
-const THIN_INDEX_HITS = 5;
 const INDEX_WAIT_MS = 1500;
 
 /** Index hits then live hits, each wave in `order`, without repeats or excluded keys, up to `max`. */
@@ -91,27 +88,29 @@ async function withPreferredNames(hits: readonly NameHit[], room: number, signal
   return [...named, ...hits.slice(room)];
 }
 
-/** Asks GBIF's live providers, best matches first; `failed` is true when every one of them did. */
+/** Asks GBIF's name search, best matches first; `failed` is true when it did. */
 async function askLiveProviders(text: string, indexHitCount: number, max: number, signal: AbortSignal) {
-  const results = await Promise.allSettled([
-    gbifSuggestProvider.search(text, signal),
-    indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal) : Promise.resolve([]),
-  ]);
-  const found = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  let found: NameHit[] = [];
+  let failed = false;
+  try {
+    found = await gbifSearchProvider.search(text, signal);
+  } catch {
+    failed = true;
+  }
   // Ranked first, so the lookup spends its requests on the hits that will show, not on all of GBIF's.
   const liveRoom = Math.max(0, max - indexHitCount);
   const named = await withPreferredNames(rankByMatch(found, text), liveRoom, signal);
   return {
     hits: [...rankByMatch(named.slice(0, liveRoom), text), ...named.slice(liveRoom)],
-    failed: results.every((result) => result.status === 'rejected'),
+    failed,
   };
 }
 
 /**
  * Live GBIF suggestions for the latest query: debounced, one search in flight, the previous one aborted.
  * @param max Most hits the list shows, which caps how many live hits are renamed.
- * @param prepare Runs first and resolves to how many hits the local index has, which decides whether
- *   the poorly ranked vernacular search is worth asking.
+ * @param prepare Runs first and resolves to how many hits the local index has, which leaves the rest
+ *   of the list for live hits.
  */
 function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
   const hits = ref<NameHit[]>([]);
@@ -164,7 +163,7 @@ export function useNameSearch(options: NameSearchOptions) {
   }
 
   // Let the local index answer first, so live results never reorder the list
-  // under the pointer, and decide on the vernacular search with it loaded.
+  // under the pointer, and know how much room it leaves them.
   const live = useLiveHits(options.max, async (text) => {
     await nameIndexWithin(INDEX_WAIT_MS);
     await runIndex(text);

@@ -25,19 +25,25 @@ export function suggestSpecies(query: string, options: { limit?: number; rank?: 
   );
 }
 
-/** Long-tail common-name search; ranking is poor, so callers re-rank. */
-export function searchVernacular(query: string, options: { limit?: number } = {}, signal?: AbortSignal) {
-  return http().getJson<Paged<NameUsage & { vernacularNames?: VernacularName[] }>>(
+type NameSearch = Paged<NameUsage & { vernacularNames?: VernacularName[] }>;
+
+/** The backbone's accepted names matching `query`, in `qField` (every name field when none). */
+function searchBackbone(query: string, limit: number, qField: string | undefined, signal?: AbortSignal) {
+  return http().getJson<NameSearch>(
     '/v1/species/search',
-    {
-      q: query.trim(),
-      qField: 'VERNACULAR',
-      datasetKey: BACKBONE_DATASET_KEY,
-      status: 'ACCEPTED',
-      limit: options.limit ?? 10,
-    },
+    { q: query.trim(), qField, datasetKey: BACKBONE_DATASET_KEY, status: 'ACCEPTED', limit },
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
+}
+
+/** Long-tail common-name search; ranking is poor, so callers re-rank. */
+export function searchVernacular(query: string, options: { limit?: number } = {}, signal?: AbortSignal) {
+  return searchBackbone(query, options.limit ?? 10, 'VERNACULAR', signal);
+}
+
+/** Scientific and common names in one search, each result carrying its common names; callers re-rank. */
+export function searchNames(query: string, options: { limit?: number } = {}, signal?: AbortSignal) {
+  return searchBackbone(query, options.limit ?? 20, undefined, signal);
 }
 
 /** Bulk-list backbone taxa of one rank (for names without N+1 lookups). */
