@@ -84,48 +84,28 @@ function liveSlots(indexHitCount: number, max: number): number {
 }
 
 /**
- * The hits with the ones to look up marked as awaiting a name. Only species GBIF already gives a
- * common name are looked up, and only those that can reach the list: an obscure species costs a
- * slow, empty search.
+ * Whether a hit needs iNaturalist's name: only species GBIF already gives a common name, and only
+ * those that can reach the list, as an obscure species costs a slow, empty search.
  */
-function awaitingNames(hits: NameHit[], slots: number): NameHit[] {
-  return hits.map((hit, index) =>
-    index < slots && hit.rank === 'SPECIES' && hit.commonName && !indexedName(hit)
-      ? { ...hit, isNamePending: true }
-      : hit,
-  );
+function needsInatName(hit: NameHit, index: number, slots: number): boolean {
+  return index < slots && hit.rank === 'SPECIES' && !!hit.commonName && !indexedName(hit);
 }
 
-/**
- * The hits awaiting a name given iNaturalist's, in the same order. Names already remembered cost
- * nothing, and a failed lookup leaves GBIF's.
- */
-async function withInatNames(hits: NameHit[], text: string, signal: AbortSignal): Promise<NameHit[]> {
-  const toName = hits.filter((hit) => hit.isNamePending);
-  if (!toName.length) return hits;
-  // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
-  const names = await inatNames(toName, { signal }).catch(() => new Map<number, string | null>());
-  return hits.map(({ isNamePending, ...hit }) => {
+/** The hits under the iNaturalist names found so far, with those still to come marked as pending. */
+function withInatNames(
+  hits: readonly NameHit[],
+  names: ReadonlyMap<number, string | null>,
+  slots: number,
+  text: string,
+): NameHit[] {
+  return hits.map((hit, index) => {
     const name = names.get(hit.key);
-    if (!isNamePending || !name || name === hit.commonName) return hit;
+    if (name === undefined) return needsInatName(hit, index, slots) ? { ...hit, isNamePending: true } : hit;
+    if (!name || name === hit.commonName) return hit;
     const named = renamed(hit, name);
     const { matchedName } = matchHit(named, text);
     return matchedName ? { ...named, matchedName } : named;
   });
-}
-
-/** Asks GBIF's live providers, best matches first, each taxon once; `failed` is true when every one of them did. */
-async function askLiveProviders(text: string, indexHitCount: number, signal: AbortSignal) {
-  const results = await Promise.allSettled([
-    gbifSuggestProvider.search(text, signal),
-    indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal) : Promise.resolve([]),
-  ]);
-  const found = results.flatMap((result) => (result.status === 'fulfilled' ? result.value.map(withIndexedName) : []));
-  const seen = new Set<number>();
-  return {
-    hits: rankByMatch(found, text).filter((hit) => !seen.has(hit.key) && seen.add(hit.key)),
-    failed: results.every((result) => result.status === 'rejected'),
-  };
 }
 
 /** What a live search shows as it goes. */
@@ -135,16 +115,72 @@ interface LiveState {
   failed: Ref<boolean>;
 }
 
-/** Asks the live providers and shows their hits, with a name's place held until iNaturalist answers: a slow name lookup shouldn't hold results back. */
-async function showLiveHits(state: LiveState, text: string, slots: number, indexHitCount: number, signal: AbortSignal) {
-  const live = await askLiveProviders(text, indexHitCount, signal);
+/** One live search's answer so far: the hits in, and iNaturalist's names for them. */
+interface LiveSearch {
+  text: string;
+  slots: number;
+  signal: AbortSignal;
+  found: Map<number, NameHit>;
+  names: Map<number, string | null>;
+  asked: Set<number>;
+}
+
+/** Shows what has come in so far, best matches first, and looks up any names it now needs. */
+function showLiveHits(state: LiveState, search: LiveSearch) {
+  if (search.signal.aborted) return;
+  const { text, slots, names, asked, signal } = search;
+  const hits = withInatNames(rankByMatch([...search.found.values()], text), names, slots, text);
+  state.hits.value = hits;
+  const toName = hits.filter((hit) => hit.isNamePending && !asked.has(hit.key));
+  if (!toName.length) return;
+  for (const hit of toName) asked.add(hit.key);
+  // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
+  void inatNames(toName, { signal })
+    .catch(() => new Map<number, string | null>())
+    .then((looked) => {
+      for (const { key } of toName) names.set(key, looked.get(key) ?? null);
+      showLiveHits(state, search);
+    });
+}
+
+/** Adds a provider's hits, keeping each taxon once: the copy with a common name, whichever came first. */
+function addHits(found: Map<number, NameHit>, hits: readonly NameHit[]) {
+  for (const hit of hits) {
+    const known = found.get(hit.key);
+    if (!known?.commonName) found.set(hit.key, withIndexedName(hit));
+  }
+}
+
+/**
+ * Asks GBIF's live providers and shows each one's hits as they arrive: one is often seconds behind
+ * the other, and often has nothing to add. `failed` is true when every one of them did.
+ */
+async function askLiveProviders(
+  state: LiveState,
+  text: string,
+  indexHitCount: number,
+  max: number,
+  signal: AbortSignal,
+) {
+  const search: LiveSearch = {
+    text,
+    slots: liveSlots(indexHitCount, max),
+    signal,
+    found: new Map(),
+    names: new Map(),
+    asked: new Set(),
+  };
+  const show = (hits: NameHit[]) => {
+    addHits(search.found, hits);
+    showLiveHits(state, search);
+  };
+  const results = await Promise.allSettled([
+    gbifSuggestProvider.search(text, signal).then(show),
+    indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal).then(show) : undefined,
+  ]);
   if (signal.aborted) return;
-  const shown = awaitingNames(live.hits, slots);
-  state.hits.value = shown;
-  state.failed.value = live.failed;
+  state.failed.value = results.every((result) => result.status === 'rejected');
   state.loading.value = false;
-  const named = await withInatNames(shown, text, signal);
-  if (!signal.aborted && named !== shown) state.hits.value = named;
 }
 
 /**
@@ -180,8 +216,7 @@ function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
     indexAnswered = prepared;
     const indexHitCount = await prepared;
     if (mine.signal.aborted || !isLive) return;
-    const slots = liveSlots(indexHitCount, max);
-    await showLiveHits({ hits, loading, failed }, text, slots, indexHitCount, mine.signal);
+    await askLiveProviders({ hits, loading, failed }, text, indexHitCount, max, mine.signal);
   }
 
   const run = debounce((text: string) => void start(text), SEARCH_DEBOUNCE_MS);

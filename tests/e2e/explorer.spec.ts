@@ -1,5 +1,5 @@
 /** Map explorer journeys, against the fake world (see fixtures.ts). */
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 const INATURALIST_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
@@ -89,6 +89,24 @@ test('a live result holds its name’s place until iNaturalist answers, without 
   expect(await heightOf(previewName)).toBe(previewNameHeight);
   // As tall as the text: the row's 14 px, not its 20 px line.
   expect(skeletonHeight).toBe(14);
+});
+
+test('moving to another result cancels what the preview was still asking for', async ({ page }) => {
+  await holdNameLookups(page);
+  // The first row, the genus, is previewed; the robin itself asks the same way for its name.
+  const isPreviewLookup = (request: Request) =>
+    request.url().includes(`datasetKey=${INATURALIST_DATASET}`) &&
+    request.url().includes('limit=1') &&
+    !request.url().includes('taxonKey=2492462');
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+  const asked = await page.waitForRequest(isPreviewLookup);
+  const cancelled = page.waitForEvent('requestfailed', (request) => request.url() === asked.url());
+  await page
+    .getByRole('option', { name: /Erithacus rubecula/i })
+    .first()
+    .hover();
+  await cancelled;
 });
 
 test('a live result in the What picker keeps its height when its name arrives', async ({ page }) => {

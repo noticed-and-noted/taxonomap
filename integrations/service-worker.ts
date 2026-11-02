@@ -5,7 +5,8 @@
  * this small integration calls workbox-build directly.
  *
  * Strategies:
- *  - GBIF JSON:  CacheFirst, 24 h max age, 300 entries (REST, and GraphQL answers without errors)
+ *  - GBIF JSON:  CacheFirst, 24 h max age, 300 entries (REST, and GraphQL answers without errors);
+ *                not the name searches, so a search typed over can be cancelled
  *  - Map tiles:  CacheFirst, 7 days, 2000 entries (empty 204 tiles too)
  *  - Images:     CacheFirst, 30 days, 300 entries (opaque responses allowed)
  *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX)
@@ -110,7 +111,8 @@ function gbifRules(apiBase: string, tileBase: string, graphqlBase: string): Runt
     },
     {
       // Cache first, not stale-while-revalidate: revalidating sent GBIF a request on every use.
-      urlPattern: new RegExp(`^${escapeRegExp(apiBase)}/v[12]/(?!image/)`),
+      // Not the name searches: the worker's own fetch outlives the page cancelling it as typing moves on.
+      urlPattern: new RegExp(`^${escapeRegExp(apiBase)}/v[12]/(?!image/|species/suggest|species/search\\?.*qField=)`),
       handler: 'CacheFirst',
       options: {
         cacheName: 'gbif-json',

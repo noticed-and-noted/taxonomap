@@ -272,6 +272,50 @@ describe('useNameSearch while typing', () => {
   });
 });
 
+describe('useNameSearch with slow providers', () => {
+  it('shows each provider\u2019s hits as they arrive, and is still loading until the last has answered', async () => {
+    let answerSuggest: (value: unknown) => void = () => undefined;
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return new Promise((resolve) => (answerSuggest = resolve));
+      if (url.pathname === '/v1/species/search')
+        return { results: [{ key: 21, scientificName: 'Zooming', rank: 'GENUS' }] };
+      return snapshots({ names: [] })(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('zoom');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([21]));
+    expect(search.loading.value).toBe(true);
+    answerSuggest([{ key: 22, scientificName: 'Zoomorphus', rank: 'GENUS' }]);
+    await vi.waitFor(() => expect(search.loading.value).toBe(false));
+    expect(search.hits.value.map((hit) => hit.key).sort()).toEqual([21, 22]);
+    search.stop();
+  });
+
+  it('keeps a taxon\u2019s common name whichever provider answered first', async () => {
+    const common = {
+      key: 31,
+      scientificName: 'Zooming',
+      rank: 'SPECIES',
+      vernacularNames: [{ vernacularName: 'Zoomer', language: 'eng' }],
+    };
+    let answerSearch: (value: unknown) => void = () => undefined;
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [{ key: 31, scientificName: 'Zooming', rank: 'SPECIES' }];
+      if (url.pathname === '/v1/species/search') return new Promise((resolve) => (answerSearch = resolve));
+      return snapshots({ names: [] })(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('zoom');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value).toHaveLength(1));
+    answerSearch({ results: [common] });
+    await vi.waitFor(() => expect(search.hits.value[0]?.englishNames).toEqual(['Zoomer']));
+    expect(search.hits.value).toHaveLength(1);
+    search.stop();
+  });
+});
+
 describe('useNameSearch naming live hits', () => {
   const named = (key: number, name: string) => ({
     key,
