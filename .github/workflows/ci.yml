@@ -160,6 +160,45 @@ jobs:
       - run: pnpm build:e2e
       - run: pnpm test:e2e
 
+  coverage-badges:
+    name: Coverage badges
+    # Only main's figures reach the README. Nothing depends on this job, so it can't hold up a deploy.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # The summary is still written when a coverage threshold fails, and the badge should show that figure.
+      - run: pnpm test:coverage
+        continue-on-error: true
+      - run: pnpm build:e2e
+      - run: pnpm test:e2e:coverage
+      - name: Draw the badges
+        run: |
+          draw_badge() {
+            percent=$(jq '.total.lines.pct | round' "$2")
+            curl --fail --silent --show-error --output "$3" "https://img.shields.io/badge/$1-$percent%25-3f5c4c"
+          }
+          draw_badge unit_coverage coverage/coverage-summary.json coverage-unit.svg
+          draw_badge e2e_coverage coverage/e2e/coverage-summary.json coverage-e2e.svg
+      # A single force-pushed commit on its own branch, so main's history stays free of badge updates.
+      - name: Publish the badges
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --orphan badges
+          git add coverage-unit.svg coverage-e2e.svg
+          git commit --message 'Update coverage badges'
+          git push --force origin badges
+
   deploy:
     name: Deploy to Cloudflare Pages
     needs: build
