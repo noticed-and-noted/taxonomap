@@ -25,12 +25,15 @@ export interface SpeciesToMatch {
 
 /**
  * The iNaturalist IDs the last `pnpm bake` found. Matches are stable and iNaturalist allows about one
- * request a second, so a re-bake only looks up species without one. `INAT_IDS_REFRESH=1` looks up all.
+ * request a second, so a re-bake only looks up species without one. `INAT_IDS_REFRESH=1` looks up all,
+ * as does a snapshot from before IDs came only through GBIF's records, whose by-name matches must go.
  */
 async function previousInatIds(): Promise<Map<number, number>> {
   if (process.env['INAT_IDS_REFRESH'] === '1') return new Map();
   try {
-    const { names } = JSON.parse(await readFile(join(bakeDir(), 'names.json'), 'utf8')) as NamesSnapshot;
+    const snapshot = JSON.parse(await readFile(join(bakeDir(), 'names.json'), 'utf8')) as NamesSnapshot;
+    if (!snapshot.inatIdsFromRecords) return new Map();
+    const { names } = snapshot;
     return new Map(names.flatMap((row): [number, number][] => (row[5] ? [[row[0], row[5]]] : [])));
   } catch {
     // No earlier bake, or one we can't read: look every species up.

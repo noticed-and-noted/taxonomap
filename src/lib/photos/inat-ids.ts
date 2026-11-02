@@ -1,12 +1,12 @@
 /**
  * GBIF taxon key → iNaturalist taxon ID and English name, remembered across visits. A match is
- * stable and costs a GBIF search (or an iNaturalist one) to find, so each browser finds it once;
+ * stable and costs a GBIF search to find, so each browser finds it once;
  * remembering the name too means a row named before needs no request at all. Held in
  * localStorage, newest last, capped.
  */
-// v2: v1 could hold wrong matches for groups iNaturalist ranks differently (GBIF's order Cetacea).
-// Entries are [key, id] or [key, id, name | null]: v2's pairs still read, just without a name.
-const STORAGE_KEY = 'inat-ids-v2';
+// v3: v2 could hold matches found by searching iNaturalist by name, not through a GBIF record.
+// Entries are [key, id] or [key, id, name | null]: pairs still read, just without a name.
+const STORAGE_KEY = 'inat-ids-v3';
 const MAX_ENTRIES = 3000;
 
 /** A remembered match: the name is null when iNaturalist has none, and absent when not yet seen. */

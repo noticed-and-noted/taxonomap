@@ -164,7 +164,12 @@ export async function getTaxonNames(ids: readonly number[]): Promise<Map<number,
   const hidden = wanted.filter((id) => !found.has(id));
   for (let offset = 0; offset < hidden.length; offset += TAXA_BATCH) {
     const chunk = hidden.slice(offset, offset + TAXA_BATCH);
-    for (const taxon of await fetchTaxonNames(`/v2/taxa/${chunk.join(',')}`, {})) found.set(taxon.id, taxon);
+    try {
+      for (const taxon of await fetchTaxonNames(`/v2/taxa/${chunk.join(',')}`, {})) found.set(taxon.id, taxon);
+    } catch (error) {
+      // These few replaced taxa keep GBIF's names; the listed taxa shouldn't lose theirs with them.
+      console.warn(`iNaturalist taxa skipped for ${chunk.length} replaced IDs:`, error);
+    }
   }
   return found;
 }

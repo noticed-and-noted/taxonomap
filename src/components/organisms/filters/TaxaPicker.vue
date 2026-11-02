@@ -31,7 +31,7 @@ const nameOf = (taxon: TaxonInfo) => taxon.commonName ?? taxon.scientificName;
 
 const query = ref('');
 const active = ref(-1);
-const { hits: options, loading, search } = useNameSearch({ max: MAX_OPTIONS, exclude: () => keys.value });
+const { hits: options, loading, search, settle } = useNameSearch({ max: MAX_OPTIONS, exclude: () => keys.value });
 
 const full = computed(() => keys.value.length >= MAX_TAXA);
 
@@ -61,6 +61,15 @@ function move(delta: number) {
   nextTick(() => document.getElementById(activeId.value ?? '')?.scrollIntoView({ block: 'nearest' }));
 }
 
+/** Enter picks the highlighted hit, or the only one, once what's typed has answered rather than the previous text. */
+async function pickOnEnter() {
+  const typed = query.value;
+  await settle();
+  if (query.value !== typed) return;
+  const hit = options.value[active.value] ?? (options.value.length === 1 ? options.value[0] : undefined);
+  if (hit) pick(hit);
+}
+
 function onKey(event: KeyboardEvent) {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
@@ -69,11 +78,8 @@ function onKey(event: KeyboardEvent) {
     event.preventDefault();
     move(-1);
   } else if (event.key === 'Enter') {
-    const hit = options.value[active.value] ?? (options.value.length === 1 ? options.value[0] : undefined);
-    if (hit) {
-      event.preventDefault();
-      pick(hit);
-    }
+    event.preventDefault();
+    void pickOnEnter();
   } else if (event.key === 'Escape' && query.value) {
     // Clear the search first; a second Escape closes the flyout.
     event.stopPropagation();

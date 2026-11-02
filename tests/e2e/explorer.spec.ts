@@ -28,6 +28,18 @@ test('the header search and the What filter add to one list of taxa', { tag: '@m
   await expect(page).toHaveURL(/taxon=2490719%2C2492462/);
 });
 
+test('Enter straight after typing picks what is typed, not the results still on screen', async ({ page }) => {
+  await page.goto('/');
+  const box = page.getByRole('combobox', { name: 'Search species or places' });
+  await box.fill('european robin');
+  await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+  // Inside the debounce, while the robin is still the highlighted row.
+  await box.fill('common blackbird');
+  await box.press('Enter');
+  await expect(page.getByRole('button', { name: /Remove taxon filter Common Blackbird/i })).toBeVisible();
+  await expect(page).toHaveURL(/taxon=2490719/);
+});
+
 test(
   'on touch, the first tap on a search result previews it and the second picks it',
   { tag: '@mobile' },

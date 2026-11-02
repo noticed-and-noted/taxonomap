@@ -234,67 +234,35 @@ export interface RecordsSearch {
 }
 
 /**
- * Like firstRecordsByTaxon for taxa of mixed ranks and several filters, still from one request: each
- * rank and filter is a search of its own in the query, so a family's many genera can't crowd a genus
- * out of its facet. Each taxon also carries its `count` of matching records.
+ * Like firstRecordsByTaxon under several filters, still from one request: each filter is a search
+ * of its own in the query. Each taxon also carries its `count` of matching records.
  * @returns One map per search, in the order given.
- * @throws Error when GBIF can't batch a taxon's rank (see canBatchRank).
+ * @throws Error when GBIF can't batch `rank` (see canBatchRank).
  */
 export async function firstRecordsBySearches(
-  taxa: readonly { key: number; rank: Rank }[],
+  keys: readonly number[],
+  rank: Rank,
   searches: readonly RecordsSearch[],
   options: { signal?: AbortSignal },
 ): Promise<Map<number, TaxonRecords>[]> {
-  const keysByRank = new Map<Rank, number[]>();
-  for (const { key, rank } of taxa) {
-    if (!canBatchRank(rank)) throw new Error(`GBIF can't batch records of rank ${rank}`);
-    keysByRank.set(rank, [...(keysByRank.get(rank) ?? []), key]);
-  }
-  const ranks = [...keysByRank.keys()];
-  const [only] = searches;
-  if (ranks.length === 1 && searches.length === 1 && only) {
-    return [await firstRecordsByTaxon(keysByRank.get(ranks[0]!)!, ranks[0]!, only.filter, { ...only, ...options })];
-  }
+  const facet = RANK_FACET[rank];
+  if (!facet) throw new Error(`GBIF can't batch records of rank ${rank}`);
 
-  const parts = searches.flatMap((search, index) =>
-    ranks.map((rank) => ({ search, rank, index, keys: keysByRank.get(rank)! })),
-  );
+  const selections = searches.map(({ perTaxon }, index) => {
+    const buckets = `${facet}(size: ${keys.length}) { key count taxon { scientificName } ${recordsSelection(perTaxon)} }`;
+    return `search_${index}: occurrenceSearch(predicate: $predicate_${index}) { facet { ${buckets} } }`;
+  });
+  const declarations = searches.map((_search, index) => `$predicate_${index}: Predicate`).join(', ');
   const data = await runQuery<Record<string, { facet: Record<string, RecordsBucket[]> }>>(
-    rankedQuery(parts),
-    Object.fromEntries(parts.map((part) => [variableOf(part), taxaPredicate(part.keys, part.search.filter)])),
+    `query FirstRecords(${declarations}) { ${selections.join(' ')} }`,
+    Object.fromEntries(searches.map(({ filter }, index) => [`predicate_${index}`, taxaPredicate(keys, filter)])),
     options,
   );
 
-  const found = searches.map(() => new Map<number, TaxonRecords>());
-  for (const part of parts) {
-    const facet = RANK_FACET[part.rank]!;
-    for (const bucket of data[aliasOf(part)]?.facet[facet] ?? []) {
-      found[part.index]!.set(Number(bucket.key), toTaxonRecords(bucket, part.rank));
-    }
-  }
-  return found;
-}
-
-/** One search of a mixed query: a filter's records of the taxa of one rank. */
-interface RankedPart {
-  search: RecordsSearch;
-  rank: Rank;
-  index: number;
-  keys: readonly number[];
-}
-
-const aliasOf = ({ rank, index }: RankedPart) => `${RANK_FACET[rank]}_${index}`;
-const variableOf = ({ rank, index }: RankedPart) => `predicate${rank}_${index}`;
-
-/** A query with a search for each part, answered under its alias. */
-function rankedQuery(parts: readonly RankedPart[]): string {
-  const declarations = parts.map((part) => `$${variableOf(part)}: Predicate`).join(', ');
-  const searches = parts.map((part) => {
-    const facet = RANK_FACET[part.rank]!;
-    const buckets = `${facet}(size: ${part.keys.length}) { key count taxon { scientificName } ${recordsSelection(part.search.perTaxon)} }`;
-    return `${aliasOf(part)}: occurrenceSearch(predicate: $${variableOf(part)}) { facet { ${buckets} } }`;
+  return searches.map((_search, index) => {
+    const buckets = data[`search_${index}`]?.facet[facet] ?? [];
+    return new Map(buckets.map((bucket) => [Number(bucket.key), toTaxonRecords(bucket, rank)]));
   });
-  return `query FirstRecords(${declarations}) { ${searches.join(' ')} }`;
 }
 
 /** A bucket's records, each given the bucket's species key, and the taxon's name. */

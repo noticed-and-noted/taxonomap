@@ -114,21 +114,17 @@ async function inatRecord(
 type InatRecord = Awaited<ReturnType<typeof inatRecord>>;
 
 /**
- * One iNaturalist record GBIF holds of each of several taxa (any mix of the main ranks), in one
- * request; taxa GBIF has none of are left out. A species is named by its record's species, a
- * higher taxon by its own name, which is how an iNaturalist ancestor is checked to be the same group.
+ * One iNaturalist record GBIF holds of each of several species, in one request; species
+ * GBIF has none of are left out.
  */
-async function inatRecords(taxa: readonly PhotoTaxon[], options: Opts): Promise<Map<number, InatRecord>> {
-  const [byTaxon] = await gbifLimit(() =>
-    firstRecordsBySearches(taxa, [{ filter: { datasetKey: INATURALIST_DATASET_KEY }, perTaxon: 1 }], options),
+async function inatRecords(keys: readonly number[], options: Opts): Promise<Map<number, InatRecord>> {
+  const bySpecies = await gbifLimit(() =>
+    firstRecordsByTaxon(keys, 'SPECIES', { datasetKey: INATURALIST_DATASET_KEY }, { perTaxon: 1, ...options }),
   );
-  const rankByKey = new Map(taxa.map((taxon) => [taxon.key, taxon.rank]));
   const found = new Map<number, InatRecord>();
-  for (const [key, { name, records }] of byTaxon ?? []) {
+  for (const [key, { name, records }] of bySpecies) {
     const id = Number(records[0]?.taxonID);
-    if (!Number.isInteger(id) || id <= 0) continue;
-    const nameField = rankByKey.get(key) === 'SPECIES' ? 'species' : 'rankName';
-    found.set(key, { taxonId: id, ...(name && { [nameField]: name }) });
+    if (Number.isInteger(id) && id > 0) found.set(key, { taxonId: id, ...(name && { species: name }) });
   }
   return found;
 }
@@ -148,16 +144,22 @@ function partitionKnown(taxa: readonly PhotoTaxon[]): { known: Map<number, numbe
 }
 
 /**
- * Finds each unknown taxon's iNaturalist record on GBIF: every taxon of a main rank in one request,
- * then singly for the rest (subspecies and below), and for all of them if that request failed.
+ * Finds each unknown taxon's iNaturalist record on GBIF: every species in one request, then
+ * singly for taxa above species, and for the species too if that request failed.
  */
 async function searchRecords(unknown: readonly PhotoTaxon[], options: Opts): Promise<Map<number, InatRecord>> {
-  const batchable = unknown.filter((taxon) => canBatchRank(taxon.rank));
-  // A single taxon is no cheaper in a batch.
-  const batch = batchable.length > 1 ? await inatRecords(batchable, options).catch(() => null) : null;
+  const species = unknown.filter((taxon) => taxon.rank === 'SPECIES');
+  // A single species is no cheaper in a batch.
+  const batch =
+    species.length > 1
+      ? await inatRecords(
+          species.map((taxon) => taxon.key),
+          options,
+        ).catch(() => null)
+      : null;
   const searches = new Map<number, InatRecord>(batch ?? []);
-  // A taxon the batch answered for but left out has no iNaturalist record to find.
-  const isAnswered = (taxon: PhotoTaxon) => batch !== null && canBatchRank(taxon.rank);
+  // A species the batch answered for but left out has no iNaturalist record to find.
+  const isAnswered = (taxon: PhotoTaxon) => batch !== null && taxon.rank === 'SPECIES';
   await Promise.all(
     unknown
       .filter((taxon) => !isAnswered(taxon))
@@ -437,41 +439,42 @@ interface GbifLeadPhotos {
 }
 
 /**
- * Each taxon's first GBIF photo, from the first source that has one. The main ranks go in one
- * request that asks every source at once; the rest, and all of them if that request fails,
- * go one source at a time.
+ * Each taxon's first GBIF photo, from the first source that has one. A lone taxon asks every source
+ * in one request. Several go one source at a time: most find a photo in the first source, and asking
+ * the second for all of them too took GBIF two to three times as long.
  */
 async function gbifLeadPhotos(taxa: readonly PhotoTaxon[], options: LeadPhotoOpts): Promise<GbifLeadPhotos> {
-  const batchable = taxa.filter((taxon) => canBatchRank(taxon.rank));
-  const rest = taxa.filter((taxon) => !canBatchRank(taxon.rank));
-  const batch = batchable.length ? await photosFromAllSources(batchable, options).catch(() => null) : null;
-  // GraphQL failing doesn't stop the REST searches the taxa's own pages make.
-  const result = batch ?? { images: new Map<number, UsableImage>(), counts: new Map<number, number>() };
-  const unanswered = batch ? rest : taxa;
-  for (const [key, image] of await photosOneSourceAtATime(unanswered, options)) result.images.set(key, image);
-  return result;
+  const [only] = taxa;
+  if (only && taxa.length === 1 && canBatchRank(only.rank)) {
+    const found = await photosFromAllSources(only, options).catch(() => null);
+    if (found) return found;
+  }
+  return { images: await photosOneSourceAtATime(taxa, options), counts: new Map() };
 }
 
-/** First photos of main-rank taxa from one request asking every source (the first source with a photo wins), and their counts if asked. */
-async function photosFromAllSources(taxa: readonly PhotoTaxon[], options: LeadPhotoOpts): Promise<GbifLeadPhotos> {
+/** A taxon's first photo from one request asking every source (the first with a photo wins), and its count if asked. */
+async function photosFromAllSources(taxon: PhotoTaxon, options: LeadPhotoOpts): Promise<GbifLeadPhotos> {
+  const { key, rank } = taxon;
   const photoSearches: RecordsSearch[] = GBIF_PHOTO_SOURCES.map(({ filter, limit }) => ({
     filter: { ...filter, hasImage: true, license: ALLOWED_LICENCE_ENUMS },
-    // A lone taxon reads as many records as its page does, so both pick the same first photo.
-    perTaxon: taxa.length === 1 ? limit : LEAD_RECORDS_PER_TAXON,
+    // As many records as its page reads, so both pick the same first photo.
+    perTaxon: limit,
   }));
   // Every record of the taxon, none of them read: only the total.
   const countSearches: RecordsSearch[] = options.withCounts ? [{ filter: {}, perTaxon: 0 }] : [];
-  const found = await gbifLimit(() => firstRecordsBySearches(taxa, [...photoSearches, ...countSearches], options));
-  const photoFound = found.slice(0, photoSearches.length);
+  const found = await gbifLimit(() =>
+    firstRecordsBySearches([key], rank, [...photoSearches, ...countSearches], options),
+  );
+  const first = found
+    .slice(0, photoSearches.length)
+    .map((records) => records.get(key)?.records.flatMap(usableImages)[0])
+    .find(Boolean);
   const countFound = found[photoSearches.length];
-  const result: GbifLeadPhotos = { images: new Map(), counts: new Map() };
-  for (const { key } of taxa) {
-    const first = photoFound.map((records) => records.get(key)?.records.flatMap(usableImages)[0]).find(Boolean);
-    if (first) result.images.set(key, first);
-    const count = countFound?.get(key)?.count;
-    if (count !== undefined) result.counts.set(key, count);
-  }
-  return result;
+  return {
+    images: new Map(first ? [[key, first]] : []),
+    // A taxon with no records has no facet value to count.
+    counts: new Map(countFound ? [[key, countFound.get(key)?.count ?? 0]] : []),
+  };
 }
 
 /** First photos of taxa, asking one source at a time and only for the taxa still without a photo. */

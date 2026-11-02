@@ -207,7 +207,7 @@ export function bakeNames(): Promise<NamesSnapshot> {
     const species = await topSpeciesKeys(indexSize()).then(speciesRows);
     const higher = await higherRanks(species.higherNames);
     const names = [...higher, ...species.rows].sort((left, right) => right[4] - left[4]);
-    return { ...snapshotMeta(), names };
+    return { ...snapshotMeta(), inatIdsFromRecords: true, names };
   });
 }
 

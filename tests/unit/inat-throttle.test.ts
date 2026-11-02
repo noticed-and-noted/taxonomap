@@ -1,6 +1,6 @@
 /** The iNaturalist token bucket: requests cancelled while queued give up their turn. */
 import { throttle } from '~/lib/photos/inat';
-import { stubNetwork } from './helpers/network';
+import { json, stubNetwork } from './helpers/network';
 
 afterEach(() => vi.useRealTimers());
 
@@ -82,5 +82,18 @@ describe('getTaxonNames with a replaced taxon', () => {
     const taxa = await getTaxonNames([40, 5]);
     expect([...taxa.keys()].sort()).toEqual([40, 5]);
     expect(calls.map((call) => call.pathname)).toEqual(['/v2/taxa', '/v2/taxa/40']);
+  });
+
+  it('keeps the listed taxa when fetching a replaced one fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    stubNetwork((url) =>
+      url.pathname === '/v2/taxa' ? { results: [{ id: 5, name: 'Five', rank_level: 10 }] } : json({}, 400),
+    );
+    vi.resetModules();
+    const { getTaxonNames } = await import('~/lib/photos/inat');
+    const taxa = await getTaxonNames([40, 5]);
+    expect([...taxa.keys()]).toEqual([5]);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 });

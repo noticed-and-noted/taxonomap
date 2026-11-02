@@ -4,7 +4,7 @@
  * index answers, and live GBIF providers (scientific suggest, plus vernacular search
  * when the index is thin) follow. Each new query aborts the last.
  */
-import { computed, onScopeDispose, ref } from 'vue';
+import { computed, onScopeDispose, ref, type Ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
 import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
 import { inatNames } from '~/lib/photos/taxon-photos';
@@ -72,43 +72,71 @@ function renamed({ matchedName: _staleMatch, ...hit }: NameHit, name: string): N
   return { ...hit, commonName: name, englishNames: [...(hit.englishNames ?? []), ...gbifNames] };
 }
 
-/**
- * The first `room` live hits named as iNaturalist names them, so a taxon shows one name everywhere:
- * the baked index's where it has one, else iNaturalist's own. Only hits that can reach the list are
- * looked up (species GBIF already names), and names already remembered cost nothing. A failed lookup leaves GBIF's names.
- */
-async function withPreferredNames(hits: readonly NameHit[], room: number, signal: AbortSignal): Promise<NameHit[]> {
-  const shown = hits.slice(0, room);
-  // Species GBIF already gives a common name: only those need the right name, and a species GBIF
-  // names has usually a record on iNaturalist's dataset, where an obscure one costs a slow empty search.
-  const unindexed = shown.filter((hit) => hit.rank === 'SPECIES' && hit.commonName && !indexedName(hit));
-  // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
-  const fromInat = await inatNames(unindexed, { signal }).catch(() => new Map<number, string | null>());
-  const named = shown.map((hit) => {
-    const name = indexedName(hit) ?? fromInat.get(hit.key);
-    return name && name !== hit.commonName ? renamed(hit, name) : hit;
-  });
-  return [...named, ...hits.slice(room)];
+/** A live hit named as the index names it, so a taxon shows one name everywhere. */
+function withIndexedName(hit: NameHit): NameHit {
+  const name = indexedName(hit);
+  return name && name !== hit.commonName ? renamed(hit, name) : hit;
 }
 
-/** Asks GBIF's live providers, best matches first; `failed` is true when every one of them did. */
-async function askLiveProviders(text: string, indexHitCount: number, max: number, signal: AbortSignal) {
+/** How many live hits can reach the list (see mergeHits). */
+function liveSlots(indexHitCount: number, max: number): number {
+  return indexHitCount ? Math.max(0, Math.min(MAX_LIVE_HITS_WITH_INDEX, max - indexHitCount)) : max;
+}
+
+/**
+ * The hits named as iNaturalist names them, in the same order. Only species GBIF already gives a
+ * common name are looked up, and only those that can reach the list: an obscure species costs a
+ * slow, empty search. Names already remembered cost nothing, and a failed lookup leaves GBIF's.
+ */
+async function withInatNames(hits: NameHit[], slots: number, text: string, signal: AbortSignal): Promise<NameHit[]> {
+  const toName = hits.slice(0, slots).filter((hit) => hit.rank === 'SPECIES' && hit.commonName && !indexedName(hit));
+  if (!toName.length) return hits;
+  // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
+  const names = await inatNames(toName, { signal }).catch(() => new Map<number, string | null>());
+  return hits.map((hit) => {
+    const name = names.get(hit.key);
+    if (!name || name === hit.commonName) return hit;
+    const named = renamed(hit, name);
+    const { matchedName } = matchHit(named, text);
+    return matchedName ? { ...named, matchedName } : named;
+  });
+}
+
+/** Asks GBIF's live providers, best matches first, each taxon once; `failed` is true when every one of them did. */
+async function askLiveProviders(text: string, indexHitCount: number, signal: AbortSignal) {
   const results = await Promise.allSettled([
     gbifSuggestProvider.search(text, signal),
     indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal) : Promise.resolve([]),
   ]);
-  const found = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
-  // Ranked first, so the lookup spends its requests on the hits that will show, not on all of GBIF's.
-  const liveRoom = Math.max(0, max - indexHitCount);
-  const named = await withPreferredNames(rankByMatch(found, text), liveRoom, signal);
+  const found = results.flatMap((result) => (result.status === 'fulfilled' ? result.value.map(withIndexedName) : []));
+  const seen = new Set<number>();
   return {
-    hits: [...rankByMatch(named.slice(0, liveRoom), text), ...named.slice(liveRoom)],
+    hits: rankByMatch(found, text).filter((hit) => !seen.has(hit.key) && seen.add(hit.key)),
     failed: results.every((result) => result.status === 'rejected'),
   };
 }
 
+/** What a live search shows as it goes. */
+interface LiveState {
+  hits: Ref<NameHit[]>;
+  loading: Ref<boolean>;
+  failed: Ref<boolean>;
+}
+
+/** Asks the live providers and shows their hits with GBIF's names, then iNaturalist's: a slow name lookup shouldn't hold results back. */
+async function showLiveHits(state: LiveState, text: string, slots: number, indexHitCount: number, signal: AbortSignal) {
+  const live = await askLiveProviders(text, indexHitCount, signal);
+  if (signal.aborted) return;
+  state.hits.value = live.hits;
+  state.failed.value = live.failed;
+  state.loading.value = false;
+  const named = await withInatNames(live.hits, slots, text, signal);
+  if (!signal.aborted && named !== live.hits) state.hits.value = named;
+}
+
 /**
- * Live GBIF suggestions for the latest query: debounced, one search in flight, the previous one aborted.
+ * Live GBIF suggestions for the latest query: debounced, one search in flight, the previous one
+ * aborted as soon as the text changes, so a late answer can't land under newer text.
  * @param max Most hits the list shows, which caps how many live hits are renamed.
  * @param prepare Runs first and resolves to how many hits the local index has, which decides whether
  *   the poorly ranked vernacular search is worth asking.
@@ -120,47 +148,77 @@ function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
   /** Every live provider failed for the last query. */
   const failed = ref(false);
   let controller: AbortController | undefined;
+  /** The text the running search is for; empty while the next one waits on the debounce. */
+  let startedText = '';
+  let indexAnswered: Promise<unknown> = Promise.resolve();
 
-  const run = debounce(async (text: string) => {
+  async function start(text: string) {
     controller?.abort();
     const mine = (controller = new AbortController());
+    startedText = text;
     const isLive = text.trim().length >= MIN_LIVE_QUERY;
     loading.value = isLive;
     failed.value = false;
-    const indexHitCount = await prepare(text);
-    // Swapped in together with the index's hits, so nothing on screen changes before the debounce settles.
-    hits.value = [];
+    const prepared = prepare(text).then((indexHitCount) => {
+      // Swapped in together with the index's hits, so nothing on screen changes before the debounce settles.
+      if (!mine.signal.aborted) hits.value = [];
+      return indexHitCount;
+    });
+    indexAnswered = prepared;
+    const indexHitCount = await prepared;
     if (mine.signal.aborted || !isLive) return;
-    const live = await askLiveProviders(text, indexHitCount, max, mine.signal);
-    if (mine.signal.aborted) return;
-    hits.value = live.hits;
-    failed.value = live.failed;
-    loading.value = false;
-  }, SEARCH_DEBOUNCE_MS);
+    const slots = liveSlots(indexHitCount, max);
+    await showLiveHits({ hits, loading, failed }, text, slots, indexHitCount, mine.signal);
+  }
+
+  const run = debounce((text: string) => void start(text), SEARCH_DEBOUNCE_MS);
+
+  /** Searches for `text` once typing pauses, dropping whatever is in flight. */
+  function queue(text: string) {
+    controller?.abort();
+    startedText = '';
+    loading.value = text.trim().length >= MIN_LIVE_QUERY;
+    run(text);
+  }
+
+  /** Searches for `text` now if the debounce is still holding it, and resolves once the index has answered. */
+  async function settle(text: string) {
+    if (startedText !== text) {
+      run.cancel();
+      void start(text);
+    }
+    await indexAnswered;
+  }
 
   /** Stop any search in flight and empty the results. */
   function reset() {
     run.cancel();
     controller?.abort();
+    startedText = '';
     hits.value = [];
     loading.value = false;
     failed.value = false;
   }
 
-  return { hits, loading, failed, run, reset };
+  return { hits, loading, failed, queue, settle, reset };
 }
 
 /**
- * Search for taxa by name: the baked index answers at once, GBIF's live providers follow.
- * @returns Merged `hits`, `loading` and `failed` flags, `search(text)` to call on every input, and `reset()`.
+ * Search for taxa by name: once typing pauses the baked index answers, and GBIF's live providers follow.
+ * @returns Merged `hits`, `loading` and `failed` flags, `answered` (the text `hits` belong to, which
+ *   lags the typed text during the debounce), `search(text)` to call on every input, `settle()` for
+ *   a pick that can't wait for the debounce, and `reset()`.
  */
 export function useNameSearch(options: NameSearchOptions) {
   const indexHits = ref<NameHit[]>([]);
+  const answered = ref('');
   let current = '';
 
   async function runIndex(text: string) {
     const found = await bakedIndexProvider.search(text);
-    if (text === current) indexHits.value = found;
+    if (text !== current) return;
+    indexHits.value = found;
+    answered.value = text;
   }
 
   // Let the local index answer first, so live results never reorder the list
@@ -175,6 +233,7 @@ export function useNameSearch(options: NameSearchOptions) {
 
   function reset() {
     current = '';
+    answered.value = '';
     indexHits.value = [];
     live.reset();
   }
@@ -186,11 +245,15 @@ export function useNameSearch(options: NameSearchOptions) {
       return;
     }
     current = text;
-    live.loading.value = text.trim().length >= MIN_LIVE_QUERY;
-    live.run(text);
+    live.queue(text);
+  }
+
+  /** Answers the typed text from the index now, so Enter picks from it and not from the previous query's hits. */
+  async function settle() {
+    if (current) await live.settle(current);
   }
 
   onScopeDispose(reset);
 
-  return { hits, loading: live.loading, failed: live.failed, search, reset };
+  return { hits, loading: live.loading, failed: live.failed, answered, search, settle, reset };
 }

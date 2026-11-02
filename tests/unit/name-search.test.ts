@@ -229,3 +229,107 @@ describe('useNameSearch without baked names', () => {
     vi.doUnmock('~/lib/photos/taxon-photos');
   });
 });
+
+describe('useNameSearch while typing', () => {
+  const noLive = (url: URL) => {
+    if (url.pathname === '/v1/species/suggest') return [];
+    if (url.pathname === '/v1/species/search') return { results: [] };
+    return snapshots({ names: [...NAMES, [13, 'S', 'Fratercula arctica', 'Atlantic puffin', 5]] })(url);
+  };
+
+  it('settles on what is typed at once, so Enter never picks from the previous text', async () => {
+    stubNetwork(noLive);
+    const search = await setup({ max: 8 });
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.answered.value).toBe('robin'));
+    search.search('puffin');
+    expect(search.hits.value[0]?.key).toBe(2492462);
+    expect(search.answered.value).toBe('robin');
+    await search.settle();
+    expect(search.hits.value.map((hit) => hit.key)).toEqual([13]);
+    expect(search.answered.value).toBe('puffin');
+    search.stop();
+  });
+
+  it('drops a search in flight when the text changes, so its late answer never lands', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest' && url.searchParams.get('q') === 'robin') {
+        return new Promise((resolve) => (release = resolve));
+      }
+      return noLive(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    search.search('puffin');
+    release([{ key: 1, scientificName: 'Robinia', rank: 'GENUS' }]);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(search.hits.value.map((hit) => hit.key)).not.toContain(1);
+    expect(search.loading.value).toBe(true);
+    search.stop();
+  });
+});
+
+describe('useNameSearch naming live hits', () => {
+  const named = (key: number, name: string) => ({
+    key,
+    scientificName: `Species ${key}`,
+    rank: 'SPECIES',
+    vernacularNames: [{ vernacularName: name, language: 'eng' }],
+  });
+
+  async function withInat(names: NameRow[], results: object[], lookup: () => Promise<Map<number, string>>) {
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
+      if (url.pathname === '/v1/species/search') return { results };
+      return snapshots({ names })(url);
+    });
+    const asked: number[][] = [];
+    vi.resetModules();
+    vi.doMock('~/lib/photos/taxon-photos', () => ({
+      inatNames: (taxa: { key: number }[]) => {
+        asked.push(taxa.map((taxon) => taxon.key));
+        return lookup();
+      },
+    }));
+    const { useNameSearch } = await import('~/composables/useNameSearch');
+    const scope = effectScope();
+    const search = scope.run(() => useNameSearch({ max: 20 }))!;
+    return { search, asked, stop: () => scope.stop() };
+  }
+
+  afterEach(() => vi.doUnmock('~/lib/photos/taxon-photos'));
+
+  it('shows the hits first, then swaps the names in place', async () => {
+    let answer: (names: Map<number, string>) => void = () => undefined;
+    const { search, stop } = await withInat(
+      [],
+      [named(1, 'Robin one'), named(2, 'Robin two')],
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.commonName)).toEqual(['Robin one', 'Robin two']));
+    expect(search.loading.value).toBe(false);
+    answer(new Map([[2, 'Better robin']]));
+    await vi.waitFor(() => expect(search.hits.value[1]?.commonName).toBe('Better robin'));
+    expect(search.hits.value.map((hit) => hit.key)).toEqual([1, 2]);
+    stop();
+  });
+
+  it('looks names up only for the live hits that can reach the list', async () => {
+    const results = [1, 2, 3, 4, 5, 6].map((key) => named(key, `Robin ${key}`));
+    const { search, asked, stop } = await withInat(
+      [[9, 'S', 'Indexed species', 'Indexed robin', 5]],
+      results,
+      async () => new Map(),
+    );
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    expect(asked[0]).toHaveLength(3);
+    stop();
+  });
+});
