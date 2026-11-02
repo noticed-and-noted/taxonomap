@@ -12,16 +12,15 @@ import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { bakeDir, queueRequests } from './cache';
 
 const INAT = 'iNaturalist';
-/** Species matched per call. Small, as a species GBIF has no iNaturalist record of costs a search a second, and the bar only moves between calls. */
+/** Species matched per call. Small, so the progress bar moves between calls. */
 const INAT_LOOKUP_CHUNK = 50;
 
 /** iNaturalist rank levels of the ranks above species the index names. */
 export const INAT_RANK_LEVEL = { K: 70, P: 60, C: 50, O: 40, F: 30, G: 20 } as const;
 
-/** A species to find on iNaturalist: its GBIF key and scientific name. */
+/** A species to find on iNaturalist: its GBIF key. */
 export interface SpeciesToMatch {
   key: number;
-  name: string;
 }
 
 /**
@@ -56,7 +55,7 @@ async function matchNewSpecies(species: readonly SpeciesToMatch[], ids: Map<numb
   const finishChunk = queueRequests(INAT, unmatched.length);
   for (const chunk of unmatched) {
     try {
-      const found = await resolveInatIds(chunk.map(({ key, name }) => ({ key, rank: 'SPECIES' as const, name })));
+      const found = await resolveInatIds(chunk.map(({ key }) => ({ key, rank: 'SPECIES' as const })));
       for (const [key, id] of found) ids.set(key, id);
     } catch (error) {
       console.warn(`iNaturalist IDs skipped for ${chunk.length} species:`, error);

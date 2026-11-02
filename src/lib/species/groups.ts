@@ -175,16 +175,14 @@ export async function gbifCommonNames(keys: readonly number[], signal?: AbortSig
  * Each species' lead photo (see leadPhotos), so a row shows the same photo
  * as the first one on the page it links to. Also supplies species names, and
  * iNaturalist's common names (to `onCommonNames` as soon as they are known).
- * `names` (scientific, by key) lets a species GBIF holds no iNaturalist record of be found by name.
  */
 export function photosForKeys(
   keys: readonly number[],
   signal?: AbortSignal,
-  names: ReadonlyMap<number, string> = new Map(),
   onCommonNames?: (commonNames: ReadonlyMap<number, string>) => void,
 ): Promise<LeadPhotos> {
   return leadPhotos(
-    keys.map((key) => ({ key, rank: 'SPECIES' as const, ...(names.has(key) && { name: names.get(key)! }) })),
+    keys.map((key) => ({ key, rank: 'SPECIES' as const })),
     { ...(signal && { signal }), ...(onCommonNames && { onCommonNames }) },
   );
 }

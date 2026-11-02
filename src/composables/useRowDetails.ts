@@ -140,7 +140,6 @@ async function lookUpPhotos(
   mine: AbortController | undefined,
   state: LookupState,
 ) {
-  const named = new Map(rows().flatMap((row) => (row.unnamed ? [] : [[row.key, row.scientificName] as const])));
   const withCommonName = new Set(rows().flatMap((row) => (row.commonName ? [row.key] : [])));
   const needCommon = photos.filter((key) => !withCommonName.has(key) && !state.asked.common.has(key));
   for (const key of needCommon) state.asked.common.add(key);
@@ -149,7 +148,7 @@ async function lookUpPhotos(
     commonNamesMerged = mergePhotoCommonNames(needCommon, commonNames, mine, state);
     if (needCommon.length) void trackNames(state, () => commonNamesMerged!);
   };
-  const found = await photosForKeys(photos, mine?.signal, named, mergeCommonNames).catch((error: unknown) => {
+  const found = await photosForKeys(photos, mine?.signal, mergeCommonNames).catch((error: unknown) => {
     // No iNaturalist taxa, so no names from them: GBIF's names still come.
     if (!commonNamesMerged) mergeCommonNames(new Map());
     throw error;

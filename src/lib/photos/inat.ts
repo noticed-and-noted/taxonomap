@@ -169,21 +169,6 @@ export async function getTaxonNames(ids: readonly number[]): Promise<Map<number,
   return found;
 }
 
-/**
- * The species iNaturalist names `name`, found by name: one request each, so
- * only for species GBIF holds no iNaturalist record of. Null when there is none.
- */
-export async function searchTaxon(name: string, signal?: AbortSignal): Promise<InatTaxon | null> {
-  const response = await inat.getJson<{ results: InatTaxon[] }>(
-    '/v2/taxa',
-    { q: name, rank: 'species', is_active: true, per_page: 5, fields: TAXON_FIELDS, ...NAME_PARAMS },
-    { ...(signal && { signal }) },
-  );
-  const found = response.results.find((taxon) => taxon.name.toLowerCase() === name.toLowerCase());
-  if (found) taxa.set(String(found.id), found, Infinity);
-  return found ?? null;
-}
-
 /** iNaturalist's English name for a taxon, tidied like every other name; null when it has none. */
 export function inatCommonName(taxon: InatTaxon | null | undefined): string | null {
   const name = taxon?.preferred_common_name?.trim();

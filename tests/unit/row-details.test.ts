@@ -14,7 +14,6 @@ vi.mock('~/lib/species/groups', () => ({
   photosForKeys: async (
     keys: number[],
     _signal: unknown,
-    _names: unknown,
     onCommonNames?: (names: ReadonlyMap<number, string>) => void,
   ) => {
     lookups.photos.push(keys);
