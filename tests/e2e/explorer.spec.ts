@@ -2,6 +2,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
+const INATURALIST_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
+
 test('the header search and the What filter add to one list of taxa', { tag: '@mobile' }, async ({ page }, info) => {
   await page.goto('/?taxon=212');
   // The header search adds rather than replaces, from the baked name index.
@@ -38,6 +40,33 @@ test('Enter straight after typing picks what is typed, not the results still on 
   await box.press('Enter');
   await expect(page.getByRole('button', { name: /Remove taxon filter Common Blackbird/i })).toBeVisible();
   await expect(page).toHaveURL(/taxon=2490719/);
+});
+
+test('a live result holds its name’s place until iNaturalist answers', async ({ page }) => {
+  // No baked names, so every result is live and needs a lookup.
+  await page.route('**/data/names.json', (route) =>
+    route.fulfill({ json: { v: 1, generated: '2026-01-01T00:00:00Z', names: [] } }),
+  );
+  let release = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(
+    // The lookup's GBIF searches, not the name search itself, which names the backbone dataset.
+    (url) => url.host === 'graphql.gbif.org' || url.searchParams.get('datasetKey') === INATURALIST_DATASET,
+    async (route) => {
+      await released;
+      await route.fallback();
+    },
+  );
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+  // An option's children are presentational, so the placeholder isn't in the accessibility tree there.
+  const robin = page.getByRole('option', { name: /Erithacus rubecula/i }).first();
+  const skeleton = robin.locator('.skeleton');
+  await expect(skeleton).toBeVisible();
+  await expect(robin).not.toContainText('European Robin');
+  release();
+  await expect(skeleton).toHaveCount(0);
+  await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
 });
 
 test(

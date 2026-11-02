@@ -302,7 +302,7 @@ describe('useNameSearch naming live hits', () => {
 
   afterEach(() => vi.doUnmock('~/lib/photos/taxon-photos'));
 
-  it('shows the hits first, then swaps the names in place', async () => {
+  it('shows the hits first, holding the place of the names it is looking up', async () => {
     let answer: (names: Map<number, string>) => void = () => undefined;
     const { search, stop } = await withInat(
       [],
@@ -311,11 +311,14 @@ describe('useNameSearch naming live hits', () => {
     );
     search.search('robin');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
-    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.commonName)).toEqual(['Robin one', 'Robin two']));
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.isNamePending)).toEqual([true, true]));
     expect(search.loading.value).toBe(false);
     answer(new Map([[2, 'Better robin']]));
     await vi.waitFor(() => expect(search.hits.value[1]?.commonName).toBe('Better robin'));
     expect(search.hits.value.map((hit) => hit.key)).toEqual([1, 2]);
+    // iNaturalist has no name for the first, so it keeps GBIF's.
+    expect(search.hits.value[0]?.commonName).toBe('Robin one');
+    expect(search.hits.value.some((hit) => hit.isNamePending)).toBe(false);
     stop();
   });
 

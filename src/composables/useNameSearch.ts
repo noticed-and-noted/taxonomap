@@ -84,18 +84,30 @@ function liveSlots(indexHitCount: number, max: number): number {
 }
 
 /**
- * The hits named as iNaturalist names them, in the same order. Only species GBIF already gives a
+ * The hits with the ones to look up marked as awaiting a name. Only species GBIF already gives a
  * common name are looked up, and only those that can reach the list: an obscure species costs a
- * slow, empty search. Names already remembered cost nothing, and a failed lookup leaves GBIF's.
+ * slow, empty search.
  */
-async function withInatNames(hits: NameHit[], slots: number, text: string, signal: AbortSignal): Promise<NameHit[]> {
-  const toName = hits.slice(0, slots).filter((hit) => hit.rank === 'SPECIES' && hit.commonName && !indexedName(hit));
+function awaitingNames(hits: NameHit[], slots: number): NameHit[] {
+  return hits.map((hit, index) =>
+    index < slots && hit.rank === 'SPECIES' && hit.commonName && !indexedName(hit)
+      ? { ...hit, isNamePending: true }
+      : hit,
+  );
+}
+
+/**
+ * The hits awaiting a name given iNaturalist's, in the same order. Names already remembered cost
+ * nothing, and a failed lookup leaves GBIF's.
+ */
+async function withInatNames(hits: NameHit[], text: string, signal: AbortSignal): Promise<NameHit[]> {
+  const toName = hits.filter((hit) => hit.isNamePending);
   if (!toName.length) return hits;
   // Swallowed on purpose: a name is a nicety, and search still works with GBIF's.
   const names = await inatNames(toName, { signal }).catch(() => new Map<number, string | null>());
-  return hits.map((hit) => {
+  return hits.map(({ isNamePending, ...hit }) => {
     const name = names.get(hit.key);
-    if (!name || name === hit.commonName) return hit;
+    if (!isNamePending || !name || name === hit.commonName) return hit;
     const named = renamed(hit, name);
     const { matchedName } = matchHit(named, text);
     return matchedName ? { ...named, matchedName } : named;
@@ -123,15 +135,16 @@ interface LiveState {
   failed: Ref<boolean>;
 }
 
-/** Asks the live providers and shows their hits with GBIF's names, then iNaturalist's: a slow name lookup shouldn't hold results back. */
+/** Asks the live providers and shows their hits, with a name's place held until iNaturalist answers: a slow name lookup shouldn't hold results back. */
 async function showLiveHits(state: LiveState, text: string, slots: number, indexHitCount: number, signal: AbortSignal) {
   const live = await askLiveProviders(text, indexHitCount, signal);
   if (signal.aborted) return;
-  state.hits.value = live.hits;
+  const shown = awaitingNames(live.hits, slots);
+  state.hits.value = shown;
   state.failed.value = live.failed;
   state.loading.value = false;
-  const named = await withInatNames(live.hits, slots, text, signal);
-  if (!signal.aborted && named !== live.hits) state.hits.value = named;
+  const named = await withInatNames(shown, text, signal);
+  if (!signal.aborted && named !== shown) state.hits.value = named;
 }
 
 /**

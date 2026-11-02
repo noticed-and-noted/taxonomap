@@ -5,6 +5,7 @@
  * pause on a result, so arrowing through the list stays cheap, and goes through the cached client.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
@@ -32,7 +33,9 @@ let sequence = 0;
 const count = computed(() => props.hit.count ?? liveCount.value);
 /** Only live suggestions wait for a count; `imageLoading` covers both requests, so a failed count stops shimmering too. */
 const isCountLoading = computed(() => props.hit.count === undefined && liveCount.value === null && imageLoading.value);
-const name = computed(() => props.hit.commonName ?? props.hit.scientificName);
+const name = computed(() =>
+  props.hit.isNamePending ? props.hit.scientificName : (props.hit.commonName ?? props.hit.scientificName),
+);
 
 const load = debounce(async (hit: NameHit) => {
   const mine = ++sequence;
@@ -93,7 +96,8 @@ onBeforeUnmount(() => load.cancel());
       <span v-else-if="!imageLoading" class="text-xs text-subtle">No photo</span>
     </div>
     <div class="body">
-      <p class="truncate font-medium text-text">{{ name }}</p>
+      <p v-if="hit.isNamePending"><NameSkeleton /></p>
+      <p v-else class="truncate font-medium text-text">{{ name }}</p>
       <p v-if="hit.commonName" class="sci-name truncate text-xs text-muted">{{ hit.scientificName }}</p>
       <p class="mt-0.5 text-[0.6875rem] text-subtle">
         {{ RANK_LABELS[hit.rank] ?? hit.rank

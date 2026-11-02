@@ -8,6 +8,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, useId } from 'vue';
+import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import SelectedList, { SCROLL_AFTER } from '~/components/molecules/SelectedList.vue';
@@ -157,8 +158,11 @@ function onKey(event: KeyboardEvent) {
           @mousemove="active = index"
         >
           <span class="min-w-0 truncate">
-            <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
-            <span v-if="hit.matchedName" class="ml-1 text-muted">({{ hit.matchedName }})</span>
+            <NameSkeleton v-if="hit.isNamePending" />
+            <template v-else>
+              <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
+              <span v-if="hit.matchedName" class="ml-1 text-muted">({{ hit.matchedName }})</span>
+            </template>
             <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': hit.commonName }">{{
               hit.scientificName
             }}</span>

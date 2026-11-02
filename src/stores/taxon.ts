@@ -76,12 +76,14 @@ async function resolve(keys: readonly number[]): Promise<void> {
 onMount($taxa, () => $taxonKeys.subscribe((keys) => void resolve(keys)));
 
 /** A search result (or index entry) as display info. */
-export function taxonFromHit(hit: Pick<NameHit, 'key' | 'scientificName' | 'rank' | 'commonName'>): TaxonInfo {
+export function taxonFromHit(
+  hit: Pick<NameHit, 'key' | 'scientificName' | 'rank' | 'commonName' | 'isNamePending'>,
+): TaxonInfo {
   return {
     key: hit.key,
     scientificName: hit.scientificName,
     rank: hit.rank,
-    ...(hit.commonName && { commonName: hit.commonName }),
+    ...(hit.isNamePending ? { loading: true } : hit.commonName && { commonName: hit.commonName }),
   };
 }
 
@@ -97,7 +99,8 @@ export function addTaxon(taxon: TaxonInfo): AddTaxonResult {
   const keys = $taxonKeys.get();
   if (keys.includes(taxon.key)) return 'already';
   if (keys.length >= MAX_TAXA) return 'full';
-  primeTaxonInfo(taxon);
+  // A taxon still awaiting its name is looked up by the selection instead, so it can't stick with the wrong one.
+  if (!taxon.loading) primeTaxonInfo(taxon);
   clearHexSelection();
   $taxonKeys.set([...keys, taxon.key].sort((left, right) => left - right));
   return 'added';

@@ -146,6 +146,20 @@ describe('taxon selection', () => {
     off();
   });
 
+  it('looks a picked taxon up when its name was still loading, rather than keeping GBIF\u2019s', async () => {
+    const { addTaxon, taxonFromHit } = await import('~/stores/taxon');
+    const taxon = taxonFromHit({
+      key: 77,
+      scientificName: 'Coprinus comatus',
+      rank: 'SPECIES',
+      commonName: 'Lawyer\u2019s Wig',
+      isNamePending: true,
+    });
+    expect(taxon.commonName).toBeUndefined();
+    expect(taxon.loading).toBe(true);
+    expect(addTaxon(taxon)).toBe('added');
+  });
+
   it('shows a picked taxon by name straight away (no lookup)', async () => {
     const store = await load();
     const off = store.$taxa.listen(() => {});

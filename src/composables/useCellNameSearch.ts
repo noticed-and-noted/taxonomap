@@ -47,7 +47,7 @@ async function countInArea(filter: OccurrenceFilter, candidates: readonly NameHi
 /**
  * Searches names as `query` changes.
  * @returns `matchedKeys` (listed species the search matched), `outside` (unlisted species with
- *   records in the area, with their counts) and `loading`.
+ *   records in the area, with their counts), `namePendingKeys` and `loading`.
  */
 export function useCellNameSearch({ query, species, area }: CellNameSearchOptions) {
   const nameSearch = useNameSearch({ max: NAME_SEARCH_HITS });
@@ -69,6 +69,8 @@ export function useCellNameSearch({ query, species, area }: CellNameSearchOption
         })
       : [];
   });
+  /** Hits whose name is still being looked up, so their rows can hold its place. */
+  const namePendingKeys = computed(() => new Set(hits.value.filter((hit) => hit.isNamePending).map((hit) => hit.key)));
   const isChecking = ref(false);
   let controller: AbortController | undefined;
 
@@ -102,6 +104,7 @@ export function useCellNameSearch({ query, species, area }: CellNameSearchOption
   return {
     matchedKeys,
     outside,
+    namePendingKeys,
     loading: computed(() => nameSearch.loading.value || isChecking.value),
   };
 }
