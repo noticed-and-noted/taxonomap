@@ -39,10 +39,7 @@ const load = debounce(async (hit: NameHit) => {
   imageLoading.value = true;
   // The baked index knows counts; a live suggestion's rides along with its photo search.
   const isCountNeeded = hit.count === undefined;
-  const lead = await leadPhotos([{ key: hit.key, rank: hit.rank }], {
-    isInatForSpeciesOnly: true,
-    withCounts: isCountNeeded,
-  }).catch(() => null);
+  const lead = await leadPhotos([{ key: hit.key, rank: hit.rank }], { withCounts: isCountNeeded }).catch(() => null);
   if (mine !== sequence) return;
   image.value = lead?.images.get(hit.key);
   liveCount.value = lead?.counts.get(hit.key) ?? null;

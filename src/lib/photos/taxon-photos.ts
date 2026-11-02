@@ -365,9 +365,15 @@ function takeIfNew(image: UsableImage, seenPhotos: Set<string>, seenRecords: Set
   return true;
 }
 
+/**
+ * The species among `taxa`: the only taxa photos are matched to iNaturalist for. A higher taxon's
+ * match costs an ancestor lookup, so it takes GBIF's photo, here and on its page alike.
+ */
+const speciesOf = (taxa: readonly PhotoTaxon[]) => taxa.filter((taxon) => taxon.rank === 'SPECIES');
+
 /** The ordered photo list for a taxon page (up to MAX_PHOTOS). */
 export async function taxonPhotos(taxon: PhotoTaxon, options: Opts = {}): Promise<UsableImage[]> {
-  const { matched } = await matchTaxa([taxon], options);
+  const { matched } = await matchTaxa(speciesOf([taxon]), options);
   const seenPhotos = new Set<string>();
   const seenRecords = new Set<number>();
   const photos: UsableImage[] = [];
@@ -386,8 +392,6 @@ export async function taxonPhotos(taxon: PhotoTaxon, options: Opts = {}): Promis
 type LeadPhotoOpts = Opts & {
   /** Hears iNaturalist's names as soon as the taxa are matched, before the photos. */
   onCommonNames?: (commonNames: ReadonlyMap<number, string>) => void;
-  /** Match only species to iNaturalist: a higher taxon's match costs an ancestor lookup, so it gets GBIF's photo. */
-  isInatForSpeciesOnly?: boolean;
   /** Also read each taxon's record count, when GBIF is searched for its photo anyway. */
   withCounts?: boolean;
 };
@@ -408,8 +412,7 @@ export interface LeadPhotos {
  * The same iNaturalist taxa carry the English names, so those cost nothing more.
  */
 export async function leadPhotos(taxa: readonly PhotoTaxon[], options: LeadPhotoOpts = {}): Promise<LeadPhotos> {
-  const toMatch = options.isInatForSpeciesOnly ? taxa.filter((taxon) => taxon.rank === 'SPECIES') : taxa;
-  const { matched, names } = await matchTaxa(toMatch, options);
+  const { matched, names } = await matchTaxa(speciesOf(taxa), options);
   const commonNames = matchedCommonNames(matched);
   options.onCommonNames?.(commonNames);
   const images = new Map<number, UsableImage>();
@@ -457,9 +460,10 @@ async function gbifLeadPhotos(taxa: readonly PhotoTaxon[], options: LeadPhotoOpt
 
 /** First photos of main-rank taxa from one request asking every source (the first source with a photo wins), and their counts if asked. */
 async function photosFromAllSources(taxa: readonly PhotoTaxon[], options: LeadPhotoOpts): Promise<GbifLeadPhotos> {
-  const photoSearches: RecordsSearch[] = GBIF_PHOTO_SOURCES.map(({ filter }) => ({
+  const photoSearches: RecordsSearch[] = GBIF_PHOTO_SOURCES.map(({ filter, limit }) => ({
     filter: { ...filter, hasImage: true, license: ALLOWED_LICENCE_ENUMS },
-    perTaxon: LEAD_RECORDS_PER_TAXON,
+    // A lone taxon reads as many records as its page does, so both pick the same first photo.
+    perTaxon: taxa.length === 1 ? limit : LEAD_RECORDS_PER_TAXON,
   }));
   // Every record of the taxon, none of them read: only the total.
   const countSearches: RecordsSearch[] = options.withCounts ? [{ filter: {}, perTaxon: 0 }] : [];
