@@ -10,7 +10,7 @@ export const isCoverageOn = Boolean(process.env['E2E_COVERAGE']);
 export const coverageOptions: CoverageReportOptions = {
   name: 'Taxonomap journeys',
   outputDir: 'coverage/e2e',
-  reports: ['console-summary', 'v8', 'lcovonly'],
+  reports: ['console-summary', 'v8', 'lcovonly', 'json-summary'],
   // Only the site's own bundles, and only our sources inside them (bundles without a sourcemap drop out too).
   entryFilter: (entry) => entry.url.includes('/_astro/'),
   outputFilter: (file) => file.sourcePath.startsWith('src/'),
