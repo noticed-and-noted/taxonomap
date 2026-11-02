@@ -47,8 +47,10 @@ describe('useNameSearch', () => {
     const calls = gbif();
     const search = await setup({ max: 8 });
     search.search('robin');
-    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564]));
-    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    // Nothing changes before typing pauses, the index's hits included.
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS - 1);
+    expect(search.hits.value).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
     // Index hits first; with index answers, only three live hits are kept (one a duplicate).
     await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([2492462, 9510564, 1, 2]));
     expect(search.loading.value).toBe(false);

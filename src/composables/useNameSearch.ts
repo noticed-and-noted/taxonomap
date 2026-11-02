@@ -1,8 +1,8 @@
 /**
  * Species and group search, shared by the header search and the What
- * filter's picker. The baked common-name index answers at once; live GBIF
- * providers (scientific suggest, plus vernacular search when the index is
- * thin) follow once typing pauses (`SEARCH_DEBOUNCE_MS`). Each new query aborts the last.
+ * filter's picker. Once typing pauses (`SEARCH_DEBOUNCE_MS`) the baked common-name
+ * index answers, and live GBIF providers (scientific suggest, plus vernacular search
+ * when the index is thin) follow. Each new query aborts the last.
  */
 import { computed, onScopeDispose, ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
@@ -122,15 +122,14 @@ function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
 
   const run = debounce(async (text: string) => {
     controller?.abort();
-    if (text.trim().length < MIN_LIVE_QUERY) {
-      loading.value = false;
-      return;
-    }
     const mine = (controller = new AbortController());
-    loading.value = true;
+    const isLive = text.trim().length >= MIN_LIVE_QUERY;
+    loading.value = isLive;
     failed.value = false;
     const indexHitCount = await prepare(text);
-    if (mine.signal.aborted) return;
+    // Swapped in together with the index's hits, so nothing on screen changes before the debounce settles.
+    hits.value = [];
+    if (mine.signal.aborted || !isLive) return;
     const live = await askLiveProviders(text, indexHitCount, max, mine.signal);
     if (mine.signal.aborted) return;
     hits.value = live.hits;
@@ -186,10 +185,7 @@ export function useNameSearch(options: NameSearchOptions) {
       return;
     }
     current = text;
-    // Live hits belong to the previous query.
-    live.hits.value = [];
     live.loading.value = text.trim().length >= MIN_LIVE_QUERY;
-    void runIndex(text);
     live.run(text);
   }
 
