@@ -1,8 +1,8 @@
 /**
  * Species and group search, shared by the header search and the What
  * filter's picker. Once typing pauses (`SEARCH_DEBOUNCE_MS`) the baked common-name
- * index answers, and live GBIF providers (scientific suggest, plus vernacular search
- * when the index is thin) follow. Each new query aborts the last.
+ * index answers, and live GBIF providers follow: vernacular search when the index is
+ * thin, then scientific suggest below it. Each new query aborts the last.
  */
 import { computed, onScopeDispose, ref, type Ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
@@ -102,6 +102,9 @@ function withInatNames(hits: readonly NameHit[], names: ReadonlyMap<number, stri
   });
 }
 
+/** A promise's outcome, which never rejects. */
+const settled = <Value>(promise: Promise<Value>) => Promise.allSettled([promise]).then(([result]) => result!);
+
 /** What a live search shows as it goes. */
 interface LiveState {
   hits: Ref<NameHit[]>;
@@ -149,8 +152,9 @@ function addHits(found: Map<number, NameHit>, hits: readonly NameHit[], text: st
 }
 
 /**
- * Asks GBIF's live providers and shows each one's hits as they arrive: one is often seconds behind
- * the other, and often has nothing to add. `failed` is true when every one of them did.
+ * Asks GBIF's live providers, showing the common-name search's hits first and suggest's below them,
+ * whichever answers first, so common names stay on top and no row moves. The search stays loading
+ * until there's a hit to show. `failed` is true when every provider did.
  */
 async function askLiveProviders(
   state: LiveState,
@@ -162,17 +166,22 @@ async function askLiveProviders(
   const search: LiveSearch = { text, signal, found: new Map(), names: new Map(), asked: new Set() };
   const room = liveSlots(indexHitCount, options.max);
   const excluded = new Set(options.exclude?.());
-  const show = (hits: NameHit[]) => {
-    const allowed = hits.filter((hit) => !excluded.has(hit.key));
-    addHits(search.found, allowed, text, room, options.order ?? ((ordered) => [...ordered]));
-    showLiveHits(state, search);
-  };
-  const results = await Promise.allSettled([
-    gbifSuggestProvider.search(text, signal).then(show),
-    indexHitCount < THIN_INDEX_HITS ? gbifVernacularProvider.search(text, signal).then(show) : undefined,
-  ]);
-  if (signal.aborted) return;
-  state.failed.value = results.every((result) => result.status === 'rejected');
+  const providers = [...(indexHitCount < THIN_INDEX_HITS ? [gbifVernacularProvider] : []), gbifSuggestProvider];
+  // All asked at once and settled apart, so one failing while the first is awaited isn't left unhandled.
+  const answers = providers.map((provider) => provider.search(text, signal)).map(settled);
+  let failures = 0;
+  for (const answer of answers) {
+    const result = await answer;
+    if (signal.aborted) return;
+    if (result.status === 'rejected') failures++;
+    else {
+      const allowed = result.value.filter((hit) => !excluded.has(hit.key));
+      addHits(search.found, allowed, text, room, options.order ?? ((ordered) => [...ordered]));
+      showLiveHits(state, search);
+    }
+    if (search.found.size) state.loading.value = false;
+  }
+  state.failed.value = failures === answers.length;
   state.loading.value = false;
 }
 
@@ -185,7 +194,7 @@ async function askLiveProviders(
  */
 function useLiveHits(options: NameSearchOptions, prepare: (text: string) => Promise<number>) {
   const hits = ref<NameHit[]>([]);
-  /** Live providers are being asked (or will be, once the debounce settles). */
+  /** Live providers are being asked with nothing to show yet (or will be, once the debounce settles). */
   const loading = ref(false);
   /** Every live provider failed for the last query. */
   const failed = ref(false);
@@ -245,7 +254,7 @@ function useLiveHits(options: NameSearchOptions, prepare: (text: string) => Prom
 }
 
 /**
- * Search for taxa by name: once typing pauses the baked index answers, and GBIF's live providers follow.
+ * Search for taxa by name: once typing pauses the baked index answers, then GBIF's common-name search, then its suggestions.
  * @returns Merged `hits`, `loading` and `failed` flags, `answered` (the text `hits` belong to, which
  *   lags the typed text during the debounce), `search(text)` to call on every input, `settle()` for
  *   a pick that can't wait for the debounce, and `reset()`.

@@ -273,65 +273,75 @@ describe('useNameSearch while typing', () => {
 });
 
 describe('useNameSearch with slow providers', () => {
-  it('shows each provider\u2019s hits as they arrive, and is still loading until the last has answered', async () => {
-    let answerSuggest: (value: unknown) => void = () => undefined;
+  const usage = (key: number, scientificName: string, rank = 'GENUS') => ({ key, scientificName, rank });
+
+  /** Stubs the providers, each answering only when released. */
+  function heldProviders() {
+    const release = { suggest: (_value: unknown) => {}, search: (_value: unknown) => {} };
     stubNetwork((url) => {
-      if (url.pathname === '/v1/species/suggest') return new Promise((resolve) => (answerSuggest = resolve));
-      if (url.pathname === '/v1/species/search')
-        return { results: [{ key: 21, scientificName: 'Zooming', rank: 'GENUS' }] };
+      if (url.pathname === '/v1/species/suggest') return new Promise((resolve) => (release.suggest = resolve));
+      if (url.pathname === '/v1/species/search') return new Promise((resolve) => (release.search = resolve));
       return snapshots({ names: [] })(url);
     });
+    return release;
+  }
+
+  async function searching() {
     const search = await setup({ max: 8 });
     search.search('zoom');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
-    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([21]));
+    return search;
+  }
+
+  it('holds suggest\u2019s hits until the common-name search has answered, and puts them below it', async () => {
+    const release = heldProviders();
+    const search = await searching();
+    release.suggest([usage(22, 'Zoomorphus')]);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(search.hits.value).toEqual([]);
     expect(search.loading.value).toBe(true);
-    answerSuggest([{ key: 22, scientificName: 'Zoomorphus', rank: 'GENUS' }]);
-    await vi.waitFor(() => expect(search.loading.value).toBe(false));
-    expect(search.hits.value.map((hit) => hit.key)).toEqual([21, 22]);
+    release.search({ results: [usage(21, 'Zoom')] });
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([21, 22]));
+    expect(search.loading.value).toBe(false);
     search.stop();
   });
 
-  it('never moves a row on screen: a later answer lands below it, however well it matches', async () => {
-    const usage = (key: number, scientificName: string, rank: string) => ({ key, scientificName, rank });
-    let answerSearch: (value: unknown) => void = () => undefined;
-    stubNetwork((url) => {
-      if (url.pathname === '/v1/species/suggest') return [usage(41, 'Zoomorphus zoomer', 'SPECIES')];
-      if (url.pathname === '/v1/species/search') return new Promise((resolve) => (answerSearch = resolve));
-      return snapshots({ names: [] })(url);
-    });
-    const { sortByRank } = await import('~/lib/gbif');
-    const search = await setup({ max: 8, order: sortByRank });
-    search.search('zoom');
-    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
-    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([41]));
-    // An exact match, and a family, which the order would otherwise put first.
-    answerSearch({ results: [usage(42, 'Zoom', 'FAMILY')] });
-    await vi.waitFor(() => expect(search.loading.value).toBe(false));
-    expect(search.hits.value.map((hit) => hit.key)).toEqual([41, 42]);
+  it('shows the common names as soon as they are in, adding a late suggestion below', async () => {
+    const release = heldProviders();
+    const search = await searching();
+    release.search({ results: [usage(21, 'Zoom')] });
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([21]));
+    expect(search.loading.value).toBe(false);
+    release.suggest([usage(22, 'Zoom')]);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([21, 22]));
     search.stop();
   });
 
-  it('keeps a taxon\u2019s common name whichever provider answered first', async () => {
-    const common = {
-      key: 31,
-      scientificName: 'Zooming',
-      rank: 'SPECIES',
+  it('keeps loading when the common-name search finds nothing, until suggest answers', async () => {
+    const release = heldProviders();
+    const search = await searching();
+    release.search({ results: [] });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(search.hits.value).toEqual([]);
+    expect(search.loading.value).toBe(true);
+    release.suggest([usage(22, 'Zoomorphus')]);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([22]));
+    expect(search.loading.value).toBe(false);
+    search.stop();
+  });
+
+  it('never loses a common name to a suggestion of the same taxon', async () => {
+    const release = heldProviders();
+    const search = await searching();
+    const named = {
+      ...usage(31, 'Zooming', 'SPECIES'),
       vernacularNames: [{ vernacularName: 'Zoomer', language: 'eng' }],
     };
-    let answerSearch: (value: unknown) => void = () => undefined;
-    stubNetwork((url) => {
-      if (url.pathname === '/v1/species/suggest') return [{ key: 31, scientificName: 'Zooming', rank: 'SPECIES' }];
-      if (url.pathname === '/v1/species/search') return new Promise((resolve) => (answerSearch = resolve));
-      return snapshots({ names: [] })(url);
-    });
-    const search = await setup({ max: 8 });
-    search.search('zoom');
-    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
-    await vi.waitFor(() => expect(search.hits.value).toHaveLength(1));
-    answerSearch({ results: [common] });
-    await vi.waitFor(() => expect(search.hits.value[0]?.englishNames).toEqual(['Zoomer']));
+    release.suggest([usage(31, 'Zooming', 'SPECIES')]);
+    release.search({ results: [named] });
+    await vi.waitFor(() => expect(search.loading.value).toBe(false));
     expect(search.hits.value).toHaveLength(1);
+    expect(search.hits.value[0]?.englishNames).toEqual(['Zoomer']);
     search.stop();
   });
 });
