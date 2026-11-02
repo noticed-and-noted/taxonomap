@@ -44,6 +44,8 @@ const imgSrc = (element: unknown) =>
 
 const BARE: UsableImage = { occurrenceKey: 1, datasetKey: 'd', licence: 'CC-BY', url: 'https://img.test/a.jpg' };
 const PHOTO: UsableImage = { ...BARE, creator: 'Ann' };
+// The real satori and resvg load inside the test, which can pass the default 5 s on a slow CI runner.
+const REAL_RENDER_TIMEOUT_MS = 20_000;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'og-'));
@@ -58,16 +60,20 @@ afterEach(async () => {
 });
 
 describe('renderSpeciesCard', () => {
-  it('renders a 1200 × 630 PNG once, then serves the cached copy', async () => {
-    const { renderSpeciesCard } = await load();
-    const input = { commonName: 'European robin', scientificName: 'Erithacus rubecula', count: 11_000_000 };
-    const png = await renderSpeciesCard(input);
-    expect(png.subarray(1, 4).toString()).toBe('PNG');
-    expect(png.readUInt32BE(16)).toBe(1200);
-    expect(png.readUInt32BE(20)).toBe(630);
-    expect(await readdir(join(dir, '.cache', 'og'))).toHaveLength(1);
-    await expect(renderSpeciesCard(input)).resolves.toEqual(png);
-  });
+  it(
+    'renders a 1200 × 630 PNG once, then serves the cached copy',
+    async () => {
+      const { renderSpeciesCard } = await load();
+      const input = { commonName: 'European robin', scientificName: 'Erithacus rubecula', count: 11_000_000 };
+      const png = await renderSpeciesCard(input);
+      expect(png.subarray(1, 4).toString()).toBe('PNG');
+      expect(png.readUInt32BE(16)).toBe(1200);
+      expect(png.readUInt32BE(20)).toBe(630);
+      expect(await readdir(join(dir, '.cache', 'og'))).toHaveLength(1);
+      await expect(renderSpeciesCard(input)).resolves.toEqual(png);
+    },
+    REAL_RENDER_TIMEOUT_MS,
+  );
 
   it('lays out the names, count and initials when there is no photo', async () => {
     const { renderSpeciesCard, trees } = await loadTree();
