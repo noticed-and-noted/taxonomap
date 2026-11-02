@@ -365,15 +365,9 @@ function takeIfNew(image: UsableImage, seenPhotos: Set<string>, seenRecords: Set
   return true;
 }
 
-/**
- * The species among `taxa`: the only taxa photos are matched to iNaturalist for. A higher taxon's
- * match costs an ancestor lookup, so it takes GBIF's photo, here and on its page alike.
- */
-const speciesOf = (taxa: readonly PhotoTaxon[]) => taxa.filter((taxon) => taxon.rank === 'SPECIES');
-
 /** The ordered photo list for a taxon page (up to MAX_PHOTOS). */
 export async function taxonPhotos(taxon: PhotoTaxon, options: Opts = {}): Promise<UsableImage[]> {
-  const { matched } = await matchTaxa(speciesOf([taxon]), options);
+  const { matched } = await matchTaxa([taxon], options);
   const seenPhotos = new Set<string>();
   const seenRecords = new Set<number>();
   const photos: UsableImage[] = [];
@@ -412,7 +406,7 @@ export interface LeadPhotos {
  * The same iNaturalist taxa carry the English names, so those cost nothing more.
  */
 export async function leadPhotos(taxa: readonly PhotoTaxon[], options: LeadPhotoOpts = {}): Promise<LeadPhotos> {
-  const { matched, names } = await matchTaxa(speciesOf(taxa), options);
+  const { matched, names } = await matchTaxa(taxa, options);
   const commonNames = matchedCommonNames(matched);
   options.onCommonNames?.(commonNames);
   const images = new Map<number, UsableImage>();

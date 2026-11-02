@@ -239,48 +239,43 @@ describe('taxon photos', () => {
     }
   });
 
-  it('names a taxon from the ancestor of its record at the taxon’s rank', async () => {
+  it('matches a record of a lower rank to its ancestor at the taxon’s rank', async () => {
     network({
       records: { 7: { taxonID: '9001' }, 8: { taxonID: '9001' } },
       taxa: {
-        9001: taxon(9001, 5, [], [1, 70, 8000, 8021, 9001]), // subspecies
-        8021: { ...taxon(8021, 10, [], [1, 70, 8000, 8021]), preferred_common_name: 'Its species' },
-        8000: { ...taxon(8000, 20, [], [1, 70, 8000]), preferred_common_name: 'Its genus' },
-        70: taxon(70, 70, [], [1, 70]),
+        9001: taxon(9001, 5, [photo(1)], [1, 70, 8000, 8021, 9001]), // subspecies
+        8021: taxon(8021, 10, [photo(2)], [1, 70, 8000, 8021]), // its species
+        8000: taxon(8000, 20, [photo(3)], [1, 70, 8000]), // its genus
+        70: taxon(70, 70, [photo(4)], [1, 70]),
       },
       voted: {},
       gbifInat: {},
       gbifAny: {},
     });
-    const names = await (
-      await load()
-    ).inatNames([
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos([
       { key: 7, rank: 'SPECIES' },
       { key: 8, rank: 'GENUS' },
     ]);
-    expect(names).toEqual(
-      new Map([
-        [7, 'Its species'],
-        [8, 'Its genus'],
-      ]),
-    );
+    expect(label(images.get(7)!)).toBe('inat:2');
+    expect(label(images.get(8)!)).toBe('inat:3');
   });
 
-  it('names by GBIF’s name when iNaturalist ranks the group differently', async () => {
+  it('matches by GBIF’s name when iNaturalist ranks the group differently', async () => {
     network({
       // GBIF's order Cetacea is an infraorder inside iNaturalist's order Artiodactyla.
       records: { 733: { taxonID: '41481', order: 'Cetacea' } as { taxonID: string } },
       taxa: {
-        41481: taxon(41481, 10, [], [1, 152870, 152871, 41481]),
-        152870: { ...taxon(152870, 40, [], [1, 152870]), name: 'Artiodactyla', preferred_common_name: 'Even-toed' },
-        152871: { ...taxon(152871, 35, [], [1, 152870, 152871]), name: 'Cetacea', preferred_common_name: 'Whales' },
+        41481: taxon(41481, 10, [photo(1)], [1, 152870, 152871, 41481]),
+        152870: { ...taxon(152870, 40, [photo(2)], [1, 152870]), name: 'Artiodactyla' },
+        152871: { ...taxon(152871, 35, [photo(3)], [1, 152870, 152871]), name: 'Cetacea' },
       },
       voted: {},
       gbifInat: {},
       gbifAny: {},
     });
-    const names = await (await load()).inatNames([{ key: 733, rank: 'ORDER' }]);
-    expect(names).toEqual(new Map([[733, 'Whales']]));
+    const loaded = await load();
+    expect(label((await loaded.leadPhoto({ key: 733, rank: 'ORDER' }))!)).toBe('inat:3');
   });
 
   it('caps the list at 20 photos', async () => {
@@ -526,7 +521,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     expect(label((await taxonPhotos(target))[0]!)).toBe('gbif:deep.jpg');
   });
 
-  it('matches only species to iNaturalist for photos, and brings the counts with the GBIF photos', async () => {
+  it('brings the record counts with the GBIF photos', async () => {
     const calls = network({
       ...base,
       gbifAny: { 9: [occ(90, 'g.jpg')] },
@@ -536,8 +531,8 @@ describe('finding iNaturalist taxa cheaply', () => {
     const lead = await leadPhotos([{ key: 9, rank: 'GENUS' }], { withCounts: true });
     expect(label(lead.images.get(9)!)).toBe('gbif:g.jpg');
     expect(lead.counts).toEqual(new Map([[9, 123]]));
-    // No iNaturalist record lookup for the genus, and one GBIF request for photos and count together.
-    expect(single(calls)).toHaveLength(0);
+    // One request for the genus's iNaturalist record, and one for its photos and count together.
+    expect(single(calls)).toHaveLength(1);
     expect(calls.filter((call) => url(call).pathname === '/graphql')).toHaveLength(1);
   });
 
@@ -589,8 +584,8 @@ describe('finding iNaturalist taxa cheaply', () => {
     const photoSearches = calls.filter((call) => call.includes('mediaType'));
     expect(photoSearches).toHaveLength(1);
     expect(url(photoSearches[0]!).searchParams.get('query')).toMatch(/genusKey_0: .*familyKey_0: /);
-    // Only the species is matched to iNaturalist, so only it needs a record lookup.
-    expect(single(calls)).toHaveLength(1);
+    // The species, genus and family are searched for in one request, so nothing is looked up singly.
+    expect(single(calls)).toHaveLength(0);
   });
 
   it('ignores batch records without a species or a usable iNaturalist ID, and keeps the first per species', async () => {
@@ -619,8 +614,10 @@ describe('finding iNaturalist taxa cheaply', () => {
     const loaded = await load();
     await (await import('~/lib/data/name-index')).loadNameIndex();
     const { images } = await loaded.leadPhotos([...species(1, 2, 3), { key: 1, rank: 'GENUS' as const }]);
-    // Species 3 has no baked ID, so its iNaturalist record is looked up; it and the genus then get GBIF's photo in one request.
-    expect(single(calls)).toHaveLength(1);
+    // Species 3 has no baked ID, and the genus is not a species: both are searched for in one request,
+    // and, having no iNaturalist photo, get GBIF's in another.
+    expect(batched(calls)).toHaveLength(1);
+    expect(single(calls)).toHaveLength(0);
     expect(calls.filter((call) => call.includes('mediaType'))).toHaveLength(1);
     expect([1, 2].map((key) => label(images.get(key)!))).toEqual(['inat:5010', 'inat:5020']);
   });
