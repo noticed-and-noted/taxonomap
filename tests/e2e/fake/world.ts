@@ -285,8 +285,20 @@ function facetLabel(field: string, key: string) {
  */
 function graphql(params: URLSearchParams) {
   const query = params.get('query') ?? '';
-  const variables = JSON.parse(params.get('variables') ?? '{}') as { predicate: PredicatePart };
-  const search = predicateParams(variables.predicate);
+  const variables = JSON.parse(params.get('variables') ?? '{}') as Record<string, PredicatePart>;
+  // A query of several filters has one aliased search each, with a predicate of its own.
+  const ranked = [
+    ...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)([^]*?)(?=\w+: occurrenceSearch\(|$)/g),
+  ];
+  // Not an occurrence search (many taxa's common names): rows fall back to what they have.
+  if (!ranked.length && !variables['predicate']) return { data: {} };
+  if (!ranked.length) return { data: { occurrenceSearch: search(query, variables['predicate']!) } };
+  return { data: Object.fromEntries(ranked.map(([, alias, name, body]) => [alias, search(body!, variables[name!]!)])) };
+}
+
+/** One occurrenceSearch of a GraphQL query: `query` is its selection, `predicate` its filter. */
+function search(query: string, predicate: PredicatePart) {
+  const search = predicateParams(predicate);
   const fields = [...query.matchAll(/(\w+)\(size: (\d+)\) \{ key/g)].map(([, field, size]) => ({
     field: field!,
     size: Number(size),
@@ -308,7 +320,7 @@ function graphql(params: URLSearchParams) {
       return { ...bucket, occurrences: { documents: { results: occurrenceSearch(recordSearch).results } } };
     });
   }
-  return { data: { occurrenceSearch: { documents: { total: occurrenceSearch(search).count }, facet } } };
+  return { documents: { total: occurrenceSearch(search).count }, facet };
 }
 
 function speciesSearch(params: URLSearchParams) {

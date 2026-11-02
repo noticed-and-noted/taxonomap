@@ -1,6 +1,8 @@
 /** Map explorer journeys, against the fake world (see fixtures.ts). */
-import type { Page } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import { expect, test } from './fixtures';
+
+const INATURALIST_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
 
 test('the header search and the What filter add to one list of taxa', { tag: '@mobile' }, async ({ page }, info) => {
   await page.goto('/?taxon=212');
@@ -26,6 +28,99 @@ test('the header search and the What filter add to one list of taxa', { tag: '@m
   await expect(page).toHaveURL(/taxon=212%2C2490719%2C2492462/);
   await page.getByRole('button', { name: 'Remove taxon filter Birds' }).click();
   await expect(page).toHaveURL(/taxon=2490719%2C2492462/);
+});
+
+test('Enter straight after typing picks what is typed, not the results still on screen', async ({ page }) => {
+  await page.goto('/');
+  const box = page.getByRole('combobox', { name: 'Search species or places' });
+  await box.fill('european robin');
+  await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+  // Inside the debounce, while the robin is still the highlighted row.
+  await box.fill('common blackbird');
+  await box.press('Enter');
+  await expect(page.getByRole('button', { name: /Remove taxon filter Common Blackbird/i })).toBeVisible();
+  await expect(page).toHaveURL(/taxon=2490719/);
+});
+
+/** Empties the baked names, so every result is live, and holds its name lookup until the returned function is called. */
+async function holdNameLookups(page: Page) {
+  await page.route('**/data/names.json', (route) =>
+    route.fulfill({ json: { v: 1, generated: '2026-01-01T00:00:00Z', names: [] } }),
+  );
+  let release = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(
+    // The lookup's GBIF searches, not the name search itself, which names the backbone dataset.
+    (url) => url.host === 'graphql.gbif.org' || url.searchParams.get('datasetKey') === INATURALIST_DATASET,
+    async (route) => {
+      await released;
+      await route.fallback();
+    },
+  );
+  return release;
+}
+
+const heightOf = async (locator: Locator) => (await locator.boundingBox())?.height;
+
+test('a live result holds its name’s place until iNaturalist answers, without moving', async ({ page }) => {
+  const release = await holdNameLookups(page);
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+  const robin = page.getByRole('option', { name: /Erithacus rubecula/i }).first();
+  // An option's children are presentational, so the placeholder isn't in the accessibility tree there.
+  const skeleton = robin.locator('.skeleton');
+  await expect(skeleton).toBeVisible();
+  await expect(robin).not.toContainText('European Robin');
+  await robin.hover();
+  const previewName = page
+    .getByRole('region', { name: /^Preview/ })
+    .locator('.body p')
+    .first();
+  await expect(previewName.locator('.skeleton')).toBeVisible();
+
+  const rowHeight = await heightOf(robin);
+  const previewNameHeight = await heightOf(previewName);
+  const skeletonHeight = await heightOf(skeleton);
+  release();
+  await expect(skeleton).toHaveCount(0);
+
+  await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+  expect(await heightOf(robin)).toBe(rowHeight);
+  expect(await heightOf(previewName)).toBe(previewNameHeight);
+  // As tall as the text: the row's 14 px, not its 20 px line.
+  expect(skeletonHeight).toBe(14);
+});
+
+test('moving to another result cancels what the preview was still asking for', async ({ page }) => {
+  await holdNameLookups(page);
+  // The first row, the genus, is previewed; the robin itself asks the same way for its name.
+  const isPreviewLookup = (request: Request) =>
+    request.url().includes(`datasetKey=${INATURALIST_DATASET}`) &&
+    request.url().includes('limit=1') &&
+    !request.url().includes('taxonKey=2492462');
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+  const asked = await page.waitForRequest(isPreviewLookup);
+  const cancelled = page.waitForEvent('requestfailed', (request) => request.url() === asked.url());
+  await page
+    .getByRole('option', { name: /Erithacus rubecula/i })
+    .first()
+    .hover();
+  await cancelled;
+});
+
+test('a live result in the What picker keeps its height when its name arrives', async ({ page }) => {
+  const release = await holdNameLookups(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /^What/ }).click();
+  await page.getByRole('combobox', { name: 'Species and groups' }).fill('robin');
+  const robin = page.getByRole('option', { name: /Erithacus rubecula/i }).first();
+  await expect(robin.locator('.skeleton')).toBeVisible();
+  const rowHeight = await heightOf(robin);
+  release();
+  await expect(robin.locator('.skeleton')).toHaveCount(0);
+  await expect(robin).toContainText('European Robin');
+  expect(await heightOf(robin)).toBe(rowHeight);
 });
 
 test(

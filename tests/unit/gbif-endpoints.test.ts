@@ -64,7 +64,7 @@ describe('species endpoints', () => {
     await api.getChildren(212, { offset: 100 });
     await api.getParents(212);
     expect(calls.map((url) => `${url.pathname}${url.search}`)).toEqual([
-      '/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=Turdus&rank=SPECIES',
+      '/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=Turdus&rank=SPECIES&status=ACCEPTED',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=10&q=robin&qField=VERNACULAR&status=ACCEPTED',
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=1000&offset=1000&rank=CLASS&status=ACCEPTED',
       '/v1/species/212/vernacularNames?limit=1000',

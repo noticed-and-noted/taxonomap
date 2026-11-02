@@ -5,6 +5,7 @@
  * model to its key; emptying the box sets it back to '' (all species).
  */
 import { computed, ref, useId, watch } from 'vue';
+import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import { useCellNameSearch } from '~/composables/useCellNameSearch';
 import { useSettledQuery } from '~/composables/useSettledQuery';
@@ -154,7 +155,8 @@ function onKey(event: KeyboardEvent) {
         :aria-selected="option.key === speciesKey"
         @mousedown.prevent="pick(option)"
       >
-        <span class="min-w-0 truncate" :class="{ 'sci-name': !names.commonNameOf(option) }">{{
+        <NameSkeleton v-if="nameSearch.namePendingKeys.value.has(option.key)" />
+        <span v-else class="min-w-0 truncate" :class="{ 'sci-name': !names.commonNameOf(option) }">{{
           names.labelOf(option)
         }}</span>
         <span class="shrink-0 text-[0.6875rem] text-subtle tabular-nums">{{ full(option.records) }}</span>

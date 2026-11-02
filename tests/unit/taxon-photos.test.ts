@@ -16,16 +16,16 @@ interface World {
   records: Record<number, { taxonID?: string; species?: string }>;
   gbifInat: Record<number, object[]>;
   gbifAny: Record<number, object[]>;
+  /** GBIF key → how many records GBIF holds of the taxon. */
+  counts?: Record<number, number>;
   taxa: Record<number, InatTaxon>;
   voted: Record<number, Obs[]>;
-  /** GBIF keys whose record lookup fails, iNaturalist taxa whose observations fail, and names whose search fails. */
-  fail?: { records?: number[]; voted?: number[]; names?: string[] };
+  /** GBIF keys whose record lookup fails, and iNaturalist taxa whose observations fail. */
+  fail?: { records?: number[]; voted?: number[] };
   /** Species GBIF's batched iNaturalist record search (GraphQL) leaves out, or `all` to make it fail. */
   crowdedOut?: number[] | 'all';
   /** Make GBIF's batched lead-photo search (GraphQL) fail. */
   isPhotoBatchDown?: boolean;
-  /** iNaturalist taxa found by name search. */
-  byName?: Record<string, InatTaxon>;
   /** A baked name index, as /data/names.json serves it. */
   names?: NameRow[];
 }
@@ -69,29 +69,69 @@ interface PredicatePart {
  * mediaType) or a lead-photo search (first 3 photo records per taxon).
  */
 function graphql(world: World, params: URLSearchParams): Response {
-  const facet = /facet \{ (\w+)\(/.exec(params.get('query') ?? '')![1]!;
-  const parts = (JSON.parse(params.get('variables')!) as { predicate: { predicates: PredicatePart[] } }).predicate
-    .predicates;
-  const part = (key: string) => parts.find((candidate) => candidate.key === key);
-  const isPhotoSearch = !!part('mediaType');
-  if (!isPhotoSearch && world.crowdedOut === 'all') return new Response('bad', { status: 400 });
-  if (isPhotoSearch && world.isPhotoBatchDown) return new Response('bad', { status: 400 });
-  const out = (world.crowdedOut ?? []) as number[];
-  const recordsOf = (key: number): object[] => {
-    if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, 3);
-    const record = world.records[key];
-    return record && !out.includes(key) ? [{ key: 1, datasetKey: 'd', ...record }] : [];
+  const query = params.get('query') ?? '';
+  const variables = JSON.parse(params.get('variables')!) as Record<string, { predicates: PredicatePart[] }>;
+  const answer = (predicate: { predicates: PredicatePart[] }, selection: string) => {
+    const size = Number(/documents\(size: (\d+)\)/.exec(selection)?.[1] ?? 3);
+    const parts = predicate.predicates;
+    const part = (key: string) => parts.find((candidate) => candidate.key === key);
+    const isPhotoSearch = !!part('mediaType');
+    const isCountSearch = parts.every((candidate) => candidate.key === 'taxonKey');
+    if (isCountSearch) {
+      const counted = part('taxonKey')!
+        .values!.map(Number)
+        .filter((key) => world.counts?.[key] !== undefined);
+      return counted.map((key) => ({
+        key: String(key),
+        count: world.counts![key],
+        taxon: null,
+        occurrences: { documents: { results: [] } },
+      }));
+    }
+    if (!isPhotoSearch && world.crowdedOut === 'all') return null;
+    if (isPhotoSearch && world.isPhotoBatchDown) return null;
+    const out = (world.crowdedOut ?? []) as number[];
+    const recordsOf = (key: number): object[] => {
+      if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, size);
+      const record = world.records[key];
+      return record && !out.includes(key) ? [{ key: 1, datasetKey: 'd', ...record }] : [];
+    };
+    return part('taxonKey')!
+      .values!.map(Number)
+      .flatMap((key) => {
+        const results = recordsOf(key);
+        const name = world.records[key]?.species;
+        return results.length
+          ? [
+              {
+                key: String(key),
+                taxon: name ? { scientificName: name } : null,
+                occurrences: { documents: { results } },
+              },
+            ]
+          : [];
+      });
   };
-  const buckets = part('taxonKey')!
-    .values!.map(Number)
-    .flatMap((key) => {
-      const results = recordsOf(key);
-      const name = world.records[key]?.species;
-      return results.length
-        ? [{ key: String(key), taxon: name ? { scientificName: name } : null, occurrences: { documents: { results } } }]
-        : [];
-    });
-  return json({ data: { occurrenceSearch: { facet: { [facet]: buckets } } } });
+  const respond = (facet: string, predicate: { predicates: PredicatePart[] }, selection: string) => {
+    const buckets = answer(predicate, selection);
+    return buckets && { facet: { [facet]: buckets } };
+  };
+  // One search per rank, each with its own predicate, when the query mixes ranks.
+  const ranked = [
+    ...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)([^]*?)(?=\w+: occurrenceSearch\(|$)/g),
+  ];
+  if (ranked.length) {
+    const data = Object.fromEntries(
+      ranked.map(([, alias, name, selection]) => [
+        alias!,
+        respond(/facet \{ (\w+)\(/.exec(selection!)![1]!, variables[name!]!, selection!),
+      ]),
+    );
+    return Object.values(data).includes(null) ? new Response('bad', { status: 400 }) : json({ data });
+  }
+  const facet = /facet \{ (\w+)\(/.exec(query)![1]!;
+  const single = respond(facet, variables['predicate'] as unknown as { predicates: PredicatePart[] }, query);
+  return single ? json({ data: { occurrenceSearch: single } }) : new Response('bad', { status: 400 });
 }
 
 function network(world: World) {
@@ -111,11 +151,6 @@ function network(world: World) {
       }
       const results = (params.get('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? [];
       return json({ results, count: results.length, endOfRecords: true });
-    }
-    if (parsedUrl.host === 'api.inaturalist.org' && parsedUrl.pathname === '/v2/taxa') {
-      if (world.fail?.names?.includes(params.get('q')!)) return new Response('bad', { status: 400 });
-      const hit = world.byName?.[params.get('q')!];
-      return json({ results: hit ? [hit] : [] });
     }
     if (parsedUrl.host === 'api.inaturalist.org' && parsedUrl.pathname.startsWith('/v2/taxa/')) {
       const ids = parsedUrl.pathname.slice('/v2/taxa/'.length).split(',').map(Number);
@@ -476,6 +511,33 @@ describe('finding iNaturalist taxa cheaply', () => {
     expect(calls.some((call) => url(call).pathname === '/v1/occurrence/search')).toBe(false);
   });
 
+  it('gives a lone taxon the same lead photo as its page, however deep the first photo sits', async () => {
+    const soundOnly = (key: number) => ({ ...occ(key, 'x.jpg'), media: [{ type: 'Sound', identifier: 'x.mp3' }] });
+    network({ ...base, gbifAny: { 9: [soundOnly(1), soundOnly(2), soundOnly(3), soundOnly(4), occ(95, 'deep.jpg')] } });
+    const { leadPhotos, taxonPhotos } = await load();
+    const target = { key: 9, rank: 'GENUS' as const };
+    const lead = (await leadPhotos([target])).images.get(9);
+    expect(label(lead!)).toBe('gbif:deep.jpg');
+    expect(label((await taxonPhotos(target))[0]!)).toBe('gbif:deep.jpg');
+  });
+
+  it('brings the record counts with the GBIF photos', async () => {
+    const calls = network({
+      ...base,
+      gbifAny: { 9: [occ(90, 'g.jpg')] },
+      counts: { 9: 123 },
+    });
+    const { leadPhotos } = await load();
+    const lead = await leadPhotos([{ key: 9, rank: 'GENUS' }], { withCounts: true });
+    expect(label(lead.images.get(9)!)).toBe('gbif:g.jpg');
+    expect(lead.counts).toEqual(new Map([[9, 123]]));
+    // One request for the genus's iNaturalist record, and one for its photos and count together.
+    expect(single(calls)).toHaveLength(1);
+    expect(calls.filter((call) => url(call).pathname === '/graphql')).toHaveLength(1);
+    // A taxon with no records has no facet value: its count is known to be none.
+    expect((await leadPhotos([{ key: 8, rank: 'GENUS' }], { withCounts: true })).counts).toEqual(new Map([[8, 0]]));
+  });
+
   it('searches GBIF photos one taxon at a time when the batched search fails', async () => {
     const calls = network({
       ...base,
@@ -515,6 +577,17 @@ describe('finding iNaturalist taxa cheaply', () => {
     ]);
     expect(batched(calls)).toHaveLength(0);
     expect(single(calls)).toHaveLength(3);
+  });
+
+  it('goes to REST as soon as a batched photo search fails', async () => {
+    const calls = network({
+      ...base,
+      isPhotoBatchDown: true,
+      gbifInat: { 1: [occ(11, 'a.jpg')], 2: [occ(12, 'b.jpg')] },
+    });
+    const { images } = await (await load()).leadPhotos(species(1, 2));
+    expect(calls.filter((call) => url(call).pathname === '/graphql' && call.includes('mediaType'))).toHaveLength(1);
+    expect([1, 2].map((key) => label(images.get(key)!))).toEqual(['gbif:a.jpg', 'gbif:b.jpg']);
   });
 
   it('ignores batch records without a species or a usable iNaturalist ID, and keeps the first per species', async () => {
@@ -562,7 +635,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     network(world);
     await (await load()).leadPhotos(species(1, 2));
     // Each with iNaturalist's name, null here: these taxa have none.
-    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
+    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([
       [1, 101, null],
       [2, 102, null],
     ]);
@@ -577,76 +650,43 @@ describe('finding iNaturalist taxa cheaply', () => {
   });
 
   it('forgets a remembered ID iNaturalist no longer has, so the next visit looks it up afresh', async () => {
-    const store = stubStorage({ 'inat-ids-v2': JSON.stringify([[1, 999]]) });
+    const store = stubStorage({ 'inat-ids-v3': JSON.stringify([[1, 999]]) });
     network({ ...base, gbifAny: { 1: [occ(11, 'g.jpg')] } });
     const { images } = await (await load()).leadPhotos(species(1));
     expect(label(images.get(1)!)).toBe('gbif:g.jpg');
-    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([]);
+    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([]);
   });
 
-  it('finds a species GBIF holds no record of by its name', async () => {
-    const store = stubStorage();
+  it('never searches iNaturalist by name: a species GBIF holds no record of keeps GBIF photos', async () => {
     const calls = network({
       ...base,
       records: { 2: { taxonID: '102' } },
       taxa: speciesTaxa(102),
-      byName: { 'Genus one': { ...taxon(901, 10, [photo(9010)]), name: 'Genus one' } },
-      gbifAny: { 3: [occ(13, 'g.jpg')], 4: [occ(14, 'h.jpg')], 5: [occ(15, 'i.jpg')], 6: [occ(16, 'j.jpg')] },
-      fail: { names: ['Broken'] },
+      gbifAny: { 1: [occ(11, 'f.jpg')], 3: [occ(13, 'g.jpg')] },
     });
     const loaded = await load();
     const { images } = await loaded.leadPhotos(
       [
-        { key: 1, rank: 'SPECIES', name: 'Genus one' },
-        { key: 2, rank: 'SPECIES', name: 'Never searched: GBIF had a record' },
-        { key: 3, rank: 'SPECIES' },
-        { key: 4, rank: 'SPECIES', name: 'Not on iNaturalist' },
-        { key: 5, rank: 'SPECIES', name: 'Broken' },
-        { key: 6, rank: 'GENUS', name: 'Genus' },
+        { key: 1, rank: 'SPECIES' },
+        { key: 2, rank: 'SPECIES' },
+        { key: 3, rank: 'GENUS' },
       ],
       { signal: new AbortController().signal },
     );
-    const searched = calls
-      .filter((call) => new URL(call).pathname === '/v2/taxa')
-      .map((call) => new URL(call).searchParams.get('q'));
-    expect(searched).toEqual(['Genus one', 'Not on iNaturalist', 'Broken']);
-    expect([1, 2, 3, 4, 5, 6].map((key) => label(images.get(key)!))).toEqual([
-      'inat:9010',
-      'inat:1020',
-      'gbif:g.jpg',
-      'gbif:h.jpg',
-      'gbif:i.jpg',
-      'gbif:j.jpg',
-    ]);
-    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
-      [2, 102, null],
-      [1, 901, null],
-    ]);
+    expect(calls.some((call) => new URL(call).pathname === '/v2/taxa')).toBe(false);
+    expect([1, 2, 3].map((key) => label(images.get(key)!))).toEqual(['gbif:f.jpg', 'inat:1020', 'gbif:g.jpg']);
   });
 
-  it('does not search by name when GBIF’s record matched a taxon that is not at the rank', async () => {
+  it('matches nothing when GBIF’s record matched a taxon that is not at the rank', async () => {
     const calls = network({
       ...base,
       records: { 1: { taxonID: '50' } },
       taxa: { 50: { id: 50, name: 'Orphan', rank_level: 5 } },
-      byName: { Found: taxon(902, 10) },
       gbifAny: { 1: [occ(11, 'g.jpg')] },
     });
     const loaded = await load();
-    await loaded.leadPhotos([{ key: 1, rank: 'SPECIES', name: 'Found' }]);
+    await loaded.leadPhotos([{ key: 1, rank: 'SPECIES' }]);
     expect(calls.some((call) => new URL(call).pathname === '/v2/taxa')).toBe(false);
-  });
-
-  it('tells the species page and the previews the same story: both find the photo by name', async () => {
-    network({
-      ...base,
-      byName: { Found: { ...taxon(902, 10, [photo(9020)]), name: 'found' } },
-    });
-    const loaded = await load();
-    const target = { key: 1, rank: 'SPECIES' as const, name: 'Found' };
-    const lead = (await loaded.leadPhotos([target])).images.get(1);
-    expect(label(lead!)).toBe('inat:9020');
-    expect((await loaded.taxonPhotos(target)).map(label)).toEqual(['inat:9020']);
   });
 
   it('resolves iNaturalist species IDs for a bake, leaving out species with none', async () => {
@@ -654,20 +694,14 @@ describe('finding iNaturalist taxa cheaply', () => {
       ...base,
       records: recordsFor(1),
       taxa: speciesTaxa(101),
-      byName: { Named: { ...taxon(902, 10), name: 'Named' } },
     });
     const loaded = await load();
     const ids = await loaded.resolveInatIds([
       { key: 1, rank: 'SPECIES' },
-      { key: 2, rank: 'SPECIES', name: 'Named' },
-      { key: 3, rank: 'SPECIES', name: 'Nobody' },
+      { key: 2, rank: 'SPECIES' },
+      { key: 3, rank: 'SPECIES' },
     ]);
-    expect(ids).toEqual(
-      new Map([
-        [1, 101],
-        [2, 902],
-      ]),
-    );
+    expect(ids).toEqual(new Map([[1, 101]]));
   });
 });
 
@@ -689,7 +723,7 @@ describe('remembered iNaturalist IDs', () => {
 
   it('reads what an earlier visit stored, ignoring what is not an ID pair', async () => {
     stubStorage({
-      'inat-ids-v2': JSON.stringify([
+      'inat-ids-v3': JSON.stringify([
         [1, 11],
         ['x', 2],
         [3, 'y'],
@@ -701,7 +735,7 @@ describe('remembered iNaturalist IDs', () => {
   });
 
   it('starts empty when the stored value is not JSON', async () => {
-    stubStorage({ 'inat-ids-v2': '{' });
+    stubStorage({ 'inat-ids-v3': '{' });
     expect((await load()).knownInatId(1)).toBeUndefined();
   });
 
@@ -720,7 +754,7 @@ describe('remembered iNaturalist IDs', () => {
     loaded.forgetInatId(9);
     loaded.forgetInatId(2);
     expect(setItem).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([[1, 12]]);
+    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([[1, 12]]);
   });
 
   it('remembers names beside IDs, keeping a name while the ID stays the same', async () => {
@@ -738,7 +772,7 @@ describe('remembered iNaturalist IDs', () => {
     expect(loaded.knownInatName(3)).toBeUndefined();
     loaded.rememberInatMatches(new Map([[1, { id: 12 }]]));
     expect(loaded.knownInatName(1)).toBeUndefined();
-    expect(JSON.parse(store.get('inat-ids-v2')!)).toEqual([
+    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([
       [2, 22, null],
       [1, 12],
     ]);
@@ -746,7 +780,7 @@ describe('remembered iNaturalist IDs', () => {
 
   it('reads stored names, ignoring ones that are not text', async () => {
     stubStorage({
-      'inat-ids-v2': JSON.stringify([
+      'inat-ids-v3': JSON.stringify([
         [1, 11, 'Robin'],
         [2, 22, null],
         [3, 33, 5],
@@ -761,7 +795,7 @@ describe('remembered iNaturalist IDs', () => {
     const store = stubStorage();
     const loaded = await load();
     loaded.rememberInatMatches(new Map(Array.from({ length: 3002 }, (_unused, index) => [index, { id: index + 1 }])));
-    const kept = JSON.parse(store.get('inat-ids-v2')!) as [number, number][];
+    const kept = JSON.parse(store.get('inat-ids-v3')!) as [number, number][];
     expect(kept).toHaveLength(3000);
     expect(kept[0]).toEqual([2, 3]);
   });
@@ -804,6 +838,7 @@ describe('iNaturalist common names', () => {
     expect(heard).toEqual([commonNames]);
     const taxaCall = url(inatCalls(calls)[0]!);
     expect(taxaCall.searchParams.get('locale')).toBe('en');
+    expect(taxaCall.searchParams.get('preferred_place_id')).toBe('6857');
     expect(taxaCall.searchParams.get('fields')).toContain('preferred_common_name');
     expect(inatCalls(calls)).toHaveLength(1);
   });
@@ -831,8 +866,8 @@ describe('iNaturalist common names', () => {
   });
 
   it('are never searched for by name: a species with no iNaturalist record just has none', async () => {
-    const calls = network({ ...base, byName: { Nobody: named(9, 'Somebody') } });
-    const names = await (await load()).inatNames([{ key: 3, rank: 'SPECIES', name: 'Nobody' }]);
+    const calls = network({ ...base });
+    const names = await (await load()).inatNames([{ key: 3, rank: 'SPECIES' }]);
     expect(names).toEqual(new Map([[3, null]]));
     expect(calls.some((call) => url(call).pathname === '/v2/taxa')).toBe(false);
   });

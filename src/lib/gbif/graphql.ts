@@ -27,6 +27,8 @@ export interface NamedFacetCount extends FacetCount {
 /** A taxon's first matching records, and GBIF's scientific name for it. */
 export interface TaxonRecords {
   name?: string;
+  /** How many records match, when the search asked for it (firstRecordsBySearches). */
+  count?: number;
   records: Occurrence[];
 }
 
@@ -47,6 +49,7 @@ interface FacetBucket {
 /** One taxon facet value with its first records (firstRecordsByTaxon). */
 interface RecordsBucket {
   key: string;
+  count?: number;
   taxon?: { scientificName?: string } | null;
   occurrences: { documents: { results: GraphqlRecord[] } };
 }
@@ -180,6 +183,16 @@ export function canBatchRank(rank: Rank): boolean {
   return rank in RANK_FACET;
 }
 
+/** The records selection of a taxon facet's buckets: the first `perTaxon` of each taxon's records. */
+const recordsSelection = (perTaxon: number) =>
+  `occurrences { documents(size: ${perTaxon}) { results { ${RECORD_FIELDS} } } }`;
+
+/** The predicate for the records of `keys` that match `filter`. */
+function taxaPredicate(keys: readonly number[], filter: OccurrenceFilter & { license?: readonly string[] }) {
+  const { license, ...occurrenceFilter } = filter;
+  return toPredicate({ ...filterToParams({ ...occurrenceFilter, taxonKeys: keys }), license });
+}
+
 /**
  * The first few records of each taxon (all of one rank) that match a filter,
  * in the order a REST search for that taxon alone returns them, from one
@@ -197,24 +210,59 @@ export async function firstRecordsByTaxon(
   const facet = RANK_FACET[rank];
   if (!facet) throw new Error(`GBIF can't batch records of rank ${rank}`);
 
-  const { license, ...occurrenceFilter } = filter;
-  const params = { ...filterToParams({ ...occurrenceFilter, taxonKeys: keys }), license };
-  const records = `occurrences { documents(size: ${options.perTaxon}) { results { ${RECORD_FIELDS} } } }`;
   const query = `
     query FirstRecords($predicate: Predicate) {
       occurrenceSearch(predicate: $predicate) {
-        facet { ${facet}(size: ${keys.length}) { key taxon { scientificName } ${records} } }
+        facet { ${facet}(size: ${keys.length}) { key taxon { scientificName } ${recordsSelection(options.perTaxon)} } }
       }
     }`;
 
   const data = await runQuery<{ occurrenceSearch: { facet: Record<string, RecordsBucket[]> } }>(
     query,
-    { predicate: toPredicate(params) },
+    { predicate: taxaPredicate(keys, filter) },
     { signal: options.signal },
   );
 
   const buckets = data.occurrenceSearch.facet[facet] ?? [];
   return new Map(buckets.map((bucket) => [Number(bucket.key), toTaxonRecords(bucket, rank)]));
+}
+
+/** One of firstRecordsBySearches' searches: the filter its records match, and how many of each taxon's to read. */
+export interface RecordsSearch {
+  filter: OccurrenceFilter & { license?: readonly string[] };
+  perTaxon: number;
+}
+
+/**
+ * Like firstRecordsByTaxon under several filters, still from one request: each filter is a search
+ * of its own in the query. Each taxon also carries its `count` of matching records.
+ * @returns One map per search, in the order given.
+ * @throws Error when GBIF can't batch `rank` (see canBatchRank).
+ */
+export async function firstRecordsBySearches(
+  keys: readonly number[],
+  rank: Rank,
+  searches: readonly RecordsSearch[],
+  options: { signal?: AbortSignal },
+): Promise<Map<number, TaxonRecords>[]> {
+  const facet = RANK_FACET[rank];
+  if (!facet) throw new Error(`GBIF can't batch records of rank ${rank}`);
+
+  const selections = searches.map(({ perTaxon }, index) => {
+    const buckets = `${facet}(size: ${keys.length}) { key count taxon { scientificName } ${recordsSelection(perTaxon)} }`;
+    return `search_${index}: occurrenceSearch(predicate: $predicate_${index}) { facet { ${buckets} } }`;
+  });
+  const declarations = searches.map((_search, index) => `$predicate_${index}: Predicate`).join(', ');
+  const data = await runQuery<Record<string, { facet: Record<string, RecordsBucket[]> }>>(
+    `query FirstRecords(${declarations}) { ${selections.join(' ')} }`,
+    Object.fromEntries(searches.map(({ filter }, index) => [`predicate_${index}`, taxaPredicate(keys, filter)])),
+    options,
+  );
+
+  return searches.map((_search, index) => {
+    const buckets = data[`search_${index}`]?.facet[facet] ?? [];
+    return new Map(buckets.map((bucket) => [Number(bucket.key), toTaxonRecords(bucket, rank)]));
+  });
 }
 
 /** A bucket's records, each given the bucket's species key, and the taxon's name. */
@@ -223,7 +271,7 @@ function toTaxonRecords(bucket: RecordsBucket, rank: Rank): TaxonRecords {
   const speciesKey = rank === 'SPECIES' ? Number(bucket.key) : undefined;
   const records = bucket.occurrences.documents.results.map((record) => toOccurrence(record, speciesKey));
   const name = bucket.taxon?.scientificName;
-  return { records, ...(name && { name }) };
+  return { records, ...(name && { name }), ...(bucket.count !== undefined && { count: bucket.count }) };
 }
 
 /** A GraphQL record as the REST API's occurrence: nulls left out, and the species key filled in when known. */

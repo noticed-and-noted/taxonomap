@@ -8,6 +8,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, useId } from 'vue';
+import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import SelectedList, { SCROLL_AFTER } from '~/components/molecules/SelectedList.vue';
@@ -31,7 +32,7 @@ const nameOf = (taxon: TaxonInfo) => taxon.commonName ?? taxon.scientificName;
 
 const query = ref('');
 const active = ref(-1);
-const { hits: options, loading, search } = useNameSearch({ max: MAX_OPTIONS, exclude: () => keys.value });
+const { hits: options, loading, search, settle } = useNameSearch({ max: MAX_OPTIONS, exclude: () => keys.value });
 
 const full = computed(() => keys.value.length >= MAX_TAXA);
 
@@ -61,6 +62,15 @@ function move(delta: number) {
   nextTick(() => document.getElementById(activeId.value ?? '')?.scrollIntoView({ block: 'nearest' }));
 }
 
+/** Enter picks the highlighted hit, or the only one, once what's typed has answered rather than the previous text. */
+async function pickOnEnter() {
+  const typed = query.value;
+  await settle();
+  if (query.value !== typed) return;
+  const hit = options.value[active.value] ?? (options.value.length === 1 ? options.value[0] : undefined);
+  if (hit) pick(hit);
+}
+
 function onKey(event: KeyboardEvent) {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
@@ -69,11 +79,8 @@ function onKey(event: KeyboardEvent) {
     event.preventDefault();
     move(-1);
   } else if (event.key === 'Enter') {
-    const hit = options.value[active.value] ?? (options.value.length === 1 ? options.value[0] : undefined);
-    if (hit) {
-      event.preventDefault();
-      pick(hit);
-    }
+    event.preventDefault();
+    void pickOnEnter();
   } else if (event.key === 'Escape' && query.value) {
     // Clear the search first; a second Escape closes the flyout.
     event.stopPropagation();
@@ -151,8 +158,11 @@ function onKey(event: KeyboardEvent) {
           @mousemove="active = index"
         >
           <span class="min-w-0 truncate">
-            <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
-            <span v-if="hit.matchedName" class="ml-1 text-muted">({{ hit.matchedName }})</span>
+            <NameSkeleton v-if="hit.isNamePending" />
+            <template v-else>
+              <span v-if="hit.commonName" class="font-medium">{{ hit.commonName }}</span>
+              <span v-if="hit.matchedName" class="ml-1 text-muted">({{ hit.matchedName }})</span>
+            </template>
             <span class="sci-name text-muted" :class="{ 'ml-1 text-xs': hit.commonName }">{{
               hit.scientificName
             }}</span>

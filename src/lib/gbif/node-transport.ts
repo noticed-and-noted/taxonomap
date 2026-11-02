@@ -49,6 +49,12 @@ const DEFAULT_CACHE_TTL_HOURS = 168;
 const DEFAULT_CONCURRENCY = 5;
 const MAX_RETRY_PAUSE_MS = 2 * MINUTE;
 
+/** How long a cached response stays fresh (`GBIF_CACHE_TTL_HOURS`). */
+const defaultCacheTtlMs = () => Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? DEFAULT_CACHE_TTL_HOURS) * HOUR;
+
+/** Whether to ignore cached responses (`GBIF_CACHE_REFRESH=1`). */
+const isCacheRefresh = () => process.env['GBIF_CACHE_REFRESH'] === '1';
+
 /** True for a GraphQL answer with errors: GBIF sends it as a 200, and a retry may answer in full. */
 function isGraphqlFailure(url: string, body: string): boolean {
   if (new URL(url).pathname !== '/graphql') return false;
@@ -91,14 +97,42 @@ function createDiskCache(cacheDir: string, ttlMs: number, refresh: boolean): Dis
 }
 
 /**
+ * `transport` behind the on-disk response cache: a stored answer skips the request, and a 200 is stored.
+ * Same TTL and refresh switches as the GBIF transport.
+ */
+export function withDiskCache(
+  transport: Transport,
+  options: Pick<NodeTransportOptions, 'cacheDir' | 'ttlMs' | 'refresh'> & { cacheDir: string },
+): Transport {
+  const cache = createDiskCache(
+    options.cacheDir,
+    options.ttlMs ?? defaultCacheTtlMs(),
+    options.refresh ?? isCacheRefresh(),
+  );
+  return async (url, requestInit) => {
+    const cached = await cache.read(url);
+    if (cached)
+      return new Response(cached.body, { status: cached.status, headers: { 'content-type': cached.contentType } });
+
+    const response = await transport(url, requestInit);
+    if (response.status !== 200) return response;
+
+    const body = await response.text();
+    const contentType = response.headers.get('content-type') ?? 'application/json';
+    await cache.write({ url, status: response.status, contentType, body, fetchedAt: Date.now() });
+    return new Response(body, { status: response.status, headers: { 'content-type': contentType } });
+  };
+}
+
+/**
  * A transport for build scripts: a disk cache in front of GBIF, at most N requests at once,
  * with a Retry-After on any response pausing every queued request.
  */
 export function createNodeTransport(options: NodeTransportOptions = {}): Transport {
   const cache = createDiskCache(
     options.cacheDir ?? join(process.cwd(), '.cache', 'gbif'),
-    options.ttlMs ?? Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? DEFAULT_CACHE_TTL_HOURS) * HOUR,
-    options.refresh ?? process.env['GBIF_CACHE_REFRESH'] === '1',
+    options.ttlMs ?? defaultCacheTtlMs(),
+    options.refresh ?? isCacheRefresh(),
   );
   const limit = pLimit(options.concurrency ?? DEFAULT_CONCURRENCY);
   const doFetch = options.fetchImpl ?? fetch;

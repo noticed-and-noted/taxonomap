@@ -20,6 +20,8 @@ export interface NameHit {
   englishNames?: string[];
   /** The other English name that matched the query, shown beside the main one. */
   matchedName?: string;
+  /** iNaturalist's name is still being looked up, so `commonName` (GBIF's, kept if it has none) isn't shown yet. */
+  isNamePending?: true;
   source: 'index' | 'suggest' | 'vernacular';
 }
 

@@ -2,17 +2,21 @@
 /**
  * Preview of the highlighted header-search result: photo, rank, record count
  * and up to two actions (add/select if offered, and its About page, for any rank). Data loads after a short
- * pause on a result, so arrowing through the list stays cheap; both requests
- * go through the cached client.
+ * pause on a result, so arrowing through the list stays cheap, and moving to another result cancels
+ * what the last one was still asking for. Requests go through the cached client.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
-import { leadPhoto } from '~/lib/photos/taxon-photos';
+import { leadPhotos } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
+
+/** Pause on a result before asking for its data. */
+const LOAD_DELAY_MS = 300;
 
 const props = defineProps<{
   hit: NameHit;
@@ -28,31 +32,41 @@ const liveCount = ref<number | null>(null);
 const imageLoading = ref(false);
 /** The photo file itself has loaded; until then the thumb shimmers. */
 const imageShown = ref(false);
-let sequence = 0;
+let controller: AbortController | undefined;
 
 const count = computed(() => props.hit.count ?? liveCount.value);
 /** Only live suggestions wait for a count; `imageLoading` covers both requests, so a failed count stops shimmering too. */
 const isCountLoading = computed(() => props.hit.count === undefined && liveCount.value === null && imageLoading.value);
-const name = computed(() => props.hit.commonName ?? props.hit.scientificName);
+const name = computed(() =>
+  props.hit.isNamePending ? props.hit.scientificName : (props.hit.commonName ?? props.hit.scientificName),
+);
 
 const load = debounce(async (hit: NameHit) => {
-  const mine = ++sequence;
+  const { signal } = (controller = new AbortController());
   imageLoading.value = true;
-  const [imageResult, total] = await Promise.allSettled([
-    leadPhoto({ key: hit.key, rank: hit.rank }),
-    // The baked index knows counts; live suggestions need one cheap count request.
-    hit.count === undefined ? occurrenceFacets({ taxonKey: hit.key }, []) : Promise.resolve(null),
-  ]);
-  if (mine !== sequence) return;
-  image.value = imageResult.status === 'fulfilled' ? imageResult.value : undefined;
-  liveCount.value = total.status === 'fulfilled' && total.value ? total.value.count : null;
+  // The baked index knows counts; a live suggestion's rides along with its photo search.
+  const isCountNeeded = hit.count === undefined;
+  const lead = await leadPhotos([{ key: hit.key, rank: hit.rank }], { signal, withCounts: isCountNeeded }).catch(
+    () => null,
+  );
+  if (signal.aborted) return;
+  image.value = lead?.images.get(hit.key);
+  liveCount.value = lead?.counts.get(hit.key) ?? null;
+  if (isCountNeeded && liveCount.value === null) liveCount.value = await countOf(hit, signal);
+  if (signal.aborted) return;
   imageLoading.value = false;
-}, 200);
+}, LOAD_DELAY_MS);
+
+/** A taxon's record count when the photo search didn't bring it (an iNaturalist photo was found), or null. */
+async function countOf(hit: NameHit, signal: AbortSignal): Promise<number | null> {
+  const total = await occurrenceFacets({ taxonKey: hit.key }, [], { signal }).catch(() => null);
+  return total?.count ?? null;
+}
 
 watch(
   () => props.hit.key,
   () => {
-    sequence++;
+    controller?.abort();
     image.value = undefined;
     imageShown.value = false;
     liveCount.value = null;
@@ -62,7 +76,10 @@ watch(
   { immediate: true },
 );
 
-onBeforeUnmount(() => load.cancel());
+onBeforeUnmount(() => {
+  load.cancel();
+  controller?.abort();
+});
 </script>
 
 <template>
@@ -88,7 +105,8 @@ onBeforeUnmount(() => load.cancel());
       <span v-else-if="!imageLoading" class="text-xs text-subtle">No photo</span>
     </div>
     <div class="body">
-      <p class="truncate font-medium text-text">{{ name }}</p>
+      <p v-if="hit.isNamePending"><NameSkeleton /></p>
+      <p v-else class="truncate font-medium text-text">{{ name }}</p>
       <p v-if="hit.commonName" class="sci-name truncate text-xs text-muted">{{ hit.scientificName }}</p>
       <p class="mt-0.5 text-[0.6875rem] text-subtle">
         {{ RANK_LABELS[hit.rank] ?? hit.rank

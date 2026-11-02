@@ -27,6 +27,21 @@ test.describe(() => {
     await expect(page.getByRole('heading', { name: 'Tree of life' })).toBeVisible();
   });
 
+  test('name searches are saved by the service worker', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload(); // now controlled by the service worker
+    await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+    await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+    const isSaved = (path: string) =>
+      page.evaluate(async (wanted) => {
+        const keys = await (await caches.open('gbif-json')).keys();
+        return keys.some((request) => request.url.includes(wanted));
+      }, path);
+    await expect.poll(() => isSaved('/v1/species/suggest')).toBe(true);
+    await expect.poll(() => isSaved('qField=VERNACULAR')).toBe(true);
+  });
+
   test('a new deploy offers a reload, which switches to it', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => navigator.serviceWorker.ready);

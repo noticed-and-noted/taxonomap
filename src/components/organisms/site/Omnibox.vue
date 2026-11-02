@@ -64,6 +64,7 @@ const {
   loading: liveLoading,
   failed: liveFailed,
   search,
+  settle,
   reset: resetSearch,
 } = useNameSearch({
   max: MAX_RESULTS,
@@ -303,14 +304,20 @@ function onRowClick(option: Option, index: number) {
 }
 
 /** Enter picks the highlighted row; with Cmd/Ctrl it opens the About page, and with Shift too it switches search. */
-function onEnter(event: KeyboardEvent) {
+async function onEnter(event: KeyboardEvent) {
   event.preventDefault();
   const isModified = event.metaKey || event.ctrlKey;
-  const option = options.value[active.value];
   if (isModified && event.shiftKey) {
     if (inPlaces.value) showSpecies();
     else showPlaces();
-  } else if (isModified && previewHit.value) openAbout(previewHit.value);
+    return;
+  }
+  const typed = query.value;
+  // The list may still hold the previous text's results, so answer what's typed before picking.
+  if (!inPlaces.value) await settle();
+  if (query.value !== typed) return;
+  const option = options.value[active.value];
+  if (isModified && previewHit.value) openAbout(previewHit.value);
   else if (option) choose(option);
   // Nothing to pick yet (still loading, or no matches): look for a place now.
   else if (inPlaces.value) flushPlaces();
@@ -333,7 +340,7 @@ function onKeydown(event: KeyboardEvent) {
     event.preventDefault();
     stepActive(-1);
   } else if (event.key === 'Enter') {
-    onEnter(event);
+    void onEnter(event);
   } else if (event.key === 'Escape') {
     if (open.value) close();
     else query.value = '';

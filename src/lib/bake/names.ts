@@ -191,9 +191,7 @@ async function speciesRows(
   const limit = lookupLimit();
   const sources = await Promise.all([...counts].map(([key, count]) => limit(() => speciesSource(key, count))));
   const known = sources.filter((source): source is RowSource => source !== null);
-  const { ids, taxa } = await inatSpeciesTaxa(
-    known.map((source) => ({ key: source.key, name: source.scientificName })),
-  );
+  const { ids, taxa } = await inatSpeciesTaxa(known.map((source) => ({ key: source.key })));
   const rows = known.map((source) => {
     const inatId = ids.get(source.key);
     if (inatId === undefined) return nameRow(source);
@@ -209,7 +207,7 @@ export function bakeNames(): Promise<NamesSnapshot> {
     const species = await topSpeciesKeys(indexSize()).then(speciesRows);
     const higher = await higherRanks(species.higherNames);
     const names = [...higher, ...species.rows].sort((left, right) => right[4] - left[4]);
-    return { ...snapshotMeta(), names };
+    return { ...snapshotMeta(), inatIdsFromRecords: true, names };
   });
 }
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** Name search over a cell's species: listed species match by key, others are checked in the cell. */
-import { effectScope, ref } from 'vue';
+import { effectScope, nextTick, ref } from 'vue';
 import type { NameRow } from '~/lib/data/types';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
@@ -88,6 +88,28 @@ describe('useCellNameSearch', () => {
     await vi.waitFor(() => expect([...search.matchedKeys.value]).toEqual([LISTED_KEY]));
     expect(search.outside.value).toEqual([]);
     expect(calls.some((url) => url.pathname === '/v1/occurrence/search')).toBe(false);
+    stop();
+  });
+
+  it('matches nothing from the previous text while the debounce holds the new one', async () => {
+    gbif();
+    const { query, search, stop } = await setup(true);
+    query.value = 'sandpiper';
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.outside.value).toHaveLength(1));
+    query.value = 'gull';
+    await nextTick();
+    expect([...search.matchedKeys.value]).toEqual([]);
+    expect(search.outside.value).toEqual([]);
+    stop();
+  });
+
+  it('checks the area as soon as the debounced hits arrive, without a second pause', async () => {
+    const calls = gbif();
+    const { query, stop } = await setup(true);
+    query.value = 'sa';
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS + 50);
+    expect(calls.filter((url) => url.pathname === '/v1/occurrence/search')).toHaveLength(1);
     stop();
   });
 });

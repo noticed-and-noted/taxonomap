@@ -93,6 +93,8 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
 
 async function bake(env: Record<string, string> = {}) {
   vi.resetModules();
+  // Registered afresh each time, so the mock hands out this bake's iNaturalist client, not an earlier one's.
+  vi.doMock('~/lib/photos/inat-server', () => import('~/lib/photos/inat'));
   vi.unstubAllEnvs();
   for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
   return import('~/lib/bake');
@@ -308,8 +310,11 @@ describe('bake with iNaturalist IDs', () => {
     const calls = gbif((url) => {
       // The backbone listings (which name a datasetKey too) aren't iNaturalist record searches.
       if (url.pathname === '/v1/species/search') return undefined;
-      if (url.host !== 'api.inaturalist.org' || url.pathname === '/v2/taxa') return inat(url);
-      const ids = url.pathname.slice('/v2/taxa/'.length).split(',').map(Number);
+      const isTaxaByPath = url.pathname.startsWith('/v2/taxa/');
+      if (url.host !== 'api.inaturalist.org' || (!isTaxaByPath && !url.searchParams.has('id'))) return inat(url);
+      const ids = (isTaxaByPath ? url.pathname.slice('/v2/taxa/'.length) : url.searchParams.get('id')!)
+        .split(',')
+        .map(Number);
       return { results: ids.flatMap((id) => taxa[id] ?? []) };
     });
     const baked = await bake({ NAME_INDEX_SIZE: '3' });
@@ -328,7 +333,7 @@ describe('bake with iNaturalist IDs', () => {
     // The ranks above are named from the species' ancestors, fetched by ID: never searched for by name.
     const inatCalls = calls.filter((url) => url.host === 'api.inaturalist.org');
     expect(inatCalls.flatMap((url) => url.searchParams.get('q') ?? [])).not.toContain('Aves');
-    expect(inatCalls.at(-1)?.pathname).toBe('/v2/taxa/3,48460');
+    expect(inatCalls.at(-1)?.searchParams.get('id')).toBe('3,48460');
   });
 
   it('keeps the IDs the last bake found, looking up only the species without one', async () => {
@@ -338,6 +343,7 @@ describe('bake with iNaturalist IDs', () => {
         join(dir, 'names.json'),
         // Species 12 was baked before without a match, so it is looked up again.
         JSON.stringify({
+          inatIdsFromRecords: true,
           names: [
             [11, 'S', 'Species number11', null, 1, 555],
             [12, 'S', 'Species number12', null, 1],
@@ -353,6 +359,20 @@ describe('bake with iNaturalist IDs', () => {
       ]);
       const recordSearches = calls.filter((url) => url.searchParams.has('datasetKey'));
       expect(recordSearches.flatMap((url) => url.searchParams.getAll('speciesKey'))).not.toContain('11');
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('drops the IDs of a bake from before they came only through GBIF records', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baked-'));
+    try {
+      writeFileSync(join(dir, 'names.json'), JSON.stringify({ names: [[11, 'S', 'Species number11', null, 1, 555]] }));
+      gbif(inat);
+      await (await bake({ BAKE_DIR: dir, NAME_INDEX_SIZE: '3' })).bakeToDisk();
+      const { names, inatIdsFromRecords } = JSON.parse(readFileSync(join(dir, 'names.json'), 'utf8')) as NamesSnapshot;
+      expect(names.find((row) => row[0] === 11)?.[5]).toBeUndefined();
+      expect(inatIdsFromRecords).toBe(true);
     } finally {
       rmSync(dir, { recursive: true });
     }

@@ -21,6 +21,8 @@ export type NameRow = [number, RankCode, string, string | null, number, (number 
 /** /data/names.json — common-name index for the omnibox, descending by count. */
 export interface NamesSnapshot extends BakedMeta {
   names: NameRow[];
+  /** Its iNaturalist IDs all came through GBIF's iNaturalist records; earlier bakes also searched by name. */
+  inatIdsFromRecords?: true;
 }
 
 /** Tree node rank codes (baked levels are K–O; lazy levels add F, G, S). */

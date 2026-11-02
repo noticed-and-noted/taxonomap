@@ -13,7 +13,14 @@ export function getSpecies(key: number, signal?: AbortSignal): Promise<NameUsage
 export function suggestSpecies(query: string, options: { limit?: number; rank?: Rank } = {}, signal?: AbortSignal) {
   return http().getJson<SuggestResult[]>(
     '/v1/species/suggest',
-    { q: query.trim(), limit: options.limit ?? 8, rank: options.rank, datasetKey: BACKBONE_DATASET_KEY },
+    {
+      q: query.trim(),
+      limit: options.limit ?? 8,
+      rank: options.rank,
+      datasetKey: BACKBONE_DATASET_KEY,
+      // Doubtful names and homonyms of a real taxon would show as twins of it.
+      status: 'ACCEPTED',
+    },
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
 }

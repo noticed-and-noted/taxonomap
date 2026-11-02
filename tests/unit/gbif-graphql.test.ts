@@ -167,6 +167,39 @@ describe('firstRecordsByTaxon', () => {
     });
   });
 
+  it('asks several filters in one request, each with its own predicate', async () => {
+    const bucket = (count: number) => ({
+      key: '7',
+      count,
+      taxon: { scientificName: 'Erithacus rubecula' },
+      occurrences: { documents: { results: [{ key: 1, taxonID: '13094' }] } },
+    });
+    const calls = stubNetwork(() => ({
+      data: {
+        search_0: { facet: { speciesKey: [bucket(3)] } },
+        search_1: { facet: { speciesKey: [bucket(50)] } },
+      },
+    }));
+    const api = await gbif();
+    const [photos, everything] = await api.firstRecordsBySearches(
+      [7],
+      'SPECIES',
+      [
+        { filter: { datasetKey: 'inat' }, perTaxon: 1 },
+        { filter: {}, perTaxon: 0 },
+      ],
+      {},
+    );
+    expect(calls.filter(isGraphql)).toHaveLength(1);
+    expect(photos!.get(7)?.name).toBe('Erithacus rubecula');
+    expect(everything!.get(7)?.count).toBe(50);
+    const { query, variables } = sent(calls[0]!);
+    expect(query).toContain('search_0: occurrenceSearch(predicate: $predicate_0)');
+    expect(query).toContain('documents(size: 0)');
+    expect(Object.keys(variables)).toEqual(['predicate_0', 'predicate_1']);
+    await expect(api.firstRecordsBySearches([1], 'SUBSPECIES', [], {})).rejects.toThrow(/SUBSPECIES/);
+  });
+
   it('batches the main ranks only', async () => {
     const api = await gbif();
     expect([api.canBatchRank('GENUS'), api.canBatchRank('SUBSPECIES')]).toEqual([true, false]);

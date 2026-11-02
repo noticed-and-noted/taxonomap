@@ -133,6 +133,7 @@ The logo is the word **Taxonomap** hand-lettered from Patrick Hand, with a **fid
 - **Search boxes** use `SearchInput.vue`: the leading icon, a spinner while results load, and its own clear button (iOS Safari draws none). Don't hand-roll a `type="search"` input.
 - **Running text** on content pages (privacy, terms) sits in `.prose`, which restores heading, paragraph and list spacing.
 - **Long scrolling lists** get edge fades: the `.fade-list` class plus `useScrollFade`. In markup that never hydrates (the pre-rendered species page), add `.fade-scroll` instead of the composable; it drives the same fades from CSS.
+- **Names still loading**: a result whose iNaturalist name is on its way holds the name's place with `NameSkeleton.vue`, so a name never shows and then changes. Its scientific name shows throughout.
 - **Selected state**: an accent border with an `--accent-soft` fill and a small "Selected" label in accent. Don't add checkmark icons.
 - **Visually hidden radios or checkboxes** inside a label: give the label `position: relative`, so focusing the input doesn't scroll the page.
 - **Icons**: 24×24 stroke icons, `stroke-width` 1.7, `currentColor`, round caps and joins. Mark them `aria-hidden`; the control carries the label.
