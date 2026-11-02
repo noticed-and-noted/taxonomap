@@ -71,7 +71,8 @@ interface PredicatePart {
 function graphql(world: World, params: URLSearchParams): Response {
   const query = params.get('query') ?? '';
   const variables = JSON.parse(params.get('variables')!) as Record<string, { predicates: PredicatePart[] }>;
-  const answer = (predicate: { predicates: PredicatePart[] }) => {
+  const answer = (predicate: { predicates: PredicatePart[] }, selection: string) => {
+    const size = Number(/documents\(size: (\d+)\)/.exec(selection)?.[1] ?? 3);
     const parts = predicate.predicates;
     const part = (key: string) => parts.find((candidate) => candidate.key === key);
     const isPhotoSearch = !!part('mediaType');
@@ -91,7 +92,7 @@ function graphql(world: World, params: URLSearchParams): Response {
     if (isPhotoSearch && world.isPhotoBatchDown) return null;
     const out = (world.crowdedOut ?? []) as number[];
     const recordsOf = (key: number): object[] => {
-      if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, 3);
+      if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, size);
       const record = world.records[key];
       return record && !out.includes(key) ? [{ key: 1, datasetKey: 'd', ...record }] : [];
     };
@@ -111,20 +112,25 @@ function graphql(world: World, params: URLSearchParams): Response {
           : [];
       });
   };
-  const respond = (facet: string, predicate: { predicates: PredicatePart[] }) => {
-    const buckets = answer(predicate);
+  const respond = (facet: string, predicate: { predicates: PredicatePart[] }, selection: string) => {
+    const buckets = answer(predicate, selection);
     return buckets && { facet: { [facet]: buckets } };
   };
   // One search per rank, each with its own predicate, when the query mixes ranks.
-  const ranked = [...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)/g)];
+  const ranked = [
+    ...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)([^]*?)(?=\w+: occurrenceSearch\(|$)/g),
+  ];
   if (ranked.length) {
     const data = Object.fromEntries(
-      ranked.map(([, alias, name]) => [alias!, respond(alias!.split('_')[0]!, variables[name!]!)]),
+      ranked.map(([, alias, name, selection]) => [
+        alias!,
+        respond(alias!.split('_')[0]!, variables[name!]!, selection!),
+      ]),
     );
     return Object.values(data).includes(null) ? new Response('bad', { status: 400 }) : json({ data });
   }
   const facet = /facet \{ (\w+)\(/.exec(query)![1]!;
-  const single = respond(facet, variables['predicate'] as unknown as { predicates: PredicatePart[] });
+  const single = respond(facet, variables['predicate'] as unknown as { predicates: PredicatePart[] }, query);
   return single ? json({ data: { occurrenceSearch: single } }) : new Response('bad', { status: 400 });
 }
 
