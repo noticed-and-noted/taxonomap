@@ -14,6 +14,8 @@ import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 const MIN_QUERY = 2;
 export const MIN_LIVE_QUERY = 3;
 
+type Order = (hits: readonly NameHit[]) => NameHit[];
+
 /** Options for `useNameSearch`. */
 export interface NameSearchOptions {
   /** Most hits to return. */
@@ -21,10 +23,10 @@ export interface NameSearchOptions {
   /** Keys to leave out (e.g. taxa already picked). */
   exclude?: () => Iterable<number>;
   /**
-   * Orders each wave of hits (index, then live) on its own, so late live hits
-   * only ever land below the index hits already on screen.
+   * Orders each wave of hits (the index's, then each live provider's) on its own, so
+   * late hits only ever land below the ones already on screen.
    */
-  order?: (hits: readonly NameHit[]) => NameHit[];
+  order?: Order;
 }
 
 /** Live scientific matches are mostly noise once the index has answers, so only a few are kept then. */
@@ -33,7 +35,7 @@ const MAX_LIVE_HITS_WITH_INDEX = 3;
 const THIN_INDEX_HITS = 5;
 const INDEX_WAIT_MS = 1500;
 
-/** Index hits then live hits, each wave in `order`, without repeats or excluded keys, up to `max`. */
+/** Index hits in `order`, then live hits as they came, without repeats or excluded keys, up to `max`. */
 function mergeHits(
   indexHits: readonly NameHit[],
   liveHits: readonly NameHit[],
@@ -42,7 +44,7 @@ function mergeHits(
   const seen = new Set(exclude?.() ?? []);
   const merged: NameHit[] = [];
   const live = indexHits.length ? liveHits.slice(0, MAX_LIVE_HITS_WITH_INDEX) : liveHits;
-  for (const hit of [...order(indexHits), ...order(live)]) {
+  for (const hit of [...order(indexHits), ...live]) {
     if (seen.has(hit.key)) continue;
     seen.add(hit.key);
     merged.push(hit);
@@ -83,24 +85,16 @@ function liveSlots(indexHitCount: number, max: number): number {
   return indexHitCount ? Math.max(0, Math.min(MAX_LIVE_HITS_WITH_INDEX, max - indexHitCount)) : max;
 }
 
-/**
- * Whether a hit needs iNaturalist's name: only species GBIF already gives a common name, and only
- * those that can reach the list, as an obscure species costs a slow, empty search.
- */
-function needsInatName(hit: NameHit, index: number, slots: number): boolean {
-  return index < slots && hit.rank === 'SPECIES' && !!hit.commonName && !indexedName(hit);
+/** Whether a hit needs iNaturalist's name: only species GBIF already names, as an obscure one costs a slow, empty search. */
+function needsInatName(hit: NameHit): boolean {
+  return hit.rank === 'SPECIES' && !!hit.commonName && !indexedName(hit);
 }
 
 /** The hits under the iNaturalist names found so far, with those still to come marked as pending. */
-function withInatNames(
-  hits: readonly NameHit[],
-  names: ReadonlyMap<number, string | null>,
-  slots: number,
-  text: string,
-): NameHit[] {
-  return hits.map((hit, index) => {
+function withInatNames(hits: readonly NameHit[], names: ReadonlyMap<number, string | null>, text: string): NameHit[] {
+  return hits.map((hit) => {
     const name = names.get(hit.key);
-    if (name === undefined) return needsInatName(hit, index, slots) ? { ...hit, isNamePending: true } : hit;
+    if (name === undefined) return needsInatName(hit) ? { ...hit, isNamePending: true } : hit;
     if (!name || name === hit.commonName) return hit;
     const named = renamed(hit, name);
     const { matchedName } = matchHit(named, text);
@@ -115,21 +109,20 @@ interface LiveState {
   failed: Ref<boolean>;
 }
 
-/** One live search's answer so far: the hits in, and iNaturalist's names for them. */
+/** One live search's answer so far: the hits in, in the order they'll show, and iNaturalist's names for them. */
 interface LiveSearch {
   text: string;
-  slots: number;
   signal: AbortSignal;
   found: Map<number, NameHit>;
   names: Map<number, string | null>;
   asked: Set<number>;
 }
 
-/** Shows what has come in so far, best matches first, and looks up any names it now needs. */
+/** Shows what has come in so far and looks up any names it now needs. */
 function showLiveHits(state: LiveState, search: LiveSearch) {
   if (search.signal.aborted) return;
-  const { text, slots, names, asked, signal } = search;
-  const hits = withInatNames(rankByMatch([...search.found.values()], text), names, slots, text);
+  const { text, names, asked, signal } = search;
+  const hits = withInatNames([...search.found.values()], names, text);
   state.hits.value = hits;
   const toName = hits.filter((hit) => hit.isNamePending && !asked.has(hit.key));
   if (!toName.length) return;
@@ -143,12 +136,16 @@ function showLiveHits(state: LiveState, search: LiveSearch) {
     });
 }
 
-/** Adds a provider's hits, keeping each taxon once: the copy with a common name, whichever came first. */
-function addHits(found: Map<number, NameHit>, hits: readonly NameHit[]) {
-  for (const hit of hits) {
-    const known = found.get(hit.key);
-    if (!known?.commonName) found.set(hit.key, withIndexedName(hit));
-  }
+/**
+ * Adds a provider's hits below those already in, best matches first, while there's room, so a row
+ * never moves once it's on screen. A taxon already in stays where it is, gaining a common name if it
+ * lacked one. (A Map keeps a key's place when its value is replaced.)
+ */
+function addHits(found: Map<number, NameHit>, hits: readonly NameHit[], text: string, room: number, order: Order) {
+  const ranked = rankByMatch(hits.map(withIndexedName), text);
+  for (const hit of ranked) if (found.has(hit.key) && !found.get(hit.key)?.commonName) found.set(hit.key, hit);
+  const fresh = ranked.filter((hit) => !found.has(hit.key)).slice(0, Math.max(0, room - found.size));
+  for (const hit of order(fresh)) found.set(hit.key, hit);
 }
 
 /**
@@ -159,19 +156,15 @@ async function askLiveProviders(
   state: LiveState,
   text: string,
   indexHitCount: number,
-  max: number,
+  options: NameSearchOptions,
   signal: AbortSignal,
 ) {
-  const search: LiveSearch = {
-    text,
-    slots: liveSlots(indexHitCount, max),
-    signal,
-    found: new Map(),
-    names: new Map(),
-    asked: new Set(),
-  };
+  const search: LiveSearch = { text, signal, found: new Map(), names: new Map(), asked: new Set() };
+  const room = liveSlots(indexHitCount, options.max);
+  const excluded = new Set(options.exclude?.());
   const show = (hits: NameHit[]) => {
-    addHits(search.found, hits);
+    const allowed = hits.filter((hit) => !excluded.has(hit.key));
+    addHits(search.found, allowed, text, room, options.order ?? ((ordered) => [...ordered]));
     showLiveHits(state, search);
   };
   const results = await Promise.allSettled([
@@ -186,11 +179,11 @@ async function askLiveProviders(
 /**
  * Live GBIF suggestions for the latest query: debounced, one search in flight, the previous one
  * aborted as soon as the text changes, so a late answer can't land under newer text.
- * @param max Most hits the list shows, which caps how many live hits are renamed.
+ * @param options How many hits the list shows, and how each wave is ordered.
  * @param prepare Runs first and resolves to how many hits the local index has, which decides whether
  *   the poorly ranked vernacular search is worth asking.
  */
-function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
+function useLiveHits(options: NameSearchOptions, prepare: (text: string) => Promise<number>) {
   const hits = ref<NameHit[]>([]);
   /** Live providers are being asked (or will be, once the debounce settles). */
   const loading = ref(false);
@@ -216,7 +209,7 @@ function useLiveHits(max: number, prepare: (text: string) => Promise<number>) {
     indexAnswered = prepared;
     const indexHitCount = await prepared;
     if (mine.signal.aborted || !isLive) return;
-    await askLiveProviders({ hits, loading, failed }, text, indexHitCount, max, mine.signal);
+    await askLiveProviders({ hits, loading, failed }, text, indexHitCount, options, mine.signal);
   }
 
   const run = debounce((text: string) => void start(text), SEARCH_DEBOUNCE_MS);
@@ -271,10 +264,11 @@ export function useNameSearch(options: NameSearchOptions) {
 
   // Let the local index answer first, so live results never reorder the list
   // under the pointer, and decide on the vernacular search with it loaded.
-  const live = useLiveHits(options.max, async (text) => {
+  const live = useLiveHits(options, async (text) => {
     await nameIndexWithin(INDEX_WAIT_MS);
     await runIndex(text);
-    return indexHits.value.length;
+    const excluded = new Set(options.exclude?.());
+    return indexHits.value.filter((hit) => !excluded.has(hit.key)).length;
   });
 
   const hits = computed(() => mergeHits(indexHits.value, live.hits.value, options));

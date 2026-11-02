@@ -27,21 +27,19 @@ test.describe(() => {
     await expect(page.getByRole('heading', { name: 'Tree of life' })).toBeVisible();
   });
 
-  test('name searches stay out of the service worker, so typing on can cancel them', async ({ page }) => {
+  test('name searches are saved by the service worker', async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.reload(); // now controlled by the service worker
     await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
     await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
-    const isCached = (path: string) =>
+    const isSaved = (path: string) =>
       page.evaluate(async (wanted) => {
         const keys = await (await caches.open('gbif-json')).keys();
         return keys.some((request) => request.url.includes(wanted));
       }, path);
-    // Other GBIF answers are cached, which shows the worker was in the way.
-    await expect.poll(() => isCached('/v1/occurrence/search')).toBe(true);
-    expect(await isCached('/v1/species/suggest')).toBe(false);
-    expect(await isCached('qField=VERNACULAR')).toBe(false);
+    await expect.poll(() => isSaved('/v1/species/suggest')).toBe(true);
+    await expect.poll(() => isSaved('qField=VERNACULAR')).toBe(true);
   });
 
   test('a new deploy offers a reload, which switches to it', async ({ page }) => {

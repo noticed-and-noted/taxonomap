@@ -288,7 +288,27 @@ describe('useNameSearch with slow providers', () => {
     expect(search.loading.value).toBe(true);
     answerSuggest([{ key: 22, scientificName: 'Zoomorphus', rank: 'GENUS' }]);
     await vi.waitFor(() => expect(search.loading.value).toBe(false));
-    expect(search.hits.value.map((hit) => hit.key).sort()).toEqual([21, 22]);
+    expect(search.hits.value.map((hit) => hit.key)).toEqual([21, 22]);
+    search.stop();
+  });
+
+  it('never moves a row on screen: a later answer lands below it, however well it matches', async () => {
+    const usage = (key: number, scientificName: string, rank: string) => ({ key, scientificName, rank });
+    let answerSearch: (value: unknown) => void = () => undefined;
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [usage(41, 'Zoomorphus zoomer', 'SPECIES')];
+      if (url.pathname === '/v1/species/search') return new Promise((resolve) => (answerSearch = resolve));
+      return snapshots({ names: [] })(url);
+    });
+    const { sortByRank } = await import('~/lib/gbif');
+    const search = await setup({ max: 8, order: sortByRank });
+    search.search('zoom');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value.map((hit) => hit.key)).toEqual([41]));
+    // An exact match, and a family, which the order would otherwise put first.
+    answerSearch({ results: [usage(42, 'Zoom', 'FAMILY')] });
+    await vi.waitFor(() => expect(search.loading.value).toBe(false));
+    expect(search.hits.value.map((hit) => hit.key)).toEqual([41, 42]);
     search.stop();
   });
 

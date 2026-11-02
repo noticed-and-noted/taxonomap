@@ -286,10 +286,12 @@ function facetLabel(field: string, key: string) {
 function graphql(params: URLSearchParams) {
   const query = params.get('query') ?? '';
   const variables = JSON.parse(params.get('variables') ?? '{}') as Record<string, PredicatePart>;
-  // A query of mixed ranks has one aliased search per rank, each with a predicate of its own.
+  // A query of several filters has one aliased search each, with a predicate of its own.
   const ranked = [
     ...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)([^]*?)(?=\w+: occurrenceSearch\(|$)/g),
   ];
+  // Not an occurrence search (many taxa's common names): rows fall back to what they have.
+  if (!ranked.length && !variables['predicate']) return { data: {} };
   if (!ranked.length) return { data: { occurrenceSearch: search(query, variables['predicate']!) } };
   return { data: Object.fromEntries(ranked.map(([, alias, name, body]) => [alias, search(body!, variables[name!]!)])) };
 }
