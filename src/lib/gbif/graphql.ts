@@ -180,6 +180,16 @@ export function canBatchRank(rank: Rank): boolean {
   return rank in RANK_FACET;
 }
 
+/** The records selection of a taxon facet's buckets: the first `perTaxon` of each taxon's records. */
+const recordsSelection = (perTaxon: number) =>
+  `occurrences { documents(size: ${perTaxon}) { results { ${RECORD_FIELDS} } } }`;
+
+/** The predicate for the records of `keys` that match `filter`. */
+function taxaPredicate(keys: readonly number[], filter: OccurrenceFilter & { license?: readonly string[] }) {
+  const { license, ...occurrenceFilter } = filter;
+  return toPredicate({ ...filterToParams({ ...occurrenceFilter, taxonKeys: keys }), license });
+}
+
 /**
  * The first few records of each taxon (all of one rank) that match a filter,
  * in the order a REST search for that taxon alone returns them, from one
@@ -197,24 +207,64 @@ export async function firstRecordsByTaxon(
   const facet = RANK_FACET[rank];
   if (!facet) throw new Error(`GBIF can't batch records of rank ${rank}`);
 
-  const { license, ...occurrenceFilter } = filter;
-  const params = { ...filterToParams({ ...occurrenceFilter, taxonKeys: keys }), license };
-  const records = `occurrences { documents(size: ${options.perTaxon}) { results { ${RECORD_FIELDS} } } }`;
   const query = `
     query FirstRecords($predicate: Predicate) {
       occurrenceSearch(predicate: $predicate) {
-        facet { ${facet}(size: ${keys.length}) { key taxon { scientificName } ${records} } }
+        facet { ${facet}(size: ${keys.length}) { key taxon { scientificName } ${recordsSelection(options.perTaxon)} } }
       }
     }`;
 
   const data = await runQuery<{ occurrenceSearch: { facet: Record<string, RecordsBucket[]> } }>(
     query,
-    { predicate: toPredicate(params) },
+    { predicate: taxaPredicate(keys, filter) },
     { signal: options.signal },
   );
 
   const buckets = data.occurrenceSearch.facet[facet] ?? [];
   return new Map(buckets.map((bucket) => [Number(bucket.key), toTaxonRecords(bucket, rank)]));
+}
+
+/**
+ * Like firstRecordsByTaxon for taxa of mixed ranks, still from one request (of one rank it is just that): each rank is a search
+ * of its own in the query, so a family's many genera can't crowd a genus out of its facet.
+ * @throws Error when GBIF can't batch a taxon's rank (see canBatchRank).
+ */
+export async function firstRecordsByRanks(
+  taxa: readonly { key: number; rank: Rank }[],
+  filter: OccurrenceFilter & { license?: readonly string[] },
+  options: { perTaxon: number; signal?: AbortSignal },
+): Promise<Map<number, TaxonRecords>> {
+  const keysByRank = new Map<Rank, number[]>();
+  for (const { key, rank } of taxa) {
+    if (!canBatchRank(rank)) throw new Error(`GBIF can't batch records of rank ${rank}`);
+    keysByRank.set(rank, [...(keysByRank.get(rank) ?? []), key]);
+  }
+
+  const ranks = [...keysByRank.keys()];
+  if (ranks.length === 1) return firstRecordsByTaxon(keysByRank.get(ranks[0]!)!, ranks[0]!, filter, options);
+
+  const variables = Object.fromEntries(
+    ranks.map((rank) => [`predicate${rank}`, taxaPredicate(keysByRank.get(rank)!, filter)]),
+  );
+  const searches = ranks.map((rank) => {
+    const facet = RANK_FACET[rank]!;
+    const size = keysByRank.get(rank)!.length;
+    const buckets = `${facet}(size: ${size}) { key taxon { scientificName } ${recordsSelection(options.perTaxon)} }`;
+    return `${facet}: occurrenceSearch(predicate: $predicate${rank}) { facet { ${buckets} } }`;
+  });
+  const declarations = ranks.map((rank) => `$predicate${rank}: Predicate`).join(', ');
+  const query = `query FirstRecords(${declarations}) { ${searches.join(' ')} }`;
+
+  const data = await runQuery<Record<string, { facet: Record<string, RecordsBucket[]> }>>(query, variables, {
+    signal: options.signal,
+  });
+
+  const found = new Map<number, TaxonRecords>();
+  for (const rank of ranks) {
+    const facet = RANK_FACET[rank]!;
+    for (const bucket of data[facet]?.facet[facet] ?? []) found.set(Number(bucket.key), toTaxonRecords(bucket, rank));
+  }
+  return found;
 }
 
 /** A bucket's records, each given the bucket's species key, and the taxon's name. */

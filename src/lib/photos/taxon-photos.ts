@@ -24,6 +24,7 @@ import {
   ALLOWED_LICENCE_ENUMS,
   canBatchRank,
   findImages,
+  firstRecordsByRanks,
   firstRecordsByTaxon,
   http,
   type HigherKeys,
@@ -112,17 +113,21 @@ async function inatRecord(
 type InatRecord = Awaited<ReturnType<typeof inatRecord>>;
 
 /**
- * One iNaturalist record GBIF holds of each of several species, in one request; species
- * GBIF has none of are left out.
+ * One iNaturalist record GBIF holds of each of several taxa (any mix of the main ranks), in one
+ * request; taxa GBIF has none of are left out. A species is named by its record's species, a
+ * higher taxon by its own name, which is how an iNaturalist ancestor is checked to be the same group.
  */
-async function inatRecords(keys: readonly number[], options: Opts): Promise<Map<number, InatRecord>> {
-  const bySpecies = await gbifLimit(() =>
-    firstRecordsByTaxon(keys, 'SPECIES', { datasetKey: INATURALIST_DATASET_KEY }, { perTaxon: 1, ...options }),
+async function inatRecords(taxa: readonly PhotoTaxon[], options: Opts): Promise<Map<number, InatRecord>> {
+  const byTaxon = await gbifLimit(() =>
+    firstRecordsByRanks(taxa, { datasetKey: INATURALIST_DATASET_KEY }, { perTaxon: 1, ...options }),
   );
+  const rankByKey = new Map(taxa.map((taxon) => [taxon.key, taxon.rank]));
   const found = new Map<number, InatRecord>();
-  for (const [key, { name, records }] of bySpecies) {
+  for (const [key, { name, records }] of byTaxon) {
     const id = Number(records[0]?.taxonID);
-    if (Number.isInteger(id) && id > 0) found.set(key, { taxonId: id, ...(name && { species: name }) });
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const nameField = rankByKey.get(key) === 'SPECIES' ? 'species' : 'rankName';
+    found.set(key, { taxonId: id, ...(name && { [nameField]: name }) });
   }
   return found;
 }
@@ -142,22 +147,16 @@ function partitionKnown(taxa: readonly PhotoTaxon[]): { known: Map<number, numbe
 }
 
 /**
- * Finds each unknown taxon's iNaturalist record on GBIF: every species in one request, then
- * singly for taxa above species, and for the species too if that request failed.
+ * Finds each unknown taxon's iNaturalist record on GBIF: every taxon of a main rank in one request,
+ * then singly for the rest (subspecies and below), and for all of them if that request failed.
  */
 async function searchRecords(unknown: readonly PhotoTaxon[], options: Opts): Promise<Map<number, InatRecord>> {
-  const species = unknown.filter((taxon) => taxon.rank === 'SPECIES');
-  // A single species is no cheaper in a batch.
-  const batch =
-    species.length > 1
-      ? await inatRecords(
-          species.map((taxon) => taxon.key),
-          options,
-        ).catch(() => null)
-      : null;
+  const batchable = unknown.filter((taxon) => canBatchRank(taxon.rank));
+  // A single taxon is no cheaper in a batch.
+  const batch = batchable.length > 1 ? await inatRecords(batchable, options).catch(() => null) : null;
   const searches = new Map<number, InatRecord>(batch ?? []);
-  // A species the batch answered for but left out has no iNaturalist record to find.
-  const isAnswered = (taxon: PhotoTaxon) => batch !== null && taxon.rank === 'SPECIES';
+  // A taxon the batch answered for but left out has no iNaturalist record to find.
+  const isAnswered = (taxon: PhotoTaxon) => batch !== null && canBatchRank(taxon.rank);
   await Promise.all(
     unknown
       .filter((taxon) => !isAnswered(taxon))

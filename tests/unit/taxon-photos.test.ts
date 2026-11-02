@@ -67,29 +67,49 @@ interface PredicatePart {
  * mediaType) or a lead-photo search (first 3 photo records per taxon).
  */
 function graphql(world: World, params: URLSearchParams): Response {
-  const facet = /facet \{ (\w+)\(/.exec(params.get('query') ?? '')![1]!;
-  const parts = (JSON.parse(params.get('variables')!) as { predicate: { predicates: PredicatePart[] } }).predicate
-    .predicates;
-  const part = (key: string) => parts.find((candidate) => candidate.key === key);
-  const isPhotoSearch = !!part('mediaType');
-  if (!isPhotoSearch && world.crowdedOut === 'all') return new Response('bad', { status: 400 });
-  if (isPhotoSearch && world.isPhotoBatchDown) return new Response('bad', { status: 400 });
-  const out = (world.crowdedOut ?? []) as number[];
-  const recordsOf = (key: number): object[] => {
-    if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, 3);
-    const record = world.records[key];
-    return record && !out.includes(key) ? [{ key: 1, datasetKey: 'd', ...record }] : [];
+  const query = params.get('query') ?? '';
+  const variables = JSON.parse(params.get('variables')!) as Record<string, { predicates: PredicatePart[] }>;
+  const answer = (predicate: { predicates: PredicatePart[] }) => {
+    const parts = predicate.predicates;
+    const part = (key: string) => parts.find((candidate) => candidate.key === key);
+    const isPhotoSearch = !!part('mediaType');
+    if (!isPhotoSearch && world.crowdedOut === 'all') return null;
+    if (isPhotoSearch && world.isPhotoBatchDown) return null;
+    const out = (world.crowdedOut ?? []) as number[];
+    const recordsOf = (key: number): object[] => {
+      if (isPhotoSearch) return ((part('datasetKey') ? world.gbifInat : world.gbifAny)[key] ?? []).slice(0, 3);
+      const record = world.records[key];
+      return record && !out.includes(key) ? [{ key: 1, datasetKey: 'd', ...record }] : [];
+    };
+    return part('taxonKey')!
+      .values!.map(Number)
+      .flatMap((key) => {
+        const results = recordsOf(key);
+        const name = world.records[key]?.species;
+        return results.length
+          ? [
+              {
+                key: String(key),
+                taxon: name ? { scientificName: name } : null,
+                occurrences: { documents: { results } },
+              },
+            ]
+          : [];
+      });
   };
-  const buckets = part('taxonKey')!
-    .values!.map(Number)
-    .flatMap((key) => {
-      const results = recordsOf(key);
-      const name = world.records[key]?.species;
-      return results.length
-        ? [{ key: String(key), taxon: name ? { scientificName: name } : null, occurrences: { documents: { results } } }]
-        : [];
-    });
-  return json({ data: { occurrenceSearch: { facet: { [facet]: buckets } } } });
+  const respond = (facet: string, predicate: { predicates: PredicatePart[] }) => {
+    const buckets = answer(predicate);
+    return buckets && { facet: { [facet]: buckets } };
+  };
+  // One search per rank, each with its own predicate, when the query mixes ranks.
+  const ranked = [...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)/g)];
+  if (ranked.length) {
+    const data = Object.fromEntries(ranked.map(([, alias, name]) => [alias!, respond(alias!, variables[name!]!)]));
+    return Object.values(data).includes(null) ? new Response('bad', { status: 400 }) : json({ data });
+  }
+  const facet = /facet \{ (\w+)\(/.exec(query)![1]!;
+  const single = respond(facet, variables['predicate'] as unknown as { predicates: PredicatePart[] });
+  return single ? json({ data: { occurrenceSearch: single } }) : new Response('bad', { status: 400 });
 }
 
 function network(world: World) {
@@ -498,16 +518,25 @@ describe('finding iNaturalist taxa cheaply', () => {
     expect(images.size).toBe(3);
   });
 
-  it('does not batch a lone species, or taxa above species', async () => {
-    const calls = network({ ...base, records: recordsFor(1, 2), taxa: speciesTaxa(101, 102) });
-    const loaded = await load();
-    await loaded.leadPhotos([{ key: 1, rank: 'SPECIES' }]);
-    await loaded.leadPhotos([
+  it('does not batch a lone taxon', async () => {
+    const calls = network({ ...base, records: recordsFor(1), taxa: speciesTaxa(101) });
+    await (await load()).leadPhotos([{ key: 1, rank: 'SPECIES' }]);
+    expect(batched(calls)).toHaveLength(0);
+    expect(single(calls)).toHaveLength(1);
+  });
+
+  it('searches GBIF for taxa of different ranks in one request', async () => {
+    const calls = network({ ...base, records: recordsFor(1, 2, 3), taxa: speciesTaxa(101, 102, 103) });
+    await (
+      await load()
+    ).leadPhotos([
+      { key: 1, rank: 'SPECIES' },
       { key: 2, rank: 'GENUS' },
       { key: 3, rank: 'FAMILY' },
     ]);
-    expect(batched(calls)).toHaveLength(0);
-    expect(single(calls)).toHaveLength(3);
+    expect(batched(calls)).toHaveLength(1);
+    expect(url(batched(calls)[0]!).searchParams.get('query')).toMatch(/speciesKey: .*genusKey: .*familyKey: /);
+    expect(single(calls)).toHaveLength(0);
   });
 
   it('ignores batch records without a species or a usable iNaturalist ID, and keeps the first per species', async () => {
@@ -536,8 +565,9 @@ describe('finding iNaturalist taxa cheaply', () => {
     const loaded = await load();
     await (await import('~/lib/data/name-index')).loadNameIndex();
     const { images } = await loaded.leadPhotos([...species(1, 2, 3), { key: 1, rank: 'GENUS' as const }]);
-    // Species 3 has no baked ID, and the genus is not a species: both are looked up the old way.
-    expect(single(calls).map((call) => new URL(call).searchParams.get('taxonKey'))).toEqual(['3', '1']);
+    // Species 3 has no baked ID, and the genus is not a species: both are searched for, in one request.
+    expect(batched(calls)).toHaveLength(1);
+    expect(single(calls)).toHaveLength(0);
     expect([1, 2].map((key) => label(images.get(key)!))).toEqual(['inat:5010', 'inat:5020']);
   });
 
