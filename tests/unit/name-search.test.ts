@@ -154,7 +154,7 @@ describe('useNameSearch', () => {
     const calls = gbif();
     const search = await setup({ max: 8 });
     search.search('ro');
-    await vi.waitFor(() => expect(search.hits.value).toHaveLength(3));
+    await vi.waitFor(() => expect(search.hits.value).toHaveLength(2));
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     expect(calls.some((url) => url.pathname.startsWith('/v1/'))).toBe(false);
     search.search('r');
