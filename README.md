@@ -5,34 +5,41 @@
 
 # Taxonomap
 
-A static, visual explorer for [GBIF](https://www.gbif.org) occurrence data, built for birders, naturalists, recorders and educators. Pages are pre-rendered at build time, interactive parts hydrate as Vue islands, and the browser calls GBIF (`api.gbif.org`, and `graphql.gbif.org` for named facets) directly. There is no application server.
+![Unit test coverage](https://github.com/jack-sandeman/taxonomap/blob/badges/coverage-unit.svg?raw=true)
+![E2E test coverage](https://github.com/jack-sandeman/taxonomap/blob/badges/coverage-e2e.svg?raw=true)
 
-Live at [app.taxonomap.com](https://app.taxonomap.com).
+A map for exploring species records from [GBIF](https://www.gbif.org), with species pages, a tree of life and a "near me" mode. Live at [app.taxonomap.com](https://app.taxonomap.com).
 
-**Stack:** Astro 7 (static) · Vue 3 islands · Nano Stores · MapLibre GL · D3 / Observable Plot · Tailwind CSS 4 · Workbox · Vitest / Playwright · Cloudflare Pages.
+![Searching for the European robin narrows the globe to where it has been recorded; panning and clicking a hexagon over the UK opens its record count and monthly chart](docs/demo.gif)
 
-## Quick start
+- See where records are on the map, and filter by species, date, place, record type or licence
+- Click a hexagon to list the species recorded there, down to individual records
+- Open a species page for photos, seasonality and yearly charts, Red List status and similar species
+- Browse the tree of life from kingdoms down to species, as a sunburst or icicle chart
+- Drop a pin or use your location to see local species and recent sightings
 
-Needs Node 24 (`.nvmrc` pins it) and pnpm.
+It's a static site. Astro pre-renders the pages, Vue islands handle the interactive parts and the browser calls GBIF directly, so there's no application server.
+
+## Running it
+
+You need Node 24 and pnpm. Set `GBIF_CONTACT_EMAIL` in `.env`; the other settings are explained in `.env.example`.
 
 ```bash
-cp .env.example .env    # set GBIF_CONTACT_EMAIL at least
+cp .env.example .env
 pnpm install
-pnpm dev                # http://localhost:4321
+pnpm dev
 ```
 
-## Docs
+## Scripts
 
-| Doc                                            | What's in it                                                          |
-| ---------------------------------------------- | --------------------------------------------------------------------- |
-| [Development](docs/development.md)             | Setup, scripts, environment variables, performance budget and testing |
-| [Features](docs/features.md)                   | Map explorer, species pages, tree of life, What's near me             |
-| [Architecture](docs/architecture.md)           | Code layout, URL state and how the islands talk                       |
-| [Caching strategy](docs/caching.md)            | Memory, service worker, build disk cache and CDN                      |
-| [GBIF API findings](docs/gbif-api-findings.md) | Where the live API differs from the docs                              |
-| [Deployment](docs/deployment.md)               | CI, Cloudflare Pages, secrets and variables                           |
-| [Design system](docs/design-system.md)         | Colour, type, logo and components                                     |
+- `pnpm build`, `pnpm preview`: build to `dist/` and serve it
+- `pnpm lint`, `pnpm format`, `pnpm check`: ESLint, Prettier, type checks
+- `pnpm test`, `pnpm test:coverage`: unit tests, with or without coverage
+- `pnpm build:e2e`, `pnpm test:e2e`: Playwright against a fake GBIF, no network needed (run `pnpm exec playwright install chromium` once)
+- `pnpm test:contract`: checks the live GBIF API still behaves as the client expects
+- `pnpm bake`: save the data the build needs to `.cache/baked/`, so builds don't fetch it (delete the folder to go back to fetching)
+- `pnpm ioc-names <VernacularName.tsv>`: rebuild the IOC bird names from GBIF's backbone archive
 
-## Data and attribution
+## Data
 
-Occurrence data comes from GBIF.org and its publishers. Every record and image shown in the app credits its dataset or publisher and its licence.
+Occurrence data comes from GBIF.org and its publishers. Records and images in the app credit their dataset or publisher and licence.

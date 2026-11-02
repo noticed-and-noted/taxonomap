@@ -16,7 +16,7 @@ export default defineConfig({
       // Vue and Astro files are covered by the Playwright journeys, not measured here.
       include: ['src/**/*.ts', 'integrations/**/*.ts'],
       exclude: ['src/**/*.d.ts', '**/types.ts'],
-      reporter: ['text-summary', 'html'],
+      reporter: ['text-summary', 'html', 'json-summary'],
       thresholds: {
         // Floors a little under the current figures, so coverage cannot quietly slip.
         lines: 90,
