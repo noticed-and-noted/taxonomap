@@ -183,6 +183,7 @@ describe('useNameSearch without baked names', () => {
       if (url.pathname === '/v1/species/search') {
         return {
           results: [
+            { key: 6, scientificName: 'Coprinus', rank: 'GENUS' },
             {
               key: 5,
               scientificName: 'Coprinus comatus',
@@ -198,15 +199,24 @@ describe('useNameSearch without baked names', () => {
       return snapshots({ names: [] })(url);
     });
     vi.resetModules();
-    vi.doMock('~/lib/photos/taxon-photos', () => ({ inatNames: async () => new Map([[5, 'Shaggy Inkcap']]) }));
+    const asked: number[][] = [];
+    vi.doMock('~/lib/photos/taxon-photos', () => ({
+      inatNames: async (taxa: { key: number }[]) => {
+        asked.push(taxa.map((taxon) => taxon.key));
+        return new Map([[5, 'Shaggy Inkcap']]);
+      },
+    }));
     const { useNameSearch } = await import('~/composables/useNameSearch');
     const scope = effectScope();
     const search = scope.run(() => useNameSearch({ max: 8 }))!;
     search.search('shaggy inkcap');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
-    await vi.waitFor(() => expect(search.hits.value).toHaveLength(1));
-    expect(search.hits.value[0]).toMatchObject({ commonName: 'Shaggy Inkcap' });
-    expect(search.hits.value[0]?.matchedName).toBeUndefined();
+    await vi.waitFor(() => expect(search.hits.value).toHaveLength(2));
+    const species = search.hits.value.find((hit) => hit.key === 5);
+    expect(species).toMatchObject({ commonName: 'Shaggy Inkcap' });
+    expect(species?.matchedName).toBeUndefined();
+    // The genus keeps GBIF's name: its iNaturalist match would cost an ancestor lookup.
+    expect(asked).toEqual([[5]]);
     scope.stop();
     vi.doUnmock('~/lib/photos/taxon-photos');
   });
