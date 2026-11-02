@@ -1,5 +1,5 @@
 /** Map explorer journeys, against the fake world (see fixtures.ts). */
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 const INATURALIST_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
@@ -42,8 +42,8 @@ test('Enter straight after typing picks what is typed, not the results still on 
   await expect(page).toHaveURL(/taxon=2490719/);
 });
 
-test('a live result holds its name’s place until iNaturalist answers', async ({ page }) => {
-  // No baked names, so every result is live and needs a lookup.
+/** Empties the baked names, so every result is live, and holds its name lookup until the returned function is called. */
+async function holdNameLookups(page: Page) {
   await page.route('**/data/names.json', (route) =>
     route.fulfill({ json: { v: 1, generated: '2026-01-01T00:00:00Z', names: [] } }),
   );
@@ -57,16 +57,52 @@ test('a live result holds its name’s place until iNaturalist answers', async (
       await route.fallback();
     },
   );
+  return release;
+}
+
+const heightOf = async (locator: Locator) => (await locator.boundingBox())?.height;
+
+test('a live result holds its name’s place until iNaturalist answers, without moving', async ({ page }) => {
+  const release = await holdNameLookups(page);
   await page.goto('/');
   await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
-  // An option's children are presentational, so the placeholder isn't in the accessibility tree there.
   const robin = page.getByRole('option', { name: /Erithacus rubecula/i }).first();
+  // An option's children are presentational, so the placeholder isn't in the accessibility tree there.
   const skeleton = robin.locator('.skeleton');
   await expect(skeleton).toBeVisible();
   await expect(robin).not.toContainText('European Robin');
+  await robin.hover();
+  const previewName = page
+    .getByRole('region', { name: /^Preview/ })
+    .locator('.body p')
+    .first();
+  await expect(previewName.locator('.skeleton')).toBeVisible();
+
+  const rowHeight = await heightOf(robin);
+  const previewNameHeight = await heightOf(previewName);
+  const skeletonHeight = await heightOf(skeleton);
   release();
   await expect(skeleton).toHaveCount(0);
+
   await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+  expect(await heightOf(robin)).toBe(rowHeight);
+  expect(await heightOf(previewName)).toBe(previewNameHeight);
+  // As tall as the text: the row's 14 px, not its 20 px line.
+  expect(skeletonHeight).toBe(14);
+});
+
+test('a live result in the What picker keeps its height when its name arrives', async ({ page }) => {
+  const release = await holdNameLookups(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /^What/ }).click();
+  await page.getByRole('combobox', { name: 'Species and groups' }).fill('robin');
+  const robin = page.getByRole('option', { name: /Erithacus rubecula/i }).first();
+  await expect(robin.locator('.skeleton')).toBeVisible();
+  const rowHeight = await heightOf(robin);
+  release();
+  await expect(robin.locator('.skeleton')).toHaveCount(0);
+  await expect(robin).toContainText('European Robin');
+  expect(await heightOf(robin)).toBe(rowHeight);
 });
 
 test(

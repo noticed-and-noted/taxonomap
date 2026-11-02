@@ -17,10 +17,10 @@ const detailWidth = computed(() => `${DETAIL_WIDTHS[props.row % DETAIL_WIDTHS.le
     <!-- Line boxes match a result's text-sm and text-xs lines, so rows keep their height. -->
     <span class="min-w-0 flex-1">
       <span class="flex h-5 items-center">
-        <SkeletonBlock :width="nameWidth" height="0.8rem" />
+        <SkeletonBlock :width="nameWidth" height="0.875rem" />
       </span>
       <span class="flex h-4 items-center">
-        <SkeletonBlock :width="detailWidth" height="0.6rem" />
+        <SkeletonBlock :width="detailWidth" height="0.75rem" />
       </span>
     </span>
     <SkeletonBlock width="2.25rem" height="0.7rem" />
