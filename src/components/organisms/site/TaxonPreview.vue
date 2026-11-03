@@ -12,6 +12,9 @@ import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
+import { usesStaticNameSearch } from '~/lib/name-search/format';
+import { bakedPreview } from '~/lib/name-search/preview';
+import { rememberInatMatches } from '~/lib/photos/inat-ids';
 import { leadPhotos } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
 
@@ -20,6 +23,8 @@ const LOAD_DELAY_MS = 300;
 
 const props = defineProps<{
   hit: NameHit;
+  /** The reader moved to this row, rather than typing having highlighted it. */
+  isRowChosen: boolean;
   href: string;
   aboutLabel: string;
   /** Picking the result in place: full label for screen readers, short caption beside or under the icon. */
@@ -30,22 +35,23 @@ const emit = defineEmits<{ select: []; about: [] }>();
 const image = ref<UsableImage>();
 const liveCount = ref<number | null>(null);
 const imageLoading = ref(false);
+/** A live lookup waiting for the reader to choose the row: under static search, typing alone reaches no API. */
+const isHeldBack = ref(false);
 /** The photo file itself has loaded; until then the thumb shimmers. */
 const imageShown = ref(false);
 let controller: AbortController | undefined;
 
 const count = computed(() => props.hit.count ?? liveCount.value);
 /** Only live suggestions wait for a count; `imageLoading` covers both requests, so a failed count stops shimmering too. */
-const isCountLoading = computed(() => props.hit.count === undefined && liveCount.value === null && imageLoading.value);
+const isCountLoading = computed(
+  () => !usesStaticNameSearch() && props.hit.count === undefined && liveCount.value === null && imageLoading.value,
+);
 const name = computed(() =>
   props.hit.isNamePending ? props.hit.scientificName : (props.hit.commonName ?? props.hit.scientificName),
 );
 
-const load = debounce(async (hit: NameHit) => {
-  const { signal } = (controller = new AbortController());
-  imageLoading.value = true;
-  // The baked index knows counts; a live suggestion's rides along with its photo search.
-  const isCountNeeded = hit.count === undefined;
+/** Asks the APIs for a hit's photo and, when `isCountNeeded`, its record count. */
+async function loadLive(hit: NameHit, signal: AbortSignal, isCountNeeded: boolean) {
   const lead = await leadPhotos([{ key: hit.key, rank: hit.rank }], { signal, withCounts: isCountNeeded }).catch(
     () => null,
   );
@@ -53,6 +59,34 @@ const load = debounce(async (hit: NameHit) => {
   image.value = lead?.images.get(hit.key);
   liveCount.value = lead?.counts.get(hit.key) ?? null;
   if (isCountNeeded && liveCount.value === null) liveCount.value = await countOf(hit, signal);
+}
+
+/** The live lookup, unless static search holds it back until the reader chooses the row. */
+async function loadLiveOnceChosen(hit: NameHit, signal: AbortSignal, isCountNeeded: boolean) {
+  isHeldBack.value = usesStaticNameSearch() && !props.isRowChosen;
+  if (!isHeldBack.value) await loadLive(hit, signal, isCountNeeded);
+}
+
+/**
+ * The static-search preview: a baked photo costs no API request, and a taxon with no row shows "No
+ * photo" without asking. A row without a photo has its lead photo in a most-voted observation, so
+ * it goes through the live path, told the known ID so the GBIF search is skipped.
+ */
+async function loadBaked(hit: NameHit, signal: AbortSignal) {
+  const preview = await bakedPreview(hit);
+  if (signal.aborted) return;
+  if (preview.state === 'photo') image.value = preview.image;
+  if (preview.state !== 'live') return;
+  if (preview.inatId) rememberInatMatches(new Map([[hit.key, { id: preview.inatId }]]));
+  await loadLiveOnceChosen(hit, signal, false);
+}
+
+const load = debounce(async (hit: NameHit) => {
+  const { signal } = (controller = new AbortController());
+  imageLoading.value = true;
+  // The baked index knows counts; a live suggestion's rides along with its photo search.
+  if (usesStaticNameSearch()) await loadBaked(hit, signal);
+  else await loadLiveOnceChosen(hit, signal, hit.count === undefined);
   if (signal.aborted) return;
   imageLoading.value = false;
 }, LOAD_DELAY_MS);
@@ -63,17 +97,23 @@ async function countOf(hit: NameHit, signal: AbortSignal): Promise<number | null
   return total?.count ?? null;
 }
 
+/** Starts afresh for the current hit. */
+function restart() {
+  controller?.abort();
+  image.value = undefined;
+  imageShown.value = false;
+  liveCount.value = null;
+  isHeldBack.value = false;
+  imageLoading.value = true;
+  load(props.hit);
+}
+
+watch(() => props.hit.key, restart, { immediate: true });
 watch(
-  () => props.hit.key,
-  () => {
-    controller?.abort();
-    image.value = undefined;
-    imageShown.value = false;
-    liveCount.value = null;
-    imageLoading.value = true;
-    load(props.hit);
+  () => props.isRowChosen,
+  (isChosen) => {
+    if (isChosen && isHeldBack.value) restart();
   },
-  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -102,7 +142,7 @@ onBeforeUnmount(() => {
         @loaded="imageShown = true"
         @broken="image = undefined"
       />
-      <span v-else-if="!imageLoading" class="text-xs text-subtle">No photo</span>
+      <span v-else-if="!imageLoading && !isHeldBack" class="text-xs text-subtle">No photo</span>
     </div>
     <div class="body">
       <p v-if="hit.isNamePending"><NameSkeleton /></p>

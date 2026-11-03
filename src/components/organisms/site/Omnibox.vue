@@ -59,6 +59,8 @@ const query = ref(
 const open = ref(false);
 /** Highlighted row; the first result by default, so Enter picks it. */
 const active = ref(0);
+/** The reader moved to a row, rather than typing having highlighted the first. */
+const isRowChosen = ref(false);
 const {
   hits: taxa,
   loading: liveLoading,
@@ -183,6 +185,7 @@ function openAbout(hit: NameHit) {
 function onInput() {
   open.value = true;
   active.value = 0;
+  isRowChosen.value = false;
   if (inPlaces.value) searchPlaces(query.value);
   else search(query.value);
 }
@@ -299,7 +302,7 @@ let lastPointerType = '';
 
 /** Phones have no hover, so a tap on another species row previews it first; tapping it again (or the preview's buttons) picks it. */
 function onRowClick(option: Option, index: number) {
-  if (lastPointerType === 'touch' && option.kind === 'taxon' && index !== active.value) active.value = index;
+  if (lastPointerType === 'touch' && option.kind === 'taxon' && index !== active.value) chooseRow(index);
   else choose(option);
 }
 
@@ -324,10 +327,16 @@ async function onEnter(event: KeyboardEvent) {
   else showPlaces();
 }
 
+/** Highlights a row the reader went to, rather than the first row typing highlights. */
+function chooseRow(index: number) {
+  active.value = index;
+  isRowChosen.value = true;
+}
+
 /** Moves the highlight by `delta` rows, wrapping at either end. */
 function stepActive(delta: number) {
   const count = options.value.length;
-  active.value = count ? (active.value + delta + count) % count : 0;
+  chooseRow(count ? (active.value + delta + count) % count : 0);
 }
 
 /** Combobox keys: arrows move, Enter picks, Escape closes the list and then clears the box. */
@@ -468,7 +477,7 @@ onBeforeUnmount(() => {
               @mousedown.prevent
               @pointerdown="lastPointerType = $event.pointerType"
               @click="onRowClick(option, index)"
-              @pointermove="$event.pointerType === 'mouse' && (active = index)"
+              @pointermove="$event.pointerType === 'mouse' && chooseRow(index)"
             >
               <OmniboxResult :option="option" />
             </li>
@@ -512,6 +521,7 @@ onBeforeUnmount(() => {
         <TaxonPreview
           v-if="previewHit"
           :hit="previewHit"
+          :is-row-chosen="isRowChosen"
           :href="aboutHref(previewHit)"
           :about-label="'About'"
           :select="SELECT_ACTIONS[mode]"
