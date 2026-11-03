@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DuckDB GBIF POC</title>
+    <link rel="stylesheet" href="../src/styles/tokens.css" />
+    <style>
+      body {
+        margin: 0 auto;
+        max-width: 72rem;
+        padding: 1rem;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, sans-serif;
+        font-size: 0.875rem;
+      }
+
+      h1,
+      h2 {
+        font-family: Georgia, serif;
+        font-weight: 600;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+      }
+
+      h2 {
+        margin: 0 0 0.5rem;
+        font-size: 1.05rem;
+      }
+
+      .top,
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 0.75rem;
+      }
+
+      .top {
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .note {
+        color: var(--text-muted);
+      }
+
+      .panel,
+      fieldset {
+        margin: 0;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+      }
+
+      legend {
+        padding: 0 0.25rem;
+        font-weight: 600;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+        gap: 0.75rem;
+        margin-block: 0.75rem;
+      }
+
+      .stacked {
+        display: block;
+        margin-bottom: 0.5rem;
+      }
+
+      .stacked input,
+      .stacked select,
+      .controls select {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 0.2rem;
+      }
+
+      input,
+      select,
+      button {
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--text);
+        font: inherit;
+      }
+
+      input[type='checkbox'] {
+        padding: 0;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-contrast);
+      }
+
+      button:disabled {
+        cursor: progress;
+        opacity: 0.6;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+      }
+
+      .checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem 0.75rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .status {
+        margin-block: 0.75rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .status.failed {
+        color: var(--danger);
+      }
+
+      .table-scroll {
+        overflow: auto;
+        max-height: 26rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+      }
+
+      th,
+      td {
+        padding: 0.25rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      td.number,
+      th.number {
+        text-align: right;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 9rem 1fr 6rem;
+        align-items: center;
+        gap: 0.5rem;
+        padding-block: 0.1rem;
+      }
+
+      .bar-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bar {
+        height: 0.6rem;
+        border-radius: 2px;
+        background: var(--ramp-4);
+      }
+
+      .bar-value {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #species-bars .bar-label {
+        font-family: Georgia, serif;
+        font-style: italic;
+      }
+
+      .bars {
+        overflow: auto;
+        max-height: 18rem;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <h1>DuckDB WASM on the GBIF snapshot</h1>
+      <button id="theme-toggle" type="button">Switch theme</button>
+    </div>
+    <p class="note">
+      Runs Taxonomap's filters and result queries in the browser, against the monthly Parquet snapshot on GBIF's public
+      S3 bucket. Each run is timed and its network use counted. The GBIF API answers the same filter as the yardstick.
+    </p>
+
+    <form id="filters">
+      <div class="controls panel">
+        <label>
+          Region
+          <select id="region">
+            <option value="eu-central-1">eu-central-1</option>
+            <option value="us-east-1">us-east-1</option>
+          </select>
+        </label>
+        <label>
+          Parts to scan
+          <select id="scope">
+            <option value="1">1 part</option>
+            <option value="10" selected>10 parts</option>
+            <option value="100">100 parts</option>
+            <option value="1000">1,000 parts (slow)</option>
+            <option value="all">Every part (hours; heavy on GBIF's bucket)</option>
+          </select>
+        </label>
+        <label>
+          Preset
+          <select id="preset"></select>
+        </label>
+        <button id="run" class="primary" type="submit">Run</button>
+        <button id="benchmark" type="button">Run all presets</button>
+        <button id="stop" type="button">Stop (reloads the page)</button>
+      </div>
+
+      <div class="grid">
+        <fieldset>
+          <legend>What</legend>
+          <label class="stacked">
+            Taxon keys, comma separated
+            <input name="taxon" inputmode="numeric" placeholder="212" />
+          </label>
+          <label class="checks"><input type="checkbox" name="exact" value="1" /> Exact taxon only</label>
+          <p class="note">IUCN status: not in the snapshot's columns, so it can't be filtered here.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>When</legend>
+          <label class="stacked">From <input type="date" name="dateFrom" /></label>
+          <label class="stacked">To <input type="date" name="dateTo" /></label>
+          <div class="checks" id="month-checks" aria-label="Months"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Where</legend>
+          <div class="checks" id="continent-checks" aria-label="Continents"></div>
+          <p class="note">Continent is approximated from the country code: the snapshot has no continent column.</p>
+          <label class="stacked">
+            Accuracy
+            <select name="uncertainty">
+              <option value="">Any</option>
+              <option value="10">Within 10 m</option>
+              <option value="100">Within 100 m</option>
+              <option value="1000">Within 1 km</option>
+              <option value="10000">Within 10 km</option>
+            </select>
+          </label>
+          <label class="stacked">
+            Selected cell: west, south, east, north
+            <input name="cell" placeholder="0.5,51,1.5,51.5" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>How</legend>
+          <div class="checks" id="basis-checks" aria-label="Basis of record"></div>
+          <label class="stacked">
+            Publisher keys, comma separated
+            <input name="publisher" />
+          </label>
+          <div class="checks">
+            <label><input type="checkbox" name="photo" value="1" /> Has photo</label>
+            <label><input type="checkbox" name="sound" value="1" /> Has sound</label>
+          </div>
+        </fieldset>
+      </div>
+    </form>
+
+    <p id="status" class="status" role="status">Pick a filter and press Run.</p>
+
+    <section class="panel">
+      <h2>Compared with the GBIF API</h2>
+      <p id="parity" class="note">No run yet.</p>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Records per year</h2>
+        <div id="year-bars" class="bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Records per month</h2>
+        <div id="month-bars" class="bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Top classes</h2>
+        <div id="class-bars" class="bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Top species</h2>
+        <div id="species-bars" class="bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Density</h2>
+        <canvas id="density" width="720" height="360" role="img" aria-label="Density of matching records"></canvas>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Records</h2>
+      <div class="table-scroll"><table id="records"></table></div>
+    </section>
+
+    <section class="panel" style="margin-top: 0.75rem">
+      <h2>Timings</h2>
+      <p class="note">"Whole snapshot" scales the measured time and bytes up by the share of parts scanned.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Step</th>
+              <th class="number">Parts</th>
+              <th class="number">Rows</th>
+              <th class="number">Time</th>
+              <th class="number">Requests</th>
+              <th class="number">Downloaded</th>
+              <th class="number">Whole snapshot: time</th>
+              <th class="number">Whole snapshot: download</th>
+            </tr>
+          </thead>
+          <tbody id="timings"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <script type="module">
+      import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm';
+
+      const API_BASE = 'https://api.gbif.org/v1';
+      const NETWORK_CHANNEL = 'duckdb-network';
+      const DENSITY_DEGREES = 2;
+      const RAMP_STOPS = 7;
+      const TOP_CLASSES = 50;
+      const TOP_SPECIES = 200;
+      const RECORDS_PAGE = 20;
+      const PUBLISHER_KEY = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+      const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const BASIS_VALUES = [
+        'HUMAN_OBSERVATION',
+        'PRESERVED_SPECIMEN',
+        'MACHINE_OBSERVATION',
+        'MATERIAL_SAMPLE',
+        'FOSSIL_SPECIMEN',
+        'LIVING_SPECIMEN',
+        'MATERIAL_CITATION',
+        'OCCURRENCE',
+      ];
+      // GBIF's own continent is worked out per record; the country's region is the closest the snapshot allows.
+      const CONTINENT_REGIONS = {
+        AFRICA: 'AFRICA',
+        ANTARCTICA: 'ANTARCTICA',
+        ASIA: 'ASIA',
+        EUROPE: 'EUROPE',
+        NORTH_AMERICA: 'NORTH_AMERICA',
+        OCEANIA: 'OCEANIA',
+        SOUTH_AMERICA: 'LATIN_AMERICA',
+      };
+      const RANK_COLUMNS = {
+        KINGDOM: 'kingdom',
+        PHYLUM: 'phylum',
+        CLASS: 'class',
+        ORDER: '"order"',
+        FAMILY: 'family',
+        GENUS: 'genus',
+        SPECIES: 'species',
+      };
+      // The issues GBIF's hasGeospatialIssue covers, which the map and area queries leave out.
+      const GEOSPATIAL_ISSUES = [
+        'ZERO_COORDINATE',
+        'COORDINATE_OUT_OF_RANGE',
+        'COORDINATE_INVALID',
+        'COUNTRY_COORDINATE_MISMATCH',
+      ];
+      const PRESETS = [
+        { name: 'No filters', fields: {} },
+        { name: 'Gray wolf (one species)', fields: { taxon: ['5219173'] } },
+        { name: 'Birds with photos, since 2020', fields: { taxon: ['212'], photo: ['1'], dateFrom: ['2020-01-01'] } },
+        { name: 'Specimens in Europe', fields: { basis: ['PRESERVED_SPECIMEN'], continent: ['EUROPE'] } },
+        { name: 'Selected cell in Kent', fields: { cell: ['0.5,51,1.5,51.5'] } },
+        { name: 'Spring, accurate to 100 m', fields: { month: ['3', '4', '5'], uncertainty: ['100'] } },
+      ];
+
+      const RESULT_QUERIES = [
+        {
+          id: 'count',
+          label: 'Count',
+          sql: ({ all }) => `SELECT count(*)::DOUBLE AS records FROM occurrence ${all}`,
+        },
+        {
+          id: 'years',
+          label: 'Year histogram',
+          sql: ({ undated }) =>
+            `SELECT year::VARCHAR AS label, count(*)::DOUBLE AS records FROM occurrence ${undated} GROUP BY year ORDER BY year DESC`,
+        },
+        {
+          id: 'months',
+          label: 'Month facet',
+          sql: ({ all }) =>
+            `SELECT month AS label, count(*)::DOUBLE AS records FROM occurrence ${all} GROUP BY month ORDER BY month`,
+        },
+        {
+          id: 'classes',
+          label: 'Class facet',
+          sql: ({ all }) =>
+            `SELECT class AS label, count(*)::DOUBLE AS records FROM occurrence ${all} GROUP BY class ORDER BY records DESC LIMIT ${TOP_CLASSES}`,
+        },
+        {
+          id: 'species',
+          label: 'Top species',
+          sql: ({ all }) =>
+            `SELECT species AS label, count(*)::DOUBLE AS records FROM occurrence ${all} GROUP BY species ORDER BY records DESC LIMIT ${TOP_SPECIES}`,
+        },
+        {
+          id: 'records',
+          label: 'Records page',
+          // A LIMIT stops as soon as it has enough rows, so its time doesn't grow with the snapshot.
+          hasFixedCost: true,
+          sql: ({ all }) =>
+            `SELECT gbifid, scientificname, countrycode, eventdate::DATE::VARCHAR AS eventdate, basisofrecord FROM occurrence ${all} LIMIT ${RECORDS_PAGE}`,
+        },
+        {
+          id: 'density',
+          label: 'Map density',
+          sql: ({ located }) =>
+            `SELECT (floor(decimallongitude / ${DENSITY_DEGREES}) * ${DENSITY_DEGREES})::DOUBLE AS lng,
+                    (floor(decimallatitude / ${DENSITY_DEGREES}) * ${DENSITY_DEGREES})::DOUBLE AS lat,
+                    count(*)::DOUBLE AS records
+             FROM occurrence ${located} GROUP BY 1, 2`,
+        },
+      ];
+
+      const form = document.querySelector('#filters');
+      const statusLine = document.querySelector('#status');
+      const network = { requests: 0, bytes: 0 };
+      const partsByRegion = new Map();
+      let connection = null;
+      let openScopeKey = null;
+      let scannedParts = 0;
+      let totalParts = 0;
+      let regionByContinent = null;
+
+      /** Create an element with optional text and class. */
+      function element(tag, text = '', className = '') {
+        const created = document.createElement(tag);
+        created.textContent = text;
+        created.className = className;
+        return created;
+      }
+
+      /** Fill a check group with one labelled checkbox per value. */
+      function addChecks(containerId, name, values, labelFor = (value) => value) {
+        const container = document.querySelector(containerId);
+        for (const value of values) {
+          const label = element('label', ` ${labelFor(value)}`);
+          const box = element('input');
+          box.type = 'checkbox';
+          box.name = name;
+          box.value = value;
+          label.prepend(box);
+          container.append(label);
+        }
+      }
+
+      const sentenceCase = (value) => value[0] + value.slice(1).toLowerCase().replaceAll('_', ' ');
+      const formatCount = (count) => Math.round(count).toLocaleString('en-GB');
+      const formatBytes = (bytes) => `${(bytes / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 1 })} MB`;
+
+      /** A duration at a readable unit. */
+      function formatDuration(milliseconds) {
+        if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+        if (milliseconds < 120_000) return `${(milliseconds / 1000).toFixed(1)} s`;
+        if (milliseconds < 7_200_000) return `${(milliseconds / 60_000).toFixed(0)} min`;
+        return `${(milliseconds / 3_600_000).toFixed(1)} h`;
+      }
+
+      const quoted = (text) => `'${String(text).replaceAll("'", "''")}'`;
+
+      /** Comma-separated whole numbers from a form field. @throws Error on anything else. */
+      function parseKeys(raw, fieldName) {
+        const keys = raw
+          .split(',')
+          .map((key) => key.trim())
+          .filter(Boolean);
+        if (keys.some((key) => !/^\d+$/.test(key))) throw new Error(`${fieldName} must be whole numbers.`);
+        return keys;
+      }
+
+      /** The selected cell as [west, south, east, north], or null. @throws Error if it isn't four numbers. */
+      function parseCell(raw) {
+        if (!raw.trim()) return null;
+        const edges = raw.split(',').map(Number);
+        if (edges.length !== 4 || !edges.every(Number.isFinite)) {
+          throw new Error('The selected cell must be four numbers: west, south, east, north.');
+        }
+        return edges;
+      }
+
+      /** The form's filters, validated. @throws Error when a field is malformed. */
+      function readFilters() {
+        const fields = new FormData(form);
+        const publishers = fields
+          .get('publisher')
+          .split(',')
+          .map((key) => key.trim())
+          .filter(Boolean);
+        if (publishers.some((key) => !PUBLISHER_KEY.test(key))) throw new Error('Publisher keys must be UUIDs.');
+        return {
+          taxonKeys: parseKeys(fields.get('taxon'), 'Taxon keys'),
+          isExact: fields.has('exact'),
+          dateFrom: fields.get('dateFrom'),
+          dateTo: fields.get('dateTo'),
+          months: fields.getAll('month'),
+          continents: fields.getAll('continent'),
+          uncertainty: fields.get('uncertainty'),
+          cell: parseCell(fields.get('cell')),
+          basis: fields.getAll('basis'),
+          publishers,
+          hasPhoto: fields.has('photo'),
+          hasSound: fields.has('sound'),
+        };
+      }
+
+      /** GET JSON from GBIF's API. @throws Error when it doesn't answer OK. */
+      async function fetchApi(path) {
+        const response = await fetch(`${API_BASE}${path}`);
+        if (!response.ok) throw new Error(`GBIF API answered ${response.status} for ${path}`);
+        return response.json();
+      }
+
+      /**
+       * SQL for one taxon, by name: the snapshot's taxonkey and specieskey are checklist IDs such as "6G4MQ",
+       * not the backbone integers the app's taxon keys use. "Exact" also pins the rank the record was filed at.
+       */
+      async function taxonClause(key, isExact) {
+        const taxon = await fetchApi(`/species/${key}`);
+        const name = quoted(taxon.canonicalName);
+        const rankColumn = RANK_COLUMNS[taxon.rank];
+        const nameClause = rankColumn ? `${rankColumn} = ${name}` : `starts_with(scientificname, ${name})`;
+        return isExact ? `(${nameClause} AND taxonrank = ${quoted(taxon.rank)})` : nameClause;
+      }
+
+      /** SQL for the What filter, or null when no taxa are set. */
+      async function taxaClause({ taxonKeys, isExact }) {
+        if (!taxonKeys.length) return null;
+        const clauses = await Promise.all(taxonKeys.map((key) => taxonClause(key, isExact)));
+        return `(${clauses.join(' OR ')})`;
+      }
+
+      /** SQL for the continents, through the country codes GBIF files under each region. */
+      async function continentClause(continents) {
+        if (!continents.length) return null;
+        regionByContinent ??= await fetchApi('/enumeration/country');
+        const regions = continents.map((continent) => CONTINENT_REGIONS[continent]);
+        const codes = regionByContinent.filter((country) => regions.includes(country.gbifRegion));
+        return `countrycode IN (${codes.map((country) => quoted(country.iso2)).join(',')})`;
+      }
+
+      /** SQL for the selected cell. A hex is a polygon; its bounding box is enough to test the scan's cost. */
+      function cellClause([west, south, east, north]) {
+        return `decimallongitude BETWEEN ${west} AND ${east} AND decimallatitude BETWEEN ${south} AND ${north}`;
+      }
+
+      /** SQL for the date range. The year clause lets row groups be skipped; eventdate alone couldn't. */
+      function dateClauses({ dateFrom, dateTo }) {
+        const clauses = [];
+        if (dateFrom) clauses.push(`year >= ${Number(dateFrom.slice(0, 4))}`, `eventdate >= ${quoted(dateFrom)}`);
+        if (dateTo)
+          clauses.push(`year <= ${Number(dateTo.slice(0, 4))}`, `eventdate <= ${quoted(`${dateTo}T23:59:59`)}`);
+        return clauses;
+      }
+
+      const GEOREFERENCED = `decimallatitude IS NOT NULL AND decimallongitude IS NOT NULL
+        AND NOT list_has_any(issue, [${GEOSPATIAL_ISSUES.map(quoted).join(',')}])`;
+
+      /** Clauses for every filter except the dates. */
+      async function undatedClauses(filters) {
+        const clauses = [await taxaClause(filters), await continentClause(filters.continents)];
+        if (filters.months.length) clauses.push(`month IN (${filters.months.join(',')})`);
+        if (filters.uncertainty) clauses.push(`coordinateuncertaintyinmeters <= ${Number(filters.uncertainty)}`);
+        if (filters.basis.length) clauses.push(`basisofrecord IN (${filters.basis.map(quoted).join(',')})`);
+        if (filters.publishers.length)
+          clauses.push(`publishingorgkey IN (${filters.publishers.map(quoted).join(',')})`);
+        if (filters.hasPhoto) clauses.push(`list_contains(mediatype, 'StillImage')`);
+        if (filters.hasSound) clauses.push(`list_contains(mediatype, 'Sound')`);
+        if (filters.cell) clauses.push(cellClause(filters.cell), GEOREFERENCED);
+        return clauses.filter(Boolean);
+      }
+
+      const whereSql = (clauses) => (clauses.length ? `WHERE ${clauses.join(' AND ')}` : '');
+
+      /** The WHERE variants the result queries need: all filters, without dates (the slider), and mappable only. */
+      async function buildWhere(filters) {
+        const undated = await undatedClauses(filters);
+        const all = [...undated, ...dateClauses(filters)];
+        return { all: whereSql(all), undated: whereSql(undated), located: whereSql([...all, GEOREFERENCED]) };
+      }
+
+      /** The same filter as GBIF API query parameters, mirroring filterToParams in src/lib/gbif/occurrence.ts. */
+      function apiQuery(filters) {
+        const query = new URLSearchParams({ limit: '0' });
+        const addAll = (name, values) => values.forEach((value) => query.append(name, value));
+        addAll(filters.isExact ? 'acceptedTaxonKey' : 'taxonKey', filters.taxonKeys);
+        addAll('month', filters.months);
+        addAll('continent', filters.continents);
+        addAll('basisOfRecord', filters.basis);
+        addAll('publishingOrg', filters.publishers);
+        if (filters.uncertainty) query.set('coordinateUncertaintyInMeters', `0,${filters.uncertainty}`);
+        if (filters.dateFrom || filters.dateTo)
+          query.set('eventDate', `${filters.dateFrom || '*'},${filters.dateTo || '*'}`);
+        if (filters.hasPhoto) query.append('mediaType', 'StillImage');
+        if (filters.hasSound) query.append('mediaType', 'Sound');
+        if (filters.cell) {
+          const [west, south, east, north] = filters.cell;
+          query.set(
+            'geometry',
+            `POLYGON((${west} ${south},${east} ${south},${east} ${north},${west} ${north},${west} ${south}))`,
+          );
+          query.set('hasCoordinate', 'true');
+          query.set('hasGeospatialIssue', 'false');
+        }
+        return query;
+      }
+
+      /** Show what's happening now, with the network use so far. */
+      function showProgress(step) {
+        statusLine.className = 'status';
+        statusLine.textContent = `${step}: ${formatCount(network.requests)} requests, ${formatBytes(network.bytes)} downloaded so far.`;
+        statusLine.dataset.step = step;
+      }
+
+      /** Add a row to the timings table. */
+      function logTiming({ run, step, rows, elapsed, requests, bytes, scale }) {
+        const row = document.createElement('tr');
+        const scaled = (value, format) => (scale ? format(value * scale) : '–');
+        row.append(element('td', run), element('td', step));
+        const numbers = [
+          formatCount(scannedParts),
+          rows === null ? '–' : formatCount(rows),
+          formatDuration(elapsed),
+          formatCount(requests),
+          formatBytes(bytes),
+          scaled(elapsed, formatDuration),
+          scaled(bytes, formatBytes),
+        ];
+        for (const number of numbers) row.append(element('td', number, 'number'));
+        document.querySelector('#timings').append(row);
+      }
+
+      /** Run one step, then log its time and network use. `scale` is its multiplier to the whole snapshot, if any. */
+      async function measured(run, step, scale, task) {
+        const before = { ...network };
+        const started = performance.now();
+        showProgress(step);
+        const outcome = await task();
+        const elapsed = performance.now() - started;
+        // The worker's last counts are still in the channel when the query resolves.
+        await new Promise((settled) => setTimeout(settled, 50));
+        logTiming({
+          run,
+          step,
+          rows: Array.isArray(outcome) ? outcome.length : null,
+          elapsed,
+          requests: network.requests - before.requests,
+          bytes: network.bytes - before.bytes,
+          scale,
+        });
+        return outcome;
+      }
+
+      /** Start DuckDB in a worker whose XHRs report their size: DuckDB's reads aren't visible from this thread. */
+      async function startDuckDb() {
+        const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+        const meteredWorker = `
+          const meter = new BroadcastChannel('${NETWORK_CHANNEL}');
+          const originalSend = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.send = function (...sendArguments) {
+            this.addEventListener('loadend', () => meter.postMessage(this.response?.byteLength ?? 0));
+            return originalSend.apply(this, sendArguments);
+          };
+          importScripts(${JSON.stringify(bundle.mainWorker)});`;
+        const workerUrl = URL.createObjectURL(new Blob([meteredWorker], { type: 'text/javascript' }));
+        const database = new duckdb.AsyncDuckDB(
+          new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING),
+          new Worker(workerUrl),
+        );
+        await database.instantiate(bundle.mainModule, bundle.pthreadWorker);
+        URL.revokeObjectURL(workerUrl);
+        // By default DuckDB downloads each whole file (40 MB a part); these settings make it use range requests.
+        await database.open({
+          filesystem: { reliableHeadRequests: true, allowFullHTTPReads: false, forceFullHTTPReads: false },
+        });
+        connection = await database.connect();
+      }
+
+      /** Every Parquet part of the newest snapshot, by listing the bucket. */
+      async function listParts(bucketUrl) {
+        const prefixes = await listBucket(bucketUrl, 'occurrence/', 'CommonPrefixes Prefix');
+        const snapshot = prefixes.sort().at(-1);
+        const keys = await listBucket(bucketUrl, `${snapshot}occurrence.parquet/`, 'Contents Key');
+        return { snapshot, urls: keys.map((key) => `${bucketUrl}/${key}`) };
+      }
+
+      /** Every value a selector matches across all pages of an S3 listing. @throws Error when S3 refuses. */
+      async function listBucket(bucketUrl, prefix, selector) {
+        const delimiter = selector.startsWith('Common') ? '&delimiter=/' : '';
+        const values = [];
+        let pageToken = null;
+        do {
+          const tokenParam = pageToken ? `&continuation-token=${encodeURIComponent(pageToken)}` : '';
+          const response = await fetch(`${bucketUrl}/?list-type=2&prefix=${prefix}${delimiter}${tokenParam}`);
+          if (!response.ok) throw new Error(`S3 listing answered ${response.status}`);
+          const page = new DOMParser().parseFromString(await response.text(), 'application/xml');
+          values.push(...[...page.querySelectorAll(selector)].map((node) => node.textContent));
+          pageToken = page.querySelector('NextContinuationToken')?.textContent;
+        } while (pageToken);
+        return values;
+      }
+
+      /** Parts spread evenly through the snapshot, so a sample isn't all from one stretch of it. */
+      function sampleParts(urls, scope) {
+        if (scope === 'all') return urls;
+        const wanted = Number(scope);
+        return Array.from({ length: wanted }, (_unused, index) => urls[Math.floor((index * urls.length) / wanted)]);
+      }
+
+      /** Point the `occurrence` view at the chosen region and number of parts. */
+      async function openScope(run) {
+        const region = document.querySelector('#region').value;
+        const scope = document.querySelector('#scope').value;
+        if (openScopeKey === `${region}/${scope}`) return;
+        const bucketUrl = `https://gbif-open-data-${region}.s3.${region}.amazonaws.com`;
+        if (!partsByRegion.has(region)) {
+          partsByRegion.set(region, await measured(run, 'List snapshot parts', null, () => listParts(bucketUrl)));
+        }
+        const { urls } = partsByRegion.get(region);
+        const parts = sampleParts(urls, scope);
+        totalParts = urls.length;
+        scannedParts = parts.length;
+        await measured(run, 'Open view (first footer)', null, () =>
+          connection.query(
+            `CREATE OR REPLACE VIEW occurrence AS SELECT * FROM read_parquet([${parts.map(quoted).join(',')}])`,
+          ),
+        );
+        openScopeKey = `${region}/${scope}`;
+      }
+
+      /** Run one result query and return plain rows. */
+      async function queryRows(sql) {
+        const table = await connection.query(sql);
+        return table.toArray().map((row) => row.toJSON());
+      }
+
+      /** Draw label/value rows as horizontal bars. */
+      function renderBars(containerId, rows, labelFor = (row) => row.label ?? 'Not given') {
+        const container = document.querySelector(containerId);
+        const largest = Math.max(...rows.map((row) => row.records), 1);
+        container.replaceChildren(
+          ...rows.map((row) => {
+            const bar = element('div', '', 'bar');
+            bar.style.width = `${(row.records / largest) * 100}%`;
+            const barRow = element('div', '', 'bar-row');
+            barRow.append(
+              element('span', labelFor(row), 'bar-label'),
+              element('div'),
+              element('span', formatCount(row.records), 'bar-value'),
+            );
+            barRow.children[1].append(bar);
+            return barRow;
+          }),
+        );
+      }
+
+      /** Draw the first page of records as a table. */
+      function renderRecords(rows) {
+        const table = document.querySelector('#records');
+        const columns = Object.keys(rows[0] ?? {});
+        const header = document.createElement('tr');
+        header.append(...columns.map((column) => element('th', column)));
+        const body = rows.map((record) => {
+          const row = document.createElement('tr');
+          row.append(...columns.map((column) => element('td', String(record[column] ?? ''))));
+          return row;
+        });
+        table.replaceChildren(header, ...body);
+      }
+
+      /** Shade each grid square of the density result on a log scale through the map's ramp. */
+      function renderDensity(rows) {
+        const canvas = document.querySelector('#density');
+        const context = canvas.getContext('2d');
+        const styles = getComputedStyle(document.documentElement);
+        const pixelsPerDegree = canvas.width / 360;
+        const logLargest = Math.log(Math.max(...rows.map((row) => row.records), 2));
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        for (const { lng, lat, records } of rows) {
+          const stop = 1 + Math.floor(((RAMP_STOPS - 1) * Math.log(records)) / logLargest);
+          context.fillStyle = styles.getPropertyValue(`--ramp-${stop}`);
+          const squareSize = DENSITY_DEGREES * pixelsPerDegree;
+          context.fillRect(
+            (lng + 180) * pixelsPerDegree,
+            (90 - lat - DENSITY_DEGREES) * pixelsPerDegree,
+            squareSize,
+            squareSize,
+          );
+        }
+      }
+
+      /** Put a query's rows on the page. */
+      function renderResult(queryId, rows) {
+        if (queryId === 'years') renderBars('#year-bars', rows);
+        if (queryId === 'months') renderBars('#month-bars', rows, (row) => MONTH_NAMES[row.label - 1] ?? 'Not given');
+        if (queryId === 'classes') renderBars('#class-bars', rows);
+        if (queryId === 'species') renderBars('#species-bars', rows);
+        if (queryId === 'records') renderRecords(rows);
+        if (queryId === 'density') renderDensity(rows);
+      }
+
+      /** Compare the scan's count, scaled to the whole snapshot, with the API's count for the same filter. */
+      function showParity(sampleCount, apiCount, apiElapsed) {
+        const estimate = (sampleCount * totalParts) / scannedParts;
+        const gapPercent = apiCount ? (Math.abs(estimate - apiCount) / apiCount) * 100 : 0;
+        document.querySelector('#parity').textContent =
+          `DuckDB found ${formatCount(sampleCount)} records in ${formatCount(scannedParts)} of ${formatCount(totalParts)} parts, ` +
+          `about ${formatCount(estimate)} across the snapshot. The API counts ${formatCount(apiCount)} in ` +
+          `${formatDuration(apiElapsed)}: the estimate is ${gapPercent.toFixed(1)}% away.`;
+      }
+
+      /** Run every result query for the form's current filters. */
+      async function runSuite(run) {
+        const filters = readFilters();
+        await openScope(run);
+        const where = await buildWhere(filters);
+        const scale = totalParts / scannedParts;
+        const apiStarted = performance.now();
+        const apiAnswer = fetchApi(`/occurrence/search?${apiQuery(filters)}`).then((answer) => ({
+          count: answer.count,
+          elapsed: performance.now() - apiStarted,
+        }));
+        let sampleCount = 0;
+        for (const query of RESULT_QUERIES) {
+          const rows = await measured(run, query.label, query.hasFixedCost ? null : scale, () =>
+            queryRows(query.sql(where)),
+          );
+          renderResult(query.id, rows);
+          if (query.id === 'count') sampleCount = rows[0].records;
+        }
+        const { count, elapsed } = await apiAnswer;
+        showParity(sampleCount, count, elapsed);
+      }
+
+      /** Set the form to a preset's values. */
+      function applyPreset(preset) {
+        const controls = ['#region', '#scope', '#preset'].map((selector) => document.querySelector(selector));
+        const controlValues = controls.map((control) => control.value);
+        form.reset();
+        controls.forEach((control, index) => (control.value = controlValues[index]));
+        for (const [name, values] of Object.entries(preset.fields)) {
+          for (const field of form.querySelectorAll(`[name="${name}"]`)) {
+            if (field.type === 'checkbox') field.checked = values.includes(field.value);
+            else field.value = values[0];
+          }
+        }
+      }
+
+      /** Run a task with the buttons locked, reporting failure in the status line. */
+      async function withLockedButtons(task) {
+        const buttons = [document.querySelector('#run'), document.querySelector('#benchmark')];
+        buttons.forEach((button) => (button.disabled = true));
+        const started = performance.now();
+        try {
+          if (!connection) await startDuckDb();
+          await task();
+          statusLine.textContent = `Finished in ${formatDuration(performance.now() - started)}.`;
+          delete statusLine.dataset.step;
+        } catch (error) {
+          statusLine.className = 'status failed';
+          statusLine.textContent = `Failed: ${error.message}`;
+          delete statusLine.dataset.step;
+        } finally {
+          buttons.forEach((button) => (button.disabled = false));
+        }
+      }
+
+      /** Run every preset in turn. */
+      async function runBenchmark() {
+        for (const preset of PRESETS) {
+          applyPreset(preset);
+          await runSuite(preset.name);
+        }
+      }
+
+      /** Wire up the form's dynamic parts and buttons. */
+      function setUpPage() {
+        addChecks(
+          '#month-checks',
+          'month',
+          MONTH_NAMES.map((_unused, index) => String(index + 1)),
+          (month) => MONTH_NAMES[month - 1],
+        );
+        addChecks('#continent-checks', 'continent', Object.keys(CONTINENT_REGIONS), sentenceCase);
+        addChecks('#basis-checks', 'basis', BASIS_VALUES, sentenceCase);
+
+        const presetSelect = document.querySelector('#preset');
+        presetSelect.append(
+          ...PRESETS.map((preset, index) => Object.assign(element('option', preset.name), { value: index })),
+        );
+        presetSelect.addEventListener('change', () => applyPreset(PRESETS[presetSelect.value]));
+
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          withLockedButtons(() => runSuite(PRESETS[presetSelect.value].name));
+        });
+        document.querySelector('#benchmark').addEventListener('click', () => withLockedButtons(runBenchmark));
+        document.querySelector('#stop').addEventListener('click', () => location.reload());
+        document.querySelector('#theme-toggle').addEventListener('click', () => {
+          const root = document.documentElement;
+          root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+        });
+
+        new BroadcastChannel(NETWORK_CHANNEL).onmessage = ({ data: bytes }) => {
+          network.requests += 1;
+          network.bytes += bytes;
+          if (statusLine.dataset.step) showProgress(statusLine.dataset.step);
+        };
+      }
+
+      setUpPage();
+    </script>
+  </body>
+</html>
