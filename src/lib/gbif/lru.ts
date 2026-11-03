@@ -45,6 +45,11 @@ export class LruCache<V> {
     }
   }
 
+  /** Removes one entry. */
+  delete(key: string): void {
+    this.#map.delete(key);
+  }
+
   /** Removes every entry. */
   clear(): void {
     this.#map.clear();

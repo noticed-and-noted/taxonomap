@@ -2,11 +2,14 @@
  * Species and group search, shared by the header search and the What
  * filter's picker. Once typing pauses (`SEARCH_DEBOUNCE_MS`) the baked common-name
  * index answers, and live GBIF providers follow: vernacular search when the index is
- * thin, then scientific suggest below it. Each new query aborts the last.
+ * thin, then scientific suggest below it. Each new query aborts the last. With
+ * `PUBLIC_NAME_SEARCH=static` the static files answer in place of the live providers.
  */
 import { computed, onScopeDispose, ref, type Ref } from 'vue';
 import { bakedIndexProvider, matchHit, nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
-import { gbifSuggestProvider, gbifVernacularProvider, type NameHit } from '~/lib/gbif';
+import { gbifSuggestProvider, gbifVernacularProvider, type NameHit, type NameSearchProvider } from '~/lib/gbif';
+import { usesStaticNameSearch } from '~/lib/name-search/format';
+import { staticNameProvider } from '~/lib/name-search/provider';
 import { inatNames } from '~/lib/photos/taxon-photos';
 import { debounce, SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
 
@@ -85,9 +88,18 @@ function liveSlots(indexHitCount: number, max: number): number {
   return indexHitCount ? Math.max(0, Math.min(MAX_LIVE_HITS_WITH_INDEX, max - indexHitCount)) : max;
 }
 
-/** Whether a hit needs iNaturalist's name: only species GBIF already names, as an obscure one costs a slow, empty search. */
+/**
+ * Whether a hit needs iNaturalist's name: only species GBIF already names, as an obscure one costs a
+ * slow, empty search. A hit from the static files already carries iNaturalist's.
+ */
 function needsInatName(hit: NameHit): boolean {
-  return hit.rank === 'SPECIES' && !!hit.commonName && !indexedName(hit);
+  return hit.source !== 'static' && hit.rank === 'SPECIES' && !!hit.commonName && !indexedName(hit);
+}
+
+/** Who answers below the index: the static files, or GBIF's providers, its common-name search only when the index is thin. */
+function liveProviders(indexHitCount: number): NameSearchProvider[] {
+  if (usesStaticNameSearch()) return [staticNameProvider];
+  return [...(indexHitCount < THIN_INDEX_HITS ? [gbifVernacularProvider] : []), gbifSuggestProvider];
 }
 
 /** The hits under the iNaturalist names found so far, with those still to come marked as pending. */
@@ -166,9 +178,10 @@ async function askLiveProviders(
   const search: LiveSearch = { text, signal, found: new Map(), names: new Map(), asked: new Set() };
   const room = liveSlots(indexHitCount, options.max);
   const excluded = new Set(options.exclude?.());
-  const providers = [...(indexHitCount < THIN_INDEX_HITS ? [gbifVernacularProvider] : []), gbifSuggestProvider];
   // All asked at once and settled apart, so one failing while the first is awaited isn't left unhandled.
-  const answers = providers.map((provider) => provider.search(text, signal)).map(settled);
+  const answers = liveProviders(indexHitCount)
+    .map((provider) => provider.search(text, signal))
+    .map(settled);
   let failures = 0;
   for (const answer of answers) {
     const result = await answer;

@@ -22,7 +22,7 @@ export interface NameHit {
   matchedName?: string;
   /** iNaturalist's name is still being looked up, so `commonName` (GBIF's, kept if it has none) isn't shown yet. */
   isNamePending?: true;
-  source: 'index' | 'suggest' | 'vernacular';
+  source: 'index' | 'suggest' | 'vernacular' | 'static';
 }
 
 export interface NameSearchProvider {
