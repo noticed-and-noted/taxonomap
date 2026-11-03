@@ -10,3 +10,4 @@ test-results/
 .DS_Store
 .wrangler/
 coverage/
+public/search-data/

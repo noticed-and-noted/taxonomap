@@ -22,6 +22,9 @@ export const TAXA_BATCH = 30;
 /** Most taxa per getTaxonNames request (iNaturalist's `per_page` allows 200). */
 export const TAXON_NAMES_BATCH = 100;
 
+/** Most taxa per getTaxonSummaries request: the list endpoint's `per_page` limit. */
+export const TAXON_SUMMARIES_BATCH = 200;
+
 const BURST = 5;
 const PER_SECOND = 1;
 
@@ -92,6 +95,11 @@ export interface InatTaxon {
   preferred_common_name?: string | null;
   ancestor_ids?: number[];
   taxon_photos?: { photo: InatPhoto }[];
+}
+
+/** A taxon from the list endpoint, which gives its default photo in place of its curated ones. */
+export interface InatTaxonSummary extends Omit<InatTaxon, 'taxon_photos'> {
+  default_photo?: InatPhoto | null;
 }
 
 interface InatObservation {
@@ -172,6 +180,22 @@ export async function getTaxonNames(ids: readonly number[]): Promise<Map<number,
     }
   }
   return found;
+}
+
+/**
+ * Taxa by ID with their names, ancestors and default photos, up to TAXON_SUMMARIES_BATCH in one
+ * request, for the static name search's bake. The list never returns `taxon_photos`, and hides
+ * inactive taxa: those are simply missing here.
+ */
+export async function getTaxonSummaries(ids: readonly number[]): Promise<InatTaxonSummary[]> {
+  const wanted = [...new Set(ids)].sort((left, right) => left - right);
+  const response = await inat.getJson<{ results: InatTaxonSummary[] }>('/v2/taxa', {
+    id: wanted.join(','),
+    per_page: wanted.length,
+    fields: `${TAXON_NAME_FIELDS},default_photo.${PHOTO_FIELDS.replaceAll(',', ',default_photo.')}`,
+    ...NAME_PARAMS,
+  });
+  return response.results;
 }
 
 /** iNaturalist's English name for a taxon, tidied like every other name; null when it has none. */

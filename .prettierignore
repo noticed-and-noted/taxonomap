@@ -6,4 +6,5 @@ pnpm-lock.yaml
 playwright-report
 test-results
 coverage
+public/search-data
 .claude

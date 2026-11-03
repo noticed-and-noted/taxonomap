@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "astro dev --host",
     "bake": "tsx scripts/bake.ts",
+    "bake:names": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/bake-names.ts",
     "ioc-names": "tsx scripts/ioc-names.ts",
     "build": "astro build",
     "preview": "astro preview",

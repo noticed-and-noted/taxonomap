@@ -117,7 +117,7 @@ type InatRecord = Awaited<ReturnType<typeof inatRecord>>;
  * One iNaturalist record GBIF holds of each of several species, in one request; species
  * GBIF has none of are left out.
  */
-async function inatRecords(keys: readonly number[], options: Opts): Promise<Map<number, InatRecord>> {
+export async function inatRecords(keys: readonly number[], options: Opts): Promise<Map<number, InatRecord>> {
   const bySpecies = await gbifLimit(() =>
     firstRecordsByTaxon(keys, 'SPECIES', { datasetKey: INATURALIST_DATASET_KEY }, { perTaxon: 1, ...options }),
   );

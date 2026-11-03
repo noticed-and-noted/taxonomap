@@ -42,7 +42,7 @@ async function previousInatIds(): Promise<Map<number, number>> {
 }
 
 /** Splits `items` into chunks of `size`. */
-function chunks<Item>(items: readonly Item[], size: number): Item[][] {
+export function chunks<Item>(items: readonly Item[], size: number): Item[][] {
   const groups: Item[][] = [];
   for (let offset = 0; offset < items.length; offset += size) groups.push(items.slice(offset, offset + size));
   return groups;
