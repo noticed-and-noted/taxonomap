@@ -4,6 +4,7 @@ import vue from '@astrojs/vue';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import { loadEnv } from 'vite';
+import fileBudget from './integrations/file-budget.ts';
 import serviceWorker from './integrations/service-worker.ts';
 
 // Make .env values visible to build-time Node code (GBIF transport, SW
@@ -38,6 +39,7 @@ export default defineConfig({
       filter: (page) => !/\/(species\/view|offline|near|404)/.test(page),
     }),
     serviceWorker(),
+    fileBudget(),
   ],
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },
   vite: {

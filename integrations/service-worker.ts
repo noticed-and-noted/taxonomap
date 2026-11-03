@@ -11,6 +11,7 @@
  *  - Basemaps:   CacheFirst, 30 days, 1500 entries (OpenFreeMap, EOX)
  *  - Pages:      NetworkOnly; the offline page whenever the network fails
  *  - Baked data: StaleWhileRevalidate (/data/*.json, on demand)
+ *  - Name search: StaleWhileRevalidate (/search-data/*, on demand, in a cache of its own)
  *  - Precached:  the offline page and what it needs (JS/CSS, Latin font subsets)
  */
 import { existsSync } from 'node:fs';
@@ -86,6 +87,15 @@ function ownContentRules(): RuntimeCaching {
       urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/data/'),
       handler: 'StaleWhileRevalidate',
       options: { cacheName: 'baked-data', expiration: { maxEntries: 20, maxAgeSeconds: 7 * SECONDS_PER_DAY } },
+    },
+    {
+      // Thousands of small files, so never precached and kept apart from the snapshots they'd evict.
+      urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/search-data/'),
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'name-search',
+        expiration: { maxEntries: 300, maxAgeSeconds: 7 * SECONDS_PER_DAY, purgeOnQuotaError: true },
+      },
     },
     {
       // Pages: never a saved copy; offline, every page is the offline page.
