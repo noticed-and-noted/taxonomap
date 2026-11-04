@@ -73,6 +73,6 @@ export function cellToHex(cell: string, total: number): Hex {
   return {
     type: 'Feature',
     geometry: { type: 'Polygon', coordinates: [outline(cell)] },
-    properties: { id: cell, total, home: true },
+    properties: { id: cell, total, home: true, h3: cell },
   };
 }

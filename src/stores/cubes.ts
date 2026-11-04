@@ -4,6 +4,7 @@
  * (PUBLIC_CUBES_BASE).
  */
 import { atom } from 'nanostores';
+import type { CubeSet } from '~/lib/cubes/reader';
 import { env } from '~/lib/env';
 
 export const CUBES_KEY = 'map-cubes';
@@ -21,6 +22,9 @@ function saved(): boolean {
 }
 
 export const $cubesOn = atom(typeof window !== 'undefined' && CUBES_BASE !== null && saved());
+
+/** The cubes once the map has opened them, for the cell panel to read; null until then. */
+export const $openCubes = atom<CubeSet | null>(null);
 
 /**
  * Turn the cube hexes on or off.

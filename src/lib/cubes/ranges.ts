@@ -5,7 +5,8 @@
  * numbers (their extra digits go 0–6). So a view's cells come down to a few ranges, and a row group whose
  * cell statistics miss every range is skipped without downloading it.
  */
-import { cellToCenterChild, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import { gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import { descendantRange } from './cellBits';
 
 /** An inclusive range of H3 cell numbers. */
 export type CellRange = [first: bigint, last: bigint];
@@ -13,23 +14,9 @@ export type CellRange = [first: bigint, last: bigint];
 /** [west, south, east, north] in degrees. */
 export type Bounds = readonly [number, number, number, number];
 
-const MAX_RESOLUTION = 15;
-const DIGIT_BITS = 3n;
-// The highest child digit; 7 marks an unused digit.
-const LAST_DIGIT = 6n;
 // Cover the view with cells this many resolutions coarser, then take each one's children: few cells to
 // cover with, and ranges that still hug the view.
 const COARSER_BY = 2;
-
-/** Every child of `cell` at `resolution`, as a range of cell numbers. */
-function childRange(cell: string, coarse: number, resolution: number): CellRange {
-  const first = BigInt(`0x${cellToCenterChild(cell, resolution)}`);
-  let last = first;
-  for (let digit = coarse + 1; digit <= resolution; digit += 1) {
-    last |= LAST_DIGIT << (BigInt(MAX_RESOLUTION - digit) * DIGIT_BITS);
-  }
-  return [first, last];
-}
 
 /** Points along a view's edges per side, corners included. */
 const EDGE_STEPS = 8;
@@ -76,7 +63,7 @@ export function viewRanges([west, south, east, north]: Bounds, resolution: numbe
   const edges = edgePoints([west, south, east, north]).map(([lat, lng]) => latLngToCell(lat, lng, coarse));
   const inside = [...edges, ...polygonToCells(loop, coarse)];
   const cover = new Set(inside.flatMap((cell) => gridDisk(cell, 1)));
-  return mergeRanges([...cover].map((cell) => childRange(cell, coarse, resolution)));
+  return mergeRanges([...cover].map((cell) => descendantRange(BigInt(`0x${cell}`), resolution)));
 }
 
 /** Whether a cell number falls in any of the ranges (binary search). */

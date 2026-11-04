@@ -19,6 +19,7 @@ const CELL = { ring: [] as [number, number][], wkt: 'POLYGON((0 0,1 0,1 1,0 0))'
 async function load() {
   vi.resetModules();
   return {
+    cubes: await import('~/stores/cubes'),
     explorer: await import('~/stores/explorer'),
     hex: await import('~/composables/useHexSummary'),
     years: await import('~/composables/useYearHistogram'),
@@ -91,6 +92,65 @@ describe('useHexSummary', () => {
     await vi.waitFor(() => expect(summary.error.value).toBe('bad-request'));
     expect(summary.loading.value).toBe(false);
     stop();
+  });
+
+  describe('with the cube setting on', () => {
+    const CUBE_CELL = { ...CELL, cell: '841f1d5ffffffff' };
+    const cubeRow = (className: string, specieskey: number, species: string, records: number) => ({
+      cell: BigInt(`0x${CUBE_CELL.cell}`),
+      kingdom: 'Animalia',
+      phylum: null,
+      class: className,
+      order: null,
+      family: null,
+      genus: null,
+      species,
+      specieskey,
+      year: 2020,
+      month: 3,
+      records: BigInt(records),
+    });
+
+    async function withCubes(cellRows: () => Promise<unknown[]>) {
+      const calls = stubNetwork((url) =>
+        isGraphql(url) ? namedFacets(5, 'classKey', []) : snapshots({ tree: TREE, names: [] })(url),
+      );
+      const loaded = await load();
+      const cubeSet = {
+        snapshot: '2026-11-01',
+        scale: 1,
+        mapRows: vi.fn(),
+        cellRows: vi.fn(cellRows),
+        recordRows: vi.fn(),
+      };
+      loaded.cubes.$openCubes.set(cubeSet as never);
+      loaded.cubes.$cubesOn.set(true);
+      return { calls, ...loaded };
+    }
+
+    it('answers a cube hex from its rows, groups included, with no GBIF search', async () => {
+      const rows = [cubeRow('Aves', 1, 'Turdus merula', 4), cubeRow('Insecta', 2, 'Apis mellifera', 6)];
+      const { calls, explorer, hex } = await withCubes(async () => rows);
+      const { result: summary, stop } = run(() => hex.useHexSummary());
+      explorer.$hexGeometry.set(CUBE_CELL);
+      await vi.waitFor(() => expect(summary.species.value).toHaveLength(2));
+      expect(summary.count.value).toBe(10);
+      expect(summary.months.value[2]).toBe(10);
+      expect(summary.classes.value.map((group) => group.name)).toEqual(['Insecta', 'Aves']);
+      await summary.pickGroup(212);
+      expect(summary.species.value.map((row) => row.key)).toEqual([1]);
+      expect(calls.filter(isGraphql)).toHaveLength(0);
+      stop();
+    });
+
+    it('falls back to GBIF when the cubes can’t be read', async () => {
+      const { calls, explorer, hex } = await withCubes(() => Promise.reject(new Error('gone')));
+      const { result: summary, stop } = run(() => hex.useHexSummary());
+      explorer.$hexGeometry.set(CUBE_CELL);
+      await vi.waitFor(() => expect(summary.count.value).toBe(5));
+      expect(calls.filter(isGraphql)).toHaveLength(1);
+      stop();
+    });
   });
 
   it('clears when the cell is deselected', async () => {

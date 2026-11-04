@@ -201,3 +201,19 @@ export function searchOccurrences(
 export function getOccurrence(key: number): Promise<Occurrence> {
   return http().getJson(`/v1/occurrence/${key}`, undefined, { ttlMs: DAY });
 }
+
+/**
+ * Records by key, in one search and in the order asked, leaving out any GBIF no longer has. The cubes'
+ * records index knows a cell's keys, so its list needs this lookup rather than a search on the cell.
+ * @throws GbifRequestError or GbifUnavailableError when GBIF cannot answer.
+ */
+export async function occurrencesByKeys(keys: readonly number[], signal?: AbortSignal): Promise<Occurrence[]> {
+  if (!keys.length) return [];
+  const response = await http().getJson<OccurrenceSearch>(
+    '/v1/occurrence/search',
+    { gbifId: keys, limit: Math.min(keys.length, LIMITS.maxPageSize) },
+    { ttlMs: DAY, ...(signal && { signal }) },
+  );
+  const byKey = new Map(response.results.map((occurrence) => [occurrence.key, occurrence]));
+  return keys.flatMap((key) => byKey.get(key) ?? []);
+}

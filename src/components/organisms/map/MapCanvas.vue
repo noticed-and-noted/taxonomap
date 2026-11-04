@@ -63,7 +63,7 @@ import {
   type FlyRequest,
   type HexPoint,
 } from '~/stores/explorer';
-import { $cubesOn, CUBES_BASE } from '~/stores/cubes';
+import { $cubesOn, $openCubes, CUBES_BASE } from '~/stores/cubes';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
@@ -332,7 +332,9 @@ function onMove(event: MapMouseEvent) {
   const text =
     exact === undefined ? records(geometry.tileTotal, `~${compact(geometry.tileTotal)}`) : records(exact, full(exact));
   tooltip.value = { x: event.point.x, y: event.point.y, text, wkt: geometry.wkt };
-  hoverCounter.hover(filter, geometry.wkt);
+  // A cube hex's count is the cubes' own; asking GBIF for it would bring back the search the cubes replace.
+  if (geometry.cell) hoverCounter.cancel();
+  else hoverCounter.hover(filter, geometry.wkt);
   map!.getCanvas().style.cursor = 'pointer';
 }
 
@@ -411,6 +413,7 @@ function loadCubes(): Promise<CubeKit> {
       import('~/lib/cubes/reader'),
     ]);
     const cubes = await openCubes(CUBES_BASE!);
+    $openCubes.set(cubes);
     return {
       cubes,
       createLayer: (query, onFailed) => createCubeLayer(map!, { ...liveLayerOptions(), onFailed, cubes, query }),

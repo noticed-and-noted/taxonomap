@@ -24,7 +24,7 @@ function setup(initial: { isOn?: boolean; filter?: OccurrenceFilter; zoom?: numb
   const cubeLayers: (ReturnType<typeof layer<CubeLayer>> & { setQuery: ReturnType<typeof vi.fn> })[] = [];
   const failures: (() => void)[] = [];
   const kit: CubeKit = {
-    cubes: { snapshot: '2026-11-01', scale: 100, mapRows: vi.fn() },
+    cubes: { snapshot: '2026-11-01', scale: 100, mapRows: vi.fn(), cellRows: vi.fn(), recordRows: vi.fn() },
     createLayer: (_query, onFailed) => {
       failures.push(onFailed);
       const created = layer<CubeLayer>({ setQuery: vi.fn() }) as (typeof cubeLayers)[number];

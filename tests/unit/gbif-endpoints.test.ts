@@ -50,6 +50,17 @@ describe('occurrence endpoints', () => {
     await expect(api.getOccurrence(9)).resolves.toMatchObject({ key: 9 });
     expect(calls[0]!.pathname).toBe('/v1/occurrence/9');
   });
+
+  it('fetches records by key in one search, in the order asked, dropping any GBIF lacks', async () => {
+    const calls = stubNetwork(() => ({ count: 2, results: [{ key: 3 }, { key: 1 }] }));
+    const api = await gbif();
+    const records = await api.occurrencesByKeys([1, 2, 3], new AbortController().signal);
+    expect(records.map((record) => record.key)).toEqual([1, 3]);
+    expect(calls[0]!.searchParams.getAll('gbifId')).toEqual(['1', '2', '3']);
+    expect(calls[0]!.searchParams.get('limit')).toBe('3');
+    await expect(api.occurrencesByKeys([])).resolves.toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
 });
 
 describe('species endpoints', () => {

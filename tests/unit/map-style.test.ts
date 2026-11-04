@@ -207,6 +207,9 @@ describe('map GeoJSON', () => {
     const hex = feature({ type: 'Polygon', coordinates: [square] }, 42);
     const geometry = geometryOf(hex);
     expect(geometry).toMatchObject({ tileTotal: 42, wkt: 'POLYGON((0 0,1 0,1 1,0 1,0 0))' });
+    expect(geometry).not.toHaveProperty('cell');
+    const cubeHex = { geometry: hex.geometry, properties: { total: 1, h3: '8a1fb46622dffff' } };
+    expect(geometryOf(cubeHex as unknown as MapGeoJSONFeature)?.cell).toBe('8a1fb46622dffff');
     // Built once per feature: the map asks it of every cell on every draw.
     expect(geometryOf(hex)).toBe(geometry);
     expect(geometryOf(feature({ type: 'MultiPolygon', coordinates: [[square]] }))?.tileTotal).toBe(0);

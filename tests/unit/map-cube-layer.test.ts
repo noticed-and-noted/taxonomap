@@ -55,7 +55,13 @@ function setup(
   const mapRows = vi.fn<CubeSet['mapRows']>(async () => options.rows ?? []);
   const callbacks = { onCells: vi.fn(), onLevel: vi.fn(), onProgress: vi.fn(), onFailed: vi.fn() };
   const fake = fakeMap(options.zoom ?? 5);
-  const cubes: CubeSet = { snapshot: '2026-11-01', scale: options.scale ?? 1, mapRows };
+  const cubes: CubeSet = {
+    snapshot: '2026-11-01',
+    scale: options.scale ?? 1,
+    mapRows,
+    cellRows: vi.fn(),
+    recordRows: vi.fn(),
+  };
   const layer = createCubeLayer(fake.map, {
     ...callbacks,
     ...(options.isEmpty && { isEmpty: options.isEmpty }),
@@ -162,7 +168,12 @@ describe('createCubeLayer', () => {
     expect(layer.cellAt([-0.1, 51.5])?.properties.total).toBe(3);
     expect(layer.cellAt([100, 10])).toBeUndefined();
     expect((await layer.findCell([-0.1, 51.5], 5))?.properties.total).toBe(3);
-    expect((await layer.findCell([-0.1, 51.5], 6))?.properties).toEqual({ id: london(5), total: 0, home: true });
+    expect((await layer.findCell([-0.1, 51.5], 6))?.properties).toEqual({
+      id: london(5),
+      total: 0,
+      home: true,
+      h3: london(5),
+    });
     expect((await layer.findCell([100, 10], 5))?.properties.total).toBe(0);
   });
 

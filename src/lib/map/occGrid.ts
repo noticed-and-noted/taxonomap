@@ -29,6 +29,8 @@ export interface HexProps {
   total: number;
   /** The cell's centre is in the tile it came from: that tile's count is the one to trust (see mergeHexes). */
   home: boolean;
+  /** The H3 cell, on hexes drawn from the cubes, so the cell panel can read the cubes too. */
+  h3?: string;
 }
 export type Hex = GeoJSON.Feature<GeoJSON.Polygon, HexProps>;
 

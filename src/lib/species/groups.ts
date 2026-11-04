@@ -62,6 +62,12 @@ function classNameMap() {
   return classNames;
 }
 
+/** Class keys by scientific name, from the tree snapshot (the cubes name classes, GBIF's facets key them). */
+export async function classKeysByName(): Promise<Map<string, number>> {
+  const names = await classNameMap();
+  return new Map([...names].map(([key, { name }]) => [name, key]));
+}
+
 /** Name a classKey facet (tree snapshot first, then the facet's own name, then a cached detail call). */
 export async function namedClasses(counts: readonly NamedFacetCount[]): Promise<ClassGroup[]> {
   const names = await classNameMap();

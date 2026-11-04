@@ -401,5 +401,11 @@ function buildGeometry(feature: HexFeature): HexGeometry | null {
         : undefined;
   if (!ring || ring.length < 4) return null;
   const points = ring.map((position) => [position[0] as number, position[1] as number] as [number, number]);
-  return { ring: points, wkt: polygonToWkt(points), tileTotal: Number(feature.properties['total'] ?? 0) };
+  const cell: unknown = feature.properties['h3'];
+  return {
+    ring: points,
+    wkt: polygonToWkt(points),
+    tileTotal: Number(feature.properties['total'] ?? 0),
+    ...(typeof cell === 'string' && { cell }),
+  };
 }

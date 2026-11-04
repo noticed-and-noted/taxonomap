@@ -48,7 +48,7 @@ describe('cellToHex', () => {
   it('makes a closed hex feature keyed by its cell', () => {
     const cell = latLngToCell(51.5, -0.1, 4);
     const hex = cellToHex(cell, 12);
-    expect(hex.properties).toEqual({ id: cell, total: 12, home: true });
+    expect(hex.properties).toEqual({ id: cell, total: 12, home: true, h3: cell });
     const ring = hex.geometry.coordinates[0]!;
     expect(ring.at(0)).toEqual(ring.at(-1));
     expect(ring.every(([lng, lat]) => Math.abs(lng! + 0.1) < 1 && Math.abs(lat! - 51.5) < 1)).toBe(true);

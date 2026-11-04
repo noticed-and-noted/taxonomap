@@ -160,6 +160,8 @@ export interface HexGeometry {
   wkt: string;
   /** Count shown on the tile (before live refinement). */
   tileTotal: number;
+  /** The H3 cell, when the hex was drawn from the cubes. */
+  cell?: string;
 }
 
 /** Geometry of the selected hex, published by MapCanvas. */

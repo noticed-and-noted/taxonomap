@@ -46,6 +46,19 @@ describe('namedClasses', () => {
   });
 });
 
+describe('classKeysByName', () => {
+  it('keys the tree snapshot’s classes by name', async () => {
+    stubNetwork(snapshots({ tree: TREE }));
+    const { classKeysByName } = await load();
+    expect(await classKeysByName()).toEqual(
+      new Map([
+        ['Aves', 212],
+        ['Mammalia', 359],
+      ]),
+    );
+  });
+});
+
 describe('topSpecies', () => {
   it('asks once for the top species, ranks them and names them, index first', async () => {
     const calls = stubNetwork((url) => {

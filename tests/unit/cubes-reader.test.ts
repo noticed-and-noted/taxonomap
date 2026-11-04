@@ -4,17 +4,20 @@
  * replaced, so the tests set each file's row groups directly.
  */
 import type { FileMetaData } from 'hyparquet';
-import { groupsFor, openCubes, type CubeManifest, type MapRow } from '~/lib/cubes/reader';
+import { cellGroupsFor, groupsFor, openCubes, type CellRow, type CubeManifest, type MapRow } from '~/lib/cubes/reader';
 import type { CubeQuery } from '~/lib/cubes/route';
 
 const metadataFor = vi.fn<(url: string) => FileMetaData>();
-const rowsFor = vi.fn<(url: string, rowStart: number) => MapRow[]>();
+const rowsFor = vi.fn<(url: string, rowStart: number) => (MapRow | CellRow)[]>();
 
 vi.mock('hyparquet-compressors', () => ({ compressors: {} }));
 vi.mock('hyparquet', () => ({
-  async parquetMetadataAsync(file: { url?: string; slice: (start: number, end?: number) => Promise<ArrayBuffer> }) {
-    // Read the footer through the reader's ranged file, as hyparquet would.
-    await file.slice(0);
+  async parquetMetadataAsync(
+    file: { byteLength: number; slice: (start: number, end?: number) => Promise<ArrayBuffer> },
+    options: { initialFetchSize: number },
+  ) {
+    // Read the file's tail through the reader's ranged file, as hyparquet does for the footer.
+    await file.slice(file.byteLength - options.initialFetchSize);
     return metadataFor((file as unknown as { url: string }).url ?? '');
   },
   async parquetReadObjects(options: { file: { url: string }; rowStart: number }) {
@@ -176,5 +179,77 @@ describe('groupsFor', () => {
 
   it('finds no groups in a file without any', () => {
     expect(groupsFor(metadata(), 'Aves', view)).toEqual([]);
+  });
+});
+
+describe('cellGroupsFor', () => {
+  it('keeps groups whose cells overlap the range, and groups without cell statistics', () => {
+    const file = metadata(
+      group(4, { cell: { min_value: 1n, max_value: 9n } }),
+      group(4, { cell: { min_value: 10n, max_value: 20n } }),
+      group(4, {}),
+    );
+    expect(cellGroupsFor(file, [12n, 12n])).toEqual([
+      { rowStart: 4, rowEnd: 8 },
+      { rowStart: 8, rowEnd: 12 },
+    ]);
+  });
+});
+
+describe('cell cube and records index', () => {
+  const byCell = (path: string, first: bigint, last: bigint) => ({
+    path,
+    bytes: 500,
+    first: String(first),
+    last: String(last),
+  });
+  const cellManifest = manifest({
+    folders: {
+      'cells/res=4': [byCell('cells/res=4/bucket=0/data_0.parquet', 1n, 100n)],
+      records: [
+        byCell('records/bucket=1/data_0.parquet', 51n, 90n),
+        byCell('records/bucket=0/data_0.parquet', 1n, 50n),
+        byCell('records/bucket=2/data_0.parquet', 91n, 99n),
+      ],
+    },
+  });
+  const cellRow = (cell: bigint) => ({ cell, records: 1n }) as unknown as CellRow;
+
+  it('reads one cell’s rows once, from the file and groups that hold it', async () => {
+    const { fetcher, asked } = server({ manifest: cellManifest });
+    metadataFor.mockReturnValue(metadata(group(2, { cell: { min_value: 1n, max_value: 100n } })));
+    rowsFor.mockReturnValue([cellRow(42n), cellRow(43n)]);
+    const cubes = await openCubes(BASE, fetcher);
+    expect(await cubes.cellRows(42n, 4)).toEqual([cellRow(42n)]);
+    const before = asked.length;
+    await cubes.cellRows(42n, 4);
+    expect(asked.length).toBe(before);
+    // A bake from before the cell cube and records index: the panel falls back to GBIF.
+    await expect(cubes.cellRows(42n, 5)).rejects.toThrow('These cubes have no cells/res=5');
+    const older = await openCubes(BASE, server().fetcher);
+    await expect(older.recordRows([1n, 2n]).next()).rejects.toThrow('These cubes have no records');
+  });
+
+  it('fetches a footer in one request when the manifest gives its length', async () => {
+    const file = { ...byCell('cells/res=4/bucket=0/data_0.parquet', 1n, 100n), bytes: 5000, footer: 300 };
+    const { fetcher, asked } = server({ manifest: manifest({ folders: { 'cells/res=4': [file] } }) });
+    metadataFor.mockReturnValue(metadata());
+    const cubes = await openCubes(BASE, fetcher);
+    await cubes.cellRows(42n, 4);
+    expect(asked.filter((request) => request.range).map((request) => request.range)).toEqual(['bytes=4700-4999']);
+  });
+
+  it('walks the records in a cell range a row group at a time, in cell order', async () => {
+    const { fetcher } = server({ manifest: cellManifest });
+    metadataFor.mockReturnValue(metadata(group(2, {})));
+    // The walk is in order, so the first file read is the one with the lowest cells.
+    rowsFor
+      .mockReturnValueOnce([cellRow(10n), cellRow(49n)])
+      .mockReturnValueOnce([cellRow(60n), cellRow(95n)])
+      .mockReturnValueOnce([cellRow(92n), cellRow(99n)]);
+    const cubes = await openCubes(BASE, fetcher);
+    const groups: bigint[][] = [];
+    for await (const rows of cubes.recordRows([40n, 95n])) groups.push(rows.map((row) => row.cell));
+    expect(groups).toEqual([[49n], [60n, 95n], [92n]]);
   });
 });

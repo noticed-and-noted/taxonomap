@@ -12,6 +12,7 @@ import ListSkeleton from '~/components/molecules/ListSkeleton.vue';
 import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { useScrollFade } from '~/composables/useScrollFade';
+import { cubeRecords, selectedCubeCell } from '~/lib/cubes/selected';
 import { full } from '~/lib/format';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
 import { recordPlace } from '~/lib/map/recordPlace';
@@ -57,15 +58,31 @@ const aboutHref = (occurrence: Occurrence) => {
   return key ? speciesPath(key, manifest.value) : undefined;
 };
 
+/** A page of the listed records: from the cubes' records index for a cube cell, else GBIF's search on the area. */
+async function fetchPage(baseFilter: OccurrenceFilter, offset: number, signal: AbortSignal) {
+  const key = speciesKey.value === '' ? null : speciesKey.value;
+  const hexGeometry = props.filter ? null : geometry.value;
+  const cubeCell = hexGeometry && (await selectedCubeCell(hexGeometry, storeFilter.value).catch(() => null));
+  if (cubeCell) {
+    try {
+      return await cubeRecords(cubeCell, key, { offset, limit: PAGE_SIZE }, signal);
+    } catch (failure) {
+      if (signal.aborted) throw failure;
+      // The cubes couldn't be read: GBIF's search lists the cell instead.
+    }
+  }
+  const pageFilter = { ...baseFilter, ...(key !== null && { speciesKeys: [key] }) };
+  return searchOccurrences(pageFilter, { limit: PAGE_SIZE, offset }, signal);
+}
+
 /** Loads the first page of records, or with `more` the next page after those listed. */
 async function load(more = false) {
   const baseFilter = area.value;
   if (!more) records.value = [];
   if (!baseFilter) return;
   await run(async (signal) => {
-    const pageFilter = { ...baseFilter, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
     const offset = more ? records.value.length : 0;
-    const response = await searchOccurrences(pageFilter, { limit: PAGE_SIZE, offset }, signal);
+    const response = await fetchPage(baseFilter, offset, signal);
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
