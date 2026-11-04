@@ -10,3 +10,9 @@ test-results/
 .DS_Store
 .wrangler/
 coverage/
+
+# Data cube pipeline outputs
+pipeline/cubes/
+pipeline/work/
+__pycache__/
+.venv/

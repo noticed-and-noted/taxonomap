@@ -18,6 +18,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "4323", "--bind", "127.0.0.1"],
       "port": 4323
+    },
+    {
+      "name": "cubes-poc",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["poc/serve.mjs"],
+      "port": 4324
     }
   ]
 }

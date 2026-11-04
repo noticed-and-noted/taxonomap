@@ -2,6 +2,7 @@
 /** The phone Filters sheet's Map tab: basemap, theme, map, reading and search settings, and the legal links. */
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
 import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
+import CubesSetting from '~/components/molecules/CubesSetting.vue';
 import MapSettings from '~/components/molecules/MapSettings.vue';
 import OnboardingSettings from '~/components/molecules/OnboardingSettings.vue';
 import ReadingSettings from '~/components/molecules/ReadingSettings.vue';
@@ -27,6 +28,7 @@ import ThemePicker from '~/components/molecules/ThemePicker.vue';
       <ReadingSettings in-settings />
     </section>
     <SearchFitSetting />
+    <CubesSetting />
     <OnboardingSettings />
     <LegalLinks />
   </div>

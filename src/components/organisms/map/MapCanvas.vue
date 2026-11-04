@@ -10,12 +10,19 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useStore } from '@nanostores/vue';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact, full } from '~/lib/format';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
 import { hexCentre, zoomPastLevel, type Hex } from '~/lib/map/occGrid';
+import {
+  createHexSource,
+  type CubeKit,
+  type HexSource,
+  type HexSourceOptions,
+  type HexSourceState,
+} from '~/lib/map/hexSource';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { PIN_CURSOR } from '~/lib/map/pinCursors';
 import { createRecordFit } from '~/lib/map/recordFit';
@@ -56,9 +63,11 @@ import {
   type FlyRequest,
   type HexPoint,
 } from '~/stores/explorer';
+import { $cubesOn, CUBES_BASE } from '~/stores/cubes';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
+import { lookupTaxon } from '~/stores/taxon';
 import WebglNotice from './WebglNotice.vue';
 
 const container = ref<HTMLDivElement>();
@@ -67,8 +76,13 @@ const unsupported = useStore($mapUnsupported);
 const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
 let map: MlMap | undefined;
-let occurrenceLayer: OccLayer | undefined;
+let hexSource: HexSource | undefined;
+/** Where the hexes come from (GBIF or the sample cubes), for the notice on the map. */
+const hexState = ref<HexSourceState>({ kind: 'gbif' });
 const cleanups: (() => void)[] = [];
+
+/** The layer drawing the hexes now: GBIF's tiles, or the cubes (see lib/map/hexSource.ts). */
+const occurrenceLayer = (): OccLayer | undefined => hexSource?.layer();
 
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
@@ -123,7 +137,7 @@ function replaceHexes(collection: GeoJSON.FeatureCollection) {
  * me switching to pin mode on a reload, say) finds no source and would be lost.
  */
 function syncOverlays() {
-  replaceHexes(occurrenceLayer?.collection() ?? EMPTY);
+  replaceHexes(occurrenceLayer()?.collection() ?? EMPTY);
   // The grid level is set as the map starts, usually before its style has loaded.
   paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
@@ -136,7 +150,7 @@ const currentStyleChoice = () => `${$basemap.get()} ${theme()}`;
 
 function styleFor() {
   return buildStyle($basemap.get(), theme(), colors(), {
-    hexes: occurrenceLayer?.collection() ?? EMPTY,
+    hexes: occurrenceLayer()?.collection() ?? EMPTY,
     level: $gridLevel.get(),
     selected: selectedGeoJson($hexGeometry.get(), $recordPlace.get()),
     near: nearData(),
@@ -155,9 +169,10 @@ function offGlobe(point: { x: number; y: number }): boolean {
 
 /** The hex cell under a screen point, if any. */
 function hexAt(point: { x: number; y: number }): Hex | undefined {
-  if (!map || !occurrenceLayer || offGlobe(point)) return undefined;
+  const layer = occurrenceLayer();
+  if (!map || !layer || offGlobe(point)) return undefined;
   const lngLat = map.unproject([point.x, point.y]);
-  return occurrenceLayer.cellAt([lngLat.lng, lngLat.lat]);
+  return layer.cellAt([lngLat.lng, lngLat.lat]);
 }
 
 function selectAt(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
@@ -180,9 +195,10 @@ function hexPoint(lng: number, lat: number): HexPoint {
 /** Re-resolve a hex selected via the URL at its level, wherever it is; a link to a cell with no records drops it. */
 async function restoreHex() {
   const selected = $selectedHex.get();
-  if (!occurrenceLayer || !selected || $hexGeometry.get()) return;
+  const layer = occurrenceLayer();
+  if (!layer || !selected || $hexGeometry.get()) return;
   const [lng, lat, level = $gridLevel.get()] = selected;
-  const feature = await occurrenceLayer.findCell([lng, lat], level);
+  const feature = await layer.findCell([lng, lat], level);
   // Another hex was picked meanwhile.
   if ($selectedHex.get() !== selected) return;
   const geometry = feature && geometryOf(feature);
@@ -199,7 +215,8 @@ let pointedRing: [number, number][] | null = null;
 
 /** Tour and hints: find the busiest hex in view, select it if asked (panel closed), and publish where it is. */
 function findBusiestHex(shouldSelect: boolean) {
-  const hex = map && occurrenceLayer ? busiestInView(map, occurrenceLayer.collection().features as Hex[]) : undefined;
+  const layer = occurrenceLayer();
+  const hex = map && layer ? busiestInView(map, layer.collection().features as Hex[]) : undefined;
   const geometry = hex && geometryOf(hex);
   pointedRing = geometry ? geometry.ring : null;
   if (hex && geometry && shouldSelect) {
@@ -273,7 +290,7 @@ const records = (count: number, text: string) => `${text} record${count === 1 ? 
 const hoverCounter = createHoverCounter((wkt, count) => {
   if (count === 0) {
     clearHover();
-    occurrenceLayer?.redraw();
+    occurrenceLayer()?.redraw();
   } else if (tooltip.value?.wkt === wkt) tooltip.value = { ...tooltip.value, text: records(count, full(count)) };
 });
 
@@ -383,6 +400,73 @@ function occLayerOptions(): OccLayerOptions {
     onFailed: () => (failed.value = true),
   };
 }
+
+/** The cube code and files, loaded the first time the cube setting needs them (and again after a failure). */
+let cubeKit: Promise<CubeKit> | null = null;
+
+function loadCubes(): Promise<CubeKit> {
+  cubeKit ??= (async () => {
+    const [{ createCubeLayer }, { openCubes }] = await Promise.all([
+      import('~/lib/map/cubeLayer'),
+      import('~/lib/cubes/reader'),
+    ]);
+    const cubes = await openCubes(CUBES_BASE!);
+    return {
+      cubes,
+      createLayer: (query, onFailed) => createCubeLayer(map!, { ...liveLayerOptions(), onFailed, cubes, query }),
+    };
+  })();
+  cubeKit.catch(() => (cubeKit = null));
+  return cubeKit;
+}
+
+/** Counts layers started, so a replaced layer's last queued draw can't overwrite its successor's cells. */
+let layerSeq = 0;
+
+/** The occurrence layer's options for a new layer, whose callbacks go quiet once another layer starts. */
+function liveLayerOptions(): OccLayerOptions {
+  const seq = ++layerSeq;
+  const options = occLayerOptions();
+  const isLive = () => seq === layerSeq;
+  return {
+    ...options,
+    onCells: (cells) => isLive() && options.onCells(cells),
+    onChanges: (add, remove) => isLive() && options.onChanges(add, remove),
+    onLevel: (level) => isLive() && options.onLevel(level),
+    onProgress: (done, total) => isLive() && options.onProgress(done, total),
+  };
+}
+
+/** How the hex source starts layers, reads the view and reports which source is drawing. */
+function hexSourceOptions(target: MlMap): HexSourceOptions {
+  return {
+    createGbifLayer: () => createOccLayer(target, liveLayerOptions()),
+    loadCubes,
+    isCubesOn: () => $cubesOn.get(),
+    filter: () => $occurrenceFilter.get(),
+    zoom: () => target.getZoom(),
+    lookup: lookupTaxon,
+    onState: (state) => (hexState.value = state),
+  };
+}
+
+/** Pick the hex layer again when the filters, the zoom or the cube setting change. */
+function listenForHexSource(target: MlMap) {
+  const update = () => void hexSource?.update();
+  target.on('moveend', update);
+  cleanups.push(
+    $occurrenceFilter.listen(update),
+    $cubesOn.listen(() => void hexSource?.retry()),
+    () => target.off('moveend', update),
+  );
+  // A hex selected in the URL is found once the first layer is picked.
+  void hexSource?.update().then(restoreHex);
+}
+
+/** The share of GBIF's records the sample cubes hold, as a percentage for the notice. */
+const samplePercent = computed(() =>
+  hexState.value.kind === 'cubes' ? `${Number((hexState.value.sampleShare * 100).toPrecision(2))}%` : '',
+);
 
 /** Below this zoom the canvas corners miss the globe, so the extent is the whole world. */
 const WORLD_BOUNDS_MAX_ZOOM = 2.5;
@@ -587,8 +671,8 @@ function sizeRecordPlace() {
 /** The zoom where the grid at the map's latitude turns finer than the selected cell; Infinity if never or unknown. */
 function gridFinerZoom(): number {
   const selectedLevel = $selectedHex.get()?.[2];
-  if (!map || !occurrenceLayer || selectedLevel === undefined) return Infinity;
-  const layer = occurrenceLayer;
+  const layer = occurrenceLayer();
+  if (!map || !layer || selectedLevel === undefined) return Infinity;
   const centreLat = map.getCenter().lat;
   return zoomPastLevel((zoom) => layer.levelAt(zoom, centreLat), selectedLevel, map.getMaxZoom());
 }
@@ -653,9 +737,9 @@ onMounted(async () => {
     pixelRatio: mapPixelRatio(),
   });
   keepGlobeTilesOnWrapJumps(map);
-  occurrenceLayer = createOccLayer(map, occLayerOptions());
-  void restoreHex();
-  cleanups.push(() => occurrenceLayer?.destroy());
+  hexSource = createHexSource(hexSourceOptions(map));
+  cleanups.push(() => hexSource?.destroy());
+  listenForHexSource(map);
   decorateMap(maplibre, element);
   listenToMap();
   listenToStores();
@@ -690,6 +774,16 @@ onBeforeUnmount(() => {
       class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
     >
       Occurrence tiles are unavailable right now. The basemap still works.
+    </p>
+    <p
+      v-else-if="hexState.kind !== 'gbif'"
+      role="status"
+      class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
+    >
+      <template v-if="hexState.kind === 'cubes'">
+        Sample cube data: counts estimated from {{ samplePercent }} of GBIF's records.
+      </template>
+      <template v-else>The sample cubes couldn't be read, so the map is using GBIF.</template>
     </p>
   </div>
 </template>

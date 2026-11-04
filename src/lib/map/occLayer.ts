@@ -228,7 +228,9 @@ class OccLayerController {
     map.on('moveend', this.#onMoveEnd);
     // A filter can switch between density and adhoc tiles, which can change the level.
     this.#stopListeningToFilter = options.listenFilter(this.#onMoveEnd);
-    if (map.loaded()) this.#planView();
+    // A layer started after the map's one 'load' (the cube setting switched off, say) can find tiles still
+    // loading, so loaded() is false; its style is up, though, so it can plan at once.
+    if (map.loaded() || map.isStyleLoaded()) this.#planView();
     else map.once('load', () => this.#planView());
   }
 

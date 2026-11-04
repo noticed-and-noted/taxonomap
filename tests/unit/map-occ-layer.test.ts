@@ -15,7 +15,7 @@ const HEIGHT = 768;
 const LAT_LIMIT = 85.0511;
 
 /** A map W × H px, centred on `center` at `zoom`, that fires its events on demand. */
-function fakeMap(options: { zoom?: number; center?: [number, number]; loaded?: boolean } = {}) {
+function fakeMap(options: { zoom?: number; center?: [number, number]; loaded?: boolean; styleLoaded?: boolean } = {}) {
   let zoom = options.zoom ?? 4;
   let center = options.center ?? [0, 0];
   const handlers = new Map<string, Set<() => void>>();
@@ -55,6 +55,7 @@ function fakeMap(options: { zoom?: number; center?: [number, number]; loaded?: b
       map.on(eventName, onceHandler);
     },
     loaded: () => options.loaded ?? true,
+    isStyleLoaded: () => options.styleLoaded ?? false,
     easeTo,
     flyTo,
   };
@@ -376,6 +377,14 @@ describe('occurrence layer', () => {
     await settle();
     expect(asked).toHaveLength(0);
     map.fire('load');
+    await settle();
+    expect(asked.length).toBeGreaterThan(0);
+  });
+
+  it('starts at once when made after the map loaded, while its tiles are still loading', async () => {
+    const asked = network();
+    const map = fakeMap({ loaded: false, styleLoaded: true });
+    createOccLayer(map.map, callbacks().o);
     await settle();
     expect(asked.length).toBeGreaterThan(0);
   });

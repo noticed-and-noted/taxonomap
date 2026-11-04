@@ -9,6 +9,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
+import CubesSetting from '~/components/molecules/CubesSetting.vue';
 import MapSettings from '~/components/molecules/MapSettings.vue';
 import OnboardingSettings from '~/components/molecules/OnboardingSettings.vue';
 import ReadingSettings from '~/components/molecules/ReadingSettings.vue';
@@ -148,6 +149,7 @@ function label(name: string, count: number) {
             <ReadingSettings in-settings />
           </section>
           <SearchFitSetting class="-mx-4 border-t border-border px-4 py-3" />
+          <CubesSetting class="-mx-4 border-t border-border px-4 py-3" />
           <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
           <LegalLinks class="-mx-4 border-t border-border px-4 py-2" />
         </div>

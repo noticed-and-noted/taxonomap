@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cube reader POC</title>
+    <link rel="stylesheet" href="../src/styles/tokens.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "hyparquet": "https://cdn.jsdelivr.net/npm/hyparquet@1.31.5/+esm",
+          "hyparquet-compressors": "https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.2/+esm",
+          "h3-js": "https://cdn.jsdelivr.net/npm/h3-js@4.5.0/+esm"
+        }
+      }
+    </script>
+    <style>
+      body {
+        margin: 0 auto;
+        max-width: 72rem;
+        padding: 1rem;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, sans-serif;
+        font-size: 0.875rem;
+      }
+
+      h1,
+      h2 {
+        margin: 0 0 0.5rem;
+        font-family: Georgia, serif;
+        font-weight: 600;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      h2 {
+        font-size: 1.05rem;
+      }
+
+      .top,
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 0.75rem;
+      }
+
+      .top {
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .controls + .controls {
+        margin-top: 0.75rem;
+      }
+
+      .note {
+        color: var(--text-muted);
+      }
+
+      .panel {
+        margin-block: 0.75rem;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+      }
+
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+
+      label.inline {
+        flex-direction: row;
+        align-items: center;
+      }
+
+      input,
+      select,
+      button {
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        color: var(--text);
+        font: inherit;
+      }
+
+      input[type='number'] {
+        width: 6rem;
+      }
+
+      input.wide {
+        width: 14rem;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-contrast);
+      }
+
+      button:disabled {
+        cursor: progress;
+        opacity: 0.6;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+      }
+
+      .months {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem 0.6rem;
+      }
+
+      .status {
+        margin-block: 0.5rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .status.failed {
+        color: var(--danger);
+      }
+
+      .map-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .map-head h2 {
+        margin: 0;
+      }
+
+      .map-frame {
+        overflow: hidden;
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        aspect-ratio: 2 / 1;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      canvas:active {
+        cursor: grabbing;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+        gap: 0.75rem;
+      }
+
+      .bars {
+        overflow: auto;
+        max-height: 16rem;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 7rem 1fr 6rem;
+        align-items: center;
+        gap: 0.5rem;
+        padding-block: 0.1rem;
+      }
+
+      .bar {
+        height: 0.6rem;
+        border-radius: 2px;
+        background: var(--ramp-4);
+      }
+
+      .bar-value {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .table-scroll {
+        overflow: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+      }
+
+      th,
+      td {
+        padding: 0.25rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      .number {
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <h1>Cubes and GBIF, routed per view</h1>
+      <button id="theme-toggle" type="button">Switch theme</button>
+    </div>
+    <p class="note">
+      Reads the pre-counted cubes from <code>pipeline/</code> with hyparquet and HTTP range requests, as the app would
+      from Hugging Face, fetching only the cells in view. GBIF's own tiles draw the world view and any filter the cubes
+      don't hold. Each run is timed and its network use counted; what's already loaded stays cached.
+    </p>
+
+    <form id="filters" class="panel">
+      <div class="controls">
+        <label>
+          Cubes address
+          <input id="base" class="wide" value="../pipeline/cubes/" />
+        </label>
+        <label>
+          Preset
+          <select id="preset"></select>
+        </label>
+        <label>
+          Source
+          <select name="mode">
+            <option value="auto">Route per view (recommended)</option>
+            <option value="cubes">Cubes wherever they can</option>
+            <option value="gbif">GBIF only</option>
+          </select>
+        </label>
+      </div>
+      <div class="controls">
+        <label>
+          Rank
+          <select name="rank"></select>
+        </label>
+        <label>
+          Taxon name
+          <input name="taxon" class="wide" required />
+        </label>
+        <label>
+          Kingdom (optional)
+          <input name="kingdom" />
+        </label>
+        <label>
+          Map detail
+          <select name="resolution">
+            <option value="">By zoom</option>
+            <option value="2">H3 resolution 2</option>
+            <option value="3">H3 resolution 3</option>
+            <option value="4">H3 resolution 4</option>
+            <option value="5">H3 resolution 5</option>
+          </select>
+        </label>
+        <label>
+          From year
+          <input name="yearFrom" type="number" min="1600" max="2100" />
+        </label>
+        <label>
+          To year
+          <input name="yearTo" type="number" min="1600" max="2100" />
+        </label>
+      </div>
+      <div class="controls">
+        <div class="months" id="months" role="group" aria-label="Months"></div>
+        <label>
+          Record type
+          <select name="basis">
+            <option value="">Any</option>
+          </select>
+        </label>
+        <label class="inline"><input type="checkbox" name="photo" value="1" /> With photos</label>
+      </div>
+      <p class="note">Months, record type and photos aren't in the map cube, so they send the map to GBIF.</p>
+      <div class="controls">
+        <button class="primary" type="submit">Run</button>
+        <button id="benchmark" type="button">Run every preset (first visit, years changed, panned)</button>
+        <button id="clear-cache" type="button">Forget cached files</button>
+      </div>
+    </form>
+
+    <p id="status" class="status" role="status">Loading the manifest…</p>
+
+    <section class="panel">
+      <div class="map-head">
+        <h2>Map</h2>
+        <div class="controls">
+          <span id="view-readout" class="note">Zoom 0</span>
+          <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="map-frame">
+        <canvas
+          id="map"
+          tabindex="0"
+          aria-label="Record density map. Drag or use the arrow keys to pan; double-click or press plus and minus to zoom."
+        ></canvas>
+      </div>
+      <p id="map-source" class="note">Map: not drawn yet.</p>
+      <p class="note">Cube cells use the site's density ramp; GBIF tiles use GBIF's purple-to-yellow style.</p>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Records by year</h2>
+        <div class="bars" id="year-bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Records by month</h2>
+        <div class="bars" id="month-bars"></div>
+      </section>
+      <section class="panel">
+        <h2>Records by type</h2>
+        <div class="bars" id="basis-bars"></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Timings</h2>
+      <p class="note">
+        Network and decoding is fetching and unpacking; local work is filtering, summing and drawing. Libraries loaded:
+        <span id="library-size">measuring…</span>
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Detail</th>
+              <th>Source</th>
+              <th class="number">Total</th>
+              <th class="number">Network and decoding</th>
+              <th class="number">Local work</th>
+              <th class="number">Requests</th>
+              <th class="number">Downloaded</th>
+              <th class="number">Cells</th>
+              <th class="number">Records</th>
+            </tr>
+          </thead>
+          <tbody id="log"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <script type="module" src="cubes/main.js"></script>
+  </body>
+</html>
