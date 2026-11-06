@@ -35,7 +35,7 @@ export async function classesNear(
     facetLimit: 50,
     ...(signal && { signal }),
   });
-  return { records: result.count, classes: await namedClasses(result.facets['classKey'] ?? []) };
+  return { records: result.count, classes: await namedClasses(result.facets.classKey) };
 }
 
 /** The area's top species, or one class's (photos are added separately). */

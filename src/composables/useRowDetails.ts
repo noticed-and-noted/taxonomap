@@ -148,13 +148,13 @@ async function lookUpPhotos(
     commonNamesMerged = mergePhotoCommonNames(needCommon, commonNames, mine, state);
     if (needCommon.length) void trackNames(state, () => commonNamesMerged!);
   };
-  const found = await photosForKeys(photos, mine?.signal, mergeCommonNames).catch((error: unknown) => {
-    // No iNaturalist taxa, so no names from them: GBIF's names still come.
+  const found = await photosForKeys(photos, mine?.signal, mergeCommonNames).catch(() => {
+    // No iNaturalist taxa, so no names from them: GBIF's names still come. The rows keep their photo skeletons.
     if (!commonNamesMerged) mergeCommonNames(new Map());
-    throw error;
+    return undefined;
   });
   await commonNamesMerged;
-  if (!state.isCurrent(mine)) return undefined;
+  if (!found || !state.isCurrent(mine)) return undefined;
   mergeInto(state.latePhotos, found.images);
   state.photoDone.value = new Set([...state.photoDone.value, ...photos]);
   mergeInto(state.lateNames, found.names);

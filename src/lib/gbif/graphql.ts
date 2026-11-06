@@ -154,11 +154,11 @@ function toNamedCount(bucket: FacetBucket): NamedFacetCount {
  * name and each dataset its title, so callers need no lookup per value.
  * Facets come back under their REST names.
  */
-export async function namedOccurrenceFacets(
+export async function namedOccurrenceFacets<Field extends FacetField>(
   filter: OccurrenceFilter,
-  facets: readonly FacetField[],
+  facets: readonly Field[],
   options: { facetLimit?: number; limits?: Partial<Record<FacetField, number>>; signal?: AbortSignal } = {},
-): Promise<{ count: number; facets: Record<string, NamedFacetCount[]> }> {
+): Promise<{ count: number; facets: Record<Field, NamedFacetCount[]> }> {
   const sizeOf = (field: FacetField) => options.limits?.[field] ?? options.facetLimit ?? DEFAULT_FACET_LIMIT;
   const selections = facets.map((field) => facetSelection(field, sizeOf(field))).join(' ');
   const query = `
@@ -175,7 +175,7 @@ export async function namedOccurrenceFacets(
 
   const { documents, facet } = data.occurrenceSearch;
   const byField = facets.map((field) => [field, (facet[GRAPHQL_FACET[field] ?? field] ?? []).map(toNamedCount)]);
-  return { count: documents.total, facets: Object.fromEntries(byField) };
+  return { count: documents.total, facets: Object.fromEntries(byField) as Record<Field, NamedFacetCount[]> };
 }
 
 /** Whether firstRecordsByTaxon can batch taxa of this rank. */

@@ -112,7 +112,7 @@ export function speciesSlug(usage: Pick<NameUsage, 'canonicalName' | 'scientific
 async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promise<SiblingSpecies[]> {
   if (!usage.genusKey) return [];
   const facets = await namedOccurrenceFacets({ taxonKey: usage.genusKey }, ['speciesKey'], { facetLimit: 12 });
-  const top = (facets.facets['speciesKey'] ?? [])
+  const top = facets.facets.speciesKey
     .flatMap(({ name, count, label }) =>
       label && Number(name) !== usage.key ? [{ key: Number(name), count, scientificName: label }] : [],
     )
@@ -195,12 +195,12 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     vernacular: groupByLanguage(vernaculars.results),
     synonyms: [...new Set(synonyms.results.map((synonym) => synonym.scientificName))].slice(0, SYNONYM_LIMIT),
     count: facets.count,
-    years: (facets.facets['year'] ?? [])
+    years: facets.facets.year
       .map((facet) => [Number(facet.name), facet.count] as [number, number])
       .sort((left, right) => left[0] - right[0]),
-    months: monthCounts(facets.facets['month']),
-    countries: (facets.facets['country'] ?? []).map((facet) => [facet.name, facet.count] as [string, number]),
-    datasets: (facets.facets['datasetKey'] ?? []).map(datasetTitle),
+    months: monthCounts(facets.facets.month),
+    countries: facets.facets.country.map((facet) => [facet.name, facet.count] as [string, number]),
+    datasets: facets.facets.datasetKey.map(datasetTitle),
     siblings,
     generated: new Date().toISOString(),
   };

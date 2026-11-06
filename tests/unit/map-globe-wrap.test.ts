@@ -43,3 +43,80 @@ describe('keepGlobeTilesOnWrapJumps', () => {
     expect(RenamedTileManager.prototype.handleWrapJump).toBe(originalWrapJump);
   });
 });
+
+describe('keepGlobeTilesOnWrapJumps on a matching tile manager', () => {
+  /** A tile id as MapLibre keys it: the wrap is part of the key. */
+  function tileId(column: number, zoom: number, wrap: number) {
+    return {
+      canonical: { x: column, z: zoom },
+      wrap,
+      key: `${wrap}/${zoom}/${column}`,
+      unwrapTo: (newWrap: number) => tileId(column, zoom, newWrap),
+    };
+  }
+
+  function makeManagerClass() {
+    return class TileManager {
+      transform: { isGlobeRendering?: boolean } = { isGlobeRendering: true };
+      _prevLng?: number;
+      _inViewTiles = { _tiles: {} as Record<string, { tileID: ReturnType<typeof tileId> }> };
+      resets = 0;
+      flatJumps: number[] = [];
+      _resetTileReloadTimers() {
+        this.resets += 1;
+      }
+      handleWrapJump(lng: number) {
+        this.flatJumps.push(lng);
+      }
+    };
+  }
+
+  function mapWith(managers: Record<string, object> | undefined) {
+    const listeners: (() => void)[] = [];
+    const map = {
+      style: { tileManagers: managers },
+      on: (_event: string, listener: () => void) => listeners.push(listener),
+      off: (_event: string, listener: () => void) => listeners.splice(listeners.indexOf(listener), 1),
+    };
+    keepGlobeTilesOnWrapJumps(map as unknown as Parameters<typeof keepGlobeTilesOnWrapJumps>[0]);
+    return { map, fire: () => [...listeners].forEach((listener) => listener()), listeners };
+  }
+
+  it('waits for the style to have a tile manager', () => {
+    const { map, fire, listeners } = mapWith(undefined);
+    fire();
+    expect(listeners).toHaveLength(1);
+    map.style.tileManagers = {};
+    fire();
+    expect(listeners).toHaveLength(1);
+  });
+
+  it('re-wraps globe tiles to the copy nearest the centre, and patches the class once', () => {
+    const TileManager = makeManagerClass();
+    const manager = new TileManager();
+    const { fire, listeners } = mapWith({ hexes: manager });
+    fire();
+    expect(listeners).toHaveLength(0);
+    const patched = TileManager.prototype.handleWrapJump;
+    mapWith({ hexes: new TileManager() }).fire();
+    expect(TileManager.prototype.handleWrapJump).toBe(patched);
+
+    manager._inViewTiles._tiles = { a: { tileID: tileId(0, 2, 0) }, b: { tileID: tileId(3, 2, 0) } };
+    manager.handleWrapJump(170);
+    expect(manager._prevLng).toBe(170);
+    expect(Object.keys(manager._inViewTiles._tiles).sort()).toEqual(['0/2/3', '1/2/0']);
+    expect(manager.resets).toBe(1);
+
+    manager.handleWrapJump(170);
+    expect(manager.resets).toBe(1);
+  });
+
+  it('keeps MapLibre’s own wrap jump on the flat map', () => {
+    const TileManager = makeManagerClass();
+    const manager = new TileManager();
+    mapWith({ hexes: manager }).fire();
+    manager.transform.isGlobeRendering = false;
+    manager.handleWrapJump(42);
+    expect(manager.flatJumps).toEqual([42]);
+  });
+});

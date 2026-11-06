@@ -430,6 +430,44 @@ describe('taxon photo edge cases', () => {
     expect(photos.map(label)).toEqual(['gbif:a.jpg']);
   });
 
+  it('asks GBIF’s REST search for a lone taxon when GraphQL is down', async () => {
+    network({ ...empty, gbifAny: { 6: [occ(16, 'x.jpg')] }, isPhotoBatchDown: true });
+    const loaded = await load();
+    const { images } = await loaded.leadPhotos([{ key: 6, rank: 'SPECIES' }]);
+    expect(label(images.get(6)!)).toBe('gbif:x.jpg');
+  });
+
+  it('gives up on the batch, not falling back, when it is cancelled as the batch fails', async () => {
+    const calls = network({ ...empty, gbifAny: { 6: [occ(16, 'x.jpg')] }, isPhotoBatchDown: true });
+    const answer = globalThis.fetch;
+    const controller = new AbortController();
+    vi.stubGlobal('fetch', async (raw: string) => {
+      const isPhotoBatch = raw.includes('graphql.gbif.org') && raw.includes('mediaType');
+      if (isPhotoBatch) controller.abort();
+      return answer(raw);
+    });
+    const loaded = await load();
+    const taxa = [
+      { key: 6, rank: 'SPECIES' as const },
+      { key: 7, rank: 'SPECIES' as const },
+    ];
+    const { images } = await loaded.leadPhotos(taxa, { signal: controller.signal });
+    expect(images.size).toBe(0);
+    expect(calls.filter((url) => url.includes('/v1/occurrence/search'))).toHaveLength(0);
+  });
+
+  it('leaves out a taxon whose batched records carry no usable photo', async () => {
+    const unlicensed = { ...occ(17, 'y.jpg'), license: 'All rights reserved' };
+    network({ ...empty, gbifAny: { 6: [occ(16, 'x.jpg')], 7: [unlicensed] } });
+    const loaded = await load();
+    const taxa = [
+      { key: 6, rank: 'SPECIES' as const },
+      { key: 7, rank: 'SPECIES' as const },
+    ];
+    const { images } = await loaded.leadPhotos(taxa);
+    expect([...images.keys()]).toEqual([6]);
+  });
+
   it('stops once its signal aborts', async () => {
     const calls = network({ ...empty, gbifAny: { 6: [occ(16, 'x.jpg')] } });
     const loaded = await load();
@@ -723,12 +761,7 @@ describe('remembered iNaturalist IDs', () => {
 
   it('reads what an earlier visit stored, ignoring what is not an ID pair', async () => {
     stubStorage({
-      'inat-ids-v3': JSON.stringify([
-        [1, 11],
-        ['x', 2],
-        [3, 'y'],
-        [4, 44],
-      ]),
+      'inat-ids-v3': JSON.stringify([[1, 11], ['x', 2], [3, 'y'], [4, 44], 5]),
     });
     const loaded = await load();
     expect([1, 3, 4].map(loaded.knownInatId)).toEqual([11, undefined, 44]);
@@ -768,6 +801,8 @@ describe('remembered iNaturalist IDs', () => {
     );
     loaded.rememberInatMatches(new Map([[1, { id: 11 }]]));
     expect(loaded.knownInatName(1)).toBe('Robin');
+    loaded.rememberInatMatches(new Map([[1, { id: 11, name: 'European robin' }]]));
+    expect(loaded.knownInatName(1)).toBe('European robin');
     expect(loaded.knownInatName(2)).toBeNull();
     expect(loaded.knownInatName(3)).toBeUndefined();
     loaded.rememberInatMatches(new Map([[1, { id: 12 }]]));

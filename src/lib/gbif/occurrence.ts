@@ -141,9 +141,9 @@ export async function occurrenceFacets(
 export const MONTHS_IN_YEAR = 12;
 
 /** Records per calendar month (index 0 = January) from a `month` facet. */
-export function monthCounts(monthFacet: readonly FacetCount[] | undefined): number[] {
+export function monthCounts(monthFacet: readonly FacetCount[]): number[] {
   const months = Array<number>(MONTHS_IN_YEAR).fill(0);
-  for (const entry of monthFacet ?? []) months[Number(entry.name) - 1] = entry.count;
+  for (const entry of monthFacet) months[Number(entry.name) - 1] = entry.count;
   return months;
 }
 

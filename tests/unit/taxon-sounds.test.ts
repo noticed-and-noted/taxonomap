@@ -80,6 +80,17 @@ describe('taxonSounds', () => {
     expect(sound?.country).toBeUndefined();
   });
 
+  it('asks for no countries when no recording names a place, and passes the signal on', async () => {
+    const { place_ids: _placeIds, ...placeless } = recording(1);
+    soundObservations.mockResolvedValue([placeless]);
+    const { taxonSounds } = await import('~/lib/photos/taxon-sounds');
+    const signal = new AbortController().signal;
+    const [sound] = await taxonSounds(griffon, signal);
+    expect(sound?.country).toBeUndefined();
+    expect(countryNames).not.toHaveBeenCalled();
+    expect(resolveInatIds).toHaveBeenCalledWith([griffon], { signal });
+  });
+
   it('asks for nothing above species rank or without an iNaturalist match', async () => {
     const { taxonSounds } = await import('~/lib/photos/taxon-sounds');
     expect(await taxonSounds({ key: GRIFFON_KEY, rank: 'GENUS' })).toEqual([]);

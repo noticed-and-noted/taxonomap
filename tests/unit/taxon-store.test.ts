@@ -79,6 +79,25 @@ describe('lookupTaxon', () => {
   });
 });
 
+describe('lookupTaxon when iNaturalist fails', () => {
+  afterEach(() => vi.doUnmock('~/lib/photos/taxon-photos'));
+
+  it('falls back to GBIF’s names', async () => {
+    vi.doMock('~/lib/photos/taxon-photos', async (original) => ({
+      ...(await original<typeof import('~/lib/photos/taxon-photos')>()),
+      inatNames: () => Promise.reject(new Error('down')),
+    }));
+    stubNetwork((url) => {
+      if (url.pathname === '/v1/species/359') return { key: 359, scientificName: 'Mammalia', rank: 'CLASS' };
+      if (url.pathname === '/v1/species/359/vernacularNames')
+        return { results: [{ vernacularName: 'Mammals', language: 'eng' }] };
+      return snapshots({ names: NAMES })(url);
+    });
+    const { lookupTaxon } = await load();
+    await expect(lookupTaxon(359)).resolves.toMatchObject({ commonName: 'Mammals' });
+  });
+});
+
 describe('taxonFromHit', () => {
   it('keeps the display fields of a search hit', async () => {
     const { taxonFromHit } = await load();

@@ -119,6 +119,15 @@ describe('datasets and organisations', () => {
     expect(variables.q).toBe('inat');
     expect(variables.predicate.predicates).toEqual([{ type: 'in', key: 'continent', values: ['EUROPE'] }]);
   });
+
+  it('lists the biggest publishers for an empty query, sending no text', async () => {
+    const calls = stubNetwork(() => ({
+      data: { occurrencePublisherSuggest: [{ key: 'big', count: 9, publisher: { title: 'Big' } }] },
+    }));
+    const api = await gbif();
+    await expect(api.findPublishers('  ', {})).resolves.toEqual([{ key: 'big', title: 'Big', count: 9 }]);
+    expect(JSON.parse(calls[0]!.searchParams.get('variables')!).q).toBeUndefined();
+  });
 });
 
 describe('occurrence filters', () => {

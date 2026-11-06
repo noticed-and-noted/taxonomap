@@ -53,6 +53,24 @@ describe('usePlaceSearch', () => {
     stop();
   });
 
+  it('stays quiet when a search in flight is reset', async () => {
+    stubNetwork(
+      (_url, requestInit) =>
+        new Promise((_resolve, reject) =>
+          requestInit?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))),
+        ),
+    );
+    const { places, failed, search, flush, reset, stop } = setup();
+    search('paris');
+    flush();
+    await vi.advanceTimersByTimeAsync(0);
+    reset();
+    await vi.runAllTimersAsync();
+    expect(places.value).toEqual([]);
+    expect(failed.value).toBe(false);
+    stop();
+  });
+
   it('skips one-letter queries and clears on reset', async () => {
     const calls = stubNetwork(() => photon('x'));
     const { places, loading, search, reset, stop } = setup();

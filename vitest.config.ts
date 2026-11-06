@@ -17,17 +17,8 @@ export default defineConfig({
       include: ['src/**/*.ts', 'integrations/**/*.ts'],
       exclude: ['src/**/*.d.ts', '**/types.ts'],
       reporter: ['text-summary', 'html', 'json-summary'],
-      thresholds: {
-        // Floors a little under the current figures, so coverage cannot quietly slip.
-        lines: 90,
-        statements: 90,
-        functions: 90,
-        branches: 85,
-        // The libraries, stores and endpoints are fully covered.
-        'src/lib/**': FULL,
-        'src/stores/**': FULL,
-        'src/pages/**': FULL,
-      },
+      // Every measured file is fully covered, so any untested line fails the run.
+      thresholds: FULL,
     },
   },
 });

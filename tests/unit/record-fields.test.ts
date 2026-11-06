@@ -27,6 +27,10 @@ describe('record fields', () => {
     expect(typeCode(record({ basisOfRecord: 'FOSSIL_SPECIMEN' }))).toBe('FOS');
     expect(typeCode(record({}))).toBe('—');
     expect(typeLabel(record({}))).toBe('Unknown');
+    expect(typeLabel(record({ basisOfRecord: 'HUMAN_OBSERVATION' }))).toBe('Human observation');
+    expect(typeLabel(record({ basisOfRecord: 'NEW_BASIS' as NonNullable<Occurrence['basisOfRecord']> }))).toBe(
+      'NEW_BASIS',
+    );
   });
 
   it('notes when the observer blurred the point', () => {

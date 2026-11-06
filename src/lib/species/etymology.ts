@@ -95,13 +95,18 @@ function linesUnder(section: string[], heading: RegExp): string[] {
   return (end < 0 ? rest : rest.slice(0, end)).filter(Boolean);
 }
 
+/** Every “quoted” gloss in a line of an entry. */
+function glossesIn(text: string): string[] {
+  return Array.from(text.matchAll(GLOSS), (match) => match[1]).filter((gloss) => gloss !== undefined);
+}
+
 /** Where a taxonomic word comes from, read from its Translingual etymology. */
 function fromEtymology(section: string[]): WordMeaning | null {
   const etymology = linesUnder(section, ETYMOLOGY_HEADING).find((line) => !PLACEHOLDER.test(line));
   const clause = etymology?.split(CLAUSE_BREAK).find((part) => part.includes('“'));
   if (!clause) return null;
 
-  const meanings = Array.from(clause.matchAll(GLOSS), ([, gloss]) => gloss ?? '').filter(Boolean);
+  const meanings = glossesIn(clause);
   const language = clause.match(SOURCE_LANGUAGE)?.[1];
   return language ? { language, meanings } : { meanings };
 }
@@ -120,7 +125,7 @@ function latinMeanings(definition: string): string[] {
   if (!FORM_OF.test(definition)) {
     return [definition.replace(LEADING_LABELS, '').replace(TRAILING_PUNCTUATION, '')];
   }
-  return Array.from(definition.matchAll(GLOSS), ([, gloss]) => gloss ?? '').filter(Boolean);
+  return glossesIn(definition);
 }
 
 /**
