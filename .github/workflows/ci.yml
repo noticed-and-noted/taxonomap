@@ -81,8 +81,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # GBIF and iNaturalist response cache, so a failed run can pick up where it stopped.
-      - uses: actions/cache@v4
+      # GBIF, Wikipedia, Wiktionary and iNaturalist response cache, so a failed run can pick up where it stopped.
+      - uses: actions/cache/restore@v4
         with:
           path: |
             .cache/gbif
@@ -90,6 +90,14 @@ jobs:
           key: gbif-${{ github.run_id }}
           restore-keys: gbif-
       - run: pnpm bake
+      # Saved even when the bake fails or times out; actions/cache only saves on success.
+      - uses: actions/cache/save@v4
+        if: ${{ !cancelled() }}
+        with:
+          path: |
+            .cache/gbif
+            .cache/inat
+          key: gbif-${{ github.run_id }}
       - uses: actions/cache/save@v4
         with:
           path: .cache/baked

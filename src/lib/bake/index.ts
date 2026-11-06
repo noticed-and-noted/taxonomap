@@ -7,12 +7,14 @@ import { join } from 'node:path';
 import { bakeDir, bakeProgress, startFreshBake } from './cache';
 import { bakeNames } from './names';
 import { bakeSpeciesList } from './species-list';
+import { bakeSpeciesPages } from './species-pages';
 import { bakeTree } from './tree';
 import { bakeYears } from './years';
 
 export { bakedCommonNames, bakeNames } from './names';
 export { bakeProgress } from './cache';
 export { bakeSpeciesList, bakeSpeciesManifest, prerenderCount, type PrerenderSpecies } from './species-list';
+export { bakeSpeciesPages, bakedSpeciesPage, type BakedSpeciesPage } from './species-pages';
 export { bakeTree } from './tree';
 export { bakeYears } from './years';
 
@@ -25,8 +27,14 @@ export async function bakeToDisk(onStep?: (key: string) => void): Promise<string
   startFreshBake();
   const dir = bakeDir();
   await mkdir(dir, { recursive: true });
-  // The species list before the names, which index every species with a page; the tree reads the names.
-  const snapshots = { years: bakeYears, 'species-list': bakeSpeciesList, names: bakeNames, tree: bakeTree };
+  // The species list before the names, which index every species with a page; the tree and species pages read the names.
+  const snapshots = {
+    years: bakeYears,
+    'species-list': bakeSpeciesList,
+    names: bakeNames,
+    tree: bakeTree,
+    'species-pages': bakeSpeciesPages,
+  };
   for (const [key, bake] of Object.entries(snapshots)) {
     // Each step's progress bar starts from zero.
     bakeProgress.clear();

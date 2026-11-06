@@ -9,6 +9,13 @@ import type { NamesSnapshot } from '~/lib/data/types';
 import { facets, isGraphql, json, predicateOf, stubNetwork } from './helpers/network';
 
 vi.mock('~/lib/gbif/server', () => import('~/lib/gbif'));
+// Species pages' own lookups have their own tests; here they only need to be saved and read back.
+vi.mock('~/lib/species/data', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/lib/species/data')>()),
+  loadSpeciesData: async (key: number) => ({ key, canonicalName: `Species number${key}` }),
+}));
+vi.mock('~/lib/species/wikipedia', () => ({ wikipediaIntro: async () => null }));
+vi.mock('~/lib/species/etymology', () => ({ nameMeaning: async () => null }));
 
 const usage = (key: number, rank: string, name: string, extra: object = {}) => ({
   key,
@@ -497,7 +504,7 @@ describe('bake to disk', () => {
       const steps: string[] = [];
       const saved = await first.bakeToDisk((key) => steps.push(key));
       const list = await first.bakeSpeciesList();
-      expect(saved).toEqual(['years', 'species-list', 'names', 'tree']);
+      expect(saved).toEqual(['years', 'species-list', 'names', 'tree', 'species-pages']);
       expect(steps).toEqual(saved);
       // The last step's GBIF requests, all counted and all finished.
       const gbifProgress = first.bakeProgress.get('GBIF');
@@ -507,6 +514,7 @@ describe('bake to disk', () => {
       const baked = await bake({ BAKE_DIR: dir });
       expect((await baked.bakeYears()).total).toBe(30);
       expect(await baked.bakeSpeciesList()).toEqual(list);
+      expect((await baked.bakedSpeciesPage(list[0]!.key)).data.key).toBe(list[0]!.key);
       expect(await (await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '0' })).bakeSpeciesList()).toEqual([]);
       expect(calls).toHaveLength(0);
     } finally {

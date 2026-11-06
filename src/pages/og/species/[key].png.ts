@@ -1,7 +1,6 @@
 import type { APIRoute } from 'astro';
-import { bakeSpeciesList, bakedCommonNames } from '~/lib/bake';
+import { bakeSpeciesList, bakedSpeciesPage } from '~/lib/bake';
 import { renderSpeciesCard } from '~/lib/og/species-card';
-import { loadSpeciesData } from '~/lib/species/data';
 
 /**
  * Open Graph image per pre-rendered species (satori + resvg at build). No
@@ -15,8 +14,7 @@ export async function getStaticPaths() {
 
 /** Open Graph card PNG for a pre-rendered species. */
 export const GET: APIRoute = async ({ params }) => {
-  const names = await bakedCommonNames();
-  const speciesData = await loadSpeciesData(Number(params['key']), names);
+  const { data: speciesData } = await bakedSpeciesPage(Number(params['key']));
   const png = await renderSpeciesCard({
     commonName: speciesData.commonName,
     scientificName: speciesData.canonicalName,

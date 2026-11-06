@@ -13,14 +13,11 @@ import SpeciesGallery from '~/components/organisms/species/SpeciesGallery.vue';
 import SpeciesPage from '~/components/organisms/species/SpeciesPage.vue';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/layouts/PageShell.astro';
-import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
+import { bakeSpeciesList, bakeSpeciesManifest, bakedSpeciesPage } from '~/lib/bake';
 import { full } from '~/lib/format';
 import { speciesCharts } from '~/lib/species/charts';
-import { loadSpeciesData } from '~/lib/species/data';
-import { nameMeaning } from '~/lib/species/etymology';
 import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
-import { wikipediaIntro } from '~/lib/species/wikipedia';
 
 export async function getStaticPaths() {
   const list = await bakeSpeciesList();
@@ -28,13 +25,7 @@ export async function getStaticPaths() {
 }
 
 const key = Number(Astro.params.key);
-const [names, manifest] = await Promise.all([bakedCommonNames(), bakeSpeciesManifest()]);
-const data = await loadSpeciesData(key, names);
-// The page reads fine without an intro or the name's meaning, so a failed lookup just leaves it out.
-const [intro, nameParts] = await Promise.all([
-  wikipediaIntro(key).catch(() => null),
-  nameMeaning(data.canonicalName).catch(() => null),
-]);
+const [{ data, intro, nameParts }, manifest] = await Promise.all([bakedSpeciesPage(key), bakeSpeciesManifest()]);
 
 const label = data.commonName ?? data.canonicalName;
 const charts = speciesCharts(data);

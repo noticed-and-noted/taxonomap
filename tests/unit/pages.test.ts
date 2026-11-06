@@ -10,17 +10,14 @@ const bake = {
     { key: 10, slug: 'a', count: 5 },
     { key: 11, slug: 'b', count: 4 },
   ]),
-  bakedCommonNames: vi.fn(async () => (key: number) => (key === 10 ? 'Robin' : null)),
+  bakedSpeciesPage: vi.fn(async (key: number) => ({
+    data: { key, commonName: 'European robin', canonicalName: 'Erithacus rubecula', count: 42 },
+    intro: null,
+    nameParts: null,
+  })),
 };
-const loadSpeciesData = vi.fn(async (key: number) => ({
-  key,
-  commonName: 'European robin',
-  canonicalName: 'Erithacus rubecula',
-  count: 42,
-}));
 const renderSpeciesCard = vi.fn(async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 vi.mock('~/lib/bake', () => bake);
-vi.mock('~/lib/species/data', () => ({ loadSpeciesData }));
 vi.mock('~/lib/og/species-card', () => ({ renderSpeciesCard }));
 
 const context = (partial: Partial<APIContext>) => partial as APIContext;
@@ -57,12 +54,12 @@ describe('/og/species/[key].png', () => {
     await expect(getStaticPaths()).resolves.toEqual([{ params: { key: '10' } }, { params: { key: '11' } }]);
   });
 
-  it('renders the card from the species data, named from the baked index', async () => {
+  it('renders the card from the baked species page', async () => {
     const { GET } = await import('~/pages/og/species/[key].png');
     const response = await GET(context({ params: { key: '10' } }));
     expect(response.headers.get('content-type')).toBe('image/png');
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
-    expect(loadSpeciesData).toHaveBeenCalledWith(10, expect.any(Function));
+    expect(bake.bakedSpeciesPage).toHaveBeenCalledWith(10);
     expect(renderSpeciesCard).toHaveBeenCalledWith({
       commonName: 'European robin',
       scientificName: 'Erithacus rubecula',
