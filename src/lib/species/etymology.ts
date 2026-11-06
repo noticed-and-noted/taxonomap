@@ -19,7 +19,10 @@ const COMMON = { format: 'json', formatversion: 2, origin: '*' };
 
 const LANGUAGE_HEADING = /^== (.+) ==$/;
 const ETYMOLOGY_HEADING = /^={3,4} Etymology( \d+)? ={3,4}$/;
-const DEFINITION_HEADING = /^={3,4} (Noun|Proper noun|Adjective|Participle|Verb) ={3,4}$/;
+// Epithets are mostly adjectives ("regia" is "royal" before it is "palace"); place names and verbs mislead.
+const DEFINITION_HEADINGS = ['Adjective', 'Participle', 'Noun'].map(
+  (partOfSpeech) => new RegExp(`^={3,4} ${partOfSpeech} ={3,4}$`),
+);
 const ANY_HEADING = /^={2,} .+ ={2,}$/;
 // Wiktionary's own notes on an unfinished etymology, not part of it.
 const PLACEHOLDER = /etymology is (missing|incomplete)/i;
@@ -29,7 +32,10 @@ const CLAUSE_BREAK = /,\s*(?=from\b)/i;
 const SOURCE_LANGUAGE = /\bfrom ((?:Ancient |Medieval |New |Late |Classical )?(?:Greek|Latin))\b/i;
 // Usage labels such as "(botany)" or "(relational)" before a definition.
 const LEADING_LABELS = /^(\([^)]*\)\s*)+/;
-const FORM_OF = /\b(?:singular|plural) of (\p{L}+)\.?$/u;
+// "inflection of rūfus:", "nominative … singular of officīnālis", "superlative degree of parvus (“smallest”)".
+const FORM_OF = /\b(?:inflection|singular|plural|degree|participle|form) of (\p{L}+)/u;
+// Wiktionary ends a definition with "—" or ":" when sub-senses follow.
+const TRAILING_PUNCTUATION = /[\s—:;.]+$/;
 const NAME_WORD = /^\p{L}+$/u;
 
 /** One word of a scientific name and what it means. */
@@ -100,23 +106,35 @@ function fromEtymology(section: string[]): WordMeaning | null {
   return language ? { language, meanings } : { meanings };
 }
 
-/** A Latin entry's first definition: the line after its headword. */
+/** A Latin entry's first definition (the line after its headword), from its adjective sense when it has one. */
 function firstDefinition(section: string[]): string | undefined {
-  return linesUnder(section, DEFINITION_HEADING)[1];
+  for (const heading of DEFINITION_HEADINGS) {
+    const definition = linesUnder(section, heading)[1];
+    if (definition) return definition;
+  }
+  return undefined;
+}
+
+/** What a Latin definition gives as the meaning: its own text, or the gloss an inflected form carries. */
+function latinMeanings(definition: string): string[] {
+  if (!FORM_OF.test(definition)) {
+    return [definition.replace(LEADING_LABELS, '').replace(TRAILING_PUNCTUATION, '')];
+  }
+  return Array.from(definition.matchAll(GLOSS), ([, gloss]) => gloss ?? '').filter(Boolean);
 }
 
 /**
  * What a Wiktionary entry says its word means.
  * @param entry The entry's plain text, as the extracts API gives it with `exsectionformat=wiki`.
- * @returns Null when the entry has no usable etymology or Latin definition (an inflected form among them).
+ * @returns Null when the entry has no usable etymology or Latin definition (a bare inflected form among them).
  */
 export function readEntry(entry: string): WordMeaning | null {
   const translingual = fromEtymology(languageSection(entry, 'Translingual'));
   if (translingual) return translingual;
 
   const definition = firstDefinition(languageSection(entry, 'Latin'));
-  if (!definition || FORM_OF.test(definition)) return null;
-  return { language: 'Latin', meanings: [definition.replace(LEADING_LABELS, '')] };
+  const meanings = definition ? latinMeanings(definition) : [];
+  return meanings.length ? { language: 'Latin', meanings } : null;
 }
 
 /**

@@ -10,3 +10,5 @@ test-results/
 .DS_Store
 .wrangler/
 coverage/
+# Local cube bakes: parquet output, logs and DuckDB extensions.
+pipeline/

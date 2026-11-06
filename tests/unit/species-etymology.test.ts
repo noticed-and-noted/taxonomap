@@ -96,6 +96,23 @@ describe('readEntry', () => {
     expect(readEntry(LEO)).toEqual({ language: 'Latin', meanings: ['lion'] });
   });
 
+  it('prefers the adjective sense, and skips place names', async () => {
+    const { readEntry, lemmaOf } = await load();
+    const regia = `== Latin ==\n\n=== Noun ===\nrēgia f\n\na royal palace\n\n=== Adjective ===\nrēgia\n\ninflection of rēgius:`;
+    const orthosia = `== Latin ==\n\n=== Proper noun ===\nOrthosia f\n\na town in Phoenicia`;
+    expect(readEntry(regia)).toBeNull();
+    expect(lemmaOf(regia)).toBe('regius');
+    expect(readEntry(orthosia)).toBeNull();
+  });
+
+  it('keeps the gloss an inflected form gives, and trims a dangling dash', async () => {
+    const { readEntry } = await load();
+    const minimus = `== Latin ==\n\n=== Adjective ===\nminimus\n\nsuperlative degree of parvus (“smallest”)`;
+    const montanus = `== Latin ==\n\n=== Adjective ===\nmontānus\n\nof or pertaining to a mountain, especially—`;
+    expect(readEntry(minimus)).toEqual({ language: 'Latin', meanings: ['smallest'] });
+    expect(readEntry(montanus)?.meanings).toEqual(['of or pertaining to a mountain, especially']);
+  });
+
   it('drops usage labels, and gives null for an inflected form or an empty entry', async () => {
     const { readEntry } = await load();
     expect(readEntry(OFFICINALIS)?.meanings).toEqual(['workshop, laboratory, office']);
