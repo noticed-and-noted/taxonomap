@@ -8,6 +8,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import GbifStatusLink from '~/components/atoms/GbifStatusLink.vue';
 import SegmentedControl from '~/components/atoms/SegmentedControl.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import TreeBreadcrumbs from '~/components/organisms/tree/TreeBreadcrumbs.vue';
@@ -227,7 +228,9 @@ const share = (node: TreeNode) => {
     <div v-if="error && !root" class="grid flex-1 place-items-center" role="alert">
       <div class="text-center">
         <p class="text-muted">
-          {{ error === 'no-data' ? 'The tree data could not be loaded.' : 'GBIF is busy right now.' }}
+          <template v-if="error === 'no-data'">The tree data could not be loaded.</template>
+          <template v-else-if="error === 'unavailable'">GBIF is busy right now. <GbifStatusLink /></template>
+          <template v-else>Something went wrong.</template>
         </p>
         <button type="button" class="mt-3 rounded-md bg-accent px-3 py-1.5 text-sm text-accent-contrast" @click="build">
           Try again

@@ -8,6 +8,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
+import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import HexRecords from '~/components/organisms/cell/HexRecords.vue';
 import SpeciesTable from '~/components/organisms/cell/SpeciesTable.vue';
@@ -164,8 +165,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="near-explorer pointer-events-none absolute inset-0 z-10">
-    <!-- Centred in the top row of pills; below it on phones, where the taxon chip can fill the row. -->
-    <MapProgress class="absolute left-1/2 top-12 -translate-x-1/2 sm:top-3" />
+    <!-- Below the top row of pills, so a note never runs under the basemap switch; over the map, not the panel. -->
+    <MapProgress class="absolute left-1/2 top-12 -translate-x-1/2" :class="{ 'beside-panel': panelOpen }" />
     <button
       v-if="!panelOpen"
       type="button"
@@ -278,9 +279,9 @@ onBeforeUnmount(() => {
 
           <!-- Species -->
           <div v-if="tab === 'species'" role="tabpanel" class="list-panel flex min-h-0 flex-1 flex-col">
-            <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
-              GBIF is busy right now. <button type="button" class="underline" @click="loadArea">Try again</button>
-            </div>
+            <InlineAlert v-if="error" :kind="error" @retry="loadArea">
+              {{ error === 'unavailable' ? 'GBIF is busy right now.' : 'Species near here could not be loaded.' }}
+            </InlineAlert>
             <p v-else-if="!loading && !species.length" class="rounded-md bg-surface-2 p-3 text-sm text-muted">
               No records here yet{{ thisMonth ? ` for ${monthName}` : '' }}. Try a larger radius{{
                 thisMonth ? ' or all months' : ''
@@ -325,6 +326,11 @@ onBeforeUnmount(() => {
   /* The same distance SidePanel's .collapsed moves the panel, so they slide together. */
   .near-bar.tucked {
     transform: translateX(calc(var(--panel-width) + 0.75rem - 4rem));
+  }
+  /* Centred on the map left of the open panel, and narrow enough to clear the rail and the panel. */
+  .beside-panel {
+    left: calc((100% - var(--panel-width) - 0.75rem) / 2);
+    --map-status-max-width: calc(100% - var(--panel-width) - 8rem);
   }
 }
 

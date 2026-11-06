@@ -402,10 +402,12 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Keep the dock and flyout clear of the desktop side panel. */
+/* Keep the dock, flyout and map notes clear of the desktop side panel. */
 @media (min-width: 768px) {
   .panel-open .top-bar {
     right: calc(var(--panel-width) + 1.5rem);
+    /* MapProgress centres in this narrowed bar; this keeps a long note from running under the panel or rail. */
+    --map-status-max-width: calc(100vw - var(--panel-width) - 8rem);
   }
   .panel-open .rail-region {
     --flyout-max: calc(100vw - var(--panel-width) - 7.5rem);

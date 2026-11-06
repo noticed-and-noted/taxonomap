@@ -7,6 +7,7 @@
  * failures keep the retry, with the tree offered as an alternative.
  */
 import { onMounted, ref, shallowRef } from 'vue';
+import GbifStatusLink from '~/components/atoms/GbifStatusLink.vue';
 import PlotChart from '~/components/molecules/PlotChart.vue';
 import MiniMap from '~/components/organisms/species/MiniMap.vue';
 import SimilarSpecies from '~/components/organisms/species/SimilarSpecies.vue';
@@ -17,6 +18,7 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
+import { nameMeaning, type NamePart } from '~/lib/species/etymology';
 import { withInatName } from '~/lib/species/inat-name';
 import { loadSpeciesManifest, similarItems, speciesPath, type SpeciesManifest } from '~/lib/species/links';
 import { wikipediaIntro, type WikipediaIntro } from '~/lib/species/wikipedia';
@@ -27,6 +29,7 @@ const error = ref<UiErrorKind | 'missing-key' | null>(null);
 const key = ref<number | null>(null);
 const intro = shallowRef<WikipediaIntro | null>(null);
 const isIntroLoading = ref(false);
+const nameParts = shallowRef<NamePart[] | null>(null);
 
 /** The Wikipedia intro, alongside the species data so the page needn't wait for it. */
 async function loadIntro(speciesKey: number) {
@@ -34,6 +37,12 @@ async function loadIntro(speciesKey: number) {
   // The page reads fine without an intro, so a failed lookup just leaves it out.
   intro.value = await wikipediaIntro(speciesKey).catch(() => null);
   isIntroLoading.value = false;
+}
+
+/** What the scientific name means; it needs the name, so it starts once the data is in. */
+async function loadNameParts(canonicalName: string) {
+  // The page reads fine without it, so a failed lookup just leaves it out.
+  nameParts.value = await nameMeaning(canonicalName).catch(() => null);
 }
 
 async function load() {
@@ -58,6 +67,7 @@ async function load() {
     // The index holds iNaturalist's names already; otherwise ask, sharing the gallery's match.
     const loaded = indexedName(speciesKey) ? speciesData : await withInatName(speciesData);
     data.value = loaded;
+    void loadNameParts(loaded.canonicalName);
     document.title = `${loaded.commonName ? `${loaded.commonName} (${loaded.canonicalName})` : loaded.canonicalName} · Taxonomap`;
   } catch (failure) {
     const kind = classifyError(failure);
@@ -75,7 +85,7 @@ onMounted(load);
 </script>
 
 <template>
-  <SpeciesPage v-if="data" :data="data" :intro="intro" :is-intro-loading="isIntroLoading">
+  <SpeciesPage v-if="data" :data="data" :intro="intro" :is-intro-loading="isIntroLoading" :name-parts="nameParts">
     <template #gallery>
       <SpeciesGallery :taxon-key="data.key" :rank="data.rank" :name="data.commonName ?? data.canonicalName" />
     </template>
@@ -109,7 +119,10 @@ onMounted(load);
     <p class="mt-3 text-muted">
       <template v-if="error === 'missing-key'">This link is missing a species key.</template>
       <template v-else-if="error === 'not-found'">GBIF has no taxon with key {{ key }}.</template>
-      <template v-else>GBIF is busy right now. Please try again in a moment.</template>
+      <template v-else-if="error === 'unavailable'">
+        GBIF is busy right now. Please try again in a moment, or check <GbifStatusLink />.
+      </template>
+      <template v-else>Something went wrong. Please try again in a moment.</template>
     </p>
     <button
       v-if="error === 'unavailable' || error === 'unknown'"

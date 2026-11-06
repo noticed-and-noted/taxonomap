@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The How filter's publishers: search GBIF's publishing organisations by name
- * and pick several, records from any of them shown. Each suggestion shows how
+ * (the biggest by records are listed before anything is typed) and pick several, records from any of them shown. Each suggestion shows how
  * many records it has under the other filters; publishers with none there
  * aren't offered. ARIA 1.2 combobox, as in
  * TaxaPicker, and the picked publishers in the same SelectedList.
@@ -36,13 +36,17 @@ const selected = computed(() => keys.value.map((key) => ({ key, name: names.valu
 const query = ref('');
 const suggestions = ref<PublisherHit[]>([]);
 const loading = ref(false);
+const isFocused = ref(false);
 const failed = ref(false);
 const active = ref(-1);
 let abort: AbortController | undefined;
 
 const isFull = computed(() => keys.value.length >= MAX_PUBLISHERS);
 const options = computed(() => suggestions.value.filter((suggestion) => !keys.value.includes(suggestion.key)));
-const isOpen = computed(() => query.value.trim().length >= MIN_QUERY_LENGTH && !isFull.value && !loading.value);
+const isBrowsing = computed(() => isFocused.value && query.value.trim() === '');
+const isOpen = computed(
+  () => (isBrowsing.value || query.value.trim().length >= MIN_QUERY_LENGTH) && !isFull.value && !loading.value,
+);
 const activeId = computed(() => (active.value >= 0 ? `${uniqueId}-opt-${active.value}` : undefined));
 
 const runSearch = debounce(async (text: string) => {
@@ -66,13 +70,13 @@ onScopeDispose(() => {
   abort?.abort();
 });
 
-/** Start a search for the box's text, or close the list when it is too short. */
+/** Start a search for the box's text; an empty focused box lists the top publishers; else close the list. */
 function onInput() {
   active.value = -1;
   abort?.abort();
   failed.value = false;
   const text = query.value.trim();
-  loading.value = text.length >= MIN_QUERY_LENGTH;
+  loading.value = isBrowsing.value || text.length >= MIN_QUERY_LENGTH;
   if (loading.value) runSearch(text);
   else runSearch.cancel();
 }
@@ -149,6 +153,11 @@ function onKey(event: KeyboardEvent) {
         aria-autocomplete="list"
         :aria-activedescendant="activeId"
         @input="onInput"
+        @focus="
+          isFocused = true;
+          onInput();
+        "
+        @blur="isFocused = false"
         @keydown="onKey"
       />
 

@@ -37,6 +37,12 @@
 }
 
 @layer base {
+  /* Thin scrollbars everywhere; a component that hides its own sets scrollbar-width: none. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
   html {
     background: var(--bg);
     color: var(--text);

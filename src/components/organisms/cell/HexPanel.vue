@@ -6,6 +6,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, onMounted, ref } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
+import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
 import { HEX_SPECIES, useHexSummary } from '~/composables/useHexSummary';
 import { full } from '~/lib/format';
@@ -40,14 +41,13 @@ const tab = ref<'species' | 'records'>('species');
   </div>
 
   <div v-else class="hex-panel space-y-5">
-    <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
+    <InlineAlert v-if="error" :kind="error" @retry="reload">
       {{
         error === 'unavailable'
           ? 'GBIF is busy right now, so this cell could not be summarised.'
           : 'This cell could not be summarised.'
       }}
-      <button type="button" class="ml-1 text-text underline" @click="reload">Try again</button>
-    </div>
+    </InlineAlert>
 
     <template v-else>
       <section aria-live="polite">

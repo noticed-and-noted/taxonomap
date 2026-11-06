@@ -13,6 +13,9 @@ export const GBIF_TILE_BASE = stripSlash(env['PUBLIC_GBIF_TILE_BASE'] || GBIF_AP
 /** GBIF's GraphQL API (the one gbif.org runs on): facets that carry names, and records per taxon, in one request. */
 export const GBIF_GRAPHQL_BASE = stripSlash(env['PUBLIC_GBIF_GRAPHQL_BASE'] || 'https://graphql.gbif.org');
 
+/** GBIF's public status page, linked (never fetched) when GBIF stops answering. */
+export const GBIF_STATUS_URL = 'https://status.gbif.org';
+
 /** iNaturalist Research-grade Observations: well-framed photos with per-photo CC licences. */
 export const INATURALIST_DATASET_KEY = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
 

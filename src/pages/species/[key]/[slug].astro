@@ -17,6 +17,7 @@ import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/ba
 import { full } from '~/lib/format';
 import { speciesCharts } from '~/lib/species/charts';
 import { loadSpeciesData } from '~/lib/species/data';
+import { nameMeaning } from '~/lib/species/etymology';
 import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
 import { wikipediaIntro } from '~/lib/species/wikipedia';
@@ -29,8 +30,11 @@ export async function getStaticPaths() {
 const key = Number(Astro.params.key);
 const [names, manifest] = await Promise.all([bakedCommonNames(), bakeSpeciesManifest()]);
 const data = await loadSpeciesData(key, names);
-// The page reads fine without an intro, so a failed lookup just leaves it out.
-const intro = await wikipediaIntro(key).catch(() => null);
+// The page reads fine without an intro or the name's meaning, so a failed lookup just leaves it out.
+const [intro, nameParts] = await Promise.all([
+  wikipediaIntro(key).catch(() => null),
+  nameMeaning(data.canonicalName).catch(() => null),
+]);
 
 const label = data.commonName ?? data.canonicalName;
 const charts = speciesCharts(data);
@@ -57,7 +61,7 @@ const jsonLd = speciesJsonLd({
 <BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, '\\u003c')} />
   <PageShell>
-    <SpeciesPage data={data} intro={intro}>
+    <SpeciesPage data={data} intro={intro} nameParts={nameParts}>
       <SpeciesGallery slot="gallery" client:load taxonKey={data.key} rank={data.rank} name={label} />
       {data.siblings.length > 0 && (
         <SimilarSpecies slot="similar" client:visible species={similarItems(data.siblings, manifest)} />

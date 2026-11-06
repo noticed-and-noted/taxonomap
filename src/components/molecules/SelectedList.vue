@@ -65,7 +65,6 @@ watch(
   max-height: 12.25rem;
   overflow-y: auto;
   padding-right: 0.25rem;
-  scrollbar-width: thin;
 }
 
 .selected-row {

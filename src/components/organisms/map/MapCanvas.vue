@@ -50,6 +50,7 @@ import {
   $selectedHex,
   $panel,
   $recordPlace,
+  $tilesFailed,
   $viewCheck,
   clearHexSelection,
   sameView,
@@ -62,7 +63,6 @@ import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading'
 import WebglNotice from './WebglNotice.vue';
 
 const container = ref<HTMLDivElement>();
-const failed = ref(false);
 const unsupported = useStore($mapUnsupported);
 const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
@@ -380,7 +380,7 @@ function occLayerOptions(): OccLayerOptions {
       paintHexes(level);
     },
     onProgress: (done, total) => $mapLoad.set({ loading: done < total, done, total }),
-    onFailed: () => (failed.value = true),
+    onFailed: () => $tilesFailed.set(true),
   };
 }
 
@@ -440,7 +440,7 @@ function hasCellInView(map: MlMap): boolean {
 function publishEmpty() {
   if (!map || $mapLoad.get().loading) return;
   const hasLayer = Boolean(map.getLayer(HEX_LAYER));
-  $viewCheck.set({ isEmpty: !failed.value && hasLayer && !hasCellInView(map) });
+  $viewCheck.set({ isEmpty: !$tilesFailed.get() && hasLayer && !hasCellInView(map) });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
@@ -685,12 +685,6 @@ onBeforeUnmount(() => {
       {{ tooltip.text }}
     </div>
     <WebglNotice v-if="unsupported" />
-    <p
-      v-else-if="failed"
-      class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
-    >
-      Occurrence tiles are unavailable right now. The basemap still works.
-    </p>
   </div>
 </template>
 
