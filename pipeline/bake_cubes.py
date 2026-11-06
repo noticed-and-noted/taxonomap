@@ -53,6 +53,32 @@ RECORD_ROWS_PER_FILE = 1_000_000
 
 TAXON_PATH = 'kingdom, phylum, class, "order", family, genus, species'
 
+# The filters every cube holds besides taxon and place; the app greys out the rest in cube mode.
+FILTERS = "year, month, basisofrecord, media"
+
+# Bits of the media column.
+MEDIA_PHOTO = 1
+MEDIA_SOUND = 2
+
+# GBIF's backbone taxonomy, whose integer keys the app and GBIF's API use. The snapshot keys taxa by the
+# new taxonomy's IDs, so the bake maps species names to backbone keys with it.
+BACKBONE_URL = "https://hosted-datasets.gbif.org/datasets/backbone/current/simple.txt.gz"
+BACKBONE_COLUMNS = 30
+BACKBONE_KINGDOMS = {
+    "incertae sedis": 0,
+    "Animalia": 1,
+    "Archaea": 2,
+    "Bacteria": 3,
+    "Chromista": 4,
+    "Fungi": 5,
+    "Plantae": 6,
+    "Protozoa": 7,
+    "Viruses": 8,
+}
+
+# The stages a bake can run; --steps picks some, for re-baking part of a sample from the work folder.
+STEPS = ["scan", "keys", "count", "map", "map-lean", "charts", "cells", "records"]
+
 # A Parquet file ends with its footer's length (4 bytes) and the magic "PAR1".
 PARQUET_TAIL_BYTES = 8
 
@@ -116,7 +142,8 @@ def connect(work_dir: pathlib.Path, memory_limit: str | None) -> duckdb.DuckDBPy
 def extract_records(connection: duckdb.DuckDBPyConnection, parts: list[str], records_file: pathlib.Path) -> None:
     """
     The one pass over the raw snapshot: each present record's key, taxon path, species key, date, basis
-    of record and H3 cell, so every cube after this reads a local file instead of S3.
+    of record, media (a bit mask: 1 photo, 2 sound) and H3 cell, so every cube after this reads a local
+    file instead of S3.
     Records without usable coordinates keep a null cell: the charts count them, the map leaves them out.
     """
     issues = ", ".join(f"'{issue}'" for issue in GEOSPATIAL_ISSUES)
@@ -126,6 +153,8 @@ def extract_records(connection: duckdb.DuckDBPyConnection, parts: list[str], rec
           SELECT TRY_CAST(gbifid AS BIGINT) AS gbifid, {TAXON_PATH},
                  TRY_CAST(specieskey AS INTEGER) AS specieskey,
                  year::SMALLINT AS year, month::TINYINT AS month, basisofrecord,
+                 (coalesce(list_contains(mediatype, 'StillImage'), false)::TINYINT * {MEDIA_PHOTO}
+                  + coalesce(list_contains(mediatype, 'Sound'), false)::TINYINT * {MEDIA_SOUND})::TINYINT AS media,
                  CASE WHEN decimallatitude IS NOT NULL AND decimallongitude IS NOT NULL
                        AND NOT list_has_any(issue, [{issues}])
                       THEN h3_latlng_to_cell(decimallatitude, decimallongitude, {BASE_RESOLUTION}) END AS cell
@@ -137,20 +166,59 @@ def extract_records(connection: duckdb.DuckDBPyConnection, parts: list[str], rec
     )
 
 
-def bake_base(connection: duckdb.DuckDBPyConnection, records_file: pathlib.Path, base_file: pathlib.Path) -> None:
+def fetch_backbone(work_dir: pathlib.Path) -> pathlib.Path:
+    """GBIF's backbone taxonomy (about 500 MB), downloaded once into the work folder."""
+    backbone_file = work_dir / "backbone-simple.txt.gz"
+    if not backbone_file.exists():
+        partial = backbone_file.with_suffix(".part")
+        with urllib.request.urlopen(BACKBONE_URL) as response, partial.open("wb") as out:
+            shutil.copyfileobj(response, out)
+        partial.rename(backbone_file)
+    return backbone_file
+
+
+def add_species_keys(connection: duckdb.DuckDBPyConnection, records_file: pathlib.Path, backbone_file: pathlib.Path) -> None:
     """
-    Count records by full taxon path in two grouping sets: by species key, year, month and H3 cell for
-    the map and cell cubes, and by year, month and basis of record for charts.
+    Replace the snapshot's species keys with GBIF backbone keys, which the app, its species pages and
+    GBIF's API use. The snapshot keys species by the new taxonomy's IDs ("7CYVX"), so each record's
+    kingdom and species name is matched to the backbone's species of that name: an accepted one first,
+    then a doubtful one, then the lowest key. Names the backbone lacks keep no key.
     """
-    sets = f"({TAXON_PATH}, specieskey, year, month, cell), ({TAXON_PATH}, year, month, basisofrecord)"
+    kingdoms = " ".join(f"WHEN {key} THEN '{name}'" for name, key in BACKBONE_KINGDOMS.items())
+    columns = ", ".join(f"'column{index:02d}': 'VARCHAR'" for index in range(BACKBONE_COLUMNS))
+    keyed_file = records_file.with_name("records-keyed.parquet")
     connection.execute(
         f"""
         COPY (
-          SELECT {TAXON_PATH}, specieskey, year, month, basisofrecord, cell,
-                 GROUPING(basisofrecord) = 1 AS is_map,
-                 count(*)::BIGINT AS records
+          WITH backbone AS (
+            SELECT column00::INTEGER AS key, column04 AS status, CASE column10::INTEGER {kingdoms} END AS kingdom,
+                   column19 AS species
+            FROM read_csv('{backbone_file}', delim = '\t', header = false, quote = '', escape = '',
+                          nullstr = '\\N', columns = {{{columns}}})
+            WHERE column05 = 'SPECIES' AND column04 IN ('ACCEPTED', 'DOUBTFUL')),
+          species_keys AS (
+            SELECT kingdom, species, arg_min(key, (status <> 'ACCEPTED', key)) AS key
+            FROM backbone GROUP BY kingdom, species)
+          SELECT records.* REPLACE (species_keys.key AS specieskey)
+          FROM read_parquet('{records_file}') AS records
+          LEFT JOIN species_keys USING (kingdom, species)
+        ) TO '{keyed_file}' (FORMAT parquet, COMPRESSION zstd)
+        """
+    )
+    keyed_file.replace(records_file)
+
+
+def bake_base(connection: duckdb.DuckDBPyConnection, records_file: pathlib.Path, base_file: pathlib.Path) -> None:
+    """
+    Count records by full taxon path, species key, H3 cell and every filter the cubes hold (year, month,
+    basis of record, media). The map and cell cubes keep the rows with a cell; the charts keep them all.
+    """
+    connection.execute(
+        f"""
+        COPY (
+          SELECT {TAXON_PATH}, specieskey, {FILTERS}, cell, count(*)::BIGINT AS records
           FROM read_parquet('{records_file}')
-          GROUP BY GROUPING SETS ({sets})
+          GROUP BY ALL
         ) TO '{base_file}' (FORMAT parquet, COMPRESSION zstd)
         """
     )
@@ -196,48 +264,52 @@ def write_sorted(
     )
 
 
-def bake_map(connection: duckdb.DuckDBPyConnection, base_file: pathlib.Path, out_dir: pathlib.Path) -> None:
+def bake_map(
+    connection: duckdb.DuckDBPyConnection, base_file: pathlib.Path, out_dir: pathlib.Path, columns: str = FILTERS
+) -> None:
     """
-    The map cube: records by taxon, year and H3 cell, one folder per resolution and rank.
-    Sorting by cell inside a taxon keeps nearby cells together, so a zoomed-in view can skip row groups.
+    The map cube: records by taxon, H3 cell and the filters (year, month, basis of record, media), one
+    folder per resolution and rank. Sorting by cell inside a taxon keeps nearby cells together, so a
+    zoomed-in view can skip row groups. The filter columns grew it 1.4 to 3 times on a sample.
+    With `columns` set to just the year, the lean map cube the app reads when no month, record type or
+    media filter is set: a fraction of the bytes for the commonest views, and year changes stay local.
     """
     for resolution in MAP_RESOLUTIONS:
         for rank in RANKS:
             kingdom, taxon, named = taxon_columns(rank)
             select_sql = f"""
-                SELECT {kingdom} AS kingdom, {taxon} AS taxon, year,
+                SELECT {kingdom} AS kingdom, {taxon} AS taxon, {columns},
                        h3_cell_to_parent(cell, {resolution}) AS cell, sum(records)::BIGINT AS records
                 FROM read_parquet('{base_file}')
-                WHERE is_map AND cell IS NOT NULL AND {named}
+                WHERE cell IS NOT NULL AND {named}
                 GROUP BY ALL"""
             write_sorted(connection, select_sql, "taxon, kingdom, cell, year", out_dir / f"res={resolution}/rank={rank}")
 
 
 def bake_charts(connection: duckdb.DuckDBPyConnection, base_file: pathlib.Path, out_dir: pathlib.Path) -> None:
-    """The charts cube: records by taxon, year, month and basis of record, one folder per rank."""
+    """The charts cube: records by taxon and the filters (year, month, basis of record, media), one folder per rank."""
     for rank in RANKS:
         kingdom, taxon, named = taxon_columns(rank)
         select_sql = f"""
-            SELECT {kingdom} AS kingdom, {taxon} AS taxon, year, month, basisofrecord,
-                   sum(records)::BIGINT AS records
+            SELECT {kingdom} AS kingdom, {taxon} AS taxon, {FILTERS}, sum(records)::BIGINT AS records
             FROM read_parquet('{base_file}')
-            WHERE NOT is_map AND {named}
+            WHERE {named}
             GROUP BY ALL"""
         write_sorted(connection, select_sql, "taxon, kingdom, year, month", out_dir / f"rank={rank}")
 
 
 def bake_cells(connection: duckdb.DuckDBPyConnection, base_file: pathlib.Path, out_dir: pathlib.Path) -> None:
     """
-    The cell cube: records by H3 cell, full taxon path, species, year and month, one folder per
+    The cell cube: records by H3 cell, full taxon path, species and the filters, one folder per
     resolution. Sorted by cell, so the panel for a clicked hex is one small read: its count, months,
-    classes and species, under any taxon and year filter, all come from the cell's own rows.
+    classes and species, under any of the cubes' filters, all come from the cell's own rows.
     """
     for resolution in MAP_RESOLUTIONS:
         select_sql = f"""
-            SELECT h3_cell_to_parent(cell, {resolution}) AS cell, {TAXON_PATH}, specieskey, year, month,
+            SELECT h3_cell_to_parent(cell, {resolution}) AS cell, {TAXON_PATH}, specieskey, {FILTERS},
                    sum(records)::BIGINT AS records
             FROM read_parquet('{base_file}')
-            WHERE is_map AND cell IS NOT NULL
+            WHERE cell IS NOT NULL
             GROUP BY ALL"""
         write_sorted(
             connection,
@@ -256,7 +328,7 @@ def bake_records(connection: duckdb.DuckDBPyConnection, records_file: pathlib.Pa
     records of a hex at any zoom. The full record comes from GBIF by key.
     """
     select_sql = f"""
-        SELECT cell, gbifid, {TAXON_PATH}, specieskey, year
+        SELECT cell, gbifid, {TAXON_PATH}, specieskey, {FILTERS}
         FROM read_parquet('{records_file}')
         WHERE cell IS NOT NULL AND gbifid IS NOT NULL"""
     write_sorted(
@@ -343,6 +415,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--snapshot", help="snapshot date such as 2026-11-01 (default: newest)")
     parser.add_argument("--parts", type=int, help="read only this many parts, for a quick test")
     parser.add_argument("--memory-limit", help="DuckDB memory limit, such as 200GB")
+    parser.add_argument(
+        "--steps",
+        type=lambda text: text.split(","),
+        default=STEPS,
+        help=f"only these stages, comma-separated, from files an earlier bake left in --work ({','.join(STEPS)})",
+    )
     return parser.parse_args()
 
 
@@ -355,19 +433,31 @@ def main() -> None:
 
     arguments.work.mkdir(parents=True, exist_ok=True)
     out_dir = arguments.out / "snapshots" / snapshot
-    shutil.rmtree(out_dir, ignore_errors=True)
     records_file = arguments.work / "records.parquet"
     base_file = arguments.work / "base.parquet"
     connection = connect(arguments.work, arguments.memory_limit)
-
-    timed("Scan the snapshot", lambda: extract_records(connection, chosen, records_file))
-    timed("Count", lambda: bake_base(connection, records_file, base_file))
-    timed("Map cube", lambda: bake_map(connection, base_file, out_dir / "map"))
-    timed("Charts cube", lambda: bake_charts(connection, base_file, out_dir / "charts"))
-    timed("Cell cube", lambda: bake_cells(connection, base_file, out_dir / "cells"))
-    timed("Records index", lambda: bake_records(connection, records_file, out_dir / "records"))
+    cubes = {
+        "map": lambda: bake_map(connection, base_file, out_dir / "map"),
+        "map-lean": lambda: bake_map(connection, base_file, out_dir / "map-lean", columns="year"),
+        "charts": lambda: bake_charts(connection, base_file, out_dir / "charts"),
+        "cells": lambda: bake_cells(connection, base_file, out_dir / "cells"),
+        "records": lambda: bake_records(connection, records_file, out_dir / "records"),
+    }
+    stages = {
+        "scan": ("Scan the snapshot", lambda: extract_records(connection, chosen, records_file)),
+        "keys": ("Backbone species keys", lambda: add_species_keys(connection, records_file, fetch_backbone(arguments.work))),
+        "count": ("Count", lambda: bake_base(connection, records_file, base_file)),
+        **{name: (f"{name.capitalize()} cube", bake) for name, bake in cubes.items()},
+    }
+    for step in [step for step in STEPS if step in arguments.steps]:
+        if step in cubes:
+            shutil.rmtree(out_dir / step, ignore_errors=True)
+        timed(*stages[step])
     timed("Manifest", lambda: write_manifest(connection, out_dir, snapshot, len(chosen), len(parts)))
-    (arguments.out / "latest.json").write_text(json.dumps({"snapshot": snapshot, "manifest": f"snapshots/{snapshot}/manifest.json"}))
+    # latest.json carries the manifest too, so a browser opens the cubes in one request, not two.
+    manifest = json.loads((out_dir / "manifest.json").read_text())
+    latest = {"snapshot": snapshot, "manifest": f"snapshots/{snapshot}/manifest.json", **manifest}
+    (arguments.out / "latest.json").write_text(json.dumps(latest))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 /** The panel data composables, run in a Vue effect scope against a fake GBIF. */
 import { effectScope, nextTick } from 'vue';
+import type { CellRow } from '~/lib/cubes/reader';
 import type { TreeNodeRow } from '~/lib/data/types';
+import { cellRow, chartRow, cubeSet } from './helpers/cubes';
 import { facets, isGraphql, namedFacets, predicateOf, snapshots, stubNetwork } from './helpers/network';
 
 const TREE: TreeNodeRow[] = [{ k: 212, n: 'Aves', c: 'Birds', r: 'C', o: 1, s: 1 }];
@@ -96,34 +98,22 @@ describe('useHexSummary', () => {
 
   describe('with the cube setting on', () => {
     const CUBE_CELL = { ...CELL, cell: '841f1d5ffffffff' };
-    const cubeRow = (className: string, specieskey: number, species: string, records: number) => ({
-      cell: BigInt(`0x${CUBE_CELL.cell}`),
-      kingdom: 'Animalia',
-      phylum: null,
-      class: className,
-      order: null,
-      family: null,
-      genus: null,
-      species,
-      specieskey,
-      year: 2020,
-      month: 3,
-      records: BigInt(records),
-    });
+    const cubeRow = (className: string, specieskey: number, species: string, records: number) =>
+      cellRow({
+        cell: BigInt(`0x${CUBE_CELL.cell}`),
+        class: className,
+        species,
+        specieskey,
+        month: 3,
+        records: BigInt(records),
+      });
 
-    async function withCubes(cellRows: () => Promise<unknown[]>) {
+    async function withCubes(cellRows: () => Promise<CellRow[]>) {
       const calls = stubNetwork((url) =>
         isGraphql(url) ? namedFacets(5, 'classKey', []) : snapshots({ tree: TREE, names: [] })(url),
       );
       const loaded = await load();
-      const cubeSet = {
-        snapshot: '2026-11-01',
-        scale: 1,
-        mapRows: vi.fn(),
-        cellRows: vi.fn(cellRows),
-        recordRows: vi.fn(),
-      };
-      loaded.cubes.$openCubes.set(cubeSet as never);
+      loaded.cubes.$openCubes.set(cubeSet({ cellRows: vi.fn(cellRows) }));
       loaded.cubes.$cubesOn.set(true);
       return { calls, ...loaded };
     }
@@ -143,12 +133,13 @@ describe('useHexSummary', () => {
       stop();
     });
 
-    it('falls back to GBIF when the cubes can’t be read', async () => {
+    it('says so when the cubes can’t be read, never asking GBIF instead', async () => {
       const { calls, explorer, hex } = await withCubes(() => Promise.reject(new Error('gone')));
       const { result: summary, stop } = run(() => hex.useHexSummary());
       explorer.$hexGeometry.set(CUBE_CELL);
-      await vi.waitFor(() => expect(summary.count.value).toBe(5));
-      expect(calls.filter(isGraphql)).toHaveLength(1);
+      await vi.waitFor(() => expect(summary.error.value).not.toBeNull());
+      expect(summary.count.value).toBeNull();
+      expect(calls.filter(isGraphql)).toHaveLength(0);
       stop();
     });
   });
@@ -194,6 +185,23 @@ describe('useYearHistogram', () => {
     explorer.$dateRange.set({ preset: '1m' });
     await nextTick();
     expect(calls).toHaveLength(before);
+    stop();
+  });
+
+  it('counts from the charts cube in cube mode, filtered or not, asking GBIF nothing', async () => {
+    const calls = stubNetwork(() => facets(9, 'YEAR', [[1990, 9]]));
+    const { cubes, explorer, years } = await load();
+    // The test before leaves its photo filter in the URL.
+    explorer.$hasPhoto.set(false);
+    const chartRows = vi.fn(async () => [chartRow({ year: 1999, records: 3n }), chartRow({ year: 1999, media: 1 })]);
+    cubes.$openCubes.set(cubeSet({ chartRows }));
+    cubes.$cubesOn.set(true);
+    const { result: histogram, stop } = run(() => years.useYearHistogram());
+    await vi.waitFor(() => expect([...histogram.counts.value]).toEqual([[1999, 4]]));
+    expect(histogram.live.value).toBe(true);
+    explorer.$hasPhoto.set(true);
+    await vi.waitFor(() => expect([...histogram.counts.value]).toEqual([[1999, 1]]));
+    expect(calls).toHaveLength(0);
     stop();
   });
 });

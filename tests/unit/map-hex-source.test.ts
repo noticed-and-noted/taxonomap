@@ -1,11 +1,13 @@
 /**
- * Which layer draws the hexes: none until the first update, then GBIF's tiles unless the cube setting is
- * on and the router finds a cube slice; swapping, re-querying, falling back on failure and retrying.
+ * Which layer draws the hexes: none until the first update, then GBIF's tiles with the cube setting off,
+ * and always the cubes with it on, never GBIF: re-querying, nothing drawn on failure or an unsupported
+ * taxon, and retrying.
  */
 import type { OccurrenceFilter } from '~/lib/gbif';
 import type { CubeLayer } from '~/lib/map/cubeLayer';
 import { createHexSource, type CubeKit, type HexSourceState } from '~/lib/map/hexSource';
 import type { OccLayer } from '~/lib/map/occLayer';
+import { cubeQuery, cubeSet } from './helpers/cubes';
 
 const layer = <T extends OccLayer>(extra: object = {}) =>
   ({
@@ -18,13 +20,13 @@ const layer = <T extends OccLayer>(extra: object = {}) =>
     ...extra,
   }) as unknown as T & { destroy: ReturnType<typeof vi.fn> };
 
-function setup(initial: { isOn?: boolean; filter?: OccurrenceFilter; zoom?: number } = {}) {
-  const state = { isOn: initial.isOn ?? true, filter: initial.filter ?? { taxonKey: 212 }, zoom: initial.zoom ?? 5 };
+function setup(initial: { isOn?: boolean; filter?: OccurrenceFilter } = {}) {
+  const state = { isOn: initial.isOn ?? true, filter: initial.filter ?? { taxonKey: 212 } };
   const gbifLayers: ReturnType<typeof layer>[] = [];
   const cubeLayers: (ReturnType<typeof layer<CubeLayer>> & { setQuery: ReturnType<typeof vi.fn> })[] = [];
   const failures: (() => void)[] = [];
   const kit: CubeKit = {
-    cubes: { snapshot: '2026-11-01', scale: 100, mapRows: vi.fn(), cellRows: vi.fn(), recordRows: vi.fn() },
+    cubes: cubeSet({ partsRead: 100, partsTotal: 10_000, scale: 100 }),
     createLayer: (_query, onFailed) => {
       failures.push(onFailed);
       const created = layer<CubeLayer>({ setQuery: vi.fn() }) as (typeof cubeLayers)[number];
@@ -46,7 +48,6 @@ function setup(initial: { isOn?: boolean; filter?: OccurrenceFilter; zoom?: numb
     loadCubes,
     isCubesOn: () => state.isOn,
     filter: () => state.filter,
-    zoom: () => state.zoom,
     lookup,
     onState: (next) => states.push(next),
   });
@@ -54,6 +55,8 @@ function setup(initial: { isOn?: boolean; filter?: OccurrenceFilter; zoom?: numb
 }
 
 describe('createHexSource', () => {
+  const CUBES = { kind: 'cubes', snapshot: '2026-11-01', partsRead: 100, partsTotal: 10_000 };
+
   it('starts no layer until the first update', () => {
     const { source, gbifLayers } = setup();
     expect(source.layer()).toBeUndefined();
@@ -70,12 +73,14 @@ describe('createHexSource', () => {
     expect(states).toEqual([{ kind: 'gbif' }]);
   });
 
-  it('draws the cubes straight away when they can serve the first view', async () => {
-    const { source, gbifLayers, cubeLayers, states } = setup();
+  it('draws the cubes for every filter with the setting on, never GBIF', async () => {
+    const { source, state, gbifLayers, cubeLayers, states } = setup();
+    await source.update();
+    state.filter = { taxonKeys: [212, 212], hasImage: true, months: [5] };
     await source.update();
     expect(gbifLayers).toHaveLength(0);
     expect(source.layer()).toBe(cubeLayers[0]);
-    expect(states).toEqual([{ kind: 'cubes', sampleShare: 0.01 }]);
+    expect(states).toEqual([CUBES]);
   });
 
   it('re-queries the cube layer only when the slice changes', async () => {
@@ -85,48 +90,57 @@ describe('createHexSource', () => {
     state.filter = { taxonKey: 212, year: [2010, 2019] };
     await source.update();
     expect(cubeLayers).toHaveLength(1);
-    expect(cubeLayers[0]!.setQuery.mock.calls).toEqual([[{ rank: 'class', taxon: 'Aves', year: [2010, 2019] }]]);
+    expect(cubeLayers[0]!.setQuery.mock.calls).toEqual([
+      [cubeQuery({ taxa: [{ rank: 'class', taxon: 'Aves' }], year: [2010, 2019] })],
+    ]);
   });
 
-  it('swaps back to GBIF for a filter the cubes can’t serve, or a taxon they don’t hold', async () => {
-    const { source, state, gbifLayers, cubeLayers } = setup();
-    await source.update();
-    state.filter = { taxonKey: 212, hasImage: true };
-    await source.update();
-    expect(cubeLayers[0]!.destroy).toHaveBeenCalled();
-    expect(source.layer()).toBe(gbifLayers[0]);
+  it('draws nothing for a taxon the cubes don’t hold, then the cubes again', async () => {
+    const { source, state, gbifLayers, cubeLayers, states } = setup();
     await source.update();
     state.filter = { taxonKey: 1 };
     await source.update();
-    expect(gbifLayers).toHaveLength(1);
+    expect(cubeLayers[0]!.destroy).toHaveBeenCalled();
+    expect(source.layer()).toBeUndefined();
+    expect(states.at(-1)).toEqual({ kind: 'cubes-unsupported' });
+    state.filter = { taxonKey: 212 };
+    await source.update();
+    expect(source.layer()).toBe(cubeLayers[1]);
+    expect(gbifLayers).toHaveLength(0);
   });
 
-  it('swaps GBIF’s layer for the cubes once a view calls for them', async () => {
-    const { source, state, gbifLayers, cubeLayers } = setup({ zoom: 1 });
+  it('swaps between GBIF and the cubes as the setting changes', async () => {
+    const { source, state, gbifLayers, cubeLayers } = setup({ isOn: false });
     await source.update();
-    state.zoom = 5;
+    state.isOn = true;
     await source.update();
     expect(gbifLayers[0]!.destroy).toHaveBeenCalled();
     expect(source.layer()).toBe(cubeLayers[0]);
+    state.isOn = false;
+    await source.update();
+    expect(source.layer()).toBe(gbifLayers[1]);
   });
 
-  it('falls back to GBIF when the cubes can’t be opened, until retried', async () => {
-    const { source, loadCubes, states, cubeLayers } = setup();
+  it('draws nothing when the cubes can’t be opened, until retried', async () => {
+    const { source, loadCubes, states, cubeLayers, gbifLayers } = setup();
     loadCubes.mockRejectedValueOnce(new Error('offline'));
     await source.update();
     expect(states.at(-1)).toEqual({ kind: 'cubes-failed' });
+    expect(source.layer()).toBeUndefined();
     await source.update();
     expect(loadCubes).toHaveBeenCalledTimes(1);
     await source.retry();
     expect(source.layer()).toBe(cubeLayers[0]);
+    expect(gbifLayers).toHaveLength(0);
   });
 
-  it('falls back to GBIF when a cube layer fails to read', async () => {
+  it('draws nothing when a cube layer fails to read', async () => {
     const { source, failures, gbifLayers, states } = setup();
     await source.update();
     failures[0]!();
-    expect(source.layer()).toBe(gbifLayers[0]);
-    expect(states.slice(-2)).toEqual([{ kind: 'cubes-failed' }, { kind: 'cubes-failed' }]);
+    expect(source.layer()).toBeUndefined();
+    expect(gbifLayers).toHaveLength(0);
+    expect(states.at(-1)).toEqual({ kind: 'cubes-failed' });
   });
 
   it('drops an update that a newer one overtook, failed or not', async () => {

@@ -7,19 +7,16 @@ import { latLngToCell } from 'h3-js';
 import type { Map as MlMap } from 'maplibre-gl';
 import type { CubeSet, MapRow } from '~/lib/cubes/reader';
 import type { CubeQuery } from '~/lib/cubes/route';
-import { createCubeLayer, sumCells } from '~/lib/map/cubeLayer';
+import { createCubeLayer, prefetchView, sumCells } from '~/lib/map/cubeLayer';
+import { cubeQuery, cubeSet, mapRow } from './helpers/cubes';
 
 const WIDTH = 1024;
 const HEIGHT = 768;
-const birds: CubeQuery = { rank: 'class', taxon: 'Aves', year: null };
+const aves = { rank: 'class', taxon: 'Aves' } as const;
+const birds: CubeQuery = cubeQuery({ taxa: [aves] });
 const london = (resolution: number) => latLngToCell(51.5, -0.1, resolution);
-const row = (cell: string, year: number | null, records: number): MapRow => ({
-  kingdom: 'Animalia',
-  taxon: 'Aves',
-  year,
-  cell: BigInt(`0x${cell}`),
-  records: BigInt(records),
-});
+const row = (cell: string, year: number | null, records: number): MapRow =>
+  mapRow({ year, cell: BigInt(`0x${cell}`), records: BigInt(records) });
 
 /** A map around London at a zoom, whose canvas spans a box that shrinks as it zooms in. */
 function fakeMap(initialZoom: number) {
@@ -55,20 +52,14 @@ function setup(
   const mapRows = vi.fn<CubeSet['mapRows']>(async () => options.rows ?? []);
   const callbacks = { onCells: vi.fn(), onLevel: vi.fn(), onProgress: vi.fn(), onFailed: vi.fn() };
   const fake = fakeMap(options.zoom ?? 5);
-  const cubes: CubeSet = {
-    snapshot: '2026-11-01',
-    scale: options.scale ?? 1,
-    mapRows,
-    cellRows: vi.fn(),
-    recordRows: vi.fn(),
-  };
+  const cubes = cubeSet({ scale: options.scale ?? 1, mapRows });
   const layer = createCubeLayer(fake.map, {
     ...callbacks,
     ...(options.isEmpty && { isEmpty: options.isEmpty }),
     cubes,
     query: birds,
   });
-  return { layer, mapRows, fake, ...callbacks };
+  return { layer, mapRows, fake, cubes, ...callbacks };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -88,6 +79,33 @@ describe('sumCells', () => {
   it('keeps only the range’s years, dropping undated rows', () => {
     expect([...sumCells(rows, { ...birds, year: [2012, 2020] }, 1)]).toEqual([['8a', 3]]);
   });
+
+  it('keeps to the months, record types and media asked for', () => {
+    const filtered = [mapRow({ cell: 0x8an, records: 2n, media: 1 }), mapRow({ cell: 0x8an, records: 5n, month: 1 })];
+    expect([...sumCells(filtered, { ...birds, media: 1 }, 1)]).toEqual([['8a', 2]]);
+    expect([...sumCells(filtered, { ...birds, months: [1] }, 1)]).toEqual([['8a', 5]]);
+    expect([...sumCells(filtered, { ...birds, basis: ['PRESERVED_SPECIMEN'] }, 1)]).toEqual([]);
+  });
+});
+
+describe('createCubeLayer with several taxa', () => {
+  it('reads each taxon and sums them per cell', async () => {
+    const fox = { rank: 'species', taxon: 'Vulpes vulpes' } as const;
+    const mapRows = vi.fn<CubeSet['mapRows']>(async () => [row(london(4), 2020, 2)]);
+    const fake = fakeMap(5);
+    const onCells = vi.fn();
+    createCubeLayer(fake.map, {
+      onCells,
+      onLevel: vi.fn(),
+      onProgress: vi.fn(),
+      onFailed: vi.fn(),
+      cubes: cubeSet({ mapRows }),
+      query: cubeQuery({ taxa: [aves, fox] }),
+    });
+    await settle();
+    expect(mapRows.mock.calls.map((call) => call[0])).toEqual([aves, fox]);
+    expect(totals(onCells)).toEqual([4]);
+  });
 });
 
 describe('createCubeLayer', () => {
@@ -96,7 +114,7 @@ describe('createCubeLayer', () => {
     await settle();
     expect(onLevel).toHaveBeenCalledWith(5);
     const [query, resolution, ranges] = mapRows.mock.lastCall!;
-    expect([query, resolution]).toEqual([birds, 4]);
+    expect([query, resolution]).toEqual([aves, 4]);
     expect(ranges!.length).toBeGreaterThan(0);
     expect(totals(onCells)).toEqual([14]);
     expect(onProgress.mock.calls).toEqual([
@@ -159,7 +177,7 @@ describe('createCubeLayer', () => {
     await settle();
     layer.setQuery({ ...birds, year: [2000, 2010] });
     await settle();
-    expect(mapRows.mock.lastCall![0]).toEqual({ ...birds, year: [2000, 2010] });
+    expect(mapRows.mock.lastCall![0]).toEqual(aves);
   });
 
   it('finds the cell under a point by H3, loaded or not, at any level', async () => {
@@ -195,5 +213,31 @@ describe('createCubeLayer', () => {
     layer.destroy();
     expect(fake.listening()).toBe(0);
     expect(mapRows).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('lean reads and warming', () => {
+  it('reads the lean map cube unless a filter needs more, and warms the cell cube after each load', async () => {
+    const { mapRows, layer, cubes } = setup();
+    await settle();
+    expect(mapRows.mock.lastCall![3]).toBe(true);
+    expect(cubes.warmCells).toHaveBeenCalledWith(4, expect.any(Array));
+    layer.setQuery({ ...birds, months: [5] });
+    await settle();
+    expect(mapRows.mock.lastCall![3]).toBe(false);
+  });
+});
+
+describe('prefetchView', () => {
+  it('reads what the first load will: the whole world zoomed out, the estimated view zoomed in', async () => {
+    const mapRows = vi.fn<CubeSet['mapRows']>(async () => []);
+    const cubes = cubeSet({ mapRows });
+    const size = { width: 1280, height: 800 };
+    await prefetchView(cubes, cubeQuery({ taxa: [aves] }), { lng: 0, lat: 20, zoom: 1.5 }, size);
+    expect(mapRows.mock.lastCall).toEqual([aves, 2, null, true]);
+    await prefetchView(cubes, cubeQuery({ taxa: [aves], media: 1 }), { lng: -0.1, lat: 51.5, zoom: 6 }, size);
+    const [, resolution, ranges, lean] = mapRows.mock.lastCall!;
+    expect([resolution, lean]).toEqual([5, false]);
+    expect(ranges!.length).toBeGreaterThan(0);
   });
 });

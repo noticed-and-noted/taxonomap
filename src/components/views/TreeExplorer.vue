@@ -2,13 +2,15 @@
 /**
  * Tree of life browser (client:only). Baked kingdom→order levels, live
  * lazy-loading below; sunburst or icicle (icicle by default on narrow
- * screens); records vs species sizing.
+ * screens); records vs species sizing. In cube mode the record counts come
+ * from the cubes (lib/tree/model.ts), and a banner says so.
  * Selecting a node only moves the tree; it leaves the shared taxon filter
  * alone ("view on map" applies it). The child list is the keyboard path and data-table fallback.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import SegmentedControl from '~/components/atoms/SegmentedControl.vue';
+import CubeDemoBanner from '~/components/molecules/CubeDemoBanner.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import TreeBreadcrumbs from '~/components/organisms/tree/TreeBreadcrumbs.vue';
 import TreeChart from '~/components/organisms/tree/TreeChart.vue';
@@ -221,6 +223,8 @@ const share = (node: TreeNode) => {
         <SegmentedControl v-model="layout" legend="Layout" :options="LAYOUT_OPTIONS" />
       </div>
     </div>
+
+    <CubeDemoBanner class="!mb-0" />
 
     <TreeBreadcrumbs :crumbs="crumbs" @go="goTo" />
 

@@ -1,54 +1,52 @@
-/** When the cubes can draw the map, and which slice of them: one taxon or all of life, years, not the plain world view. */
-import { cubeQueryFor, cubesCanServe } from '~/lib/cubes/route';
+/** The cube slice a filter asks for: its taxa (each a rank and name), and the years, months, record types and media. */
+import { cubeFilters, cubeQueryFor, LIFE } from '~/lib/cubes/route';
 
-const birds = { scientificName: 'Aves', rank: 'CLASS' };
-const lookup = vi.fn(async (key: number) =>
-  key === 212 ? birds : key === 1 ? { scientificName: 'Abc d', rank: 'SUBSPECIES' } : null,
-);
+const lookup = vi.fn(async (key: number) => {
+  if (key === 212) return { scientificName: 'Aves', rank: 'CLASS' };
+  if (key === 5219243) return { scientificName: 'Vulpes vulpes', rank: 'SPECIES' };
+  if (key === 1) return { scientificName: 'Abc d e', rank: 'SUBSPECIES' };
+  return null;
+});
 
 beforeEach(() => lookup.mockClear());
 
-describe('cubesCanServe', () => {
-  it('takes one taxon or none, with or without years, once zoomed in', () => {
-    expect(cubesCanServe({}, 3)).toBe(true);
-    expect(cubesCanServe({ taxonKey: 212 }, 4)).toBe(true);
-    expect(cubesCanServe({ taxonKeys: [212] }, 4)).toBe(true);
-    expect(cubesCanServe({ taxonKeys: [], exactTaxon: false, year: null }, 4)).toBe(true);
-  });
-
-  it('takes the world view only with a year range: without one, GBIF’s cached tiles are quicker', () => {
-    expect(cubesCanServe({ taxonKey: 212 }, 1.5)).toBe(false);
-    expect(cubesCanServe({ taxonKey: 212, year: [2010, 2019] }, 1.5)).toBe(true);
-  });
-
-  it('leaves several taxa and every other filter to GBIF', () => {
-    expect(cubesCanServe({ taxonKeys: [212, 359] }, 4)).toBe(false);
-    expect(cubesCanServe({ basisOfRecord: ['PRESERVED_SPECIMEN'] }, 4)).toBe(false);
-    expect(cubesCanServe({ hasImage: true }, 4)).toBe(false);
-    expect(cubesCanServe({ exactTaxon: true }, 4)).toBe(false);
+describe('cubeFilters', () => {
+  it('reads years, months (either form), record types and media as bits', () => {
+    expect(cubeFilters({})).toEqual({ year: null, months: null, basis: null, media: 0 });
+    expect(
+      cubeFilters({ year: [2000, 2010], months: [3, 4], basisOfRecord: ['PRESERVED_SPECIMEN'], hasImage: true }),
+    ).toEqual({ year: [2000, 2010], months: [3, 4], basis: ['PRESERVED_SPECIMEN'], media: 1 });
+    expect(cubeFilters({ month: 6, hasSound: true, months: [], basisOfRecord: [] })).toMatchObject({
+      months: [6],
+      basis: null,
+      media: 2,
+    });
+    expect(cubeFilters({ hasImage: true, hasSound: true }).media).toBe(3);
   });
 });
 
 describe('cubeQueryFor', () => {
   it('is all of life with no taxon', async () => {
-    expect(await cubeQueryFor({ year: [2000, 2020] }, 1, lookup)).toEqual({
-      rank: 'life',
-      taxon: 'Life',
+    expect(await cubeQueryFor({ year: [2000, 2020] }, lookup)).toEqual({
+      taxa: [LIFE],
       year: [2000, 2020],
+      months: null,
+      basis: null,
+      media: 0,
     });
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it('is the taxon’s name at its rank, from either form of the taxon filter', async () => {
-    const expected = { rank: 'class', taxon: 'Aves', year: null };
-    expect(await cubeQueryFor({ taxonKey: 212 }, 4, lookup)).toEqual(expected);
-    expect(await cubeQueryFor({ taxonKeys: [212] }, 4, lookup)).toEqual(expected);
+  it('names every taxon at its rank, from either form of the taxon filter', async () => {
+    expect((await cubeQueryFor({ taxonKey: 212 }, lookup))?.taxa).toEqual([{ rank: 'class', taxon: 'Aves' }]);
+    expect((await cubeQueryFor({ taxonKeys: [212, 5219243] }, lookup))?.taxa).toEqual([
+      { rank: 'class', taxon: 'Aves' },
+      { rank: 'species', taxon: 'Vulpes vulpes' },
+    ]);
   });
 
-  it('is null for a taxon it can’t name, a rank the cubes don’t hold, or a filter they can’t serve', async () => {
-    expect(await cubeQueryFor({ taxonKey: 7 }, 4, lookup)).toBeNull();
-    expect(await cubeQueryFor({ taxonKey: 1 }, 4, lookup)).toBeNull();
-    expect(await cubeQueryFor({ taxonKey: 212, hasSound: true }, 4, lookup)).toBeNull();
-    expect(lookup).toHaveBeenCalledTimes(2);
+  it('is null when any taxon can’t be named or is at a rank the cubes don’t hold', async () => {
+    expect(await cubeQueryFor({ taxonKey: 7 }, lookup)).toBeNull();
+    expect(await cubeQueryFor({ taxonKeys: [212, 1] }, lookup)).toBeNull();
   });
 });

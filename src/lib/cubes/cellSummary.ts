@@ -1,21 +1,14 @@
 /**
  * A clicked cell's panel from its cell-cube rows, with no request: the record count, records per month,
- * the classes and the top species, under the map's taxon and year filter. Counts come out in the shape
- * GBIF's facets have, so the panel names and shows them as it does GBIF's.
+ * the classes and the top species, under the map's filters. Counts come out in the shape GBIF's facets
+ * have, so the panel names and shows them as it does GBIF's. Near me sums several cells' rows the same way.
  */
 import type { NamedFacetCount } from '~/lib/gbif/graphql';
-import type { CellRow, TaxonPathRow } from './reader';
+import { matchesQuery } from './match';
+import type { CellRow } from './reader';
 import type { CubeQuery } from './route';
 
 const MONTHS = 12;
-
-/** Whether a row falls under the query's taxon and years. */
-export function matchesQuery(row: TaxonPathRow, query: CubeQuery): boolean {
-  if (query.rank !== 'life' && row[query.rank] !== query.taxon) return false;
-  if (!query.year) return true;
-  const [from, to] = query.year;
-  return row.year !== null && row.year >= from && row.year <= to;
-}
 
 /** Counts by key, largest first, the first `limit` of them, scaled up for a sample. */
 function topCounts(totals: Map<string, { count: number; label: string }>, limit: number, scale: number) {

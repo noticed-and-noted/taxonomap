@@ -8,6 +8,7 @@ import { computed, ref, useId, watch } from 'vue';
 import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import { useCellNameSearch } from '~/composables/useCellNameSearch';
+import type { CubeArea } from '~/lib/cubes/cell';
 import { useSettledQuery } from '~/composables/useSettledQuery';
 import { normalise } from '~/lib/data/name-index';
 import { full } from '~/lib/format';
@@ -22,6 +23,8 @@ const props = defineProps<{
   species: readonly SpeciesRow[];
   /** The area whose records are listed; changing it clears the box. */
   area: OccurrenceFilter | null;
+  /** The same area in the cubes, in cube mode, so the search counts species from its rows. */
+  cubeArea?: CubeArea | null;
   names: RecordNames;
 }>();
 /** The picked speciesKey, or '' for all species. */
@@ -31,7 +34,12 @@ const uniqueId = useId();
 const query = ref('');
 const isOpen = ref(false);
 const activeIndex = ref(-1);
-const nameSearch = useCellNameSearch({ query, species: () => props.species, area: () => props.area });
+const nameSearch = useCellNameSearch({
+  query,
+  species: () => props.species,
+  area: () => props.area,
+  cubeArea: () => props.cubeArea ?? null,
+});
 
 /** Whether a species' common or scientific name contains the typed text. */
 function matchesQuery(row: SpeciesRow, needle: string) {

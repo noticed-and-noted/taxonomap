@@ -9,9 +9,14 @@
  * (see ~/lib/photos/taxon-photos).
  *
  * Isomorphic: build time imports ~/lib/gbif/server first (Node transport);
- * the /species/view fallback calls it in the browser.
+ * the /species/view fallback calls it in the browser. Given cubes (cube mode), the
+ * counts, years, months and siblings' counts come from the charts cube instead,
+ * and the countries and datasets, which no cube holds, are left empty.
  */
+import type { CubeSet } from '~/lib/cubes/reader';
+import { siblingCounts, speciesCounts } from '~/lib/cubes/species';
 import {
+  getAllChildren,
   getDistributions,
   getRedListCategory,
   getSpecies,
@@ -77,6 +82,8 @@ export interface SpeciesData {
   datasets: { key: string; title: string; count: number }[];
   siblings: SiblingSpecies[];
   generated: string;
+  /** Counted from the cubes (cube mode): the countries and datasets are left out. */
+  fromCubes?: true;
 }
 
 /** Optional common-name lookup (build: baked index; browser: loaded index). */
@@ -108,15 +115,31 @@ export function speciesSlug(usage: Pick<NameUsage, 'canonicalName' | 'scientific
   return slugify(usage.canonicalName ?? usage.scientificName);
 }
 
-/** The most-recorded other species of the same genus, with common names where known (the baked index first). */
-async function siblingsOf(usage: NameUsage, commonName: CommonNameLookup): Promise<SiblingSpecies[]> {
-  if (!usage.genusKey) return [];
-  const facets = await namedOccurrenceFacets({ taxonKey: usage.genusKey }, ['speciesKey'], { facetLimit: 12 });
-  const top = (facets.facets['speciesKey'] ?? [])
+/** The genus's most-recorded other species, from one GBIF facet request. */
+async function gbifTopSiblings(usage: NameUsage, genusKey: number) {
+  const facets = await namedOccurrenceFacets({ taxonKey: genusKey }, ['speciesKey'], { facetLimit: 12 });
+  return (facets.facets['speciesKey'] ?? [])
     .flatMap(({ name, count, label }) =>
       label && Number(name) !== usage.key ? [{ key: Number(name), count, scientificName: label }] : [],
     )
     .slice(0, SIBLING_LIMIT);
+}
+
+/** The genus's most-recorded other species from the charts cube; the genus's species come from GBIF's taxonomy. */
+async function cubeTopSiblings(usage: NameUsage, genusKey: number, cubes: CubeSet) {
+  return siblingCounts(cubes, usage, await getAllChildren(genusKey, 'SPECIES'), SIBLING_LIMIT);
+}
+
+/** The most-recorded other species of the same genus, with common names where known (the baked index first). */
+async function siblingsOf(
+  usage: NameUsage,
+  commonName: CommonNameLookup,
+  cubes: CubeSet | null,
+): Promise<SiblingSpecies[]> {
+  if (!usage.genusKey) return [];
+  const top = cubes
+    ? await cubeTopSiblings(usage, usage.genusKey, cubes)
+    : await gbifTopSiblings(usage, usage.genusKey);
   if (!top.length) return [];
   // The baked index (iNaturalist's names) misses many species, so fall back to their GBIF vernacular names;
   // the similar-species cards swap in iNaturalist's from the photo lookup they make anyway.
@@ -158,21 +181,41 @@ function datasetTitle(facet: NamedFacetCount) {
   return { key: facet.name, title: facet.label ?? 'Unnamed dataset', count: facet.count };
 }
 
+/** A taxon's record counts: from one GBIF facet request, or from the charts cube (no countries or datasets). */
+async function recordFacts(usage: NameUsage, cubes: CubeSet | null) {
+  if (cubes) return { ...(await speciesCounts(cubes, usage)), countries: [], datasets: [] };
+  const facets = await namedOccurrenceFacets({ taxonKey: usage.key }, ['year', 'month', 'country', 'datasetKey'], {
+    limits: { year: 700, month: MONTHS_IN_YEAR, country: 10, datasetKey: 5 },
+  });
+  return {
+    count: facets.count,
+    years: (facets.facets['year'] ?? [])
+      .map((facet) => [Number(facet.name), facet.count] as [number, number])
+      .sort((left, right) => left[0] - right[0]),
+    months: monthCounts(facets.facets['month']),
+    countries: (facets.facets['country'] ?? []).map((facet) => [facet.name, facet.count] as [string, number]),
+    datasets: (facets.facets['datasetKey'] ?? []).map(datasetTitle),
+  };
+}
+
 /**
- * Everything a species page shows, from GBIF.
+ * Everything a species page shows, from GBIF (and the cubes' counts in cube mode).
  * @param key GBIF species key.
  * @param commonName Looks up the common name to show ahead of GBIF's (the baked name index, which holds iNaturalist's).
+ * @param cubes The opened cubes in cube mode, which count the records instead of GBIF.
  * @throws GbifNotFoundError when GBIF has no such taxon.
  */
-export async function loadSpeciesData(key: number, commonName: CommonNameLookup = () => null): Promise<SpeciesData> {
+export async function loadSpeciesData(
+  key: number,
+  commonName: CommonNameLookup = () => null,
+  cubes: CubeSet | null = null,
+): Promise<SpeciesData> {
   const usage = await getSpecies(key);
-  const [vernaculars, synonyms, facets, siblings, redList, distribution] = await Promise.all([
+  const [vernaculars, synonyms, facts, siblings, redList, distribution] = await Promise.all([
     getVernacularNames(key).catch(() => ({ results: [] })),
     getSynonyms(key, SYNONYM_LIMIT).catch(() => ({ results: [] })),
-    namedOccurrenceFacets({ taxonKey: key }, ['year', 'month', 'country', 'datasetKey'], {
-      limits: { year: 700, month: MONTHS_IN_YEAR, country: 10, datasetKey: 5 },
-    }),
-    siblingsOf(usage, commonName).catch(() => []),
+    recordFacts(usage, cubes),
+    siblingsOf(usage, commonName, cubes).catch(() => []),
     redListOf(usage),
     distributionOf(usage),
   ]);
@@ -192,14 +235,9 @@ export async function loadSpeciesData(key: number, commonName: CommonNameLookup 
     classification: classificationOf(usage),
     vernacular: groupByLanguage(vernaculars.results),
     synonyms: [...new Set(synonyms.results.map((synonym) => synonym.scientificName))].slice(0, SYNONYM_LIMIT),
-    count: facets.count,
-    years: (facets.facets['year'] ?? [])
-      .map((facet) => [Number(facet.name), facet.count] as [number, number])
-      .sort((left, right) => left[0] - right[0]),
-    months: monthCounts(facets.facets['month']),
-    countries: (facets.facets['country'] ?? []).map((facet) => [facet.name, facet.count] as [string, number]),
-    datasets: (facets.facets['datasetKey'] ?? []).map(datasetTitle),
+    ...facts,
     siblings,
     generated: new Date().toISOString(),
+    ...(cubes && { fromCubes: true as const }),
   };
 }

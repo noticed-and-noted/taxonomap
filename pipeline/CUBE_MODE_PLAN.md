@@ -1,6 +1,6 @@
 # Plan: closed "cube mode" for the data-cube POC
 
-Status: planned, not started (2026-11-04). Pick up from **Where things stand** below.
+Status: built (2026-11-06). Cube mode is in the app as planned; see `pipeline/README.md`, "In the app: cube mode". What's left is under **Next** at the end.
 
 ## The goal
 
@@ -14,22 +14,15 @@ The point is to remove the fuzzy line in today's version, where the source flips
 
 **How to explain it to Jack.** Instead of querying GBIF's API for every view and click, a monthly DuckDB job pre-counts GBIF's public snapshot into small Parquet cubes hosted free on Hugging Face. The browser fetches only the slices it needs (hyparquet, HTTP range requests) and filters and sums them itself, so the site stays static and hosting cost doesn't grow with users. DuckDB runs only in the bake, not in the browser. The demo uses a ~1% sample (100 of 10,346 parts): every number is an estimate scaled up from it, and record lists show only sampled records. A banner says so. Baking more parts makes the data denser, not more capable.
 
-## Where things stand
+## Decisions made while building
 
-- **Committed and pushed** (`1e5b2cb`): the map cube and the experimental setting, where the map's hexes come from the cubes for one taxon and/or whole years, zoomed in past the world view.
-- **Done but NOT committed:** the hex panel from the cubes. This covers:
-  - a cell cube and a records index in `bake_cubes.py`
-  - `src/lib/cubes/{cell,cellBits,cellPanel,cellSummary,parquet,selected}.ts` and changes to `reader.ts`
-  - the cube branch in `useHexSummary.ts` and `HexRecords.vue`
-  - GBIF's lookup by key (`occurrencesByKeys`)
-  - the hover tooltip skipping GBIF for cube hexes
-  - footer lengths in the manifest
-  - tests and the README
-
-  Type check, lint and all 662 unit tests passed. **Commit this first** (`git status` lists it), then push from your own terminal.
-
-- **Local sample:** `pipeline/cubes/` holds a 100-part bake _with_ the cell cube and records index (about 21 minutes to bake). The plan below needs one more re-bake for the new columns.
-- **Servers for testing:** `node poc/serve.mjs` (cubes on port 4324), and the app started with `PUBLIC_CUBES_BASE=http://127.0.0.1:4324/pipeline/cubes/`. On PowerShell: `$env:PUBLIC_CUBES_BASE='…'; corepack pnpm dev --port 4322`.
+- **One map cube, not two.** Adding month and record type grew the map cube 1.4 to 3 times per rank and resolution on the sample (measured on the slim records table before baking), under the 5× threshold, so it gained the columns. Baked, it went from 287 MB to 560 MB.
+- **Unsupported filters are cleared** on entering cube mode (and if a link sets one while it's on), and the banner names them. Their controls stay visible but greyed out with a "Not in cube demo" tag.
+- **Tree of life and species pages count from the cubes too** (added after a first version left them out): the tree's record counts at every level, and a species page's count, years, months, mini-map and similar species. Taxonomy (a node's children, species counts under it) still comes from GBIF's species API, like names. Top countries and datasets are greyed out. Pre-built species pages hand over to `/species/view` in cube mode.
+- **A lean map cube** (taxon, year, place) for views with no month, record type or media filter, a preloaded `latest.json`, the first view read as the map starts, a quick taxon lookup, and cell footers fetched ahead of a click. Cube mode is now quicker or level everywhere except world-view first visits (about 0.5 s behind GBIF's cached tiles).
+- **First-visit speed-ups**: neighbouring row groups in one request, the manifest inside `latest.json`, and the cubes opened as the map component mounts. Zoomed first visits are now quicker than GBIF's tiles; cached world views are still quicker from GBIF (see the README's A/B).
+- **Near me uses resolution-5 hexes** (about 8 km) whose centres fall in the circle, plus the pin's own; the cubes hold nothing finer.
+- **Nested taxa** (birds and blackbird) count twice on the map, which reads each taxon separately; noted as an open question.
 
 ## What works in cube mode (target)
 
@@ -128,3 +121,26 @@ Allowed GBIF calls in cube mode: name search and suggest, the baked name index, 
 - Split the map cube in two or not: decide from the size measurement (bake step 3).
 - Tree of life "within an area": grey it out, or use the cell cube.
 - Turning cube mode on with unsupported filters set: clear them with a notice (simplest), or keep them shown as ignored.
+
+## Next
+
+- Request-only A/B tables: done (README, "A/B: cube mode against the app as it is").
+- Shrink the full bake: the ideas below, measured on the 100-part sample before adopting any.
+
+## Shrinking the bake
+
+Ideas for the same data in fewer bytes, safest first. The savings are estimates, not measurements.
+
+| Idea                          | What it means                                                                                                                  | Rough saving                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Numbers instead of names      | Rows repeat the full taxon path as text; store the species key and look the path up in the taxonomy file the app already ships | 30–50% on the cell cube and records index, and much smaller footers |
+| Narrower number types         | Counts fit in 32 bits, years in 16, a resolution-5 cell in 32 as an index                                                      | 10–30%                                                              |
+| Delta encoding                | Sorted cell IDs and record keys stored as small differences (Parquet v2 in DuckDB)                                             | 10–30% on sorted columns                                            |
+| Maximum compression           | zstd level 19 instead of 3: a slower bake, the same read speed                                                                 | 5–15%                                                               |
+| Cap the records index         | Keep the newest ~1,000 records per hex (or per hex and species); the panel shows the true total from the cell cube             | ~35 GB to a few GB                                                  |
+| Coarser old data              | Decades instead of years before 1950                                                                                           | Fewer rows where data is sparse                                     |
+| Colour bands on the map       | The map needs only a colour band (one byte), with exact counts in the cell cube                                                | Up to 8× on the map cube's counts                                   |
+| Pack a record into one number | Cell, species, year, month and flags in one 64-bit integer, sorted and delta-encoded                                           | 3–4 bytes a record instead of about 10                              |
+| Upload only what changed      | Most counts barely move month to month                                                                                         | Less upload time and old-snapshot storage                           |
+
+Start with numbers instead of names, narrower types with delta encoding, and capping the records index: together perhaps 50–70 GB down to 15–25 GB for a full bake, with the same app behaviour.

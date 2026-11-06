@@ -13,12 +13,16 @@ import HexRecords from '~/components/organisms/cell/HexRecords.vue';
 import SpeciesTable from '~/components/organisms/cell/SpeciesTable.vue';
 import MapProgress from '~/components/organisms/map/MapProgress.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
+import type { CubeArea } from '~/lib/cubes/cell';
+import { cellPanel, type CellPanel } from '~/lib/cubes/cellPanel';
+import { nearCubeArea } from '~/lib/cubes/selected';
 import { full } from '~/lib/format';
 import { RADIUS_STEPS_KM } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
 import { boundsOf } from '~/lib/map/recordFit';
 import {
   classesNear,
+  NEAR_CLASSES,
   NEAR_SPECIES,
   nearFilter,
   speciesNear,
@@ -101,34 +105,61 @@ function locate() {
   );
 }
 
+/** In cube mode, the circle's cells in the cubes; the records tab lists from them too. */
+const cubeArea = shallowRef<CubeArea | null>(null);
+/** In cube mode, the area's species by group, from the rows already read. */
+let cubeGroups: CellPanel['groupSpecies'] | null = null;
+
+/** Fills the area from GBIF: one facet request for the classes, one for the species. */
+async function showFromGbif(searchArea: Area, signal: AbortSignal) {
+  const [summary, rows] = await Promise.all([classesNear(searchArea, signal), speciesNear(searchArea, null, signal)]);
+  if (signal.aborted) return;
+  total.value = summary.records;
+  classes.value = summary.classes;
+  species.value = rows;
+}
+
+/** Fills the area from the cubes, in cube mode: one read of the circle's cells, with no GBIF search. */
+async function showFromCubes(found: CubeArea, signal: AbortSignal) {
+  const panel = await cellPanel(found, { classes: NEAR_CLASSES, species: NEAR_SPECIES });
+  if (signal.aborted) return;
+  total.value = panel.count;
+  const lists = await panel.lists(signal);
+  if (signal.aborted) return;
+  classes.value = lists.classes;
+  species.value = lists.species;
+  cubeGroups = panel.groupSpecies;
+}
+
 /** Load the area's groups and species; a new pin or radius aborts the last area's requests. */
 async function loadArea() {
   const searchArea = area.value;
   classes.value = [];
   species.value = [];
   group.value = null;
+  cubeGroups = null;
   if (!searchArea) {
     cancelArea();
+    cubeArea.value = null;
     error.value = null;
     return;
   }
   await runArea(async (signal) => {
-    const [summary, rows] = await Promise.all([classesNear(searchArea, signal), speciesNear(searchArea, null, signal)]);
+    const found = await nearCubeArea(searchArea, searchArea.filter ?? {});
     if (signal.aborted) return;
-    total.value = summary.records;
-    classes.value = summary.classes;
-    species.value = rows;
+    cubeArea.value = found;
+    await (found ? showFromCubes(found, signal) : showFromGbif(searchArea, signal));
   });
 }
 
-/** Narrow the species list to one group (null for all); one request each time. */
+/** Narrow the species list to one group (null for all); one request each time, or none in cube mode. */
 async function pickGroup(key: number | null) {
   const searchArea = area.value;
   if (!searchArea || key === group.value) return;
   group.value = key;
   species.value = [];
   await runArea(async (signal) => {
-    const rows = await speciesNear(searchArea, key, signal);
+    const rows = cubeGroups ? await cubeGroups(key, signal) : await speciesNear(searchArea, key, signal);
     if (!signal.aborted) species.value = rows;
   });
 }
@@ -300,7 +331,7 @@ onBeforeUnmount(() => {
 
           <!-- Records: the same list as a map cell's Records tab -->
           <div v-else role="tabpanel" aria-label="Records" class="list-panel flex min-h-0 flex-1 flex-col">
-            <HexRecords :species="species" :filter="recordsFilter" fill />
+            <HexRecords :species="species" :filter="recordsFilter" :cube-area="cubeArea" fill />
           </div>
         </section>
       </ResponsivePanel>

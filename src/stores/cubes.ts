@@ -23,8 +23,29 @@ function saved(): boolean {
 
 export const $cubesOn = atom(typeof window !== 'undefined' && CUBES_BASE !== null && saved());
 
-/** The cubes once the map has opened them, for the cell panel to read; null until then. */
+/** The cubes once opened (see openedCubes); null until then. */
 export const $openCubes = atom<CubeSet | null>(null);
+
+let opening: Promise<CubeSet> | null = null;
+
+/**
+ * The cubes, opened the first time any page asks for them (the map, the tree of life, a species page),
+ * and kept for the visit.
+ * @throws Error when the build has no cubes, or they can't be read (the next call tries again)
+ */
+export function openedCubes(): Promise<CubeSet> {
+  const open = $openCubes.get();
+  if (open) return Promise.resolve(open);
+  opening ??= (async () => {
+    if (!CUBES_BASE) throw new Error('This build has no cubes');
+    const { openCubes } = await import('~/lib/cubes/reader');
+    const cubes = await openCubes(CUBES_BASE);
+    $openCubes.set(cubes);
+    return cubes;
+  })();
+  opening.catch(() => (opening = null));
+  return opening;
+}
 
 /**
  * Turn the cube hexes on or off.

@@ -3,14 +3,25 @@
  * levels load live, three requests per expansion (no per-node calls):
  *   children (names) · occurrence facet on the child rank (records) ·
  *   species-search facet on higherTaxonKey (species counts).
+ * In cube mode the record counts come from the charts cube instead (lib/cubes/tree.ts), the baked levels'
+ * too; the children and species counts are taxonomy, so they still come from GBIF.
  */
 import { loadSnapshot } from '~/lib/data/load';
 import { nameIndexWithin } from '~/lib/data/name-index';
 import { CODE_BY_RANK, RANK_BY_CODE } from '~/lib/data/ranks';
 import type { TreeRank, TreeNodeRow } from '~/lib/data/types';
 import { capitalise } from '~/lib/format';
-import { getAllChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField } from '~/lib/gbif';
+import { CUBE_RANK_OF, countKey, namedTotals, rankTotals } from '~/lib/cubes/tree';
+import {
+  getAllChildren,
+  getParents,
+  occurrenceFacets,
+  speciesCountsUnder,
+  type FacetField,
+  type UsageWithNames,
+} from '~/lib/gbif';
 import { englishName } from '~/lib/species/names';
+import { $cubesOn, openedCubes } from '~/stores/cubes';
 
 export interface TreeNode {
   key: number;
@@ -112,22 +123,61 @@ function sortChildren(node: TreeNode) {
   node.children?.forEach(sortChildren);
 }
 
-/** The tree built from the baked snapshot; null if the snapshot cannot be loaded. */
+/** Every node below the root, depth first. */
+function descendants(node: TreeNode): TreeNode[] {
+  return (node.children ?? []).flatMap((child) => [child, ...descendants(child)]);
+}
+
+/** Replace the baked levels' record counts (the full data at build time) with the cubes'. */
+async function countFromCubes(root: TreeNode) {
+  const cubes = await openedCubes();
+  const codes = ['K', 'P', 'C', 'O'] as const;
+  const totals = new Map(
+    await Promise.all(codes.map(async (code) => [code, await rankTotals(cubes, CUBE_RANK_OF[code])] as const)),
+  );
+  for (const node of descendants(root)) {
+    const kingdom = node.rank === 'K' ? node.name : node.kingdom;
+    node.records = totals.get(node.rank as (typeof codes)[number])?.get(countKey(kingdom, node.name)) ?? 0;
+  }
+  root.records = sum(root.children!, 'records');
+  sortChildren(root);
+}
+
+/** The tree built from the baked snapshot, counted from the cubes in cube mode; null if the snapshot cannot be loaded. */
 export async function loadBakedTree(): Promise<TreeNode | null> {
   const snapshot = await loadSnapshot('tree');
-  return snapshot ? buildTree(snapshot.nodes) : null;
+  if (!snapshot) return null;
+  const tree = buildTree(snapshot.nodes);
+  if ($cubesOn.get()) await countFromCubes(tree);
+  return tree;
+}
+
+/** Records of each child, by key: one occurrence facet on the child rank. */
+async function gbifChildRecords(node: TreeNode, childRank: TreeRank, wkt?: string, signal?: AbortSignal) {
+  const facet = FACET_FOR[childRank];
+  const options = { facetLimit: 5000, ...(signal && { signal }) };
+  const result = await occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [facet], options);
+  return new Map((result.facets[facet] ?? []).map((entry) => [Number(entry.name), entry.count]));
+}
+
+/** Records of each child, by key, from the charts cube (cube mode). */
+async function cubeChildRecords(node: TreeNode, childRank: TreeRank, children: Promise<UsageWithNames[]>) {
+  const [cubes, usages] = await Promise.all([openedCubes(), children]);
+  const nameOf = (usage: UsageWithNames) => usage.canonicalName ?? usage.scientificName;
+  const genus = childRank === 'S' ? node.name : undefined;
+  const totals = await namedTotals(cubes, CUBE_RANK_OF[childRank], usages.map(nameOf), genus);
+  return new Map(usages.map((usage) => [usage.key, totals.get(countKey(node.kingdom, nameOf(usage))) ?? 0]));
 }
 
 /** Everything needed to list a node's children: the child taxa, their record and species counts, and common names. */
 async function fetchChildData(node: TreeNode, childRank: TreeRank, wkt?: string, signal?: AbortSignal) {
-  const facet = FACET_FOR[childRank];
-  const [childUsages, recordFacets, species, nameIndex] = await Promise.all([
-    getAllChildren(node.key, RANK_BY_CODE[childRank], signal),
-    occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [facet], { facetLimit: 5000, ...(signal && { signal }) }),
+  const children = getAllChildren(node.key, RANK_BY_CODE[childRank], signal);
+  const [childUsages, records, species, nameIndex] = await Promise.all([
+    children,
+    $cubesOn.get() ? cubeChildRecords(node, childRank, children) : gbifChildRecords(node, childRank, wkt, signal),
     childRank === 'S' ? Promise.resolve(null) : speciesCountsUnder(node.key, 5000, signal),
     nameIndexWithin(800),
   ]);
-  const records = new Map((recordFacets.facets[facet] ?? []).map((entry) => [Number(entry.name), entry.count]));
   return { childUsages, records, species, nameIndex };
 }
 

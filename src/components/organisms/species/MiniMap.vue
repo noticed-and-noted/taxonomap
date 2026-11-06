@@ -3,18 +3,27 @@
  * Distribution mini-map: the world at zoom 1 (2×2 tiles of GBIF's basemap)
  * with the explorer's hex density layer drawn on a canvas from GBIF's vector
  * tiles, in the ramp picked in map settings. No MapLibre, so species pages
- * stay light. Links to the explorer filtered to the taxon.
+ * stay light. Links to the explorer filtered to the taxon. In cube mode (`cubeTaxon`) the hexes come
+ * from the map cube instead of GBIF's tiles; the basemap is still GBIF's imagery.
  */
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import type { MiniMapShape } from '~/lib/cubes/miniMap';
+import type { CubeTaxon } from '~/lib/cubes/route';
 import { gbifBasemapTile, occurrenceTileTemplate } from '~/lib/gbif';
 import { hexRecords, homeOffset } from '~/lib/map/occGrid';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
+import { openedCubes } from '~/stores/cubes';
 import { $ramp } from '~/stores/ramp';
 
-const props = defineProps<{ taxonKey: number; label: string }>();
+const props = defineProps<{
+  taxonKey: number;
+  label: string;
+  /** In cube mode: the taxon as the cubes name it, so the hexes come from the map cube. */
+  cubeTaxon?: (CubeTaxon & { kingdom?: string }) | undefined;
+}>();
 
 const ZOOM = 1;
 const tiles = [
@@ -65,18 +74,28 @@ async function fetchTile(tileX: number, tileY: number): Promise<Tile | null> {
 }
 
 let loaded: (Tile | null)[] = [];
+/** In cube mode, the cells to draw, and the colour level their counts bin at. */
+let cubeCells: { shapes: MiniMapShape[]; level: number } | null = null;
 
-/** Same bins as the explorer's legend at this zoom. */
-function paint() {
-  const context = canvas.value?.getContext('2d');
-  if (!context) return;
-  const colors = rampColors();
-  const bins = thresholdsAt(ZOOM);
-  const colorOf = (count: number) => {
-    const bin = bins.findIndex((threshold) => count < threshold);
-    return colors[bin === -1 ? colors.length - 1 : bin]!;
-  };
-  context.clearRect(0, 0, TILE_PX * 2, TILE_PX * 2);
+/** The taxon's cells from the map cube; none if the cubes can't be read. */
+async function loadCubeCells(taxon: NonNullable<typeof props.cubeTaxon>) {
+  const [{ miniMapShapes }, cubes] = await Promise.all([import('~/lib/cubes/miniMap'), openedCubes()]);
+  return miniMapShapes(cubes, taxon, taxon.kingdom, TILE_PX * 2);
+}
+
+/** Draws cube cells, already in canvas pixels. */
+function paintCubeCells(context: CanvasRenderingContext2D, colorOf: (count: number) => string) {
+  for (const shape of cubeCells?.shapes ?? []) {
+    context.beginPath();
+    shape.points.forEach(([px, py], index) => (index ? context.lineTo(px, py) : context.moveTo(px, py)));
+    context.closePath();
+    context.fillStyle = colorOf(shape.total);
+    context.fill();
+  }
+}
+
+/** Draws GBIF's tile hexes, each from the tile holding its centre. */
+function paintTiles(context: CanvasRenderingContext2D, colorOf: (count: number) => string) {
   loaded.forEach((tile, index) => {
     if (!tile) return;
     const [tileX, tileY] = tiles[index]!;
@@ -106,10 +125,31 @@ function paint() {
   });
 }
 
+/** Same bins as the explorer's legend at this zoom. */
+function paint() {
+  const context = canvas.value?.getContext('2d');
+  if (!context) return;
+  const colors = rampColors();
+  const bins = thresholdsAt(cubeCells?.level ?? ZOOM);
+  const colorOf = (count: number) => {
+    const bin = bins.findIndex((threshold) => count < threshold);
+    return colors[bin === -1 ? colors.length - 1 : bin]!;
+  };
+  context.clearRect(0, 0, TILE_PX * 2, TILE_PX * 2);
+  if (cubeCells) {
+    paintCubeCells(context, colorOf);
+    return;
+  }
+  paintTiles(context, colorOf);
+}
+
 let unlisten: (() => void) | undefined;
 onMounted(async () => {
   unlisten = $ramp.listen(paint);
-  loaded = await Promise.all(tiles.map(([tileX, tileY]) => fetchTile(tileX, tileY)));
+  if (props.cubeTaxon) {
+    // Cube mode draws nothing rather than GBIF's tiles when the cubes can't be read.
+    cubeCells = await loadCubeCells(props.cubeTaxon).catch(() => ({ shapes: [], level: ZOOM }));
+  } else loaded = await Promise.all(tiles.map(([tileX, tileY]) => fetchTile(tileX, tileY)));
   paint();
 });
 onBeforeUnmount(() => unlisten?.());

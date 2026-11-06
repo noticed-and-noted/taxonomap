@@ -6,10 +6,9 @@
  * cell statistics miss every range is skipped without downloading it.
  */
 import { gridDisk, latLngToCell, polygonToCells } from 'h3-js';
-import { descendantRange } from './cellBits';
+import { descendantRange, mergeRanges, type CellRange } from './cellBits';
 
-/** An inclusive range of H3 cell numbers. */
-export type CellRange = [first: bigint, last: bigint];
+export { mergeRanges, type CellRange };
 
 /** [west, south, east, north] in degrees. */
 export type Bounds = readonly [number, number, number, number];
@@ -29,20 +28,6 @@ function edgePoints([west, south, east, north]: Bounds): [number, number][] {
     points.push([south, lng], [north, lng], [lat, west], [lat, east]);
   }
   return points;
-}
-
-const compare = (left: bigint, right: bigint) => (left < right ? -1 : left > right ? 1 : 0);
-
-/** Sorted ranges with overlapping and touching ones joined. */
-export function mergeRanges(ranges: readonly CellRange[]): CellRange[] {
-  const sorted = [...ranges].sort(([left], [right]) => compare(left, right));
-  const merged: CellRange[] = [];
-  for (const [first, last] of sorted) {
-    const previous = merged.at(-1);
-    if (previous && first <= previous[1] + 1n) previous[1] = last > previous[1] ? last : previous[1];
-    else merged.push([first, last]);
-  }
-  return merged;
 }
 
 /**

@@ -13,7 +13,7 @@
 import { useStore } from '@nanostores/vue';
 import { ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue';
 import { cellPanel, type CellPanel } from '~/lib/cubes/cellPanel';
-import { selectedCubeCell } from '~/lib/cubes/selected';
+import { selectedCubeArea } from '~/lib/cubes/selected';
 import { loadSnapshot } from '~/lib/data/load';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { MONTHS_IN_YEAR, monthCounts, namedOccurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
@@ -123,18 +123,12 @@ async function showFromGbif(
   state.show(null, rows);
 }
 
-/** The cell counted from the cubes, or null when GBIF should answer for it. */
-async function cubePanelFor(hexGeometry: CellGeometry, filter: OccurrenceFilter, signal: AbortSignal) {
-  try {
-    const cubeCell = await selectedCubeCell(hexGeometry, filter);
-    if (!cubeCell) return null;
-    void loadNameIndex();
-    return await cellPanel(cubeCell, { classes: HEX_CLASSES, species: HEX_SPECIES });
-  } catch (failure) {
-    if (signal.aborted) throw failure;
-    // The cubes couldn't be read (moved, or the server is down) or the taxon looked up: GBIF answers instead.
-    return null;
-  }
+/** The cell counted from the cubes in cube mode, or null outside it (GBIF answers then). */
+async function cubePanelFor(hexGeometry: CellGeometry, filter: OccurrenceFilter) {
+  const area = await selectedCubeArea(hexGeometry, filter);
+  if (!area) return null;
+  void loadNameIndex();
+  return cellPanel(area, { classes: HEX_CLASSES, species: HEX_SPECIES });
 }
 
 /**
@@ -148,7 +142,7 @@ async function showFromCubes(
   state: PanelState,
   signal: AbortSignal,
 ) {
-  const panel = await cubePanelFor(hexGeometry, filter, signal);
+  const panel = await cubePanelFor(hexGeometry, filter);
   if (!panel || signal.aborted) return null;
   state.count.value = panel.count;
   state.months.value = panel.months;

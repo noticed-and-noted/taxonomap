@@ -16,6 +16,27 @@ const robin = { key: 2492462, scientificName: 'Erithacus rubecula', rank: 'SPECI
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe('lookupTaxonRank', () => {
+  it('answers from the name index, else GBIF’s species API, without asking for common names', async () => {
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v1/species/359')
+        return { key: 359, scientificName: 'Mammalia Linnaeus', canonicalName: 'Mammalia', rank: 'CLASS' };
+      if (url.pathname === '/v1/species/360') return { key: 360, scientificName: 'Reptilia', rank: 'CLASS' };
+      return snapshots({ names: NAMES })(url);
+    });
+    const { lookupTaxonRank } = await load();
+    await expect(lookupTaxonRank(212)).resolves.toMatchObject({ scientificName: 'Aves', rank: 'CLASS' });
+    // Loaded now, so the next index hit needs no wait.
+    await expect(lookupTaxonRank(212)).resolves.toMatchObject({ scientificName: 'Aves' });
+    await expect(lookupTaxonRank(359)).resolves.toEqual({ scientificName: 'Mammalia', rank: 'CLASS' });
+    await expect(lookupTaxonRank(360)).resolves.toEqual({ scientificName: 'Reptilia', rank: 'CLASS' });
+    await expect(lookupTaxonRank(1)).resolves.toBeNull();
+    expect(calls.some((url) => url.pathname.endsWith('/vernacularNames') || url.host.includes('inaturalist'))).toBe(
+      false,
+    );
+  });
+});
+
 describe('lookupTaxon', () => {
   it('uses the name index, then GBIF, then gives up', async () => {
     stubNetwork((url) => {

@@ -3,9 +3,12 @@
  * shared name search (the baked index, then at most two live GBIF requests) rather than looking
  * up every species' common name, a request each. Hits among the listed species match by key;
  * given an `area`, species hits outside the list are checked there with one facet request,
- * which also gives their record counts.
+ * which also gives their record counts. In cube mode (`cubeArea`) the area's cube rows count them
+ * instead, with no request.
  */
 import { computed, ref, shallowRef, watch, type Ref } from 'vue';
+import type { CubeArea } from '~/lib/cubes/cell';
+import { speciesInArea } from '~/lib/cubes/selected';
 import { occurrenceFacets, type NameHit, type OccurrenceFilter } from '~/lib/gbif';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { useNameSearch } from './useNameSearch';
@@ -20,16 +23,33 @@ export interface CellNameSearchOptions {
   species: () => readonly SpeciesRow[];
   /** The area to check unlisted species against; without it only listed species match. */
   area?: () => OccurrenceFilter | null;
+  /** The same area in the cubes, in cube mode: checked from its rows instead of GBIF. */
+  cubeArea?: () => CubeArea | null;
 }
 
-/** The candidates with records in the area, with their counts, from one facet request. */
-async function countInArea(filter: OccurrenceFilter, candidates: readonly NameHit[], signal: AbortSignal) {
-  const keys = candidates.map((hit) => hit.key);
+/** Records of each key in the area: from the cube rows in cube mode, else one GBIF facet request. */
+async function countsIn(filter: OccurrenceFilter, cubeArea: CubeArea | null, keys: number[], signal: AbortSignal) {
+  if (cubeArea) return speciesInArea(cubeArea, keys);
   const response = await occurrenceFacets({ ...filter, speciesKeys: keys }, ['speciesKey'], {
     facetLimit: keys.length,
     signal,
   });
-  const counts = new Map((response.facets['speciesKey'] ?? []).map((facet) => [Number(facet.name), facet.count]));
+  return new Map((response.facets['speciesKey'] ?? []).map((facet) => [Number(facet.name), facet.count]));
+}
+
+/** The candidates with records in the area, with their counts. */
+async function countInArea(
+  filter: OccurrenceFilter,
+  cubeArea: CubeArea | null,
+  candidates: readonly NameHit[],
+  signal: AbortSignal,
+) {
+  const counts = await countsIn(
+    filter,
+    cubeArea,
+    candidates.map((hit) => hit.key),
+    signal,
+  );
   return candidates.flatMap((hit): SpeciesRow[] => {
     const records = counts.get(hit.key);
     if (!records) return [];
@@ -49,7 +69,7 @@ async function countInArea(filter: OccurrenceFilter, candidates: readonly NameHi
  * @returns `matchedKeys` (listed species the search matched), `outside` (unlisted species with
  *   records in the area, with their counts), `namePendingKeys` and `loading`.
  */
-export function useCellNameSearch({ query, species, area }: CellNameSearchOptions) {
+export function useCellNameSearch({ query, species, area, cubeArea }: CellNameSearchOptions) {
   const nameSearch = useNameSearch({ max: NAME_SEARCH_HITS });
   const listed = computed(() => new Set(species().map((row) => row.key)));
   /** During the debounce the hits are still the previous text's, so nothing is matched from them. */
@@ -82,7 +102,7 @@ export function useCellNameSearch({ query, species, area }: CellNameSearchOption
     const mine = (controller = new AbortController());
     isChecking.value = true;
     try {
-      checked.value = await countInArea(filter, candidates, mine.signal);
+      checked.value = await countInArea(filter, cubeArea?.() ?? null, candidates, mine.signal);
     } catch {
       // Unchecked hits are left out rather than offered unverified; the listed species still match.
     } finally {

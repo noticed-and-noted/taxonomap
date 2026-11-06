@@ -1,13 +1,21 @@
 /**
- * The map's hexes from the pre-counted cubes instead of GBIF's tiles, for the views the cube router
- * sends here (lib/cubes/route.ts). Each settled view reads the H3 resolution for its grid level and
- * only the cells in view; the counts become the same hex features GBIF's tiles do, so the legend,
+ * The map's hexes from the pre-counted cubes instead of GBIF's tiles, in cube mode. Each settled view
+ * reads the H3 resolution for its grid level, each selected taxon, and only the cells in view (or the
+ * whole world, zoomed out); the counts become the same hex features GBIF's tiles do, so the legend,
  * colours, hover and the hex panel work unchanged. Counts from a sample are scaled to estimate the
  * whole snapshot.
  */
 import { latLngToCell } from 'h3-js';
 import type { Map as MlMap } from 'maplibre-gl';
-import { cellToHex, colourLevel, resolutionForLevel, viewBounds, type CubeResolution } from '~/lib/cubes/grid';
+import {
+  cellToHex,
+  colourLevel,
+  estimateBounds,
+  resolutionForLevel,
+  viewBounds,
+  type CubeResolution,
+} from '~/lib/cubes/grid';
+import { matchesFilters, needsFilterColumns } from '~/lib/cubes/match';
 import { viewRanges } from '~/lib/cubes/ranges';
 import type { CubeSet, MapRow } from '~/lib/cubes/reader';
 import type { CubeQuery } from '~/lib/cubes/route';
@@ -25,14 +33,14 @@ export interface CubeLayer extends OccLayer {
   setQuery(query: CubeQuery): void;
 }
 
-const inYears = (year: number | null, range: CubeQuery['year']) =>
-  !range || (year !== null && year >= range[0] && year <= range[1]);
-
-/** Records per cell (hex id) in the query's years, scaled to the whole snapshot. */
+/**
+ * Records per cell (hex id) under the query's filters, scaled to the whole snapshot. The rows are already
+ * the query's taxa; several taxa nested in one another (a class and a species in it) are counted once each.
+ */
 export function sumCells(rows: readonly MapRow[], query: CubeQuery, scale: number): Map<string, number> {
   const sums = new Map<string, number>();
   for (const row of rows) {
-    if (!inYears(row.year, query.year)) continue;
+    if (!matchesFilters(row, query)) continue;
     const cell = row.cell.toString(16);
     sums.set(cell, (sums.get(cell) ?? 0) + Number(row.records));
   }
@@ -79,9 +87,12 @@ class CubeLayerController {
     const resolution = this.#resolution;
     const bounds = viewBounds(this.#map);
     this.#options.onProgress(0, 1);
+    const ranges = bounds && viewRanges(bounds, resolution);
     let rows: MapRow[];
     try {
-      rows = await this.#options.cubes.mapRows(this.#query, resolution, bounds && viewRanges(bounds, resolution));
+      const lean = !needsFilterColumns(this.#query);
+      const perTaxon = this.#query.taxa.map((taxon) => this.#options.cubes.mapRows(taxon, resolution, ranges, lean));
+      rows = (await Promise.all(perTaxon)).flat();
     } catch {
       // The cubes couldn't be read: say so as the GBIF layer does, and leave the last cells up.
       if (seq === this.#loadSeq) this.#options.onFailed();
@@ -92,6 +103,8 @@ class CubeLayerController {
     this.#cells = new Map([...sums].map(([cell, total]) => [cell, cellToHex(cell, total)]));
     this.redraw();
     this.#options.onProgress(1, 1);
+    // A hex click reads the cell cube: its footers come now, so the click needs one round trip.
+    void this.#options.cubes.warmCells(resolution, ranges);
   }
 
   setQuery(query: CubeQuery) {
@@ -128,6 +141,24 @@ class CubeLayerController {
     this.#loadSeq++;
     this.#map.off('moveend', this.#onMoveEnd);
   }
+}
+
+/**
+ * Starts the reads a map view's first load will make, before the map is ready, from the view in the URL
+ * and the window's size: the layer's own load then finds them on their way.
+ * @returns when they're in; a failure is left to the layer's load to report
+ */
+export async function prefetchView(
+  cubes: CubeSet,
+  query: CubeQuery,
+  view: { lng: number; lat: number; zoom: number },
+  size: { width: number; height: number },
+): Promise<void> {
+  const resolution = resolutionForLevel(gridLevel(view.zoom, view.lat, size.width, size.height));
+  const bounds = estimateBounds(view, size);
+  const ranges = bounds && viewRanges(bounds, resolution);
+  const lean = !needsFilterColumns(query);
+  await Promise.all(query.taxa.map((taxon) => cubes.mapRows(taxon, resolution, ranges, lean)));
 }
 
 /**

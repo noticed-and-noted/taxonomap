@@ -4,7 +4,8 @@
  * test sees exactly the facets they're given.
  */
 import type { NamedFacetCount } from '~/lib/gbif/graphql';
-import type { CellRow, CubeSet } from '~/lib/cubes/reader';
+import type { CellRow } from '~/lib/cubes/reader';
+import { cellRow, cubeQuery, cubeSet } from './helpers/cubes';
 
 const namedClasses = vi.fn(async (counts: readonly NamedFacetCount[]) =>
   counts.map((facet) => ({ key: Number(facet.name), name: facet.label ?? '', records: facet.count })),
@@ -26,20 +27,7 @@ vi.mock('~/lib/species/groups', () => ({
 const { cellPanel } = await import('~/lib/cubes/cellPanel');
 
 function row(className: string, species: string, specieskey: number, records: number): CellRow {
-  return {
-    cell: 1n,
-    kingdom: 'Animalia',
-    phylum: null,
-    class: className,
-    order: null,
-    family: null,
-    genus: null,
-    species,
-    specieskey,
-    year: 2020,
-    month: 3,
-    records: BigInt(records),
-  };
+  return cellRow({ class: className, species, specieskey, month: 3, records: BigInt(records) });
 }
 
 const ROWS = [
@@ -49,14 +37,8 @@ const ROWS = [
 ];
 
 function cubeCell(rows = ROWS) {
-  const cubes: CubeSet = {
-    snapshot: '2026-11-01',
-    scale: 2,
-    mapRows: vi.fn(),
-    cellRows: vi.fn(async () => rows),
-    recordRows: vi.fn(),
-  };
-  return { cubes, query: { rank: 'life' as const, taxon: 'Life', year: null }, cell: 1n, resolution: 4 };
+  const cubes = cubeSet({ scale: 2, cellRows: vi.fn(async () => rows) });
+  return { cubes, query: cubeQuery(), cells: [1n], resolution: 4 };
 }
 
 describe('cellPanel', () => {

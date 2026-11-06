@@ -1,4 +1,5 @@
 /** Everything a species page shows, and links to species pages. */
+import { chartRow, cubeSet } from './helpers/cubes';
 import { isGraphql, json, namedFacets, predicateOf, stubNetwork } from './helpers/network';
 
 const ROBIN = {
@@ -49,6 +50,14 @@ function gbif(usage: Record<string, unknown> = ROBIN, redListCode = 'LC') {
             },
           },
         },
+      };
+    if (path === '/v1/species/search' && url.searchParams.get('highertaxonKey') === '2492460')
+      return {
+        count: 2,
+        results: [
+          { key: 2492462, canonicalName: 'Erithacus rubecula', scientificName: 'Erithacus rubecula', rank: 'SPECIES' },
+          { key: 7, canonicalName: 'Erithacus akahige', scientificName: 'Erithacus akahige', rank: 'SPECIES' },
+        ],
       };
     if (path === '/v1/species/2492462/iucnRedListCategory') return { code: redListCode, iucnTaxonID: '22710' };
     if (path === '/v1/species/2492462/distributions')
@@ -205,5 +214,32 @@ describe('species charts', () => {
       countries: [{ label: 'United Kingdom', value: 3 }],
       datasets: [{ label: 'Garden birds', value: 2, href: 'https://www.gbif.org/dataset/ds' }],
     });
+  });
+});
+
+describe('loadSpeciesData in cube mode', () => {
+  it('counts the records, years, months and siblings from the cubes, with no GBIF count', async () => {
+    const calls = gbif();
+    const chartRows = vi.fn(async () => [
+      chartRow({ kingdom: 'Animalia', taxon: 'Erithacus rubecula', year: 2020, month: 5, records: 3n }),
+      chartRow({ kingdom: 'Animalia', taxon: 'Erithacus rubecula', year: null, month: null, records: 1n }),
+      chartRow({ kingdom: 'Plantae', taxon: 'Erithacus rubecula', year: 2020, records: 50n }),
+    ]);
+    const chartRowsBetween = vi.fn(async () => [
+      chartRow({ kingdom: 'Animalia', taxon: 'Erithacus akahige', records: 2n }),
+      chartRow({ kingdom: 'Animalia', taxon: 'Erithacus rubecula', records: 4n }),
+    ]);
+    const { loadSpeciesData } = await load();
+    const data = await loadSpeciesData(2492462, () => null, cubeSet({ scale: 2, chartRows, chartRowsBetween }));
+    expect([data.count, data.years, data.months[4], data.countries, data.datasets, data.fromCubes]).toEqual([
+      8,
+      [[2020, 6]],
+      6,
+      [],
+      [],
+      true,
+    ]);
+    expect(data.siblings.map((sibling) => [sibling.key, sibling.count])).toEqual([[7, 4]]);
+    expect(calls.some((url) => isGraphql(url))).toBe(false);
   });
 });

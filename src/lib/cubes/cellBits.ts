@@ -3,7 +3,12 @@
  * loading the library. A cell number holds its resolution (4 bits) and one 3-bit digit per resolution;
  * digits past the cell's own resolution are 7.
  */
-import type { CellRange } from './ranges';
+
+/** The records index's cells: the cubes' finest resolution. */
+export const RECORD_RESOLUTION = 5;
+
+/** An inclusive range of H3 cell numbers. */
+export type CellRange = [first: bigint, last: bigint];
 
 const MAX_RESOLUTION = 15;
 const DIGIT_BITS = 3n;
@@ -42,4 +47,18 @@ export function descendantRange(cell: bigint, resolution: number): CellRange {
     last = (last & ~(DIGIT_MASK << digitShift(digit))) | (LAST_DIGIT << digitShift(digit));
   }
   return [first, last];
+}
+
+const compare = (left: bigint, right: bigint) => (left < right ? -1 : left > right ? 1 : 0);
+
+/** Sorted ranges with overlapping and touching ones joined. */
+export function mergeRanges(ranges: readonly CellRange[]): CellRange[] {
+  const sorted = [...ranges].sort(([left], [right]) => compare(left, right));
+  const merged: CellRange[] = [];
+  for (const [first, last] of sorted) {
+    const previous = merged.at(-1);
+    if (previous && first <= previous[1] + 1n) previous[1] = last > previous[1] ? last : previous[1];
+    else merged.push([first, last]);
+  }
+  return merged;
 }

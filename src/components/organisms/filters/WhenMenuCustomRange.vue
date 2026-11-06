@@ -2,9 +2,12 @@
 /**
  * The When menu's custom range: pick by years, months or days, typing either end or picking it on
  * the calendar. The range is a draft until Apply; it reloads when the slider changes the stored range.
+ * Cube mode picks by years only: the cubes hold no months or days of a date range.
  */
+import { useStore } from '@nanostores/vue';
 import { onBeforeUnmount, ref, useId, watch } from 'vue';
 import DatePicker from '~/components/atoms/DatePicker.vue';
+import NotInDemoTag from '~/components/atoms/NotInDemoTag.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import {
   endOf,
@@ -16,6 +19,7 @@ import {
   type DateRange,
   type DateUnit,
 } from '~/lib/dates';
+import { $cubesOn } from '~/stores/cubes';
 
 type RangeEnd = 'from' | 'to';
 
@@ -34,6 +38,7 @@ const emit = defineEmits<{ apply: [range: DateRange | null]; cancel: []; back: [
 
 const uniqueId = useId();
 const unit = ref<DateUnit>('y');
+const cubesOn = useStore($cubesOn);
 const from = ref<string | null>(null);
 const to = ref<string | null>(null);
 /** The end the next calendar pick sets. */
@@ -148,11 +153,13 @@ onBeforeUnmount(() => clearTimeout(errorTimer));
             class="sr-only"
             :name="`${uniqueId}-unit`"
             :checked="unit === unitOption.id"
+            :disabled="cubesOn && unitOption.id !== 'y'"
             @change="setUnit(unitOption.id)"
           />
           {{ unitOption.label }}
         </label>
       </fieldset>
+      <p v-if="cubesOn" class="demo-note">Months and days<NotInDemoTag /></p>
 
       <div class="ends">
         <label class="end" :class="{ active: activeEnd === 'from' }">
@@ -236,6 +243,15 @@ onBeforeUnmount(() => clearTimeout(errorTimer));
   font-size: 0.75rem;
   color: var(--text-muted);
   cursor: pointer;
+}
+.unit:has(:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.demo-note {
+  margin-top: 0.25rem;
+  color: var(--text-subtle);
+  font-size: 0.75rem;
 }
 .unit:hover {
   color: var(--text);

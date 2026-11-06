@@ -5,7 +5,7 @@
  * (species/groups.ts): the tree snapshot and baked index first.
  */
 import { classKeysByName, namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
-import type { CubeCell } from './cell';
+import { areaRows, type CubeArea } from './cell';
 import { speciesCounts, summariseCell } from './cellSummary';
 
 /** A cell's panel, and its species narrowed to one class. */
@@ -30,15 +30,15 @@ function classKeyMaker(known: Map<string, number>) {
 }
 
 /**
- * Read a cell's rows and count them for its panel.
+ * Read an area's rows (a hex, or Near me's circle) and count them for its panel.
  * @param limits how many classes and species to list
  * @throws Error when the cubes can't be read
  */
-export async function cellPanel(
-  { cubes, query, cell, resolution }: CubeCell,
-  limits: { classes: number; species: number },
-): Promise<CellPanel> {
-  const [rows, classKeys] = await Promise.all([cubes.cellRows(cell, resolution), classKeysByName()]);
+export async function cellPanel(area: CubeArea, limits: { classes: number; species: number }): Promise<CellPanel> {
+  const { cubes, query } = area;
+  // The records tab reads the records index next: its footers come while the panel fills.
+  void cubes.warmRecords(area.cells.map((cell) => [cell, cell]));
+  const [rows, classKeys] = await Promise.all([areaRows(area), classKeysByName()]);
   const summary = summariseCell(rows, query, cubes.scale, classKeyMaker(classKeys), limits);
   const classNames = new Map(summary.classes.map((facet) => [Number(facet.name), facet.label]));
   const named = (known: typeof summary.species, signal?: AbortSignal) =>

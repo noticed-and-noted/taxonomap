@@ -2,11 +2,13 @@
 /**
  * The controls for one filter group. Rendered in the rail's flyout on
  * desktop and stacked in the Filters sheet on phones. Every control writes a
- * URL-synced store.
+ * URL-synced store. In cube mode the filters the cubes don't hold are greyed out
+ * and tagged "Not in cube demo" (lib/cubes/filters.ts), never hidden.
  */
 import { useStore } from '@nanostores/vue';
 import type { WritableAtom } from 'nanostores';
 import { computed, ref, useId, watch } from 'vue';
+import NotInDemoTag from '~/components/atoms/NotInDemoTag.vue';
 import type { FilterGroupId } from '~/lib/filter-groups';
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTH_NAMES, MONTHS } from '~/lib/format';
 import {
@@ -27,6 +29,7 @@ import {
   MAX_TAXA,
   UNCERTAINTY_STEPS_M,
 } from '~/stores/explorer';
+import { $cubesOn } from '~/stores/cubes';
 import { markDone } from '~/stores/onboarding';
 import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
 import PublisherPicker from './PublisherPicker.vue';
@@ -50,6 +53,8 @@ const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
 const sound = useStore($hasSound);
 const taxonKeys = useStore($taxonKeys);
+/** Cube mode: the filters the cubes don't hold are greyed out. */
+const cubesOn = useStore($cubesOn);
 
 const groupOn = (group: TaxonGroup) => group.taxa.every((taxon) => taxonKeys.value.includes(taxon.key));
 /** Set when a group would take the What filter past MAX_TAXA. */
@@ -118,8 +123,8 @@ const clearDates = () => $dateRange.set(null);
         </p>
       </fieldset>
 
-      <fieldset>
-        <legend class="group-label">Taxon match</legend>
+      <fieldset :disabled="cubesOn">
+        <legend class="group-label">Taxon match<NotInDemoTag v-if="cubesOn" /></legend>
         <label class="check-row">
           <input type="checkbox" :checked="exact" @change="toggleExact" />
           Exact taxon only
@@ -127,8 +132,8 @@ const clearDates = () => $dateRange.set(null);
         <p class="hint">Leaves out subspecies and lower ranks, e.g. domestic dogs filed under gray wolf.</p>
       </fieldset>
 
-      <fieldset>
-        <legend class="group-label">IUCN Red List</legend>
+      <fieldset :disabled="cubesOn">
+        <legend class="group-label">IUCN Red List<NotInDemoTag v-if="cubesOn" /></legend>
         <label v-for="category in IUCN_CATEGORIES" :key="category" class="check-row">
           <input type="checkbox" :checked="iucn.includes(category)" @change="toggleIucn(category)" />
           <span class="iucn-code">{{ category }}</span>
@@ -174,16 +179,16 @@ const clearDates = () => $dateRange.set(null);
     </template>
 
     <template v-else-if="group === 'where'">
-      <fieldset>
-        <legend class="group-label">Continent</legend>
+      <fieldset :disabled="cubesOn">
+        <legend class="group-label">Continent<NotInDemoTag v-if="cubesOn" /></legend>
         <label v-for="continent in CONTINENTS" :key="continent" class="check-row">
           <input type="checkbox" :checked="continents.includes(continent)" @change="toggleContinent(continent)" />
           {{ CONTINENT_LABELS[continent] }}
         </label>
       </fieldset>
 
-      <fieldset>
-        <legend class="group-label">Location accuracy</legend>
+      <fieldset :disabled="cubesOn">
+        <legend class="group-label">Location accuracy<NotInDemoTag v-if="cubesOn" /></legend>
         <div class="flex flex-wrap gap-1">
           <label class="toggle radio">
             <input
@@ -211,7 +216,10 @@ const clearDates = () => $dateRange.set(null);
     </template>
 
     <template v-else-if="group === 'how'">
-      <PublisherPicker />
+      <fieldset :disabled="cubesOn">
+        <legend v-if="cubesOn" class="group-label">Publisher<NotInDemoTag /></legend>
+        <PublisherPicker />
+      </fieldset>
 
       <fieldset>
         <legend class="group-label">Record type</legend>
@@ -234,6 +242,17 @@ const clearDates = () => $dateRange.set(null);
 </template>
 
 <style scoped>
+/* Greyed out in cube mode; the legend and its tag stay readable. */
+fieldset:disabled > :not(legend) {
+  opacity: 0.45;
+}
+fieldset:disabled .check-row {
+  cursor: not-allowed;
+}
+fieldset:disabled .check-row:hover {
+  background: none;
+}
+
 .group-label {
   margin-bottom: 0.375rem;
   font-size: 0.75rem;

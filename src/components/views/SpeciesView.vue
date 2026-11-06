@@ -4,15 +4,19 @@
  * with the same components as the pre-rendered pages. If it does have a
  * static page, it redirects there instead; if GBIF cannot give us the taxon
  * at all, it falls back to the tree of life, focused on that key. Transient
- * failures keep the retry, with the tree offered as an alternative.
+ * failures keep the retry, with the tree offered as an alternative. In cube mode it renders every taxon
+ * here, pre-built page or not, with its counts from the cubes (lib/cubes/species.ts).
  */
 import { onMounted, ref, shallowRef } from 'vue';
+import NotInDemoTag from '~/components/atoms/NotInDemoTag.vue';
+import CubeDemoBanner from '~/components/molecules/CubeDemoBanner.vue';
 import PlotChart from '~/components/molecules/PlotChart.vue';
 import MiniMap from '~/components/organisms/species/MiniMap.vue';
 import SimilarSpecies from '~/components/organisms/species/SimilarSpecies.vue';
 import SpeciesGallery from '~/components/organisms/species/SpeciesGallery.vue';
 import SpeciesPage from '~/components/organisms/species/SpeciesPage.vue';
 import SpeciesSkeleton from '~/components/organisms/species/SpeciesSkeleton.vue';
+import { cubeTaxonOf } from '~/lib/cubes/species';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { speciesCharts } from '~/lib/species/charts';
@@ -20,6 +24,7 @@ import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
 import { withInatName } from '~/lib/species/inat-name';
 import { loadSpeciesManifest, similarItems, speciesPath, type SpeciesManifest } from '~/lib/species/links';
 import { wikipediaIntro, type WikipediaIntro } from '~/lib/species/wikipedia';
+import { $cubesOn, openedCubes } from '~/stores/cubes';
 
 const data = shallowRef<SpeciesData | null>(null);
 const manifest = shallowRef<SpeciesManifest | null>(null);
@@ -46,7 +51,8 @@ async function load() {
   key.value = speciesKey;
   const loadedManifest = await loadSpeciesManifest();
   manifest.value = loadedManifest;
-  if (loadedManifest?.[String(speciesKey)]) {
+  // Cube mode renders every taxon here, as pre-built pages hold GBIF's counts from when the site was built.
+  if (loadedManifest?.[String(speciesKey)] && !$cubesOn.get()) {
     window.location.replace(speciesPath(speciesKey, loadedManifest));
     return;
   }
@@ -54,7 +60,8 @@ async function load() {
   try {
     const nameIndex = await loadNameIndex();
     const indexedName = (taxonKey: number) => nameIndex?.get(taxonKey)?.commonName ?? null;
-    const speciesData = await loadSpeciesData(speciesKey, indexedName);
+    const cubes = $cubesOn.get() ? await openedCubes() : null;
+    const speciesData = await loadSpeciesData(speciesKey, indexedName, cubes);
     // The index holds iNaturalist's names already; otherwise ask, sharing the gallery's match.
     const loaded = indexedName(speciesKey) ? speciesData : await withInatName(speciesData);
     data.value = loaded;
@@ -75,6 +82,7 @@ onMounted(load);
 </script>
 
 <template>
+  <div v-if="data?.fromCubes" class="mx-auto max-w-6xl px-4 pt-6 sm:px-6"><CubeDemoBanner /></div>
   <SpeciesPage v-if="data" :data="data" :intro="intro" :is-intro-loading="isIntroLoading">
     <template #gallery>
       <SpeciesGallery :taxon-key="data.key" :rank="data.rank" :name="data.commonName ?? data.canonicalName" />
@@ -83,15 +91,25 @@ onMounted(load);
       <SimilarSpecies :species="similarItems(data.siblings, manifest)" />
     </template>
     <template v-if="data.count > 0" #map>
-      <MiniMap :taxon-key="data.key" :label="data.commonName ?? data.canonicalName" />
+      <MiniMap
+        :taxon-key="data.key"
+        :label="data.commonName ?? data.canonicalName"
+        v-bind="data.fromCubes ? { cubeTaxon: cubeTaxonOf(data) } : {}"
+      />
     </template>
     <template #years>
       <PlotChart kind="years" title="Records per year" :years="data.years" />
     </template>
-    <template #countries>
+    <template v-if="data.fromCubes" #countries>
+      <p class="not-held">Top countries<NotInDemoTag /></p>
+    </template>
+    <template v-else #countries>
       <PlotChart kind="bars" title="Top countries" :bars="speciesCharts(data).countries" :total="data.count" />
     </template>
-    <template #datasets>
+    <template v-if="data.fromCubes" #datasets>
+      <p class="not-held">Top datasets<NotInDemoTag /></p>
+    </template>
+    <template v-else #datasets>
       <PlotChart
         kind="bars"
         title="Top datasets"
@@ -127,3 +145,11 @@ onMounted(load);
 
   <SpeciesSkeleton v-else />
 </template>
+
+<style scoped>
+.not-held {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+</style>

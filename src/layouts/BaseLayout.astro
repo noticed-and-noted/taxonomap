@@ -3,6 +3,7 @@ import sansLatin from '@fontsource-variable/lexend/files/lexend-latin-wght-norma
 import serifLatin from '@fontsource-variable/source-serif-4/files/source-serif-4-latin-wght-normal.woff2?url';
 import { ClientRouter } from 'astro:transitions';
 import { GBIF_API_BASE } from '~/lib/gbif/config';
+import { CUBES_BASE, CUBES_KEY } from '~/stores/cubes';
 import '~/styles/global.css';
 
 interface Props {
@@ -53,6 +54,23 @@ const ogImageUrl = ogImage && Astro.site ? new URL(ogImage, Astro.site).href : u
     {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
     {ogImageUrl && <meta property="og:image" content={ogImageUrl} />}
     <meta name="twitter:card" content={ogImageUrl ? 'summary_large_image' : 'summary'} />
+
+    {CUBES_BASE && <script
+      is:inline
+      define:vars={{ latest: new URL('latest.json', CUBES_BASE).href, cubesKey: CUBES_KEY }}
+    >
+      // Cube mode: start fetching latest.json (which carries the manifest) as the page starts, rather
+      // than when the app's scripts have run; the app's own fetch picks up the preloaded response.
+      try {
+        if (localStorage.getItem(cubesKey) === 'on') {
+          const link = document.createElement('link');
+          Object.assign(link, { rel: 'preload', as: 'fetch', href: latest, crossOrigin: 'anonymous' });
+          document.head.append(link);
+        }
+      } catch {
+        // Storage blocked: cube mode can't be on, so there's nothing to preload.
+      }
+    </script>}
 
     <!-- Apply the saved theme before first paint, and again after each client-side swap. -->
     <script is:inline>

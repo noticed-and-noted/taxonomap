@@ -4,7 +4,7 @@
  * iNaturalist (or GBIF) for its common name.
  */
 import { atom, onMount } from 'nanostores';
-import { nameIndexWithin } from '~/lib/data/name-index';
+import { nameIndexIfLoaded, nameIndexWithin } from '~/lib/data/name-index';
 import { getSpecies, getVernacularNames, type NameHit, type Rank } from '~/lib/gbif';
 import { inatNames } from '~/lib/photos/taxon-photos';
 import { englishName } from '~/lib/species/names';
@@ -74,6 +74,27 @@ async function resolve(keys: readonly number[]): Promise<void> {
 }
 
 onMount($taxa, () => $taxonKeys.subscribe((keys) => void resolve(keys)));
+
+/** How long the cubes' lookup waits for the baked index before relying on GBIF's answer, already on its way. */
+const QUICK_INDEX_MS = 300;
+
+/**
+ * A taxon's scientific name and rank, as quickly as possible, for the cubes (which need no common name):
+ * the baked index if it's loaded or loads within QUICK_INDEX_MS, else GBIF's species API, asked at once
+ * rather than after the index.
+ * @returns null when GBIF has no such taxon
+ */
+export async function lookupTaxonRank(key: number): Promise<{ scientificName: string; rank: Rank } | null> {
+  const loaded = nameIndexIfLoaded()?.get(key);
+  if (loaded) return taxonFromHit(loaded);
+  const fromGbif = getSpecies(key).then(
+    (usage) => ({ scientificName: usage.canonicalName ?? usage.scientificName, rank: usage.rank }),
+    // No such taxon (or GBIF down): the cubes say a taxon is one they don't hold.
+    () => null,
+  );
+  const hit = (await nameIndexWithin(QUICK_INDEX_MS))?.get(key);
+  return hit ? taxonFromHit(hit) : fromGbif;
+}
 
 /** A search result (or index entry) as display info. */
 export function taxonFromHit(

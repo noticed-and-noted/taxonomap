@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** The cube setting: off by default, remembered, and only possible when the build has cubes to read. */
+import { cubeSet } from './helpers/cubes';
 import { memoryStorage } from './helpers/storage';
 
 /** A fresh copy of the store, in a build with cubes at `base` (null: none). */
@@ -55,5 +56,31 @@ describe('cube setting store', () => {
   it('is off when rendered on the server', async () => {
     vi.stubGlobal('window', undefined);
     expect((await store()).$cubesOn.get()).toBe(false);
+  });
+});
+
+describe('openedCubes', () => {
+  afterEach(() => vi.doUnmock('~/lib/cubes/reader'));
+
+  it('gives the cubes once open, opening them the first time any page asks', async () => {
+    const opened = cubeSet();
+    const openCubes = vi.fn(async () => opened);
+    vi.doMock('~/lib/cubes/reader', () => ({ openCubes }));
+    const cubes = await store();
+    const [first, second] = await Promise.all([cubes.openedCubes(), cubes.openedCubes()]);
+    expect([first, second]).toEqual([opened, opened]);
+    expect(cubes.$openCubes.get()).toBe(opened);
+    expect(await cubes.openedCubes()).toBe(opened);
+    expect(openCubes).toHaveBeenCalledTimes(1);
+    expect(openCubes).toHaveBeenCalledWith('http://127.0.0.1:4324/pipeline/cubes/');
+  });
+
+  it('fails without cubes in the build, or when they can’t be read, and tries again next time', async () => {
+    await expect((await store(null)).openedCubes()).rejects.toThrow('no cubes');
+    const openCubes = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(cubeSet());
+    vi.doMock('~/lib/cubes/reader', () => ({ openCubes }));
+    const cubes = await store();
+    await expect(cubes.openedCubes()).rejects.toThrow('offline');
+    await expect(cubes.openedCubes()).resolves.toBeDefined();
   });
 });

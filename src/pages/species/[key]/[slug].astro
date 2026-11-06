@@ -4,6 +4,8 @@
  * HTML at build; only the gallery, similar species and mini-map hydrate.
  * Photos are never fetched at build: the gallery and similar species cards
  * look them up in the browser (see ~/lib/photos/taxon-photos).
+ * In cube mode (builds with cubes only), the page hands over to /species/view, which counts from the
+ * cubes: these counts are GBIF's at build time, not the cube demo's sample.
  */
 import PlotChart from '~/components/molecules/PlotChart.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
@@ -20,6 +22,7 @@ import { loadSpeciesData } from '~/lib/species/data';
 import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
 import { wikipediaIntro } from '~/lib/species/wikipedia';
+import { CUBES_BASE, CUBES_KEY } from '~/stores/cubes';
 
 export async function getStaticPaths() {
   const list = await bakeSpeciesList();
@@ -55,6 +58,13 @@ const jsonLd = speciesJsonLd({
 ---
 
 <BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>
+  {CUBES_BASE && <script slot="head" is:inline define:vars={{ key, cubesKey: CUBES_KEY }}>
+    try {
+      if (localStorage.getItem(cubesKey) === 'on') location.replace('/species/view/' + key);
+    } catch {
+      // Storage blocked: cube mode can't be on, so the page stays as built.
+    }
+  </script>}
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, '\\u003c')} />
   <PageShell>
     <SpeciesPage data={data} intro={intro}>

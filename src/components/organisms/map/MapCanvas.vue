@@ -26,6 +26,7 @@ import {
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { PIN_CURSOR } from '~/lib/map/pinCursors';
 import { createRecordFit } from '~/lib/map/recordFit';
+import { cubeQueryFor } from '~/lib/cubes/route';
 import { fillsCanvas, isOnScreen } from '~/lib/map/screen';
 import {
   buildStyle,
@@ -63,11 +64,12 @@ import {
   type FlyRequest,
   type HexPoint,
 } from '~/stores/explorer';
-import { $cubesOn, $openCubes, CUBES_BASE } from '~/stores/cubes';
+import { $clearedForCubes, startCubeMode } from '~/stores/cubeMode';
+import { $cubesOn, openedCubes } from '~/stores/cubes';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
-import { lookupTaxon } from '~/stores/taxon';
+import { lookupTaxonRank } from '~/stores/taxon';
 import WebglNotice from './WebglNotice.vue';
 
 const container = ref<HTMLDivElement>();
@@ -79,6 +81,7 @@ let map: MlMap | undefined;
 let hexSource: HexSource | undefined;
 /** Where the hexes come from (GBIF or the sample cubes), for the notice on the map. */
 const hexState = ref<HexSourceState>({ kind: 'gbif' });
+const clearedForCubes = useStore($clearedForCubes);
 const cleanups: (() => void)[] = [];
 
 /** The layer drawing the hexes now: GBIF's tiles, or the cubes (see lib/map/hexSource.ts). */
@@ -406,14 +409,30 @@ function occLayerOptions(): OccLayerOptions {
 /** The cube code and files, loaded the first time the cube setting needs them (and again after a failure). */
 let cubeKit: Promise<CubeKit> | null = null;
 
+/**
+ * Before the map starts: keep cube mode's filters to the cubes' own, so it never draws one they can't
+ * answer, and start reading the first view from the cubes while the map and its style load, so their
+ * round trips overlap.
+ */
+function prepareCubeMode() {
+  cleanups.push(startCubeMode());
+  // A failure here is reported by the hex source, which asks again.
+  if ($cubesOn.get()) prefetchFirstView().catch(() => undefined);
+}
+
+/** Start reading the first view's cells (the view in the URL, at the window's size) while the map loads. */
+async function prefetchFirstView() {
+  const [{ prefetchView }, cubes, query] = await Promise.all([
+    import('~/lib/map/cubeLayer'),
+    openedCubes(),
+    cubeQueryFor($occurrenceFilter.get(), lookupTaxonRank),
+  ]);
+  if (query) await prefetchView(cubes, query, $mapView.get(), { width: window.innerWidth, height: window.innerHeight });
+}
+
 function loadCubes(): Promise<CubeKit> {
   cubeKit ??= (async () => {
-    const [{ createCubeLayer }, { openCubes }] = await Promise.all([
-      import('~/lib/map/cubeLayer'),
-      import('~/lib/cubes/reader'),
-    ]);
-    const cubes = await openCubes(CUBES_BASE!);
-    $openCubes.set(cubes);
+    const [{ createCubeLayer }, cubes] = await Promise.all([import('~/lib/map/cubeLayer'), openedCubes()]);
     return {
       cubes,
       createLayer: (query, onFailed) => createCubeLayer(map!, { ...liveLayerOptions(), onFailed, cubes, query }),
@@ -447,29 +466,34 @@ function hexSourceOptions(target: MlMap): HexSourceOptions {
     loadCubes,
     isCubesOn: () => $cubesOn.get(),
     filter: () => $occurrenceFilter.get(),
-    zoom: () => target.getZoom(),
-    lookup: lookupTaxon,
-    onState: (state) => (hexState.value = state),
+    lookup: lookupTaxonRank,
+    onState: (state) => {
+      hexState.value = state;
+      // Cube mode draws nothing rather than GBIF's hexes when the cubes can't answer.
+      if (state.kind === 'cubes-failed' || state.kind === 'cubes-unsupported') replaceHexes(EMPTY);
+    },
   };
 }
 
-/** Pick the hex layer again when the filters, the zoom or the cube setting change. */
-function listenForHexSource(target: MlMap) {
+/** Pick the hex layer again when the filters or the cube setting change. */
+function listenForHexSource() {
   const update = () => void hexSource?.update();
-  target.on('moveend', update);
   cleanups.push(
     $occurrenceFilter.listen(update),
     $cubesOn.listen(() => void hexSource?.retry()),
-    () => target.off('moveend', update),
   );
   // A hex selected in the URL is found once the first layer is picked.
   void hexSource?.update().then(restoreHex);
 }
 
-/** The share of GBIF's records the sample cubes hold, as a percentage for the notice. */
-const samplePercent = computed(() =>
-  hexState.value.kind === 'cubes' ? `${Number((hexState.value.sampleShare * 100).toPrecision(2))}%` : '',
-);
+/** What the cubes were baked from, for the cube demo banner: "1% sample of GBIF's 2026-11-01 snapshot". */
+const cubeSource = computed(() => {
+  const state = hexState.value;
+  if (state.kind !== 'cubes') return '';
+  if (state.partsRead >= state.partsTotal) return `GBIF's ${state.snapshot} snapshot`;
+  const percent = Number(((state.partsRead / state.partsTotal) * 100).toPrecision(2));
+  return `${percent}% sample of GBIF's ${state.snapshot} snapshot`;
+});
 
 /** Below this zoom the canvas corners miss the globe, so the extent is the whole world. */
 const WORLD_BOUNDS_MAX_ZOOM = 2.5;
@@ -713,6 +737,7 @@ function mapShown(element: HTMLElement): Promise<void> {
 
 onMounted(async () => {
   if (!container.value) return;
+  prepareCubeMode();
   await mapShown(container.value);
   if (!hasWebgl2()) {
     $mapUnsupported.set(true);
@@ -742,7 +767,7 @@ onMounted(async () => {
   keepGlobeTilesOnWrapJumps(map);
   hexSource = createHexSource(hexSourceOptions(map));
   cleanups.push(() => hexSource?.destroy());
-  listenForHexSource(map);
+  listenForHexSource();
   decorateMap(maplibre, element);
   listenToMap();
   listenToStores();
@@ -778,20 +803,44 @@ onBeforeUnmount(() => {
     >
       Occurrence tiles are unavailable right now. The basemap still works.
     </p>
-    <p
-      v-else-if="hexState.kind !== 'gbif'"
-      role="status"
-      class="absolute left-1/2 top-[calc(var(--header-offset)+0.75rem)] -translate-x-1/2 rounded-md bg-surface px-3 py-2 text-xs text-muted shadow-panel"
-    >
+    <p v-else-if="hexState.kind !== 'gbif'" role="status" class="cube-banner shadow-panel">
       <template v-if="hexState.kind === 'cubes'">
-        Sample cube data: counts estimated from {{ samplePercent }} of GBIF's records.
+        <strong class="font-medium text-text">Cube demo:</strong> {{ cubeSource }}, so counts are estimates.
+        <template v-if="clearedForCubes.length">
+          Cleared filters the demo doesn't hold: {{ clearedForCubes.join(', ') }}.
+        </template>
       </template>
-      <template v-else>The sample cubes couldn't be read, so the map is using GBIF.</template>
+      <template v-else-if="hexState.kind === 'cubes-unsupported'">
+        <strong class="font-medium text-text">Cube demo:</strong> a selected taxon isn't in the cubes, which stop at
+        species.
+      </template>
+      <template v-else>
+        <strong class="font-medium text-text">Cube demo:</strong> the cube data couldn't be read. Is the cube server
+        running?
+      </template>
     </p>
   </div>
 </template>
 
 <style scoped>
+/* Below the header's second row of pills (near me, basemap), so it never sits under them. */
+.cube-banner {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--header-offset) + 3.25rem);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(36rem, calc(100% - 2rem));
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  pointer-events: none;
+}
+
 /* Crosshair appears only while the map has keyboard focus. */
 .crosshair {
   position: absolute;

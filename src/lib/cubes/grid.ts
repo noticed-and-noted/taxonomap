@@ -57,6 +57,37 @@ export function viewBounds(map: MlMap): Bounds | null {
   return [west, Math.max(-MAX_LAT, Math.min(...lats)), east, Math.min(MAX_LAT, Math.max(...lats))];
 }
 
+/** How much wider than the view an estimate of it is, so the reads it starts cover the real view. */
+const ESTIMATE_PADDING = 1.25;
+/** MapLibre's tile size: the world is this many pixels across at zoom 0. */
+const WORLD_PX_AT_ZOOM_0 = 512;
+
+/** A latitude's web-mercator y, in radians (0 at the equator). */
+const mercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / (2 * HALF_TURN)));
+
+/**
+ * A map view's bounds estimated from its centre, zoom and canvas size, before the map exists (web
+ * mercator, padded), or null for the whole world, as viewBounds gives.
+ */
+export function estimateBounds(
+  view: { lng: number; lat: number; zoom: number },
+  size: { width: number; height: number },
+): Bounds | null {
+  if (view.zoom < WORLD_MAX_ZOOM) return null;
+  const worldPx = WORLD_PX_AT_ZOOM_0 * 2 ** view.zoom;
+  const lngSpan = ((size.width * ESTIMATE_PADDING) / worldPx) * 2 * HALF_TURN;
+  if (lngSpan >= HALF_TURN) return null;
+  const centreY = mercatorY(view.lat);
+  const halfY = ((size.height * ESTIMATE_PADDING) / worldPx) * Math.PI;
+  const latOf = (mercator: number) => (Math.atan(Math.sinh(mercator)) * HALF_TURN) / Math.PI;
+  return [
+    view.lng - lngSpan / 2,
+    Math.max(-MAX_LAT, latOf(centreY - halfY)),
+    view.lng + lngSpan / 2,
+    Math.min(MAX_LAT, latOf(centreY + halfY)),
+  ];
+}
+
 /** A cell's outline as [lng, lat], unwrapped past ±180 when it straddles the antimeridian, as GBIF's are. */
 function outline(cell: string): GeoJSON.Position[] {
   const ring = cellToBoundary(cell, true);

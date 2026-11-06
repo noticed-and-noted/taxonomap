@@ -26,13 +26,16 @@ export const nearFilter = (area: Area, extra: { taxonKey?: number; classKey?: nu
   ...extra,
 });
 
+/** Classes listed for an area, most recorded first. */
+export const NEAR_CLASSES = 50;
+
 /** Total records and the classes present, most-recorded first. */
 export async function classesNear(
   area: Area,
   signal?: AbortSignal,
 ): Promise<{ records: number; classes: ClassGroup[] }> {
   const result = await namedOccurrenceFacets(nearFilter(area), ['classKey'], {
-    facetLimit: 50,
+    facetLimit: NEAR_CLASSES,
     ...(signal && { signal }),
   });
   return { records: result.count, classes: await namedClasses(result.facets['classKey'] ?? []) };

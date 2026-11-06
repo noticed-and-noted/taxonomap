@@ -4,6 +4,7 @@
  * type code (FOS, SPE…; the full type on hover). A row expands to its photo (opening a lightbox of all its
  * photos) and details. No column sorts: GBIF's occurrence search has no sort parameter. A species filter
  * narrows the list. Pass `filter` to list another area's records (near me) instead of the selected cell's.
+ * In cube mode the records index lists them, newest first, and GBIF only fills them in by key.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
@@ -12,13 +13,15 @@ import ListSkeleton from '~/components/molecules/ListSkeleton.vue';
 import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { useScrollFade } from '~/composables/useScrollFade';
-import { cubeRecords, selectedCubeCell } from '~/lib/cubes/selected';
+import type { CubeArea } from '~/lib/cubes/cell';
+import { cubeRecords, selectedCubeArea } from '~/lib/cubes/selected';
 import { full } from '~/lib/format';
 import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
 import { recordPlace } from '~/lib/map/recordPlace';
 import { aboutKey } from '~/lib/record-fields';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
+import { $cubesOn } from '~/stores/cubes';
 import { $hexGeometry, $occurrenceFilter, $recordPlace } from '~/stores/explorer';
 import HexRecordDetails from './HexRecordDetails.vue';
 import HexRecordRow from './HexRecordRow.vue';
@@ -29,7 +32,13 @@ import { useRecordNames } from './useRecordNames';
 const PAGE_SIZE = 20;
 const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
 
-const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceFilter | null; fill?: boolean }>();
+const props = defineProps<{
+  species: readonly SpeciesRow[];
+  filter?: OccurrenceFilter | null;
+  /** With `filter`, in cube mode: the same area in the cubes (near me), so its records list from them. */
+  cubeArea?: CubeArea | null;
+  fill?: boolean;
+}>();
 
 const geometry = useStore($hexGeometry);
 const storeFilter = useStore($occurrenceFilter);
@@ -45,6 +54,8 @@ const area = computed(
 /** Chosen speciesKey, or '' for all species. */
 const speciesKey = ref<number | ''>('');
 const records = shallowRef<Occurrence[]>([]);
+/** The cube area the records list came from, in cube mode, for the species search. */
+const listedArea = shallowRef<CubeArea | null>(null);
 const total = ref<number | null>(null);
 const hasMore = computed(() => total.value !== null && records.value.length < total.value);
 /** Expanded row's occurrence key. */
@@ -58,19 +69,20 @@ const aboutHref = (occurrence: Occurrence) => {
   return key ? speciesPath(key, manifest.value) : undefined;
 };
 
+/** In cube mode, the listed area in the cubes: near me's, or the selected hex's; null outside cube mode. */
+async function listedCubeArea() {
+  if (props.filter) return props.cubeArea ?? null;
+  return geometry.value && selectedCubeArea(geometry.value, storeFilter.value);
+}
+
 /** A page of the listed records: from the cubes' records index for a cube cell, else GBIF's search on the area. */
 async function fetchPage(baseFilter: OccurrenceFilter, offset: number, signal: AbortSignal) {
   const key = speciesKey.value === '' ? null : speciesKey.value;
-  const hexGeometry = props.filter ? null : geometry.value;
-  const cubeCell = hexGeometry && (await selectedCubeCell(hexGeometry, storeFilter.value).catch(() => null));
-  if (cubeCell) {
-    try {
-      return await cubeRecords(cubeCell, key, { offset, limit: PAGE_SIZE }, signal);
-    } catch (failure) {
-      if (signal.aborted) throw failure;
-      // The cubes couldn't be read: GBIF's search lists the cell instead.
-    }
-  }
+  const area = await listedCubeArea();
+  listedArea.value = area;
+  if (area) return cubeRecords(area, key, { offset, limit: PAGE_SIZE }, signal);
+  // Cube mode never falls back to GBIF's search on the area.
+  if ($cubesOn.get()) throw new Error('The cube demo has no records for this area');
   const pageFilter = { ...baseFilter, ...(key !== null && { speciesKeys: [key] }) };
   return searchOccurrences(pageFilter, { limit: PAGE_SIZE, offset }, signal);
 }
@@ -80,6 +92,8 @@ async function load(more = false) {
   const baseFilter = area.value;
   if (!more) records.value = [];
   if (!baseFilter) return;
+  // Near me's cube area is still loading; the watch below lists once it arrives.
+  if ($cubesOn.get() && props.filter && !props.cubeArea) return;
   await run(async (signal) => {
     const offset = more ? records.value.length : 0;
     const response = await fetchPage(baseFilter, offset, signal);
@@ -101,6 +115,10 @@ watch(
   { immediate: true },
 );
 watch(speciesKey, () => void load());
+watch(
+  () => props.cubeArea,
+  () => void load(),
+);
 watch(records, () => void nextTick(updateFade));
 
 // Mark the expanded record on the map, when it has coordinates.
@@ -207,7 +225,13 @@ function toggle(occurrence: Occurrence) {
 </script>
 <template>
   <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'" @keydown.capture="usedPointer = false">
-    <HexRecordsSpeciesFilter v-model="speciesKey" :species="species" :area="area" :names="names" />
+    <HexRecordsSpeciesFilter
+      v-model="speciesKey"
+      :species="species"
+      :area="area"
+      :cube-area="listedArea"
+      :names="names"
+    />
 
     <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
       Records could not be loaded.

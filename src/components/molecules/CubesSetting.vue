@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Map setting (experimental): draw hexes from the pre-counted cubes where they can serve the view. */
+/** Map setting: cube mode, where every count comes from the pre-counted cubes (pipeline/README.md). */
 import { useStore } from '@nanostores/vue';
 import { $cubesOn, CUBES_BASE, setCubesOn } from '~/stores/cubes';
 
@@ -10,11 +10,11 @@ const isOn = useStore($cubesOn);
   <div v-if="CUBES_BASE">
     <label class="check-row">
       <input type="checkbox" :checked="isOn" @change="setCubesOn(($event.target as HTMLInputElement).checked)" />
-      <span class="text-sm font-medium">Sample cube data (experimental)</span>
+      <span class="text-sm font-medium">Cube demo (sample data)</span>
     </label>
     <p class="mt-1 text-xs text-muted">
-      Draws the hexagons from pre-counted sample files instead of GBIF where they can: one taxon or all records, with or
-      without a year range. Counts are estimated from a sample, so treat them as rough.
+      Every map, count, chart and list comes from pre-counted sample files instead of GBIF. Filters the files don't hold
+      are greyed out. Counts are scaled up from a sample, so treat them as estimates.
     </p>
   </div>
 </template>

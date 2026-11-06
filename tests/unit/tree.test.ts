@@ -1,5 +1,6 @@
 import type { TreeNodeRow } from '~/lib/data/types';
 import { buildTree, findNode, isExpandable, loadChildren, pathTo, resolve } from '~/lib/tree/model';
+import { chartRow, cubeSet } from './helpers/cubes';
 import { facets, snapshots, stubNetwork } from './helpers/network';
 
 const rows: TreeNodeRow[] = [
@@ -184,5 +185,109 @@ describe('baked tree', () => {
     vi.resetModules();
     const without = await import('~/lib/tree/model');
     await expect(without.loadBakedTree()).resolves.toBeNull();
+  });
+});
+
+describe('tree in cube mode', () => {
+  /** A fresh model in cube mode, reading these stand-in cubes. */
+  async function cubeModel(cubes: ReturnType<typeof cubeSet>) {
+    vi.resetModules();
+    const store = await import('~/stores/cubes');
+    store.$cubesOn.set(true);
+    store.$openCubes.set(cubes);
+    return import('~/lib/tree/model');
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('counts the baked levels from the cubes, whole ranks at a time', async () => {
+    stubNetwork(snapshots({ tree: rows }));
+    const chartRowsBetween = vi.fn(async (rank: string) =>
+      rank === 'kingdom'
+        ? [
+            chartRow({ kingdom: 'Animalia', taxon: 'Animalia', records: 7n }),
+            chartRow({ kingdom: 'Plantae', taxon: 'Plantae', records: 9n }),
+          ]
+        : rank === 'class'
+          ? [chartRow({ taxon: 'Aves', records: 4n })]
+          : [],
+    );
+    const model = await cubeModel(cubeSet({ scale: 2, chartRowsBetween }));
+    const tree = (await model.loadBakedTree())!;
+    expect(tree.children?.map((child) => [child.name, child.records])).toEqual([
+      ['Plantae', 18],
+      ['Animalia', 14],
+    ]);
+    expect(tree.records).toBe(32);
+    expect(model.findNode(tree, 212)?.records).toBe(8);
+    expect(model.findNode(tree, 729)?.records).toBe(0);
+    expect(chartRowsBetween.mock.calls.map(([rank]) => rank).sort()).toEqual(['class', 'kingdom', 'order', 'phylum']);
+  });
+
+  it('counts a node’s children from the cubes, asking GBIF only for the taxa and their species', async () => {
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v1/species/search' && url.searchParams.get('limit') !== '0')
+        return {
+          count: 2,
+          results: [
+            { key: 5264, canonicalName: 'Paridae', scientificName: 'Paridae', rank: 'FAMILY' },
+            { key: 9327, canonicalName: 'Turdidae', scientificName: 'Turdidae', rank: 'FAMILY' },
+            // No canonical name, and no records in the cubes: named by its scientific name, counted 0.
+            { key: 77, scientificName: 'Unrecorded', rank: 'FAMILY' },
+          ],
+        };
+      if (url.pathname === '/v1/species/search')
+        return facets(0, 'HIGHER_TAXON_KEY', [
+          [5264, 6],
+          [9327, 18],
+          [77, 2],
+        ]);
+      return snapshots({ names: [] })(url);
+    });
+    const chartRows = vi.fn(async ({ taxon }: { taxon: string }) =>
+      taxon === 'Unrecorded' ? [] : [chartRow({ taxon, records: taxon === 'Turdidae' ? 3n : 1n })],
+    );
+    const model = await cubeModel(cubeSet({ chartRows }));
+    const order = {
+      key: 729,
+      name: 'Passeriformes',
+      rank: 'O' as const,
+      records: 1,
+      species: 1,
+      loaded: false,
+      kingdom: 'Animalia',
+    };
+    const loaded = await model.loadChildren(order);
+    expect(loaded.map((child) => [child.name, child.records, child.species])).toEqual([
+      ['Turdidae', 3, 18],
+      ['Paridae', 1, 6],
+      ['Unrecorded', 0, 2],
+    ]);
+    expect(calls.some((url) => url.pathname === '/v1/occurrence/search')).toBe(false);
+  });
+
+  it('reads a genus’s species in one go', async () => {
+    stubNetwork((url) =>
+      url.pathname === '/v1/species/search'
+        ? {
+            count: 1,
+            results: [{ key: 11, canonicalName: 'Turdus merula', scientificName: 'Turdus merula L.', rank: 'SPECIES' }],
+          }
+        : snapshots({ names: [] })(url),
+    );
+    const chartRowsBetween = vi.fn(async () => [chartRow({ taxon: 'Turdus merula', records: 5n })]);
+    const model = await cubeModel(cubeSet({ chartRowsBetween }));
+    const genus = {
+      key: 2490,
+      name: 'Turdus',
+      rank: 'G' as const,
+      records: 1,
+      species: 1,
+      loaded: false,
+      kingdom: 'Animalia',
+    };
+    const [blackbird] = await model.loadChildren(genus);
+    expect(blackbird?.records).toBe(5);
+    expect(chartRowsBetween).toHaveBeenCalledWith('species', 'Turdus ', 'Turdus ￿');
   });
 });

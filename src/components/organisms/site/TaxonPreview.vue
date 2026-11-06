@@ -5,15 +5,18 @@
  * pause on a result, so arrowing through the list stays cheap, and moving to another result cancels
  * what the last one was still asking for. Requests go through the cached client.
  */
+import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import { cubeTaxonTotal } from '~/lib/cubes/selected';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { occurrenceFacets, type NameHit, type UsableImage } from '~/lib/gbif';
 import { leadPhotos } from '~/lib/photos/taxon-photos';
 import { debounce } from '~/lib/util/debounce';
+import { $cubesOn } from '~/stores/cubes';
 
 /** Pause on a result before asking for its data. */
 const LOAD_DELAY_MS = 300;
@@ -29,14 +32,21 @@ const emit = defineEmits<{ select: []; about: [] }>();
 
 const image = ref<UsableImage>();
 const liveCount = ref<number | null>(null);
+const cubesOn = useStore($cubesOn);
 const imageLoading = ref(false);
 /** The photo file itself has loaded; until then the thumb shimmers. */
 const imageShown = ref(false);
 let controller: AbortController | undefined;
 
-const count = computed(() => props.hit.count ?? liveCount.value);
+/** In cube mode, the charts cube's count (null while it loads, or for a rank the cubes lack). */
+const cubeCount = ref<number | null>(null);
+const count = computed(() => (cubesOn.value ? cubeCount.value : (props.hit.count ?? liveCount.value)));
 /** Only live suggestions wait for a count; `imageLoading` covers both requests, so a failed count stops shimmering too. */
-const isCountLoading = computed(() => props.hit.count === undefined && liveCount.value === null && imageLoading.value);
+const isCountLoading = computed(() =>
+  cubesOn.value
+    ? cubeCount.value === null && imageLoading.value
+    : props.hit.count === undefined && liveCount.value === null && imageLoading.value,
+);
 const name = computed(() =>
   props.hit.isNamePending ? props.hit.scientificName : (props.hit.commonName ?? props.hit.scientificName),
 );
@@ -44,8 +54,10 @@ const name = computed(() =>
 const load = debounce(async (hit: NameHit) => {
   const { signal } = (controller = new AbortController());
   imageLoading.value = true;
-  // The baked index knows counts; a live suggestion's rides along with its photo search.
-  const isCountNeeded = hit.count === undefined;
+  // In cube mode the charts cube counts; otherwise the baked index knows counts, and a live suggestion's
+  // rides along with its photo search.
+  void countFromCubes(hit, signal);
+  const isCountNeeded = hit.count === undefined && !cubesOn.value;
   const lead = await leadPhotos([{ key: hit.key, rank: hit.rank }], { signal, withCounts: isCountNeeded }).catch(
     () => null,
   );
@@ -56,6 +68,12 @@ const load = debounce(async (hit: NameHit) => {
   if (signal.aborted) return;
   imageLoading.value = false;
 }, LOAD_DELAY_MS);
+
+/** The hit's count from the charts cube, in cube mode. */
+async function countFromCubes(hit: NameHit, signal: AbortSignal) {
+  const total = await cubeTaxonTotal(hit).catch(() => null);
+  if (!signal.aborted) cubeCount.value = total;
+}
 
 /** A taxon's record count when the photo search didn't bring it (an iNaturalist photo was found), or null. */
 async function countOf(hit: NameHit, signal: AbortSignal): Promise<number | null> {
@@ -70,6 +88,7 @@ watch(
     image.value = undefined;
     imageShown.value = false;
     liveCount.value = null;
+    cubeCount.value = null;
     imageLoading.value = true;
     load(props.hit);
   },
