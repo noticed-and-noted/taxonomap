@@ -1,9 +1,9 @@
 ---
 /**
  * Pre-rendered species page (top SPECIES_PRERENDER_COUNT species). Static
- * HTML at build; only the gallery, similar species, mini-map, charts and name meanings hydrate.
- * Photos are never fetched at build: the gallery and similar species cards
- * look them up in the browser (see ~/lib/photos/taxon-photos).
+ * HTML at build; only the gallery, sounds, similar species, mini-map, charts and name
+ * meanings hydrate. Photos, sounds and name meanings are never fetched at build: those
+ * islands look them up in the browser (see ~/lib/photos and LiveNameMeaning.vue).
  */
 import PlotChart from '~/components/molecules/PlotChart.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
@@ -12,6 +12,7 @@ import MiniMap from '~/components/organisms/species/MiniMap.vue';
 import SimilarSpecies from '~/components/organisms/species/SimilarSpecies.vue';
 import SpeciesGallery from '~/components/organisms/species/SpeciesGallery.vue';
 import SpeciesPage from '~/components/organisms/species/SpeciesPage.vue';
+import SpeciesSounds from '~/components/organisms/species/SpeciesSounds.vue';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/layouts/PageShell.astro';
 import { bakeSpeciesList, bakeSpeciesManifest, bakedSpeciesPage } from '~/lib/bake';
@@ -56,6 +57,7 @@ const jsonLd = speciesJsonLd({
     <SpeciesPage data={data} intro={intro}>
       <LiveNameMeaning slot="meaning" client:idle canonicalName={data.canonicalName} />
       <SpeciesGallery slot="gallery" client:load taxonKey={data.key} rank={data.rank} name={label} />
+      <SpeciesSounds slot="sounds" client:visible taxonKey={data.key} rank={data.rank} />
       {data.siblings.length > 0 && (
         <SimilarSpecies slot="similar" client:visible species={similarItems(data.siblings, manifest)} />
       )}

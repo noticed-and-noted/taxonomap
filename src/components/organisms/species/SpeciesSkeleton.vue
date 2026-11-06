@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
  * Loading placeholder for /species/view. It copies SpeciesPage's classes and the
- * usual content (photos, intro, names, ten countries, five datasets) so nothing moves when the data lands.
+ * usual content (photos, sounds, intro, names, ten countries, five datasets) so nothing moves when the data lands.
  */
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import IntroSkeleton from '~/components/molecules/IntroSkeleton.vue';
 import SkeletonLine from '~/components/molecules/SkeletonLine.vue';
+import SoundsSkeleton from '~/components/molecules/SoundsSkeleton.vue';
 
 /** Plot heights from PlotChart (years: 170; bars: rows × 26 + 34) and RadialSeasonality (240). */
 const CHARTS = [
@@ -46,6 +47,7 @@ const BUTTON_HEIGHT = 'calc(2.25rem + 2px)';
             <SkeletonBlock v-for="slot in 4" :key="slot" class="aspect-square" height="auto" aria-hidden="true" />
           </div>
         </div>
+        <SoundsSkeleton aria-hidden="true" />
         <IntroSkeleton aria-hidden="true" />
       </div>
       <div class="space-y-4">

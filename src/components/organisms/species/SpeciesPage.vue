@@ -2,7 +2,7 @@
 /**
  * Species page body, shared by the pre-rendered route (rendered at build,
  * no hydration) and the /species/view fallback (rendered in the browser).
- * Interactive parts (gallery, mini-map, similar species, name meanings) come in through named slots so the
+ * Interactive parts (gallery, sounds, mini-map, similar species, name meanings) come in through named slots so the
  * pre-rendered page can hydrate just those as islands.
  */
 import { computed } from 'vue';
@@ -145,6 +145,7 @@ const englishNames = computed(
             No openly licensed photos yet
           </div>
         </slot>
+        <slot name="sounds" />
         <section v-if="intro" class="about mt-5 max-w-prose space-y-3 leading-relaxed" aria-label="About this species">
           <!-- No JS on the pre-rendered page: every paragraph is rendered, and CSS shows the rest while the toggle is open. -->
           <p v-for="(paragraph, index) in intro.paragraphs" :key="index" :class="{ more: index > 0 }">
