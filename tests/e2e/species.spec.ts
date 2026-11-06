@@ -15,6 +15,9 @@ test('a pre-rendered species page has metadata, charts and attribution', async (
   // Every chart has a data-table fallback.
   expect(await page.getByText('Show data table').count()).toBeGreaterThanOrEqual(3);
   await expect(page.getByRole('link', { name: 'GBIF.org', exact: true })).toBeVisible();
+  // Looked up in the browser, not baked into the page.
+  await expect(page.getByRole('heading', { name: 'What the name means' })).toBeVisible();
+  await expect(page.getByText('“blackbird”')).toBeVisible();
   const og = await request.get(`/og/species/${key}.png`);
   expect(og.headers()['content-type']).toContain('image/png');
 });

@@ -459,6 +459,8 @@ const json = (body: unknown, status = 200): FakeResponse => ({
   contentType: 'application/json',
   body: JSON.stringify(body),
 });
+const MERULA_ENTRY = '== Latin ==\n\n=== Noun ===\nmerula f\n\nblackbird';
+
 const png = (): FakeResponse => ({ status: 200, contentType: 'image/png', body: PNG });
 const missing = (): FakeResponse => json({ message: 'not found' }, 404);
 
@@ -475,8 +477,9 @@ export function answer(url: URL): FakeResponse | undefined {
     return json({ total_results: 0, results: [] });
   // No Wikidata item for any key, so species pages show no Wikipedia intro.
   if (url.hostname === 'www.wikidata.org') return json({ query: { search: [] } });
-  // No Wiktionary entry for any word, so species pages show no name meanings.
-  if (url.hostname === 'en.wiktionary.org') return json({ query: { pages: [] } });
+  // Wiktionary knows only "merula", so the blackbird's page means "blackbird" and no other page has meanings.
+  if (url.hostname === 'en.wiktionary.org')
+    return json({ query: { pages: params.get('titles') === 'merula' ? [{ extract: MERULA_ENTRY }] : [] } });
   if (url.hostname === 'tile.gbif.org' || url.hostname === 'photos.example') return png();
   if (url.hostname === 'sounds.example') return { status: 200, contentType: 'audio/wav', body: WAV };
   if (path === '/geocode')

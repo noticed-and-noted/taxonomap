@@ -15,7 +15,6 @@ vi.mock('~/lib/species/data', async (importOriginal) => ({
   loadSpeciesData: async (key: number) => ({ key, canonicalName: `Species number${key}` }),
 }));
 vi.mock('~/lib/species/wikipedia', () => ({ wikipediaIntro: async () => null }));
-vi.mock('~/lib/species/etymology', () => ({ nameMeaning: async () => null }));
 
 const usage = (key: number, rank: string, name: string, extra: object = {}) => ({
   key,

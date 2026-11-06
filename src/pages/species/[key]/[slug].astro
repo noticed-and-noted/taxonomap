@@ -1,12 +1,13 @@
 ---
 /**
  * Pre-rendered species page (top SPECIES_PRERENDER_COUNT species). Static
- * HTML at build; only the gallery, similar species and mini-map hydrate.
+ * HTML at build; only the gallery, similar species, mini-map, charts and name meanings hydrate.
  * Photos are never fetched at build: the gallery and similar species cards
  * look them up in the browser (see ~/lib/photos/taxon-photos).
  */
 import PlotChart from '~/components/molecules/PlotChart.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
+import LiveNameMeaning from '~/components/organisms/species/LiveNameMeaning.vue';
 import MiniMap from '~/components/organisms/species/MiniMap.vue';
 import SimilarSpecies from '~/components/organisms/species/SimilarSpecies.vue';
 import SpeciesGallery from '~/components/organisms/species/SpeciesGallery.vue';
@@ -25,7 +26,7 @@ export async function getStaticPaths() {
 }
 
 const key = Number(Astro.params.key);
-const [{ data, intro, nameParts }, manifest] = await Promise.all([bakedSpeciesPage(key), bakeSpeciesManifest()]);
+const [{ data, intro }, manifest] = await Promise.all([bakedSpeciesPage(key), bakeSpeciesManifest()]);
 
 const label = data.commonName ?? data.canonicalName;
 const charts = speciesCharts(data);
@@ -52,7 +53,8 @@ const jsonLd = speciesJsonLd({
 <BaseLayout title={title} description={description} ogImage={`/og/species/${key}.png`}>
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, '\\u003c')} />
   <PageShell>
-    <SpeciesPage data={data} intro={intro} nameParts={nameParts}>
+    <SpeciesPage data={data} intro={intro}>
+      <LiveNameMeaning slot="meaning" client:idle canonicalName={data.canonicalName} />
       <SpeciesGallery slot="gallery" client:load taxonKey={data.key} rank={data.rank} name={label} />
       {data.siblings.length > 0 && (
         <SimilarSpecies slot="similar" client:visible species={similarItems(data.siblings, manifest)} />

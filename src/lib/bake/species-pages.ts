@@ -1,25 +1,19 @@
 import { loadSpeciesData, type CommonNameLookup, type SpeciesData } from '~/lib/species/data';
-import { nameMeaning, type NamePart } from '~/lib/species/etymology';
 import { wikipediaIntro, type WikipediaIntro } from '~/lib/species/wikipedia';
 import { lookupLimit, once } from './cache';
 import { bakedCommonNames } from './names';
 import { bakeSpeciesList } from './species-list';
 
-/** Everything a pre-rendered species page and its Open Graph card show. */
+/** What a pre-rendered species page and its Open Graph card show, bar the name's meaning (looked up in the browser). */
 export interface BakedSpeciesPage {
   data: SpeciesData;
   intro: WikipediaIntro | null;
-  nameParts: NamePart[] | null;
 }
 
 async function loadPage(key: number, commonName: CommonNameLookup): Promise<BakedSpeciesPage> {
-  const data = await loadSpeciesData(key, commonName);
-  // The page reads fine without an intro or the name's meaning, so a failed lookup just leaves it out.
-  const [intro, nameParts] = await Promise.all([
-    wikipediaIntro(key).catch(() => null),
-    nameMeaning(data.canonicalName).catch(() => null),
-  ]);
-  return { data, intro, nameParts };
+  // The page reads fine without an intro, so a failed lookup just leaves it out.
+  const [data, intro] = await Promise.all([loadSpeciesData(key, commonName), wikipediaIntro(key).catch(() => null)]);
+  return { data, intro };
 }
 
 /** Every pre-rendered species' page, keyed by species key (memoised; `pnpm bake` saves it). */

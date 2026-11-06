@@ -13,7 +13,6 @@ const bake = {
   bakedSpeciesPage: vi.fn(async (key: number) => ({
     data: { key, commonName: 'European robin', canonicalName: 'Erithacus rubecula', count: 42 },
     intro: null,
-    nameParts: null,
   })),
 };
 const renderSpeciesCard = vi.fn(async () => Buffer.from([0x89, 0x50, 0x4e, 0x47]));
