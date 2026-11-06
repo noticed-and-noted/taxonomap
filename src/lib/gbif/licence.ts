@@ -119,6 +119,10 @@ export interface UsableSound {
   licence: AllowedLicence;
   creator?: string;
   rightsHolder?: string;
+  /** Where it was recorded, no finer than the country: an observation's own place text can be someone's street. */
+  country?: string;
+  /** The iNaturalist observation it belongs to, when known. */
+  observationUrl?: string;
 }
 
 /** A record's playable sounds, licensed by the same rule as usableImages. */

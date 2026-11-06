@@ -3,18 +3,20 @@
  * Plays a record's sound: a play button, a seekable progress line and the time, with the sound's licence.
  * Nothing is fetched until the viewer presses play, as the file comes straight from its publisher.
  */
-import { computed, ref, useTemplateRef } from 'vue';
+import { computed, ref, useTemplateRef, watch } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import { useDelayedSpinner } from '~/composables/useDelayedSpinner';
 import { LICENCE_URLS, type UsableSound } from '~/lib/gbif/licence';
 
 const props = defineProps<{ sound: UsableSound }>();
+const emit = defineEmits<{ failed: [] }>();
 
 const SECONDS_PER_MINUTE = 60;
-const SEEK_STEP_SECONDS = 0.1;
 
 const audio = useTemplateRef<HTMLAudioElement>('audio');
 const isPlaying = ref(false);
 const isLoading = ref(false);
+const isSpinning = useDelayedSpinner(isLoading);
 const hasFailed = ref(false);
 const currentSeconds = ref(0);
 const durationSeconds = ref(0);
@@ -29,15 +31,31 @@ function clock(seconds: number): string {
   return `${minutes}:${String(wholeSeconds % SECONDS_PER_MINUTE).padStart(2, '0')}`;
 }
 
+/** Starts the sound, loading it first if need be. */
+function startPlaying() {
+  if (!audio.value) return;
+  isLoading.value = audio.value.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+  void audio.value.play().catch(markUnplayable);
+}
+
 /** Plays or pauses the sound. */
 function togglePlay() {
-  if (!audio.value) return;
-  if (isPlaying.value) audio.value.pause();
-  else {
-    isLoading.value = audio.value.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
-    void audio.value.play().catch(markUnplayable);
-  }
+  if (isPlaying.value) audio.value?.pause();
+  else startPlaying();
 }
+
+// A new sound waits to be played, so it starts from nothing.
+watch(
+  () => props.sound.url,
+  () => {
+    isPlaying.value = isLoading.value = hasFailed.value = false;
+    currentSeconds.value = durationSeconds.value = 0;
+  },
+);
+
+watch(hasFailed, (isFailed) => {
+  if (isFailed) emit('failed');
+});
 
 /** Shows the failure note when the browser can't play the file; a play cut short by a pause (AbortError) isn't one. */
 function markUnplayable(error: unknown) {
@@ -61,9 +79,12 @@ function readDuration() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-1">
-    <p v-if="hasFailed" class="text-xs text-subtle">This sound couldn't be played. It may still play on GBIF.</p>
-    <div v-else class="player">
+  <div class="flex flex-col gap-2">
+    <p v-if="hasFailed" class="text-xs text-subtle">
+      This sound couldn't be played. It may still play on
+      {{ sound.observationUrl ? 'iNaturalist' : 'GBIF' }}.
+    </p>
+    <div v-show="!hasFailed" class="player">
       <audio
         ref="audio"
         :src="sound.url"
@@ -77,6 +98,7 @@ function readDuration() {
         @durationchange="readDuration"
         @error="hasFailed = true"
       />
+      <slot name="before-play" />
       <button
         type="button"
         class="play"
@@ -86,18 +108,19 @@ function readDuration() {
         @click="togglePlay"
       >
         <span
-          v-if="isLoading"
+          v-if="isSpinning"
           class="size-3.5 animate-spin rounded-full border-2 border-border-strong border-t-accent motion-reduce:animate-none"
           aria-hidden="true"
         />
         <UiIcon v-else :name="isPlaying ? 'pause' : 'play'" size="14" />
       </button>
+      <slot name="after-play" />
       <input
         type="range"
         class="line"
         min="0"
         :max="durationSeconds"
-        :step="SEEK_STEP_SECONDS"
+        step="any"
         :value="currentSeconds"
         :style="{ '--progress': progress }"
         aria-label="Position in sound"
@@ -108,11 +131,19 @@ function readDuration() {
         {{ clock(currentSeconds) }}<template v-if="durationSeconds"> / {{ clock(durationSeconds) }}</template>
       </span>
     </div>
-    <p class="text-[0.6875rem] text-subtle [overflow-wrap:anywhere]">
-      Sound ·
-      <a :href="LICENCE_URLS[sound.licence]" target="_blank" rel="license noopener">{{ sound.licence }}</a>
-      <template v-if="credit"> · © {{ credit }}</template>
-    </p>
+    <div class="flex items-baseline justify-between gap-3 text-[0.6875rem] text-subtle">
+      <p class="min-w-0 [overflow-wrap:anywhere]">
+        Sound ·
+        <a :href="LICENCE_URLS[sound.licence]" target="_blank" rel="license noopener">{{ sound.licence }}</a>
+        <template v-if="credit">
+          ·
+          <a v-if="sound.observationUrl" :href="sound.observationUrl" target="_blank" rel="noopener">© {{ credit }}</a>
+          <template v-else>© {{ credit }}</template>
+        </template>
+        <template v-if="sound.country"> · {{ sound.country }}</template>
+      </p>
+      <slot name="after-credit" />
+    </div>
   </div>
 </template>
 

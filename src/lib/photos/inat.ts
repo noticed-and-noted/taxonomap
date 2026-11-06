@@ -8,7 +8,7 @@
 import { env } from '~/lib/env';
 import { createHttp, type Transport } from '~/lib/gbif/http';
 import type { Params } from '~/lib/gbif/params';
-import { parseLicence, type InatImage } from '~/lib/gbif/licence';
+import { parseLicence, type InatImage, type UsableSound } from '~/lib/gbif/licence';
 import { LruCache } from '~/lib/gbif/lru';
 import { tidy } from '~/lib/species/names';
 import { HOUR } from '~/lib/util/time';
@@ -99,6 +99,29 @@ interface InatObservation {
   uri?: string;
   photos?: InatPhoto[];
 }
+
+interface InatSound {
+  file_url?: string | null;
+  license_code: string | null;
+  attribution?: string;
+}
+
+export interface InatSoundObservation {
+  id: number;
+  uri?: string;
+  /** Every place the observation falls in, from continent down. */
+  place_ids?: number[];
+  sounds?: InatSound[];
+}
+
+interface InatPlace {
+  id: number;
+  name: string;
+  admin_level?: number | null;
+}
+
+/** iNaturalist's `admin_level` for a country. */
+const COUNTRY_ADMIN_LEVEL = 0;
 
 /**
  * Common names in English as iNaturalist names them for the United Kingdom (place 6857), whatever
@@ -199,10 +222,56 @@ export async function votedObservations(taxonId: number, signal?: AbortSignal): 
   return response.results;
 }
 
+/** Research-grade observations of a taxon with an openly licensed sound, most-voted first. */
+export async function soundObservations(taxonId: number, signal?: AbortSignal): Promise<InatSoundObservation[]> {
+  const response = await inat.getJson<{ results: InatSoundObservation[] }>(
+    '/v2/observations',
+    {
+      taxon_id: taxonId,
+      quality_grade: 'research',
+      sounds: true,
+      sound_license: PHOTO_LICENCES,
+      order_by: 'votes',
+      order: 'desc',
+      per_page: 20,
+      fields: 'id,uri,place_ids,sounds.file_url,sounds.license_code,sounds.attribution',
+    },
+    { ...(signal && { signal }) },
+  );
+  return response.results;
+}
+
+/** Country names by place ID, for those of `placeIds` that are countries. */
+export async function countryNames(placeIds: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
+  const response = await inat.getJson<{ results: InatPlace[] }>(
+    `/v2/places/${placeIds.join(',')}`,
+    { fields: 'id,name,admin_level', per_page: placeIds.length },
+    { ...(signal && { signal }) },
+  );
+  const countries = response.results.filter((place) => place.admin_level === COUNTRY_ADMIN_LEVEL);
+  return new Map(countries.map((place) => [place.id, place.name]));
+}
+
 /** "(c) Ann Smith, some rights reserved (CC BY)" → "Ann Smith". */
-function creatorOf(photo: InatPhoto): string | undefined {
-  if (photo.attribution_name) return photo.attribution_name;
-  return photo.attribution?.match(/^\(c\)\s*(.+?),\s*(?:some|all) rights reserved/i)?.[1];
+function creatorOf(media: Pick<InatPhoto, 'attribution' | 'attribution_name'>): string | undefined {
+  if (media.attribution_name) return media.attribution_name;
+  return media.attribution?.match(/^\(c\)\s*(.+?),\s*(?:some|all) rights reserved/i)?.[1];
+}
+
+/** An observation's first openly licensed sound with a file, or null when it has none. */
+export function observationSound(observation: InatSoundObservation): UsableSound | null {
+  for (const sound of observation.sounds ?? []) {
+    const licence = parseLicence(sound.license_code);
+    if (!licence || !sound.file_url) continue;
+    const creator = creatorOf(sound);
+    return {
+      url: sound.file_url,
+      licence,
+      ...(creator && { creator }),
+      ...(observation.uri && { observationUrl: observation.uri }),
+    };
+  }
+  return null;
 }
 
 /** An openly licensed photo as an image, or null ("all rights reserved" and the like). */

@@ -5,13 +5,11 @@
  * Attributes (id, placeholder, role, aria-*, listeners) go on the input; v-model is its text.
  * `bare` drops the box styling, for a field inside a pill that draws its own.
  */
-import { onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
+import { useTemplateRef } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import { useDelayedSpinner } from '~/composables/useDelayedSpinner';
 
 defineOptions({ inheritAttrs: false });
-
-/** Lookups quicker than this finish without the spinner flashing up. */
-const SPINNER_DELAY_MS = 300;
 
 const query = defineModel<string>({ required: true });
 
@@ -24,20 +22,7 @@ const {
 
 const input = useTemplateRef<HTMLInputElement>('input');
 
-const isSpinning = ref(false);
-let spinnerTimer: ReturnType<typeof setTimeout> | undefined;
-
-watch(
-  () => loading,
-  (isLoading) => {
-    clearTimeout(spinnerTimer);
-    if (isLoading) spinnerTimer = setTimeout(() => (isSpinning.value = true), SPINNER_DELAY_MS);
-    else isSpinning.value = false;
-  },
-  { immediate: true },
-);
-
-onBeforeUnmount(() => clearTimeout(spinnerTimer));
+const isSpinning = useDelayedSpinner(() => loading);
 
 defineExpose({ input });
 
