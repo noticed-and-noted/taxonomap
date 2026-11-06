@@ -3,7 +3,8 @@
  * The house search box: a text field with a leading icon, a spinner while results load and a
  * clear button. The browser's own clear button is hidden, as iOS Safari never draws it.
  * Attributes (id, placeholder, role, aria-*, listeners) go on the input; v-model is its text.
- * `bare` drops the box styling, for a field inside a pill that draws its own.
+ * `bare` drops the box styling, for a field inside a pill that draws its own; the pill's padding
+ * already insets the clear button, so it sits further out to match the leading icon's gap.
  */
 import { useTemplateRef } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
@@ -82,7 +83,8 @@ function clear() {
       <button
         v-if="query && !$attrs.disabled"
         type="button"
-        class="absolute right-1 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-sm text-muted after:absolute after:-inset-2 hover:text-text"
+        class="absolute top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-sm text-muted after:absolute after:-inset-2 hover:text-text"
+        :class="bare ? '-right-1' : 'right-1'"
         aria-label="Clear search"
         @pointerdown.prevent
         @click="clear"

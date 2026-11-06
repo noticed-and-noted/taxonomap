@@ -27,22 +27,33 @@ let isReadingFiles = true;
 /** Directory of the snapshots `pnpm bake` writes (`BAKE_DIR`, default `.cache/baked`). */
 export const bakeDir = () => process.env['BAKE_DIR'] ?? '.cache/baked';
 
+const bakedFile = (key: string) => join(bakeDir(), `${key}.json`);
+
 /**
- * Memoised per build. A file left by `pnpm bake` (baked/<key>.json) is used
- * instead of asking GBIF, so a build needs no GBIF requests once data is baked.
+ * One snapshot, memoised per run. `pnpm bake` runs `bake` and saves the result; a build only
+ * reads the file it left (baked/<key>.json) and never fetches, so the site's external requests
+ * all happen in the bake.
+ * @param missing What a build gets when the bake saved no file; the browser fetches that data live.
  */
-export function once<T>(key: string, callback: () => Promise<T>): Promise<T> {
+export function once<T>(key: string, bake: () => Promise<T>, missing: T): Promise<T> {
   let pending = memo.get(key) as Promise<T> | undefined;
   if (!pending) {
-    const file = join(bakeDir(), `${key}.json`);
-    pending =
-      isReadingFiles && existsSync(file) ? readFile(file, 'utf8').then((text) => JSON.parse(text) as T) : callback();
+    pending = isReadingFiles ? readBaked(key, missing) : bake();
     memo.set(key, pending);
   }
   return pending;
 }
 
-/** Forget memoised results and ignore baked files, so the next bake asks GBIF afresh. */
+async function readBaked<T>(key: string, missing: T): Promise<T> {
+  return isBaked(key) ? (JSON.parse(await readFile(bakedFile(key), 'utf8')) as T) : missing;
+}
+
+/** Whether a build has this snapshot from the bake; a bake has every snapshot it makes. */
+export function isBaked(key: string): boolean {
+  return !isReadingFiles || existsSync(bakedFile(key));
+}
+
+/** Switch to baking: forget memoised results and ignore baked files, so snapshots are fetched afresh. */
 export function startFreshBake(): void {
   isReadingFiles = false;
   memo.clear();

@@ -8,6 +8,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
+import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ListSkeleton from '~/components/molecules/ListSkeleton.vue';
 import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
@@ -192,10 +193,13 @@ function toggle(occurrence: Occurrence) {
   <div :class="fill ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'" @keydown.capture="usedPointer = false">
     <HexRecordsSpeciesFilter v-model="speciesKey" :species="species" :area="area" :names="names" />
 
-    <div v-if="error" class="rounded-md bg-surface-2 p-3 text-sm text-muted" role="alert">
-      Records could not be loaded.
-      <button type="button" class="ml-1 text-text underline" @click="load()">Try again</button>
-    </div>
+    <InlineAlert v-if="error" :kind="error" @retry="load()">
+      {{
+        error === 'unavailable'
+          ? 'GBIF is busy right now, so records could not be loaded.'
+          : 'Records could not be loaded.'
+      }}
+    </InlineAlert>
 
     <ListSkeleton v-else-if="loading && !records.length" label="Loading records" :fill="fill">
       <span class="w-[3.25rem] shrink-0"><SkeletonBlock width="2rem" height="1rem" rounded="sm" /></span>

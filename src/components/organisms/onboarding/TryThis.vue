@@ -213,7 +213,6 @@ const percent = computed(() => Math.round((done.value.length / CHECKLIST.length)
 .try-list {
   /* 248px at default text size: leaves a gap between the dock and the filter rail above it. */
   max-height: min(15.5rem, 30dvh);
-  scrollbar-width: thin;
 }
 
 /* Folds open and shut: the row grows from 0fr to 1fr, so no height has to be known. */

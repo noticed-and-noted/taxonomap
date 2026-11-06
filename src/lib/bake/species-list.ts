@@ -80,31 +80,28 @@ export async function bakeSpeciesList(): Promise<PrerenderSpecies[]> {
 }
 
 function pickedSpecies(): Promise<PrerenderSpecies[]> {
-  return once('species-list', async () => {
-    const total = prerenderCount();
-    if (total === 0) return [];
-    const picked = await pickSpeciesKeys(total);
-    const limit = lookupLimit();
-    const rows = await Promise.all(
-      [...picked].map(([key, count]) =>
-        limit(async (): Promise<PrerenderSpecies | null> => {
-          try {
-            const usage = await getSpecies(key);
-            // Only accepted species get a canonical page.
-            if (usage.rank !== 'SPECIES') return null;
-            return { key, slug: speciesSlug(usage), count };
-          } catch (error) {
-            return rethrowUnlessMissing(error);
-          }
-        }),
-      ),
-    );
-    return rows.filter((row): row is PrerenderSpecies => row !== null).sort((left, right) => right.count - left.count);
-  });
+  return once('species-list', fetchSpeciesList, []);
 }
 
-/** key → slug for every pre-rendered species (links elsewhere use /species/view). */
-export async function bakeSpeciesManifest(): Promise<Record<string, string>> {
-  const list = await bakeSpeciesList();
-  return Object.fromEntries(list.map((species) => [String(species.key), species.slug]));
+/** The most-recorded accepted species, picked per class, busiest first. */
+async function fetchSpeciesList(): Promise<PrerenderSpecies[]> {
+  const total = prerenderCount();
+  if (total === 0) return [];
+  const picked = await pickSpeciesKeys(total);
+  const limit = lookupLimit();
+  const rows = await Promise.all(
+    [...picked].map(([key, count]) =>
+      limit(async (): Promise<PrerenderSpecies | null> => {
+        try {
+          const usage = await getSpecies(key);
+          // Only accepted species get a canonical page.
+          if (usage.rank !== 'SPECIES') return null;
+          return { key, slug: speciesSlug(usage), count };
+        } catch (error) {
+          return rethrowUnlessMissing(error);
+        }
+      }),
+    ),
+  );
+  return rows.filter((row): row is PrerenderSpecies => row !== null).sort((left, right) => right.count - left.count);
 }

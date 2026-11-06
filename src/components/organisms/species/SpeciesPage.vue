@@ -2,16 +2,18 @@
 /**
  * Species page body, shared by the pre-rendered route (rendered at build,
  * no hydration) and the /species/view fallback (rendered in the browser).
- * Interactive parts (gallery, sounds, mini-map, similar species) come in through named slots so the
+ * Interactive parts (gallery, sounds, mini-map, similar species, name meanings) come in through named slots so the
  * pre-rendered page can hydrate just those as islands.
  */
 import { computed } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import IntroSkeleton from '~/components/molecules/IntroSkeleton.vue';
+import NameMeaning from '~/components/molecules/NameMeaning.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
 import { compact, countryName, full, IUCN_LABELS, RANK_LABELS } from '~/lib/format';
 import { LICENCE_URLS } from '~/lib/gbif/licence';
 import type { SpeciesData } from '~/lib/species/data';
+import type { NamePart } from '~/lib/species/etymology';
 import { nameRuns, type WikipediaIntro } from '~/lib/species/wikipedia';
 
 const props = defineProps<{
@@ -19,6 +21,8 @@ const props = defineProps<{
   /** Its Wikipedia intro, loaded apart from the data so the page needn't wait for it. */
   intro?: WikipediaIntro | null;
   isIntroLoading?: boolean;
+  /** What each word of the scientific name means, from Wiktionary. */
+  nameParts?: NamePart[] | null;
 }>();
 
 // Introduced lists run to dozens of countries; the rest sit behind a disclosure.
@@ -58,6 +62,7 @@ const intro = computed(() => {
     paragraphs: wikipedia.paragraphs.map((paragraph) => nameRuns(paragraph, speciesData.value.canonicalName)),
   };
 });
+
 const generated = computed(() => speciesData.value.generated.slice(0, 10));
 const otherNames = computed(() =>
   speciesData.value.vernacular.filter((group) => group.code !== 'eng' && group.code !== 'en'),
@@ -206,6 +211,10 @@ const englishNames = computed(
             </dl>
           </details>
         </section>
+        <!-- The pre-rendered page fills this with a live Wiktionary lookup; see LiveNameMeaning.vue. -->
+        <slot name="meaning">
+          <NameMeaning :name-parts="nameParts ?? null" />
+        </slot>
       </div>
     </div>
 

@@ -202,13 +202,17 @@ async function speciesRows(
 
 /** The search index of taxon names: higher ranks plus the most-recorded species, busiest first. */
 export function bakeNames(): Promise<NamesSnapshot> {
-  return once('names', async () => {
-    // Species first: their iNaturalist taxa name the ranks above them.
-    const species = await topSpeciesKeys(indexSize()).then(speciesRows);
-    const higher = await higherRanks(species.higherNames);
-    const names = [...higher, ...species.rows].sort((left, right) => right[4] - left[4]);
-    return { ...snapshotMeta(), inatIdsFromRecords: true, names };
-  });
+  return once<NamesSnapshot>(
+    'names',
+    async () => {
+      // Species first: their iNaturalist taxa name the ranks above them.
+      const species = await topSpeciesKeys(indexSize()).then(speciesRows);
+      const higher = await higherRanks(species.higherNames);
+      const names = [...higher, ...species.rows].sort((left, right) => right[4] - left[4]);
+      return { ...snapshotMeta(), inatIdsFromRecords: true, names };
+    },
+    { ...snapshotMeta(), names: [] },
+  );
 }
 
 /** Common-name lookup from the baked name index (build time). */

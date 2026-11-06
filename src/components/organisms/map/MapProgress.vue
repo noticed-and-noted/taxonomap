@@ -8,10 +8,11 @@
 import { useStore } from '@nanostores/vue';
 import { onBeforeUnmount, ref, watch } from 'vue';
 import BusyNotice from '~/components/molecules/BusyNotice.vue';
+import TilesNotice from '~/components/molecules/TilesNotice.vue';
 import UpdateNotice from '~/components/molecules/UpdateNotice.vue';
 import { $gbifStale } from '~/lib/gbif';
 import { $applyUpdate } from '~/stores/app-update';
-import { $mapLoad } from '~/stores/explorer';
+import { $mapLoad, $tilesFailed } from '~/stores/explorer';
 
 /** Loads quicker than this never show the ring. */
 const SHOW_DELAY = 150;
@@ -22,6 +23,7 @@ const RING = 2 * Math.PI * 9;
 
 const load = useStore($mapLoad);
 const stale = useStore($gbifStale);
+const tilesFailed = useStore($tilesFailed);
 const applyUpdate = useStore($applyUpdate);
 const visible = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -45,8 +47,12 @@ onBeforeUnmount(() => clearTimeout(timer));
         <div class="slide-inner"><UpdateNotice class="note" /></div>
       </div>
     </Transition>
+    <!-- Both notes link GBIF's status; the tile note says more, so it stands in for the busy one. -->
     <Transition name="slide">
-      <div v-if="stale" class="slide-box">
+      <div v-if="tilesFailed" class="slide-box">
+        <div class="slide-inner"><TilesNotice class="note" /></div>
+      </div>
+      <div v-else-if="stale" class="slide-box">
         <div class="slide-inner"><BusyNotice class="note" /></div>
       </div>
     </Transition>
@@ -77,7 +83,8 @@ onBeforeUnmount(() => clearTimeout(timer));
   flex-direction: column;
   align-items: center;
   width: max-content;
-  max-width: calc(100vw - 1.5rem); /* notes wrap rather than run off a phone screen */
+  /* Notes wrap rather than run off a phone screen; a parent narrows this to clear its own panels. */
+  max-width: var(--map-status-max-width, calc(100vw - 1.5rem));
   pointer-events: none;
 }
 

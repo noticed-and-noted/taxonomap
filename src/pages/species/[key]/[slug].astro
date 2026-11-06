@@ -1,12 +1,13 @@
 ---
 /**
  * Pre-rendered species page (top SPECIES_PRERENDER_COUNT species). Static
- * HTML at build; only the gallery, sounds, similar species and mini-map hydrate.
- * Photos and sounds are never fetched at build: the gallery, sounds and similar
- * species cards look them up in the browser (see ~/lib/photos).
+ * HTML at build; only the gallery, sounds, similar species, mini-map, charts and name
+ * meanings hydrate. Photos, sounds and name meanings are never fetched at build: those
+ * islands look them up in the browser (see ~/lib/photos and LiveNameMeaning.vue).
  */
 import PlotChart from '~/components/molecules/PlotChart.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
+import LiveNameMeaning from '~/components/organisms/species/LiveNameMeaning.vue';
 import MiniMap from '~/components/organisms/species/MiniMap.vue';
 import SimilarSpecies from '~/components/organisms/species/SimilarSpecies.vue';
 import SpeciesGallery from '~/components/organisms/species/SpeciesGallery.vue';
@@ -14,24 +15,19 @@ import SpeciesPage from '~/components/organisms/species/SpeciesPage.vue';
 import SpeciesSounds from '~/components/organisms/species/SpeciesSounds.vue';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/layouts/PageShell.astro';
-import { bakeSpeciesList, bakeSpeciesManifest, bakedCommonNames } from '~/lib/bake';
+import { prerenderedSpecies, bakeSpeciesManifest, bakedSpeciesPage } from '~/lib/bake';
 import { full } from '~/lib/format';
 import { speciesCharts } from '~/lib/species/charts';
-import { loadSpeciesData } from '~/lib/species/data';
 import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
-import { wikipediaIntro } from '~/lib/species/wikipedia';
 
 export async function getStaticPaths() {
-  const list = await bakeSpeciesList();
+  const list = await prerenderedSpecies();
   return list.map((species) => ({ params: { key: String(species.key), slug: species.slug } }));
 }
 
 const key = Number(Astro.params.key);
-const [names, manifest] = await Promise.all([bakedCommonNames(), bakeSpeciesManifest()]);
-const data = await loadSpeciesData(key, names);
-// The page reads fine without an intro, so a failed lookup just leaves it out.
-const intro = await wikipediaIntro(key).catch(() => null);
+const [{ data, intro }, manifest] = await Promise.all([bakedSpeciesPage(key), bakeSpeciesManifest()]);
 
 const label = data.commonName ?? data.canonicalName;
 const charts = speciesCharts(data);
@@ -59,6 +55,7 @@ const jsonLd = speciesJsonLd({
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, '\\u003c')} />
   <PageShell>
     <SpeciesPage data={data} intro={intro}>
+      <LiveNameMeaning slot="meaning" client:idle canonicalName={data.canonicalName} />
       <SpeciesGallery slot="gallery" client:load taxonKey={data.key} rank={data.rank} name={label} />
       <SpeciesSounds slot="sounds" client:visible taxonKey={data.key} rank={data.rank} />
       {data.siblings.length > 0 && (

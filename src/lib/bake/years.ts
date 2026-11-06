@@ -5,11 +5,15 @@ const YEAR_FACET_LIMIT = 1000;
 
 /** Records per year, for the time slider's histogram. */
 export function bakeYears(): Promise<YearsSnapshot> {
-  return once('years', async () => {
-    const result = await countedFacets({}, ['year'], { facetLimit: YEAR_FACET_LIMIT });
-    const years = (result.facets['year'] ?? [])
-      .map((facet) => [Number(facet.name), facet.count] as [number, number])
-      .sort((left, right) => left[0] - right[0]);
-    return { ...snapshotMeta(), total: result.count, years };
-  });
+  return once(
+    'years',
+    async () => {
+      const result = await countedFacets({}, ['year'], { facetLimit: YEAR_FACET_LIMIT });
+      const years = (result.facets['year'] ?? [])
+        .map((facet) => [Number(facet.name), facet.count] as [number, number])
+        .sort((left, right) => left[0] - right[0]);
+      return { ...snapshotMeta(), total: result.count, years };
+    },
+    { ...snapshotMeta(), total: 0, years: [] },
+  );
 }

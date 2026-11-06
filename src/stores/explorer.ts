@@ -190,6 +190,9 @@ export const $gridLevel = atom(0);
 /** Hex tile loading for the current burst, published by the map (`total` 0: nothing counted yet). */
 export const $mapLoad = atom<{ loading: boolean; done: number; total: number }>({ loading: true, done: 0, total: 0 });
 
+/** GBIF's density tiles failed to load, published by MapCanvas and shown as a note by MapProgress. */
+export const $tilesFailed = atom(false);
+
 /**
  * The map's latest check, once loaded and settled, of whether any cell is in view (published by MapCanvas).
  * A new object every check, so listeners hear each one even when the answer is unchanged.

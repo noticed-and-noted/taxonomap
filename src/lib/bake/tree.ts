@@ -74,15 +74,19 @@ function toTreeRow(usage: NamedUsage, { records, species, commonName }: TreeCoun
  * outside the species facet limit; they get a floor of 1.
  */
 export function bakeTree(): Promise<TreeSnapshot> {
-  return once('tree', async () => {
-    const records = await recordCounts();
-    const usages = await listAllByRank(TREE_RANKS);
-    const species = await speciesCounts(usages.filter((usage) => usage.rank === 'KINGDOM'));
-    const commonName = await bakedCommonNames();
+  return once(
+    'tree',
+    async () => {
+      const records = await recordCounts();
+      const usages = await listAllByRank(TREE_RANKS);
+      const species = await speciesCounts(usages.filter((usage) => usage.rank === 'KINGDOM'));
+      const commonName = await bakedCommonNames();
 
-    const nodes = usages.flatMap((usage) => toTreeRow(usage, { records, species, commonName }) ?? []);
-    // Drop nodes whose parent is missing (e.g. unplaced taxa without counts).
-    const keys = new Set(nodes.map((node) => node.k));
-    return { ...snapshotMeta(), nodes: nodes.filter((node) => node.p === undefined || keys.has(node.p)) };
-  });
+      const nodes = usages.flatMap((usage) => toTreeRow(usage, { records, species, commonName }) ?? []);
+      // Drop nodes whose parent is missing (e.g. unplaced taxa without counts).
+      const keys = new Set(nodes.map((node) => node.k));
+      return { ...snapshotMeta(), nodes: nodes.filter((node) => node.p === undefined || keys.has(node.p)) };
+    },
+    { ...snapshotMeta(), nodes: [] },
+  );
 }

@@ -50,7 +50,7 @@ function gbif(usage: Record<string, unknown> = ROBIN, redListCode = 'LC') {
           },
         },
       };
-    if (path === '/v1/species/2492462/iucnRedListCategory') return { code: redListCode, iucnTaxonID: '22710' };
+    if (path === '/v1/species/2492462/iucnRedListCategory') return { code: redListCode, iucnTaxonID: '22710_1' };
     if (path === '/v1/species/2492462/distributions')
       return { results: [{ country: 'IE', establishmentMeans: 'INTRODUCED', source: 'GRIIS - Ireland' }] };
     return undefined;

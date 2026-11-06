@@ -186,3 +186,44 @@ describe('baked tree', () => {
     await expect(without.loadBakedTree()).resolves.toBeNull();
   });
 });
+
+describe('live tree', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('lists the kingdoms from GBIF when there is no bake, with unfiltered counts', async () => {
+    const calls = stubNetwork((url) => {
+      const path = url.pathname;
+      if (path === '/v1/species/search' && url.searchParams.get('rank') === 'KINGDOM')
+        return {
+          endOfRecords: true,
+          results: [
+            { key: 1, scientificName: 'Animalia', canonicalName: 'Animalia', rank: 'KINGDOM' },
+            { key: 6, scientificName: 'Plantae', canonicalName: 'Plantae', rank: 'KINGDOM' },
+          ],
+        };
+      if (path === '/v1/species/search')
+        return facets(0, 'HIGHER_TAXON_KEY', [
+          [1, 900],
+          [6, 300],
+        ]);
+      if (path === '/v1/occurrence/search')
+        return facets(0, 'KINGDOM_KEY', [
+          [1, 5000],
+          [6, 2000],
+        ]);
+      return snapshots({ names: [] })(url);
+    });
+    vi.resetModules();
+    const model = await import('~/lib/tree/model');
+    const tree = await model.loadLiveTree();
+    expect(tree.children?.map((kingdom) => [kingdom.name, kingdom.records, kingdom.species, kingdom.kingdom])).toEqual([
+      ['Animalia', 5000, 900, 'Animalia'],
+      ['Plantae', 2000, 300, 'Plantae'],
+    ]);
+    expect([tree.records, tree.species, tree.loaded]).toEqual([7000, 1200, true]);
+    const counts = calls.filter((url) => url.searchParams.has('facet'));
+    expect(counts.some((url) => url.searchParams.has('taxonKey') || url.searchParams.has('highertaxonKey'))).toBe(
+      false,
+    );
+  });
+});

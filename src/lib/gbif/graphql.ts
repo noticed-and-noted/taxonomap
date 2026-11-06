@@ -303,7 +303,7 @@ export function nameMatches(name: string, query: string): boolean {
 /**
  * Publishers whose name matches what's typed, word by word, most records first, with their
  * records under the filter. Only publishers with records there are listed, so never a
- * sign-up GBIF rejected (it can't publish).
+ * sign-up GBIF rejected (it can't publish). An empty query lists the biggest publishers.
  */
 export async function findPublishers(
   query: string,
@@ -318,7 +318,7 @@ export async function findPublishers(
         key count publisher { title }
       }
     }`,
-    { q: query.trim(), predicate: toPredicate(filterToParams(filter)) },
+    { q: query.trim() || undefined, predicate: toPredicate(filterToParams(filter)) },
     { signal },
   );
 

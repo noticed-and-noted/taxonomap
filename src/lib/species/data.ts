@@ -143,7 +143,9 @@ async function redListOf(usage: NameUsage): Promise<RedListStatus | null> {
     iucnTaxonID: undefined,
   }));
   if (!code || UNRATED_CODES.has(code)) return null;
-  return { code, ...(iucnTaxonID && { iucnTaxonId: iucnTaxonID }) };
+  // GBIF ids look like "22685441_1"; iucnredlist.org's /species/ URLs take only the number before the underscore.
+  const iucnTaxonId = iucnTaxonID?.split('_')[0];
+  return { code, ...(iucnTaxonId && { iucnTaxonId }) };
 }
 
 /** Introduced countries for a species rank, or null (none listed, or GBIF failed: the section is left out). */
