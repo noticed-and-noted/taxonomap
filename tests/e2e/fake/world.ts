@@ -466,7 +466,7 @@ const missing = (): FakeResponse => json({ message: 'not found' }, 404);
  * The answer to a request, or undefined for a URL nothing here serves.
  * Paths are matched whatever the host: the build points the GBIF bases and
  * basemaps at the fake server, and the browser's hard-coded hosts
- * (api.inaturalist.org, www.wikidata.org, tile.gbif.org) are routed here too.
+ * (api.inaturalist.org, www.wikidata.org, en.wiktionary.org, tile.gbif.org) are routed here too.
  */
 export function answer(url: URL): FakeResponse | undefined {
   const path = url.pathname;
@@ -475,6 +475,8 @@ export function answer(url: URL): FakeResponse | undefined {
     return json({ total_results: 0, results: [] });
   // No Wikidata item for any key, so species pages show no Wikipedia intro.
   if (url.hostname === 'www.wikidata.org') return json({ query: { search: [] } });
+  // No Wiktionary entry for any word, so species pages show no name meanings.
+  if (url.hostname === 'en.wiktionary.org') return json({ query: { pages: [] } });
   if (url.hostname === 'tile.gbif.org' || url.hostname === 'photos.example') return png();
   if (url.hostname === 'sounds.example') return { status: 200, contentType: 'audio/wav', body: WAV };
   if (path === '/geocode')
