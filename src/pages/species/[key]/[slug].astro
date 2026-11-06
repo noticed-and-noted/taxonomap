@@ -15,14 +15,14 @@ import SpeciesPage from '~/components/organisms/species/SpeciesPage.vue';
 import SpeciesSounds from '~/components/organisms/species/SpeciesSounds.vue';
 import BaseLayout from '~/layouts/BaseLayout.astro';
 import PageShell from '~/layouts/PageShell.astro';
-import { bakeSpeciesList, bakeSpeciesManifest, bakedSpeciesPage } from '~/lib/bake';
+import { prerenderedSpecies, bakeSpeciesManifest, bakedSpeciesPage } from '~/lib/bake';
 import { full } from '~/lib/format';
 import { speciesCharts } from '~/lib/species/charts';
 import { speciesJsonLd } from '~/lib/species/json-ld';
 import { similarItems } from '~/lib/species/links';
 
 export async function getStaticPaths() {
-  const list = await bakeSpeciesList();
+  const list = await prerenderedSpecies();
   return list.map((species) => ({ params: { key: String(species.key), slug: species.slug } }));
 }
 

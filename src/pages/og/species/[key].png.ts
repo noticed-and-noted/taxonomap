@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { bakeSpeciesList, bakedSpeciesPage } from '~/lib/bake';
+import { prerenderedSpecies, bakedSpeciesPage } from '~/lib/bake';
 import { renderSpeciesCard } from '~/lib/og/species-card';
 
 /**
@@ -8,7 +8,7 @@ import { renderSpeciesCard } from '~/lib/og/species-card';
  * differ from the page's lead photo.
  */
 export async function getStaticPaths() {
-  const list = await bakeSpeciesList();
+  const list = await prerenderedSpecies();
   return list.map((species) => ({ params: { key: String(species.key) } }));
 }
 

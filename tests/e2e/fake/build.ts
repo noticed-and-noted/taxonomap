@@ -1,11 +1,22 @@
 /**
- * Build the site against the fake world, for the journeys: `pnpm build:e2e`.
+ * Bake and build the site against the fake world, for the journeys: `pnpm build:e2e`.
  * Every base URL points at the fake server, so the baked data, the species
  * pages and the browser's requests all come from world.ts.
  */
 import { spawn } from 'node:child_process';
+import { rm } from 'node:fs/promises';
 import { startFake } from './server.ts';
 import { FAKE_BASE } from './world.ts';
+
+const E2E_BAKE_DIR = '.cache/e2e-bake';
+
+/** Runs a command with the fake world's environment; resolves its exit code. */
+function run(command: string, args: string[]): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { env, stdio: 'inherit' });
+    child.on('exit', (exitCode) => resolve(exitCode ?? 1));
+  });
+}
 
 const server = await startFake();
 const env = {
@@ -24,15 +35,14 @@ const env = {
   SPECIES_PRERENDER_COUNT: '1',
   NAME_INDEX_SIZE: '20',
   GBIF_CACHE_REFRESH: '1',
-  // Never the data a local `pnpm bake` left behind.
-  BAKE_DIR: '.cache/e2e-bake-nothing',
+  // A bake of its own, never the data a local `pnpm bake` left behind.
+  BAKE_DIR: E2E_BAKE_DIR,
   ASTRO_TELEMETRY_DISABLED: '1',
   // Sourcemaps let the journeys' coverage (`pnpm test:e2e:coverage`) map back to src/.
   E2E_SOURCEMAP: '1',
 };
-const code = await new Promise<number>((resolve) => {
-  const child = spawn('npx', ['astro', 'build'], { env, stdio: 'inherit' });
-  child.on('exit', (exitCode) => resolve(exitCode ?? 1));
-});
+await rm(E2E_BAKE_DIR, { recursive: true, force: true });
+const bakeCode = await run('npx', ['tsx', 'scripts/bake.ts']);
+const code = bakeCode || (await run('npx', ['astro', 'build']));
 server.close();
 process.exit(code);

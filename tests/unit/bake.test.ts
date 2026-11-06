@@ -97,13 +97,21 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
   });
 }
 
-async function bake(env: Record<string, string> = {}) {
+/** A fresh copy of the bake module that only reads baked files, as the build does. */
+async function build(env: Record<string, string> = {}) {
   vi.resetModules();
   // Registered afresh each time, so the mock hands out this bake's iNaturalist client, not an earlier one's.
   vi.doMock('~/lib/photos/inat-server', () => import('~/lib/photos/inat'));
   vi.unstubAllEnvs();
   for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
   return import('~/lib/bake');
+}
+
+/** A fresh copy of the bake module that fetches, as `pnpm bake` does. */
+async function bake(env: Record<string, string> = {}) {
+  const module = await build(env);
+  module.startFreshBake();
+  return module;
 }
 
 afterEach(() => {
@@ -486,6 +494,7 @@ describe('build sizes', () => {
       isDev: () => false,
     }));
     const prod = await import('~/lib/bake');
+    prod.startFreshBake();
     vi.doUnmock('~/lib/env');
     expect(prod.prerenderCount()).toBe(2000);
     const calls = gbif();
@@ -510,11 +519,31 @@ describe('bake to disk', () => {
       expect(gbifProgress?.queued).toBeGreaterThan(0);
       expect(gbifProgress?.done).toBe(gbifProgress?.queued);
       const calls = gbif();
-      const baked = await bake({ BAKE_DIR: dir });
+      const baked = await build({ BAKE_DIR: dir });
       expect((await baked.bakeYears()).total).toBe(30);
       expect(await baked.bakeSpeciesList()).toEqual(list);
       expect((await baked.bakedSpeciesPage(list[0]!.key)).data.key).toBe(list[0]!.key);
-      expect(await (await bake({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '0' })).bakeSpeciesList()).toEqual([]);
+      expect(await baked.prerenderedSpecies()).toEqual(list);
+      expect(baked.isBaked('species-pages')).toBe(true);
+      expect(await (await build({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '0' })).bakeSpeciesList()).toEqual([]);
+      expect(calls).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe('build without a bake', () => {
+  it('asks nothing of the network, and has no snapshots or species pages', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baked-'));
+    try {
+      const calls = gbif();
+      const empty = await build({ BAKE_DIR: dir, SPECIES_PRERENDER_COUNT: '3' });
+      expect(empty.isBaked('names')).toBe(false);
+      expect((await empty.bakeNames()).names).toEqual([]);
+      expect((await empty.bakeTree()).nodes).toEqual([]);
+      expect(await empty.prerenderedSpecies()).toEqual([]);
+      expect(await empty.bakeSpeciesManifest()).toEqual({});
       expect(calls).toHaveLength(0);
     } finally {
       rmSync(dir, { recursive: true });

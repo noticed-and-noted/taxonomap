@@ -26,6 +26,7 @@ import {
   isExpandable,
   loadBakedTree,
   loadChildren,
+  loadLiveTree,
   pathTo,
   resolve,
   ROOT_KEY,
@@ -82,7 +83,7 @@ const metricOf = (node: TreeNode) => (metric.value === 'records' ? node.records 
 /** Loads the baked tree and moves to the focus in the URL. */
 async function build() {
   error.value = null;
-  const fresh = await loadBakedTree();
+  const fresh = await loadBakedTree().then((baked) => baked ?? loadLiveTree().catch(() => null));
   if (!fresh) {
     error.value = 'no-data';
     return;

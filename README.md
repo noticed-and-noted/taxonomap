@@ -37,7 +37,7 @@ pnpm dev
 - `pnpm test`, `pnpm test:coverage`: unit tests, with or without coverage
 - `pnpm build:e2e`, `pnpm test:e2e`: Playwright against a fake GBIF, no network needed (run `pnpm exec playwright install chromium` once)
 - `pnpm test:contract`: checks the live GBIF API still behaves as the client expects
-- `pnpm bake`: save the data the build needs to `.cache/baked/`, so builds don't fetch it (delete the folder to go back to fetching)
+- `pnpm bake`: fetch the data the build needs (GBIF, iNaturalist and Wikipedia) and save it to `.cache/baked/`. The build makes no external requests: without a bake it has no species pages or `/data` snapshots, and the browser fetches that data live
 - `pnpm ioc-names <VernacularName.tsv>`: rebuild the IOC bird names from GBIF's backbone archive
 
 ## Data

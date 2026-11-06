@@ -1,6 +1,7 @@
 /**
- * Build-time data baking (Node only). Each baker is used by a static endpoint in
- * src/pages/data/ and memoised so several pages can share one result within a build.
+ * Data baking (Node only). `pnpm bake` fetches every snapshot and saves it; the build reads
+ * the saved files and makes no external requests. Snapshots are memoised so several pages
+ * share one result within a run.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -12,9 +13,15 @@ import { bakeTree } from './tree';
 import { bakeYears } from './years';
 
 export { bakedCommonNames, bakeNames } from './names';
-export { bakeProgress } from './cache';
-export { bakeSpeciesList, bakeSpeciesManifest, prerenderCount, type PrerenderSpecies } from './species-list';
-export { bakeSpeciesPages, bakedSpeciesPage, type BakedSpeciesPage } from './species-pages';
+export { bakeProgress, isBaked, startFreshBake } from './cache';
+export { bakeSpeciesList, prerenderCount, type PrerenderSpecies } from './species-list';
+export {
+  bakeSpeciesManifest,
+  bakeSpeciesPages,
+  bakedSpeciesPage,
+  prerenderedSpecies,
+  type BakedSpeciesPage,
+} from './species-pages';
 export { bakeTree } from './tree';
 export { bakeYears } from './years';
 

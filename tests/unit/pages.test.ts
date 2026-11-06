@@ -6,7 +6,8 @@ const bake = {
   bakeSpeciesManifest: vi.fn(async () => ({ 10: 'species-10' })),
   bakeTree: vi.fn(async () => ({ v: 1, generated: 'g', nodes: [] })),
   bakeYears: vi.fn(async () => ({ v: 1, generated: 'g', total: 3, years: [[2000, 3]] })),
-  bakeSpeciesList: vi.fn(async () => [
+  isBaked: vi.fn((_key: string) => true),
+  prerenderedSpecies: vi.fn(async () => [
     { key: 10, slug: 'a', count: 5 },
     { key: 11, slug: 'b', count: 4 },
   ]),
@@ -36,14 +37,25 @@ describe('robots.txt', () => {
 describe('/data snapshots', () => {
   it.each([
     ['names', 'bakeNames'],
-    ['species-manifest', 'bakeSpeciesManifest'],
     ['tree', 'bakeTree'],
     ['years', 'bakeYears'],
-  ] as const)('/data/%s.json serves %s', async (name, callback) => {
-    const { GET } = await import(`~/pages/data/${name}.json.ts`);
-    const response: Response = await GET(context({}));
+  ] as const)('/data/%s.json serves %s', async (snapshot, callback) => {
+    const { GET } = await import('~/pages/data/[snapshot].json');
+    const response: Response = await GET(context({ params: { snapshot } }));
     expect(response.headers.get('content-type')).toBe('application/json');
     expect(await response.json()).toEqual(await bake[callback]());
+  });
+
+  it('only builds the snapshots the bake saved, so the browser fetches the rest live', async () => {
+    bake.isBaked.mockImplementation((key: string) => key !== 'tree');
+    const { getStaticPaths } = await import('~/pages/data/[snapshot].json');
+    expect(getStaticPaths()).toEqual([{ params: { snapshot: 'years' } }, { params: { snapshot: 'names' } }]);
+  });
+
+  it('/data/species-manifest.json serves bakeSpeciesManifest', async () => {
+    const { GET } = await import('~/pages/data/species-manifest.json');
+    const response: Response = await GET(context({}));
+    expect(await response.json()).toEqual(await bake.bakeSpeciesManifest());
   });
 });
 

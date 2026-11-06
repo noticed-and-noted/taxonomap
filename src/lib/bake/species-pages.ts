@@ -2,7 +2,7 @@ import { loadSpeciesData, type CommonNameLookup, type SpeciesData } from '~/lib/
 import { wikipediaIntro, type WikipediaIntro } from '~/lib/species/wikipedia';
 import { lookupLimit, once } from './cache';
 import { bakedCommonNames } from './names';
-import { bakeSpeciesList } from './species-list';
+import { bakeSpeciesList, type PrerenderSpecies } from './species-list';
 
 /** What a pre-rendered species page and its Open Graph card show, bar the name's meaning (looked up in the browser). */
 export interface BakedSpeciesPage {
@@ -16,24 +16,39 @@ async function loadPage(key: number, commonName: CommonNameLookup): Promise<Bake
   return { data, intro };
 }
 
+async function fetchSpeciesPages(): Promise<Record<string, BakedSpeciesPage>> {
+  const [list, commonName] = await Promise.all([bakeSpeciesList(), bakedCommonNames()]);
+  const limit = lookupLimit();
+  const entries = await Promise.all(
+    list.map((species) => limit(async () => [String(species.key), await loadPage(species.key, commonName)] as const)),
+  );
+  return Object.fromEntries(entries);
+}
+
 /** Every pre-rendered species' page, keyed by species key (memoised; `pnpm bake` saves it). */
 export function bakeSpeciesPages(): Promise<Record<string, BakedSpeciesPage>> {
-  return once('species-pages', async () => {
-    const [list, commonName] = await Promise.all([bakeSpeciesList(), bakedCommonNames()]);
-    const limit = lookupLimit();
-    const entries = await Promise.all(
-      list.map((species) => limit(async () => [String(species.key), await loadPage(species.key, commonName)] as const)),
-    );
-    return Object.fromEntries(entries);
-  });
+  return once('species-pages', fetchSpeciesPages, {});
+}
+
+/** The species that get a static page: those the bake saved one for. The rest render in the browser. */
+export async function prerenderedSpecies(): Promise<PrerenderSpecies[]> {
+  const [list, pages] = await Promise.all([bakeSpeciesList(), bakeSpeciesPages()]);
+  return list.filter((species) => String(species.key) in pages);
 }
 
 /**
- * One pre-rendered species' page, from the bake when it has it.
- * @param key The GBIF species key.
- * @returns The baked page, or one fetched now for a species the bake left out.
+ * One pre-rendered species' baked page.
+ * @param key A key from `prerenderedSpecies()`.
+ * @throws Error when the bake has no page for it.
  */
 export async function bakedSpeciesPage(key: number): Promise<BakedSpeciesPage> {
-  const baked = (await bakeSpeciesPages())[String(key)];
-  return baked ?? loadPage(key, await bakedCommonNames());
+  const page = (await bakeSpeciesPages())[String(key)];
+  if (!page) throw new Error(`The bake has no page for species ${key}`);
+  return page;
+}
+
+/** key → slug for every pre-rendered species (links elsewhere use /species/view). */
+export async function bakeSpeciesManifest(): Promise<Record<string, string>> {
+  const species = await prerenderedSpecies();
+  return Object.fromEntries(species.map((prerendered) => [String(prerendered.key), prerendered.slug]));
 }

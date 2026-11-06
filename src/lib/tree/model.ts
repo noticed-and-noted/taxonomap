@@ -1,6 +1,6 @@
 /**
- * Tree of life model. The top four ranks come from /data/tree.json; deeper
- * levels load live, three requests per expansion (no per-node calls):
+ * Tree of life model. The top four ranks come from /data/tree.json (or load live
+ * when the bake left none); deeper levels load live, three requests per expansion (no per-node calls):
  *   children (names) · occurrence facet on the child rank (records) ·
  *   species-search facet on higherTaxonKey (species counts).
  */
@@ -9,7 +9,15 @@ import { nameIndexWithin } from '~/lib/data/name-index';
 import { CODE_BY_RANK, RANK_BY_CODE } from '~/lib/data/ranks';
 import type { TreeRank, TreeNodeRow } from '~/lib/data/types';
 import { capitalise } from '~/lib/format';
-import { getAllChildren, getParents, occurrenceFacets, speciesCountsUnder, type FacetField } from '~/lib/gbif';
+import {
+  getAllChildren,
+  getParents,
+  listByRank,
+  occurrenceFacets,
+  speciesCountsUnder,
+  type FacetField,
+  type UsageWithNames,
+} from '~/lib/gbif';
 import { englishName } from '~/lib/species/names';
 
 export interface TreeNode {
@@ -75,18 +83,14 @@ function assignKingdom(node: TreeNode, kingdom: string) {
   node.children?.forEach((child) => assignKingdom(child, kingdom));
 }
 
+/** The root of the tree, with no kingdoms under it yet. */
+function emptyRoot(loaded: boolean): TreeNode {
+  return { key: ROOT_KEY, name: 'Life', rank: 'ROOT', records: 0, species: 0, loaded, kingdom: '' };
+}
+
 /** Build the hierarchy from baked rows. */
 export function buildTree(rows: readonly TreeNodeRow[]): TreeNode {
-  const root: TreeNode = {
-    key: ROOT_KEY,
-    name: 'Life',
-    rank: 'ROOT',
-    records: 0,
-    species: 0,
-    loaded: true,
-    children: [],
-    kingdom: '',
-  };
+  const root: TreeNode = { ...emptyRoot(true), children: [] };
   const byKey = new Map(rows.map((row) => [row.k, nodeFromRow(row)]));
   for (const row of rows) {
     const node = byKey.get(row.k) as TreeNode;
@@ -118,13 +122,33 @@ export async function loadBakedTree(): Promise<TreeNode | null> {
   return snapshot ? buildTree(snapshot.nodes) : null;
 }
 
+/**
+ * The tree with its kingdoms fetched from GBIF, for when the bake left no snapshot.
+ * Deeper levels then load on demand, as below a baked tree's orders.
+ */
+export async function loadLiveTree(): Promise<TreeNode> {
+  const root = emptyRoot(false);
+  const kingdoms = await loadChildren(root);
+  root.records = sum(kingdoms, 'records');
+  root.species = sum(kingdoms, 'species');
+  return root;
+}
+
+/** The taxa one rank below `node`: the kingdoms under the root, else its children in the backbone. */
+function childUsagesOf(node: TreeNode, childRank: TreeRank, signal?: AbortSignal): Promise<UsageWithNames[]> {
+  if (node.rank === 'ROOT') return listByRank('KINGDOM').then((page) => page.results);
+  return getAllChildren(node.key, RANK_BY_CODE[childRank], signal);
+}
+
 /** Everything needed to list a node's children: the child taxa, their record and species counts, and common names. */
 async function fetchChildData(node: TreeNode, childRank: TreeRank, wkt?: string, signal?: AbortSignal) {
   const facet = FACET_FOR[childRank];
+  // The root stands for all of life, so its counts are unfiltered.
+  const taxonKey = node.rank === 'ROOT' ? undefined : node.key;
   const [childUsages, recordFacets, species, nameIndex] = await Promise.all([
-    getAllChildren(node.key, RANK_BY_CODE[childRank], signal),
-    occurrenceFacets({ taxonKey: node.key, geometry: wkt }, [facet], { facetLimit: 5000, ...(signal && { signal }) }),
-    childRank === 'S' ? Promise.resolve(null) : speciesCountsUnder(node.key, 5000, signal),
+    childUsagesOf(node, childRank, signal),
+    occurrenceFacets({ taxonKey, geometry: wkt }, [facet], { facetLimit: 5000, ...(signal && { signal }) }),
+    childRank === 'S' ? Promise.resolve(null) : speciesCountsUnder(taxonKey, 5000, signal),
     nameIndexWithin(800),
   ]);
   const records = new Map((recordFacets.facets[facet] ?? []).map((entry) => [Number(entry.name), entry.count]));
@@ -134,7 +158,8 @@ async function fetchChildData(node: TreeNode, childRank: TreeRank, wkt?: string,
 /** Fetch and attach the children of `node` (optionally scoped to a WKT area). */
 export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortSignal): Promise<TreeNode[]> {
   const childRank = NEXT_RANK[node.rank];
-  if (!childRank || node.rank === 'ROOT') return node.children ?? [];
+  // A loaded root keeps its kingdoms, whatever the area: they're the whole tree's top level.
+  if (!childRank || (node.rank === 'ROOT' && node.loaded)) return node.children ?? [];
   const { childUsages, records, species, nameIndex } = await fetchChildData(node, childRank, wkt, signal);
   const children: TreeNode[] = [];
   for (const child of childUsages) {
@@ -145,16 +170,17 @@ export async function loadChildren(node: TreeNode, wkt?: string, signal?: AbortS
     if (recordCount === 0 && speciesCount === 0) continue;
     const raw = nameIndex?.get(child.key)?.commonName ?? englishName(child.vernacularNames ?? [], child.key);
     const common = raw ? capitalise(raw) : undefined;
+    const name = child.canonicalName ?? child.scientificName;
     children.push({
       key: child.key,
-      name: child.canonicalName ?? child.scientificName,
+      name,
       ...(common && { common }),
       rank: childRank,
       records: recordCount,
       species: speciesCount,
       parent: node,
       loaded: childRank === 'S',
-      kingdom: node.kingdom,
+      kingdom: childRank === 'K' ? name : node.kingdom,
     });
   }
   children.sort((left, right) => right.records - left.records || right.species - left.species);

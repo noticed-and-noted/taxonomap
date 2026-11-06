@@ -130,21 +130,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # Data from the latest bake. Without one, the build fetches it from GBIF itself.
+      # Data from the latest bake. The build makes no external requests: what the bake lacks, the browser fetches.
       - uses: actions/cache/restore@v4
         with:
           path: .cache/baked
           key: baked-none
           restore-keys: baked-
-
-      # GBIF response cache for what the build still fetches (species pages, if pre-rendered).
-      - uses: actions/cache@v4
-        with:
-          path: |
-            .cache/gbif
-            .cache/inat
-          key: gbif-${{ github.run_id }}
-          restore-keys: gbif-
 
       - run: pnpm build
         timeout-minutes: 40
