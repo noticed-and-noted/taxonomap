@@ -96,10 +96,8 @@ test('the place search picks by keyboard or pointer, and closes on Escape or a c
 
 test('a place picked from the list with the pointer moves the circle there', async ({ page }) => {
   await page.goto('/?near=1');
-  // Enter before any results are in searches at once.
   const box = page.getByRole('combobox', { name: 'Search for a place' });
   await box.fill('london');
-  await box.press('Enter');
   const london = page.getByRole('listbox', { name: 'Places' }).getByRole('option', { name: /London/ });
   await london.hover();
   await london.click();
