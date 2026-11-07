@@ -138,6 +138,32 @@ describe('useYearHistogram', () => {
   });
 });
 
+describe('useYearHistogram races', () => {
+  it('drops the baked years when a filter arrives first, and reads a live answer without years as none', async () => {
+    let releaseYears!: () => void;
+    const yearsHeld = new Promise<void>((resolve) => (releaseYears = resolve));
+    stubNetwork(async (url) => {
+      if (url.pathname === '/data/years.json') {
+        await yearsHeld;
+        return YEARS;
+      }
+      return { count: 0, results: [], facets: [] };
+    });
+    // Earlier tests leave their filters in the URL.
+    history.replaceState(null, '', '/');
+    const { explorer, years } = await load();
+    const { result: histogram, stop } = run(() => years.useYearHistogram());
+    explorer.$hasPhoto.set(true);
+    await vi.waitFor(() => expect(histogram.live.value).toBe(true));
+    releaseYears();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect([...histogram.counts.value]).toEqual([]);
+    expect(histogram.live.value).toBe(true);
+    explorer.$hasPhoto.set(false);
+    stop();
+  });
+});
+
 describe('useLatestLoad', () => {
   it('lets only the latest run publish, aborting the one before', async () => {
     const { useLatestLoad } = await import('~/composables/useLatestLoad');

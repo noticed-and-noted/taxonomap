@@ -200,6 +200,23 @@ describe('firstRecordsByTaxon', () => {
     await expect(api.firstRecordsBySearches([1], 'SUBSPECIES', [], {})).rejects.toThrow(/SUBSPECIES/);
   });
 
+  it('finds no records when GBIF answers without the rank’s facet', async () => {
+    stubNetwork(() => ({ data: { occurrenceSearch: { facet: {} } } }));
+    const api = await gbif();
+    expect((await api.firstRecordsByTaxon([7], 'SPECIES', {}, { perTaxon: 1 })).size).toBe(0);
+  });
+
+  it('finds no records for a search GBIF left out of its answer', async () => {
+    stubNetwork(() => ({ data: { search_1: { facet: {} } } }));
+    const api = await gbif();
+    const searches = [
+      { filter: {}, perTaxon: 1 },
+      { filter: {}, perTaxon: 1 },
+    ];
+    const results = await api.firstRecordsBySearches([7], 'SPECIES', searches, {});
+    expect(results.map((result) => result.size)).toEqual([0, 0]);
+  });
+
   it('batches the main ranks only', async () => {
     const api = await gbif();
     expect([api.canBatchRank('GENUS'), api.canBatchRank('SUBSPECIES')]).toEqual([true, false]);

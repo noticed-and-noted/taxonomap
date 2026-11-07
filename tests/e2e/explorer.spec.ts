@@ -362,3 +362,291 @@ test('the When menu picks a preset, or a custom range typed or picked on the cal
   await expect(page).toHaveURL(/when=y(%3A|:)2012\.\.2016/);
   await expect(menu).toHaveAccessibleName('Date range: 2012–2016');
 });
+
+test('in the cell’s records, the arrows step through rows and the lightbox steps through records', async ({ page }) => {
+  await expandFirstRecord(page);
+  const rows = page.getByRole('table', { name: 'Records' }).locator('tbody tr[data-record]');
+  // Up from the first record has nowhere to go; down opens the next one.
+  await rows.first().getByRole('button').first().focus();
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowDown');
+  await expect(rows.nth(1).getByRole('button').first()).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(rows.first().getByRole('button').first()).toBeFocused();
+
+  // The expanded record's photo opens a lightbox that steps on through the records.
+  await page.getByRole('button', { name: /^Enlarge photo, 1 of/ }).click();
+  const lightbox = page.getByRole('dialog');
+  await expect(lightbox).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  await lightbox.locator('img').first().click();
+  await page.keyboard.press('Escape');
+  await expect(lightbox).toBeHidden();
+
+  // Down from the last loaded record loads the next page first.
+  const shown = await rows.count();
+  await rows.last().getByRole('button').first().focus();
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(() => rows.count()).toBeGreaterThan(shown);
+  const loaded = await rows.count();
+  await page.getByRole('button', { name: /^Show more/ }).click();
+  await expect.poll(() => rows.count()).toBeGreaterThan(loaded);
+});
+
+test('the records’ species filter answers the arrow keys, Enter and Escape', async ({ page }) => {
+  await page.goto('/?taxon=212&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  await page.getByRole('tab', { name: 'Records' }).click();
+  const search = page.getByRole('combobox', { name: 'Filter records by species' });
+  await search.click();
+  await search.press('ArrowDown');
+  await search.press('ArrowUp');
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await expect(search).not.toHaveValue('');
+  // Enter with nothing matching picks nothing.
+  await search.fill('zzzz');
+  await search.press('Enter');
+  await expect(search).toHaveValue('zzzz');
+});
+
+test('the cell’s species table opens a row anywhere, sorts by records, and clears a search that matches nothing', async ({
+  page,
+}) => {
+  // No taxon filter, so the cell holds several groups to filter by.
+  await page.goto('/?view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  const table = page.locator('.species-table');
+  await table.getByRole('button', { name: /^Records/ }).click();
+  await table.getByRole('button', { name: /^Records/ }).click();
+  await table.getByRole('searchbox', { name: 'Find in results' }).fill('zzzz');
+  await table.getByRole('button', { name: 'Clear search and filters' }).click();
+  await expect(table.getByRole('searchbox', { name: 'Find in results' })).toHaveValue('');
+  await table.getByRole('button', { name: 'Filter' }).click();
+  const filters = page.getByRole('dialog', { name: 'Filter species' });
+  await filters.getByRole('button', { name: /^All/ }).click();
+  await table.getByRole('button', { name: 'Filter' }).click();
+  await page.keyboard.press('Escape');
+  await expect(filters).toBeHidden();
+  await table.getByRole('button', { name: 'Filter' }).click();
+  await filters.getByRole('button', { name: 'Done' }).click();
+  await expect(filters).toBeHidden();
+  // A click on the row's count, not its link, still opens the species.
+  const firstRow = table.locator('tbody tr').first();
+  await firstRow.locator('td').last().click();
+  await expect(page).toHaveURL(/\/species\//);
+});
+
+/** The map canvas, once its cells have loaded (a hover tooltip shows over the centre). */
+async function mapWithCells(page: Page) {
+  const canvas = page.locator('.maplibregl-canvas');
+  const box = (await canvas.boundingBox())!;
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await expect(async () => {
+    await page.mouse.move(centre.x, centre.y + 1);
+    await page.mouse.move(centre.x, centre.y);
+    await expect(page.getByTestId('map').getByText(/records?$/)).toBeVisible({ timeout: 500 });
+  }).toPass();
+  return { canvas, box, centre };
+}
+
+test('a click or Enter on the map selects the cell there, and Escape or a click off the cells clears it', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name === 'mobile', 'the keyboard and pointer paths are the same on phones');
+  await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0');
+  const { canvas, box, centre } = await mapWithCells(page);
+  await page.mouse.click(centre.x, centre.y);
+  await expect(page).toHaveURL(/hex=/);
+  await expect(page.getByRole('heading', { name: 'Selected cell' })).toBeVisible();
+  // Far out in the Atlantic there are no cells, so a click there clears the selection.
+  await page.mouse.click(box.x + 5, box.y + box.height - 5);
+  await expect(page).not.toHaveURL(/hex=/);
+
+  await canvas.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/hex=/);
+  await canvas.focus();
+  await page.keyboard.press('Escape');
+  await expect(page).not.toHaveURL(/hex=/);
+});
+
+test('a cell found to hold no records drops its count from the tooltip', async ({ page }, info) => {
+  test.skip(info.project.name === 'mobile', 'touch has no hover tooltip');
+  // No species falls under this taxon, so every cell's exact count comes back as 0.
+  await page.goto('/?taxon=999999&view=-1.50,52.50,5.0');
+  const canvas = page.locator('.maplibregl-canvas');
+  const box = (await canvas.boundingBox())!;
+  await expect(async () => {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 1);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.getByTestId('map').getByText(/records?$/)).toBeVisible({ timeout: 500 });
+  }).toPass();
+  await expect(page.getByTestId('map').getByText(/records?$/)).toBeHidden();
+  // The next draw leaves the cell known to be empty out; panning makes sure one happens.
+  await canvas.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page).not.toHaveURL(/view=-1\.50%2C52\.50/);
+});
+
+test('an empty view offers to fly to the nearest records', async ({ page }) => {
+  // Australia: the fake world's cells are all over Britain.
+  await page.goto('/?taxon=2492462&view=135,-25,4');
+  await expect(page.getByText(/Closest are about [\d,]+ km/)).toBeVisible();
+  await page.getByRole('button', { name: 'Fly to nearest' }).click();
+  await expect(page).not.toHaveURL(/view=135/);
+});
+
+test('a filter with no records anywhere offers to edit the filters', { tag: '@mobile' }, async ({ page }, info) => {
+  // Empty tiles everywhere, the world grid included.
+  await page.route(/\.mvt(\?|$)/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/x-protobuf', body: Buffer.alloc(0) }),
+  );
+  await page.goto('/?taxon=2492462&basis=FOSSIL_SPECIMEN');
+  await page.getByRole('button', { name: 'Edit filters' }).click();
+  if (info.project.name === 'mobile') await expect(page).toHaveURL(/panel=filters/);
+  else await expect(page.locator('#filter-flyout')).toBeVisible();
+});
+
+test('the header search steps with the arrows, switches to places and back, and opens a result’s page', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const box = page.getByRole('combobox', { name: 'Search species or places' });
+  await box.fill('european robin');
+  await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+  await box.press('ArrowDown');
+  await box.press('ArrowUp');
+  // Ctrl+Shift+Enter switches what is searched, each way.
+  await box.press('Control+Shift+Enter');
+  await expect(page.getByRole('option', { name: /Search species for/ })).toBeVisible();
+  await box.press('Control+Shift+Enter');
+  await expect(page.getByRole('option', { name: /^European Robin/i }).first()).toBeVisible();
+  // The preview's button picks the result in place.
+  await page
+    .getByRole('option', { name: /^European Robin/i })
+    .first()
+    .hover();
+  await page.getByRole('button', { name: 'Filter on map' }).click();
+  await expect(page).toHaveURL(/taxon=2492462/);
+  // Ctrl+Enter opens the highlighted result's About page instead.
+  await box.fill('common blackbird');
+  await expect(page.getByRole('option', { name: /^Common Blackbird/i }).first()).toBeVisible();
+  await box.press('Control+Enter');
+  await expect(page).toHaveURL(/\/species\//);
+});
+
+test('a pick past the What list’s limit says why it was not added', async ({ page }) => {
+  await page.goto('/?taxon=1,2,3,4,5,6,7,8,9,10');
+  const box = page.getByRole('combobox', { name: 'Search species or places' });
+  await box.fill('european robin');
+  await page
+    .getByRole('option', { name: /^European Robin/i })
+    .first()
+    .click();
+  await expect(page.getByText('You can show up to 10 species or groups.', { exact: false }).first()).toBeVisible();
+});
+
+test('the legend slides away and back, and the cell panel closes to no selection', async ({ page }) => {
+  await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  await page.getByRole('button', { name: 'Slide legend away' }).click();
+  await page.getByRole('button', { name: 'Show legend' }).click();
+  await expect(page.getByRole('button', { name: 'Slide legend away' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close panel' }).click();
+  await expect(page).not.toHaveURL(/hex=/);
+});
+
+test('open filters move between the rail and the sheet as the window crosses the phone width', async ({ page }) => {
+  await page.goto('/?taxon=2492462');
+  await page.getByRole('button', { name: 'When', exact: true }).click();
+  await page.setViewportSize({ width: 800, height: 800 });
+  await expect(page).toHaveURL(/panel=filters/);
+  // The sheet clears every filter in one go.
+  await page.getByRole('button', { name: 'Clear all filters' }).click();
+  await expect(page).not.toHaveURL(/taxon=/);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page).not.toHaveURL(/panel=filters/);
+  await expect(page.locator('#filter-flyout')).toBeVisible();
+  // Crossing back with nothing open moves nothing.
+  await page.getByRole('button', { name: 'When', exact: true }).click();
+  await expect(page.locator('#filter-flyout')).toBeHidden();
+  await page.setViewportSize({ width: 800, height: 800 });
+  await expect(page).not.toHaveURL(/panel=filters/);
+});
+
+test('busy GBIF tiles raise a notice that can be dismissed, and failed tiles say so', async ({ page }) => {
+  await page.route(/\.mvt(\?|$)/, (route) => route.fulfill({ status: 503, body: '' }));
+  await page.goto('/?taxon=2492462');
+  const dismiss = page.getByRole('button', { name: 'Dismiss' });
+  await expect(dismiss).toBeVisible();
+  // Once GBIF answers again, the notice stays dismissed.
+  await page.unroute(/\.mvt(\?|$)/);
+  await dismiss.click();
+  await expect(page.getByText('GBIF is busy.')).toBeHidden();
+
+  await page.route(/\.mvt(\?|$)/, (route) => route.abort('failed'));
+  await page.goto('/?taxon=212');
+  await expect(page.getByText('Occurrence tiles are unavailable right now.')).toBeVisible();
+});
+
+test('the request meter, with ?debug=requests, hides and shows with Ctrl+D and remembers it', async ({ page }) => {
+  await page.goto('/?debug=requests');
+  const meter = page.getByText(/GBIF requests · \d+ min/);
+  await expect(meter).toBeVisible();
+  await page.keyboard.press('Control+d');
+  await expect(meter).toBeHidden();
+  await page.keyboard.press('d');
+  await page.reload();
+  await page.waitForTimeout(500);
+  await expect(meter).toBeHidden();
+  await page.keyboard.press('Control+d');
+  await expect(meter).toBeVisible();
+});
+
+test('a record list that fails to load offers to try again', async ({ page }) => {
+  let isDown = true;
+  await page.route(/\/v1\/occurrence\/search\?.*limit=(?!0\b)\d+/, (route) =>
+    isDown ? route.fulfill({ status: 500, body: '' }) : route.fallback(),
+  );
+  await page.goto('/?taxon=212&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  await page.getByRole('tab', { name: 'Records' }).click();
+  const alert = page.getByRole('alert').filter({ hasText: /records/i });
+  await expect(alert).toBeVisible();
+  isDown = false;
+  await alert.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByRole('table', { name: 'Records' }).locator('tbody tr').first()).toBeVisible();
+});
+
+test('a photo GBIF’s image cache misses at first is asked for again', async ({ page }) => {
+  const asked = new Map<string, number>();
+  await page.route(/\/v1\/image\/cache\//, (route) => {
+    const url = route.request().url();
+    asked.set(url, (asked.get(url) ?? 0) + 1);
+    return asked.get(url) === 1 ? route.fulfill({ status: 500, body: '' }) : route.fallback();
+  });
+  await expandFirstRecord(page);
+  await expect.poll(() => Math.max(0, ...asked.values())).toBeGreaterThan(1);
+});
+
+test('a search box’s own clear button empties it', async ({ page }) => {
+  await page.goto('/tree?focus=729');
+  const filter = page.getByRole('searchbox', { name: 'Filter groups' });
+  await filter.fill('thrush');
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await expect(filter).toHaveValue('');
+});
+
+test('a live search result’s preview counts its records when its photo search could not', async ({ page }) => {
+  // No baked names, so every result is a live one without a count.
+  await page.route('**/data/names.json', (route) =>
+    route.fulfill({ json: { v: 1, generated: '2026-01-01T00:00:00Z', names: [] } }),
+  );
+  await page.route(/\/graphql/, (route) => route.fulfill({ status: 500, body: '' }));
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Search species or places' }).fill('robin');
+  await page
+    .getByRole('option', { name: /Erithacus rubecula/i })
+    .first()
+    .hover();
+  await expect(page.getByRole('region', { name: /^Preview/ }).getByText(/records/)).toBeVisible();
+});

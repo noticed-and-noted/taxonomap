@@ -62,6 +62,8 @@ describe('reading store', () => {
     expect(reading.mapPixelRatio()).toBe(3);
     reading.setReading({ renderScale: 'low' });
     expect(reading.mapPixelRatio()).toBe(1);
+    reading.setReading({ renderScale: 'unknown' as never });
+    expect(reading.mapPixelRatio()).toBe(2);
 
     vi.stubGlobal('devicePixelRatio', 1);
     reading.setReading({ renderScale: 'high' });

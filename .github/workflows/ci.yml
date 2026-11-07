@@ -146,11 +146,17 @@ jobs:
           retention-days: 3
 
   e2e:
-    name: Playwright journeys
+    name: Playwright journeys (${{ matrix.shard }}/3)
     # The journeys build their own site against a fake GBIF (tests/e2e/fake), so they
     # need neither the live build nor the network, and start straight away.
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    # A third of the journeys each, on machines of their own: the journeys are CPU-bound, so more machines,
+    # not more workers on one, are what make the run shorter. Each shard builds the fake site itself.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -161,7 +167,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm build:e2e
-      - run: pnpm test:e2e
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/3
 
   coverage-badges:
     name: Coverage badges

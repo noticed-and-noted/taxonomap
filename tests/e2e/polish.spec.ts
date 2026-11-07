@@ -5,6 +5,8 @@ const SW_PATH = 'dist/sw.js';
 
 test.describe(() => {
   test.use({ serviceWorkers: 'allow' });
+  // One of these rewrites dist/sw.js to stand in for a deploy, which the others' workers would fetch mid-change.
+  test.describe.configure({ mode: 'serial' });
 
   test('offline, every page is the offline page, and it reloads when the connection returns', async ({
     page,
@@ -18,9 +20,13 @@ test.describe(() => {
     await context.setOffline(true);
     // The page that was open reloads into the offline page.
     await expect(page.getByRole('heading', { name: 'You’re offline' })).toBeVisible();
-    await page.goto('/tree/?focus=1');
-    await expect(page.getByRole('heading', { name: 'You’re offline' })).toBeVisible();
-    await expect(page).toHaveURL('/tree/?focus=1');
+    // Chromium's emulated offline switch can replace a navigation in flight with a reload of the page it left
+    // (seen as the URL staying "/" after the goto), so ask again until the page asked for is the one shown.
+    await expect(async () => {
+      await page.goto('/tree/?focus=1');
+      await expect(page.getByRole('heading', { name: 'You’re offline' })).toBeVisible({ timeout: 2000 });
+      await expect(page).toHaveURL('/tree/?focus=1', { timeout: 2000 });
+    }).toPass();
 
     await context.unroute('**/*');
     await context.setOffline(false);

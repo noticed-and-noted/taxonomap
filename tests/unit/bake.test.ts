@@ -14,7 +14,8 @@ vi.mock('~/lib/species/data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/lib/species/data')>()),
   loadSpeciesData: async (key: number) => ({ key, canonicalName: `Species number${key}` }),
 }));
-vi.mock('~/lib/species/wikipedia', () => ({ wikipediaIntro: async () => null }));
+const wikipedia = vi.hoisted(() => ({ intro: async (): Promise<null> => null }));
+vi.mock('~/lib/species/wikipedia', () => ({ wikipediaIntro: () => wikipedia.intro() }));
 
 const usage = (key: number, rank: string, name: string, extra: object = {}) => ({
   key,
@@ -316,8 +317,10 @@ describe('bake with iNaturalist IDs', () => {
         name: 'Species number10',
         rank_level: 10,
         preferred_common_name: 'tenth bird',
-        ancestor_ids: [48460, 3, 777],
+        ancestor_ids: [48460, 2, 3, 777],
       },
+      // No English name, so GBIF's stays.
+      2: { id: 2, name: 'Chordata', rank_level: 60 },
       3: { id: 3, name: 'Aves', rank_level: 50, preferred_common_name: 'Birds' },
       48460: { id: 48460, name: 'Life', rank_level: 100, preferred_common_name: 'Life' },
     };
@@ -347,7 +350,7 @@ describe('bake with iNaturalist IDs', () => {
     // The ranks above are named from the species' ancestors, fetched by ID: never searched for by name.
     const inatCalls = calls.filter((url) => url.host === 'api.inaturalist.org');
     expect(inatCalls.flatMap((url) => url.searchParams.get('q') ?? [])).not.toContain('Aves');
-    expect(inatCalls.at(-1)?.searchParams.get('id')).toBe('3,48460');
+    expect(inatCalls.at(-1)?.searchParams.get('id')).toBe('2,3,48460');
   });
 
   it('keeps the IDs the last bake found, looking up only the species without one', async () => {
@@ -413,6 +416,18 @@ describe('bake with iNaturalist IDs', () => {
     const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
     expect(names.some((row) => row.length === 6)).toBe(false);
     expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it('keeps GBIF’s names when iNaturalist’s taxa fail to load', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    gbif((url) => {
+      const isTaxaListing = url.pathname === '/v2/taxa' && url.searchParams.has('id');
+      return url.host === 'api.inaturalist.org' && isTaxaListing ? json({}, 400) : inat(url);
+    });
+    const { names } = await (await bake({ NAME_INDEX_SIZE: '3' })).bakeNames();
+    expect(names.find((row) => row[0] === 10)?.[3]).toBe('Some bird');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('iNaturalist taxa skipped'), expect.anything());
     warn.mockRestore();
   });
 });
@@ -530,6 +545,19 @@ describe('bake to disk', () => {
     } finally {
       rmSync(dir, { recursive: true });
     }
+  });
+});
+
+describe('bake species pages', () => {
+  afterEach(() => (wikipedia.intro = async () => null));
+
+  it('leaves out an intro Wikipedia failed to give, and refuses a species it has no page for', async () => {
+    wikipedia.intro = () => Promise.reject(new Error('Wikipedia is down'));
+    gbif();
+    const baked = await bake({ SPECIES_PRERENDER_COUNT: '3' });
+    const [first] = await baked.bakeSpeciesList();
+    expect((await baked.bakedSpeciesPage(first!.key)).intro).toBeNull();
+    await expect(baked.bakedSpeciesPage(-1)).rejects.toThrow('no page for species -1');
   });
 });
 

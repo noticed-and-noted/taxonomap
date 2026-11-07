@@ -94,10 +94,8 @@ export async function topSpecies(
   signal?.throwIfAborted();
   const counts =
     known ??
-    (await namedOccurrenceFacets(filter, ['speciesKey'], { facetLimit: limit, ...(signal && { signal }) })).facets[
-      'speciesKey'
-    ] ??
-    [];
+    (await namedOccurrenceFacets(filter, ['speciesKey'], { facetLimit: limit, ...(signal && { signal }) })).facets
+      .speciesKey;
   if (!counts.length) return [];
 
   // Wait for the whole index: its names match the species pages', and it has common names.

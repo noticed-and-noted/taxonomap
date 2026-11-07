@@ -237,6 +237,22 @@ describe('useNameSearch while typing', () => {
     return snapshots({ names: [...NAMES, [13, 'S', 'Fratercula arctica', 'Atlantic puffin', 5]] })(url);
   };
 
+  it('skips the common-name search when the index already has plenty of hits', async () => {
+    const robins: NameRow[] = [1, 2, 3, 4, 5].map((key) => [key, 'S', `Robinus ${key}`, `Robin ${key}`, key]);
+    const calls = stubNetwork((url) => {
+      if (url.pathname === '/v1/species/suggest') return [];
+      if (url.pathname === '/v1/species/search') return { results: [] };
+      return snapshots({ names: robins })(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.loading.value).toBe(false));
+    expect(search.hits.value).toHaveLength(5);
+    expect(calls.some((url) => url.pathname === '/v1/species/search')).toBe(false);
+    search.stop();
+  });
+
   it('settles on what is typed at once, so Enter never picks from the previous text', async () => {
     stubNetwork(noLive);
     const search = await setup({ max: 8 });
@@ -249,6 +265,31 @@ describe('useNameSearch while typing', () => {
     await search.settle();
     expect(search.hits.value.map((hit) => hit.key)).toEqual([13]);
     expect(search.answered.value).toBe('puffin');
+    // Already searched: settling again only waits for the index.
+    await search.settle();
+    expect(search.answered.value).toBe('puffin');
+    search.reset();
+    await search.settle();
+    expect(search.answered.value).toBe('');
+    search.stop();
+  });
+
+  it('ignores the index’s answer for text that has since changed', async () => {
+    let releaseIndex: () => void = () => undefined;
+    const indexLoaded = new Promise<void>((resolve) => (releaseIndex = resolve));
+    stubNetwork(async (url) => {
+      if (url.pathname === '/data/names.json') await indexLoaded;
+      return noLive(url);
+    });
+    const search = await setup({ max: 8 });
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    search.search('puffin');
+    releaseIndex();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(search.answered.value).toBe('');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.answered.value).toBe('puffin'));
     search.stop();
   });
 
@@ -330,6 +371,16 @@ describe('useNameSearch with slow providers', () => {
     search.stop();
   });
 
+  it('takes a suggestion of a taxon the common-name search found without an English name', async () => {
+    const release = heldProviders();
+    const search = await searching();
+    release.search({ results: [{ ...usage(32, 'Zoomia', 'SPECIES'), vernacularNames: [] }] });
+    release.suggest([usage(32, 'Zoomia', 'SPECIES')]);
+    await vi.waitFor(() => expect(search.loading.value).toBe(false));
+    expect(search.hits.value.map((hit) => hit.key)).toEqual([32]);
+    search.stop();
+  });
+
   it('never loses a common name to a suggestion of the same taxon', async () => {
     const release = heldProviders();
     const search = await searching();
@@ -393,6 +444,32 @@ describe('useNameSearch naming live hits', () => {
     // iNaturalist has no name for the first, so it keeps GBIF's.
     expect(search.hits.value[0]?.commonName).toBe('Robin one');
     expect(search.hits.value.some((hit) => hit.isNamePending)).toBe(false);
+    stop();
+  });
+
+  it('keeps GBIF’s names when the iNaturalist lookup fails', async () => {
+    const { search, stop } = await withInat([], [named(1, 'Robin one')], () => Promise.reject(new Error('down')));
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value[0]?.isNamePending).toBeUndefined());
+    expect(search.hits.value[0]?.commonName).toBe('Robin one');
+    stop();
+  });
+
+  it('drops names that arrive after the text changed', async () => {
+    let answer: (names: Map<number, string>) => void = () => undefined;
+    const { search, stop } = await withInat(
+      [],
+      [named(1, 'Robin one')],
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    search.search('robin');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await vi.waitFor(() => expect(search.hits.value[0]?.isNamePending).toBe(true));
+    search.search('wren');
+    answer(new Map([[1, 'Better robin']]));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(search.hits.value.some((hit) => hit.commonName === 'Better robin')).toBe(false);
     stop();
   });
 

@@ -62,6 +62,18 @@ describe('node transport', () => {
     expect(seen).toHaveLength(2);
   });
 
+  it('does not cache a GraphQL answer that is not JSON', async () => {
+    const seen: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      seen.push(url);
+      return new Response('<html>Bad gateway</html>');
+    }) as typeof fetch;
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl, refresh: false });
+    await transport('https://graphql.test/graphql?query=y');
+    await transport('https://graphql.test/graphql?query=y');
+    expect(seen).toHaveLength(2);
+  });
+
   it('does not cache throttled responses', async () => {
     const fetcher = fakeFetch(429);
     const transport = createNodeTransport({ cacheDir: dir, fetchImpl: fetcher.impl, refresh: false });
@@ -158,5 +170,23 @@ describe('disk cache in front of another transport', () => {
     await uncached('https://api.test/v1/b');
     await uncached('https://api.test/v1/b');
     expect(failing.seen).toHaveLength(2);
+  });
+
+  it('refreshes when GBIF_CACHE_REFRESH is set, and stores an untyped answer as JSON', async () => {
+    vi.stubEnv('GBIF_CACHE_REFRESH', '1');
+    try {
+      const seen: string[] = [];
+      const untyped = async (url: string) => {
+        seen.push(url);
+        return new Response(new Blob(['{"ok":true}']));
+      };
+      const cached = withDiskCache(untyped, { cacheDir: dir });
+      const first = await cached('https://api.test/v1/c');
+      expect(first.headers.get('content-type')).toBe('application/json');
+      await cached('https://api.test/v1/c');
+      expect(seen).toHaveLength(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

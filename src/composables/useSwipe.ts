@@ -20,7 +20,7 @@ export interface SwipeHandlers {
 export function useSwipe(handlers: SwipeHandlers) {
   let swipeStart: { x: number; y: number } | null = null;
   const isPinchZoomed = ref(false);
-  const trackPinchZoom = () => (isPinchZoomed.value = (window.visualViewport?.scale ?? 1) > 1);
+  const trackPinchZoom = (event: Event) => (isPinchZoomed.value = (event.target as VisualViewport).scale > 1);
   onMounted(() => window.visualViewport?.addEventListener('resize', trackPinchZoom));
   onBeforeUnmount(() => window.visualViewport?.removeEventListener('resize', trackPinchZoom));
 

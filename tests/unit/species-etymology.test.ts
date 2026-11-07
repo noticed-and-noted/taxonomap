@@ -91,6 +91,12 @@ describe('readEntry', () => {
     expect(readEntry(ANAS)).toEqual({ language: 'Latin', meanings: ['duck'] });
   });
 
+  it('gives the glosses alone when the etymology names no source language', async () => {
+    const { readEntry } = await load();
+    const coined = '== Translingual ==\n\n=== Etymology ===\nCoined by Linnaeus (“little bird”).';
+    expect(readEntry(coined)).toEqual({ meanings: ['little bird'] });
+  });
+
   it('falls back to the first Latin definition', async () => {
     const { readEntry } = await load();
     expect(readEntry(LEO)).toEqual({ language: 'Latin', meanings: ['lion'] });

@@ -97,3 +97,63 @@ describe('getTaxonNames with a replaced taxon', () => {
     warn.mockRestore();
   });
 });
+
+describe('iNaturalist sounds and places', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function inat() {
+    vi.resetModules();
+    return import('~/lib/photos/inat');
+  }
+
+  it('asks for research-grade observations with openly licensed sounds', async () => {
+    const calls = stubNetwork(() => ({ results: [{ id: 1, sounds: [] }] }));
+    const { soundObservations } = await inat();
+    expect(await soundObservations(4772)).toEqual([{ id: 1, sounds: [] }]);
+    await soundObservations(4772, new AbortController().signal);
+    expect(calls[0]?.pathname).toBe('/v2/observations');
+    expect(calls[0]?.searchParams.get('taxon_id')).toBe('4772');
+    expect(calls[0]?.searchParams.get('quality_grade')).toBe('research');
+  });
+
+  it('names the places that are countries', async () => {
+    const calls = stubNetwork(() => ({
+      results: [
+        { id: 6774, name: 'Spain', admin_level: 0 },
+        { id: 97391, name: 'Europe', admin_level: null },
+      ],
+    }));
+    const { countryNames } = await inat();
+    expect(await countryNames([6774, 97391])).toEqual(new Map([[6774, 'Spain']]));
+    await countryNames([6774], new AbortController().signal);
+    expect(calls[0]?.pathname).toBe('/v2/places/6774,97391');
+  });
+
+  it('finds no sound on an observation without any', async () => {
+    const { observationSound } = await inat();
+    expect(observationSound({ id: 1 })).toBeNull();
+  });
+
+  it('lets the build wrap the throttled fetch', async () => {
+    stubNetwork(() => ({ results: [] }));
+    const { configureInat, countryNames } = await inat();
+    const wrapped: string[] = [];
+    configureInat((throttled) => (url, requestInit) => (wrapped.push(url), throttled(url, requestInit)));
+    await countryNames([1]);
+    expect(wrapped).toHaveLength(1);
+  });
+});
+
+describe('iNaturalist for the build', () => {
+  it('puts the disk cache in .cache/inat in front of the client', async () => {
+    vi.resetModules();
+    const withDiskCache = vi.fn((transport: unknown) => transport);
+    vi.doMock('~/lib/gbif/node-transport', () => ({ withDiskCache }));
+    const server = await import('~/lib/photos/inat-server');
+    expect(withDiskCache).toHaveBeenCalledWith(expect.any(Function), {
+      cacheDir: expect.stringMatching(/\.cache[/\\]inat$/),
+    });
+    expect(server.getTaxonNames).toBeTypeOf('function');
+    vi.doUnmock('~/lib/gbif/node-transport');
+  });
+});

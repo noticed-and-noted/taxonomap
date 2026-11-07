@@ -1,4 +1,5 @@
 import { filterToParams, hasRefinements, needsAdhoc, refinementParams, toQueryString } from '~/lib/gbif';
+import { json, stubNetwork } from './helpers/network';
 
 const PUBLISHER = '28eb1a3f-1c15-4a95-931a-4af90ecb574d';
 
@@ -147,10 +148,43 @@ describe('explorer filter stores', () => {
     expect(publisher.$publisherKeys.get()).toEqual([]);
   });
 
+  it('refuse a publisher twice or past the limit, and remove one by key', async () => {
+    const publisher = await import('~/stores/publisher');
+    const keys = Array.from({ length: publisher.MAX_PUBLISHERS }, (_unused, index) =>
+      PUBLISHER.replace(/^.{2}/, String(index).padStart(2, '0')),
+    );
+    expect(publisher.addPublisher({ key: keys[0]!, title: 'First' })).toBe(true);
+    expect(publisher.addPublisher({ key: keys[0]!, title: 'First' })).toBe(false);
+    for (const key of keys.slice(1)) publisher.addPublisher({ key, title: key });
+    expect(publisher.addPublisher({ key: PUBLISHER, title: 'One too many' })).toBe(false);
+    publisher.removePublisher(keys[0]!);
+    expect(publisher.$publisherKeys.get()).toHaveLength(publisher.MAX_PUBLISHERS - 1);
+    publisher.$publisherKeys.set([]);
+  });
+
+  it('look up the names of publishers from a shared link while their pills are shown', async () => {
+    const other = '00000000-0000-4000-8000-000000000000';
+    stubNetwork((url) => {
+      if (url.pathname === `/v1/organization/${PUBLISHER}`) return { key: PUBLISHER, title: 'iNaturalist.org' };
+      return json({ message: 'gone' }, 404);
+    });
+    vi.resetModules();
+    const publisher = await import('~/stores/publisher');
+    expect(publisher.publisherName(PUBLISHER)).toBe(publisher.UNKNOWN_PUBLISHER);
+    const stop = publisher.$publisherNames.listen(() => {});
+    publisher.$publisherKeys.set([PUBLISHER, other]);
+    await vi.waitFor(() => expect(publisher.publisherName(PUBLISHER)).toBe('iNaturalist.org'));
+    expect(publisher.publisherName(other)).toBe(publisher.UNKNOWN_PUBLISHER);
+    stop();
+    publisher.$publisherKeys.set([]);
+    vi.unstubAllGlobals();
+  });
+
   it('read only organisation keys from a publisher link', async () => {
     const { codecs } = await import('~/stores/url-sync');
     const codec = codecs.stringSet('publisher', { pattern: /^[0-9a-f-]{36}$/, limit: 1 });
     expect(codec.parse(`not-a-key,${PUBLISHER},${PUBLISHER}`)).toEqual([PUBLISHER]);
+    expect(codec.serialize(['b', 'a'])).toBe('a,b');
   });
 
   it('read a pre-multi-select taxon link as a one-item list', async () => {

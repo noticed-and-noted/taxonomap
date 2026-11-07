@@ -142,7 +142,8 @@ describe('without the baked data', () => {
 });
 
 describe('commonNames', () => {
-  const inatNames = vi.fn<(taxa: { key: number }[]) => Promise<Map<number, string | null>>>();
+  const inatNames = vi.fn<(taxa: { key: number }[], options: object) => Promise<Map<number, string | null>>>();
+  const leadPhotos = vi.fn();
 
   /** groups with iNaturalist's names mocked, so only GBIF's fallback request reaches the network. */
   async function loadWithInat() {
@@ -150,6 +151,7 @@ describe('commonNames', () => {
     vi.doMock('~/lib/photos/taxon-photos', async (original) => ({
       ...(await original<typeof import('~/lib/photos/taxon-photos')>()),
       inatNames,
+      leadPhotos,
     }));
     return import('~/lib/species/groups');
   }
@@ -157,6 +159,32 @@ describe('commonNames', () => {
   afterEach(() => {
     vi.doUnmock('~/lib/photos/taxon-photos');
     inatNames.mockReset();
+    leadPhotos.mockReset();
+  });
+
+  it('passes a live signal on to iNaturalist', async () => {
+    inatNames.mockResolvedValue(new Map([[1, 'European robin']]));
+    const { commonNames } = await loadWithInat();
+    const signal = new AbortController().signal;
+    await commonNames([1], signal);
+    expect(inatNames.mock.calls[0]![1]).toEqual({ signal });
+  });
+
+  it('asks for each species’ lead photo, passing the signal and names callback on', async () => {
+    leadPhotos.mockResolvedValue({ images: new Map() });
+    const { photosForKeys } = await loadWithInat();
+    await photosForKeys([1, 2]);
+    expect(leadPhotos).toHaveBeenLastCalledWith(
+      [
+        { key: 1, rank: 'SPECIES' },
+        { key: 2, rank: 'SPECIES' },
+      ],
+      {},
+    );
+    const signal = new AbortController().signal;
+    const onCommonNames = () => {};
+    await photosForKeys([1], signal, onCommonNames);
+    expect(leadPhotos).toHaveBeenLastCalledWith([{ key: 1, rank: 'SPECIES' }], { signal, onCommonNames });
   });
 
   it('takes iNaturalist’s names, asking GBIF in one request only for the species it does not name', async () => {
@@ -217,6 +245,14 @@ describe('gbifCommonNames', () => {
     const { gbifCommonNames } = await load();
     expect([...(await gbifCommonNames([1, 2, 3]))]).toEqual([[1, 'Robin']]);
     expect(calls).toHaveLength(1);
+  });
+
+  it('asks nothing for no keys, or once superseded', async () => {
+    const calls = stubNetwork(() => ({ data: {} }));
+    const { gbifCommonNames } = await load();
+    expect((await gbifCommonNames([])).size).toBe(0);
+    expect((await gbifCommonNames([1], AbortSignal.abort())).size).toBe(0);
+    expect(calls).toHaveLength(0);
   });
 
   it('names none when the request fails', async () => {

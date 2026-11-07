@@ -76,8 +76,8 @@ async function fetchCellLists(
   result: Awaited<ReturnType<typeof fetchCellFacets>>,
   signal: AbortSignal,
 ) {
-  const groups = await namedClasses(result.facets['classKey'] ?? []);
-  const rows = await topSpecies(hexFilter, { known: result.facets['speciesKey'] ?? [], signal });
+  const groups = await namedClasses(result.facets.classKey);
+  const rows = await topSpecies(hexFilter, { known: result.facets.speciesKey, signal });
   return { groups, rows };
 }
 
@@ -114,7 +114,7 @@ export function useHexSummary() {
       count.value = result.count;
       // The map's tooltip shows this cell's exact count from now on.
       rememberCount(filter.value, hexGeometry.wkt, result.count);
-      months.value = monthCounts(result.facets['month']);
+      months.value = monthCounts(result.facets.month);
 
       const { groups, rows } = await fetchCellLists(hexFilter, result, signal);
       if (signal.aborted) return;

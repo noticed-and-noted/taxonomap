@@ -79,6 +79,7 @@ describe('licence', () => {
       { url: 'a.mp3', licence: 'CC0', creator: 'Ann', rightsHolder: 'Record RH' },
       { url: 'b.wav', licence: 'CC-BY-NC', rightsHolder: 'Record RH' },
     ]);
+    expect(usableSounds({ key: 1, license: 'CC0_1_0' } as Occurrence)).toEqual([]);
   });
 
   it('takes the rights holder and publisher from the media, else the record, with any references', () => {

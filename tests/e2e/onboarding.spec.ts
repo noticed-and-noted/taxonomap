@@ -119,3 +119,46 @@ test('Near me keeps the checklist and the legend, and ticks the list', async ({ 
   await expect(checklist).toContainText('1 of 7');
   await expect(page.getByText('Records per cell')).toBeVisible();
 });
+
+test.describe('on a dense screen', () => {
+  test.use({ deviceScaleFactor: 3 });
+
+  test('the welcome card’s reading options change text, motion and the map’s colours and render scale', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const tour = page.getByRole('dialog', { name: 'Welcome to Taxonomap' });
+    await tour.getByRole('button', { name: /Reading and display options/ }).click();
+    await page.locator('label', { has: page.getByRole('radio', { name: 'Larger' }) }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-text-size', 'larger');
+    await page.getByRole('checkbox', { name: /No italics/ }).check();
+    await expect(page.locator('html')).toHaveAttribute('data-no-italics', /.*/);
+    await page.locator('label', { hasText: 'Max' }).click();
+    await page.getByLabel('Map colours').selectOption({ index: 2 });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--ramp-1')))
+      .not.toBe('');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByRole('button', { name: 'Start tour' })).toBeVisible();
+  });
+});
+
+test('the tour keeps Tab inside its card, goes back a step, and waits for slow cells', async ({ page }) => {
+  // Cells that load slowly, so the tour has to wait for one to point at.
+  await page.route(/\.mvt(\?|$)/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.fallback();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start tour' }).click();
+  const step = page.getByRole('dialog', { name: 'Every hex is a count' });
+  await expect(step).toBeVisible();
+  await step.getByRole('button', { name: 'Next' }).focus();
+  for (let press = 0; press < 4; press++) await page.keyboard.press('Tab');
+  for (let press = 0; press < 4; press++) await page.keyboard.press('Shift+Tab');
+  await expect(step).toBeVisible();
+  await step.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Back' }).click();
+  await expect(step).toBeVisible();
+  await expect(page.locator('.spotlight-ring')).toHaveCount(2);
+});
