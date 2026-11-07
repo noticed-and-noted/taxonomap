@@ -6,18 +6,28 @@
  */
 import { test as base, expect } from '@playwright/test';
 import { MCR } from 'monocart-coverage-reports';
-import { coverageOptions, isCoverageOn } from './coverage';
+import { coverageOptions, isCoverageOn, startCoverage } from './coverage';
 import { answer } from './fake/world';
 
 export const test = base.extend<{ external: string[]; showTour: boolean; seenTour: void; coverage: void }>({
   coverage: [
     async ({ page }, use, testInfo) => {
       if (!isCoverageOn) return use();
-      await page.coverage.startJSCoverage({ resetOnNavigation: false });
+      const collector = await startCoverage(page);
+      // Before each page load a journey asks for, while the old document still exists.
+      for (const method of ['goto', 'reload', 'goBack', 'goForward'] as const) {
+        const load = page[method].bind(page) as (...args: unknown[]) => Promise<unknown>;
+        Object.assign(page, {
+          [method]: async (...args: unknown[]) => {
+            if (page.url() !== 'about:blank') await collector.snapshot();
+            return load(...args);
+          },
+        });
+      }
       await use();
-      const scripts = await page.coverage.stopJSCoverage();
+      const entries = await collector.finish();
       // A test that skips itself has nothing to add, and MCR refuses an empty list.
-      if (testInfo.status !== 'skipped') await MCR(coverageOptions).add(scripts);
+      if (testInfo.status !== 'skipped' && entries.length) await MCR(coverageOptions).add(entries);
     },
     { auto: true },
   ],

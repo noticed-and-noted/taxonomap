@@ -283,9 +283,25 @@ function facetLabel(field: string, key: string) {
  * (namedOccurrenceFacets), or a taxon facet with each value's first records
  * (firstRecordsByTaxon).
  */
+/** Publishing organisations, biggest first, for the How filter's publisher search. */
+const PUBLISHERS = [
+  { key: '28eb1a3f-1c15-4a95-931a-4af90ecb574d', title: 'iNaturalist.org', count: 9000 },
+  { key: '0a7a9a6b-6c1d-4c3e-8f3a-1b2c3d4e5f60', title: 'Garden Bird Club', count: 600 },
+  { key: '5b6c7d8e-9f01-4a2b-8c3d-4e5f60718293', title: 'Garden Moth Survey', count: 40 },
+];
+
 function graphql(params: URLSearchParams) {
   const query = params.get('query') ?? '';
   const variables = JSON.parse(params.get('variables') ?? '{}') as Record<string, PredicatePart>;
+  if (query.includes('occurrencePublisherSuggest')) {
+    const typed = String((variables as Record<string, unknown>)['q'] ?? '').toLowerCase();
+    const found = PUBLISHERS.filter((publisher) => publisher.title.toLowerCase().includes(typed));
+    return {
+      data: {
+        occurrencePublisherSuggest: found.map(({ key, count, title }) => ({ key, count, publisher: { title } })),
+      },
+    };
+  }
   // A query of several filters has one aliased search each, with a predicate of its own.
   const ranked = [
     ...query.matchAll(/(\w+): occurrenceSearch\(predicate: \$(\w+)\)([^]*?)(?=\w+: occurrenceSearch\(|$)/g),
@@ -531,11 +547,10 @@ export function answer(url: URL): FakeResponse | undefined {
     }
   }
   match = /^\/v1\/(dataset|organization)\/([\w-]+)$/.exec(path);
-  if (match)
-    return json({
-      key: match[2],
-      title: DATASETS.find((dataset) => dataset.key === match![2])?.title ?? 'Garden Bird Club',
-    });
+  if (match) {
+    const known = [...DATASETS, ...PUBLISHERS].find((entry) => entry.key === match![2]);
+    return json({ key: match[2], title: known?.title ?? 'Garden Bird Club' });
+  }
   if (path === '/v2/map/occurrence/density/capabilities.json') {
     const total = speciesFor(params).reduce((running, species) => running + species.records!, 0);
     return json({ minLat: 49, maxLat: 59, minLng: -8, maxLng: 2, total });

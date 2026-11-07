@@ -40,6 +40,8 @@ test('geolocation is rounded to ~100 m before use', async ({ page, context }) =>
 test('lists species in a sortable table that one group can narrow', async ({ page }) => {
   await page.goto(LONDON);
   await expect(page.getByRole('link', { name: /Common Blackbird/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Hide What’s near me' }).click();
+  await page.getByRole('button', { name: 'Show What’s near me' }).click();
   await page.getByRole('button', { name: /^Species/ }).click();
   await expect(page.getByRole('columnheader', { name: /Species/ })).toHaveAttribute('aria-sort', 'ascending');
   await page.getByRole('button', { name: 'Filter' }).click();
@@ -64,4 +66,49 @@ test('radius lives in the URL', { tag: '@mobile' }, async ({ page }) => {
   await page.goto(LONDON);
   await page.getByRole('slider').first().fill('3');
   await expect(page).toHaveURL(/r=10/);
+});
+
+test('the place search picks by keyboard or pointer, and closes on Escape or a click away', async ({ page }) => {
+  await page.goto('/?near=1');
+  const box = page.getByRole('combobox', { name: 'Search for a place' });
+  const places = page.getByRole('listbox', { name: 'Places' });
+  await box.fill('nowhere at all');
+  await expect(page.getByRole('status').filter({ hasText: /No places/ })).toBeVisible();
+  await box.fill('london');
+  await expect(places.getByRole('option')).toHaveCount(1);
+  await box.press('ArrowDown');
+  await box.press('ArrowUp');
+  await page.keyboard.press('Escape');
+  await expect(places).toBeHidden();
+  await box.fill('london');
+  await expect(places).toBeVisible();
+  await page.mouse.click(5, 300);
+  await expect(places).toBeHidden();
+
+  // Enter takes the first match once the results are in.
+  const answered = page.waitForResponse((response) => /london(\+|%20)city/.test(response.url()));
+  await box.fill('london city');
+  await answered;
+  await expect(places.getByRole('option')).toHaveCount(1);
+  await box.press('Enter');
+  await expect(page).toHaveURL(/at=51\.507/);
+});
+
+test('a place picked from the list with the pointer moves the circle there', async ({ page }) => {
+  await page.goto('/?near=1');
+  // Enter before any results are in searches at once.
+  const box = page.getByRole('combobox', { name: 'Search for a place' });
+  await box.fill('london');
+  await box.press('Enter');
+  const london = page.getByRole('listbox', { name: 'Places' }).getByRole('option', { name: /London/ });
+  await london.hover();
+  await london.click();
+  await expect(page).toHaveURL(/at=51\.507/);
+});
+
+test('a refused location request says so', async ({ page }) => {
+  // No permission granted, so the browser refuses.
+  await page.goto('/?near=1');
+  await page.getByRole('button', { name: 'Use my location' }).click();
+  await expect(page.getByText(/denied|blocked|permission/i).first()).toBeVisible();
 });

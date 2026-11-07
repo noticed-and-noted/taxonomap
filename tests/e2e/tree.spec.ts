@@ -55,3 +55,106 @@ test('the groups list filters by common or scientific name', async ({ page }) =>
   await details.getByRole('button', { name: 'Clear filter' }).click();
   await expect(details.getByRole('button', { name: /Turdidae/ })).toBeVisible();
 });
+
+test('the chart shows a tip on hover, picks a group, zooms out from its centre and follows the breadcrumbs', async ({
+  page,
+}) => {
+  await page.goto('/tree?focus=729');
+  const chart = page.getByRole('img', { name: /^Sunburst of Perching Birds/ });
+  await expect(chart).toBeVisible();
+  // A point in the ring of groups around the centre.
+  const box = (await chart.boundingBox())!;
+  const inRing = { x: box.x + box.width / 2, y: box.y + box.height / 2 - Math.min(box.width, box.height) * 0.3 };
+  await page.mouse.move(inRing.x, inRing.y);
+  await page.mouse.move(inRing.x + 2, inRing.y);
+  await expect(page.locator('[popover]')).toBeVisible();
+  // Without motion, the chart jumps to its new focus.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.mouse.click(inRing.x, inRing.y);
+  await page
+    .getByRole('img', { name: /^Sunburst of/ })
+    .locator('circle')
+    .click({ force: true });
+  await expect(page).not.toHaveURL(/focus=729/);
+  await page.getByRole('navigation', { name: 'Tree position' }).getByRole('button').first().click();
+  await expect(page).not.toHaveURL(/focus=/);
+
+  // The icicle zooms out from its head column; on a narrow screen, from its head row.
+  await page.goto('/tree?focus=729&layout=icicle');
+  const icicle = page.getByRole('img', { name: /^Icicle chart of Perching Birds/ });
+  await icicle.locator('g.cursor-pointer').first().click();
+  await expect(page).not.toHaveURL(/focus=729/);
+  // Back returns to the group; narrowing the window turns the icicle's head into a row.
+  await page.goBack();
+  await expect(page).toHaveURL(/focus=729/);
+  await page.setViewportSize({ width: 500, height: 800 });
+  await page
+    .getByRole('img', { name: /^Icicle chart of Perching Birds/ })
+    .locator('g.cursor-pointer')
+    .first()
+    .click();
+  await expect(page).not.toHaveURL(/focus=729/);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // A click on one of the icicle's groups moves into it.
+  await page.goto('/tree?focus=729&layout=icicle');
+  await page
+    .getByRole('img', { name: /^Icicle chart of Perching Birds/ })
+    .locator('g.cursor-pointer')
+    .nth(1)
+    .click();
+  await expect(page).not.toHaveURL(/focus=729/);
+});
+
+test('levels that fail to load say so, and a tree that fails altogether offers to try again', async ({ page }) => {
+  await page.goto('/tree?focus=729');
+  await expect(page.getByRole('button', { name: /Corvidae/ })).toBeVisible();
+  await page.route(/\/v1\/species\//, (route) => route.fulfill({ status: 500, body: '' }));
+  await page.route(/\/v1\/occurrence\//, (route) => route.fulfill({ status: 500, body: '' }));
+  await page
+    .getByRole('button', { name: /Corvidae/ })
+    .first()
+    .click();
+  await expect(page.getByText('Some levels could not be loaded. Try again in a moment.')).toBeVisible();
+
+  await page.route('**/data/tree.json', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.goto('/tree');
+  await expect(page.getByText(/The tree data could not be loaded|GBIF is busy|Something went wrong/)).toBeVisible();
+  await page.getByRole('button', { name: 'Try again' }).click();
+});
+
+test('a link to a group GBIF does not know opens at the top, saying a level failed', async ({ page }) => {
+  await page.goto('/tree?focus=99999999');
+  await expect(page.getByRole('button', { name: /^Animals/ })).toBeVisible();
+  await expect(page.getByText('Some levels could not be loaded. Try again in a moment.')).toBeVisible();
+});
+
+test('a group GBIF places outside the tree opens the tree at the top', async ({ page }) => {
+  await page.route('**/v1/species/424242/parents', (route) => route.fulfill({ json: [] }));
+  await page.goto('/tree?focus=424242');
+  await expect(page.getByRole('button', { name: /^Animals/ })).toBeVisible();
+});
+
+test('the header search moves the tree to a group, and a selected group without a photo still shows', async ({
+  page,
+  context,
+}) => {
+  // Perching Birds' iNaturalist taxon, remembered from before; iNaturalist then fails, so it has no photo.
+  await context.addInitScript(() => localStorage.setItem('inat-ids-v3', JSON.stringify([[729, 7251]])));
+  await page.route(/\/inat\/v2\/taxa/, (route) => route.fulfill({ status: 400, body: '' }));
+  await page.goto('/tree');
+  const box = page.getByRole('combobox', { name: 'Search species or places' });
+  await box.fill('corvidae');
+  await page
+    .getByRole('option', { name: /Corvidae/i })
+    .first()
+    .hover();
+  await page.getByRole('button', { name: 'Show in tree' }).click();
+  await expect(page).toHaveURL(/focus=5235/);
+  await page.goto('/tree?focus=729');
+  await page
+    .getByRole('navigation', { name: 'Tree position' })
+    .getByRole('button', { name: /Perching Birds/ })
+    .click();
+  await expect(page.getByRole('complementary', { name: 'Details' })).toContainText('Perching Birds');
+});

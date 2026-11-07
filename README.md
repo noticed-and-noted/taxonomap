@@ -34,8 +34,9 @@ pnpm dev
 
 - `pnpm build`, `pnpm preview`: build to `dist/` and serve it
 - `pnpm lint`, `pnpm format`, `pnpm check`: ESLint, Prettier, type checks
-- `pnpm test`, `pnpm test:coverage`: unit tests, with or without coverage
+- `pnpm test`, `pnpm test:coverage`: unit tests, with or without coverage (every `.ts` file held at 100%)
 - `pnpm build:e2e`, `pnpm test:e2e`: Playwright against a fake GBIF, no network needed (run `pnpm exec playwright install chromium` once)
+- `pnpm test:e2e:coverage`: the same journeys, measuring how much of each component (`.vue`, `.astro`) they run, held to the floors in `tests/e2e/coverage.ts` (`E2E_COVERAGE=report pnpm exec playwright test <spec>` reports on some journeys without them)
 - `pnpm test:contract`: checks the live GBIF API still behaves as the client expects
 - `pnpm bake`: fetch the data the build needs (GBIF, iNaturalist and Wikipedia) and save it to `.cache/baked/`. The build makes no external requests: without a bake it has no species pages or `/data` snapshots, and the browser fetches that data live
 - `pnpm ioc-names <VernacularName.tsv>`: rebuild the IOC bird names from GBIF's backbone archive

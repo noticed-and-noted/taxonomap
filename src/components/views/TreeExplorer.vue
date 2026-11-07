@@ -120,6 +120,8 @@ async function syncFocus() {
     if (node.key === taxonKey.value || node.key === focusKey.value) selected.value = node;
   } catch (failure) {
     error.value = classifyError(failure);
+    // Without a focus the page would show its loading state for good; open at the top instead.
+    focus.value ??= rootNode;
   } finally {
     loadingKey.value = null;
   }

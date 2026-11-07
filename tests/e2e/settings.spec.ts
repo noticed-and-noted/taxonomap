@@ -9,6 +9,7 @@ test('map colours are saved in the browser and the basemap in the URL', async ({
   await page.getByRole('button', { name: 'Settings' }).click();
   // The default ramp lives in tokens.css; another is written onto <html>.
   expect(await rampStop(page)).toBe('');
+  await page.getByRole('checkbox', { name: 'Go to search results' }).click();
   await page.getByText('Viridis', { exact: true }).click();
   await expect(page.getByRole('radio', { name: /^Viridis/ })).toBeChecked();
   await expect.poll(() => rampStop(page)).not.toBe('');
