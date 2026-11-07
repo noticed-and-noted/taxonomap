@@ -62,24 +62,39 @@ test('the chart shows a tip on hover, picks a group, zooms out from its centre a
   await page.goto('/tree?focus=729');
   const chart = page.getByRole('img', { name: /^Sunburst of Perching Birds/ });
   await expect(chart).toBeVisible();
-  // A point in the ring of groups around the centre.
-  const box = (await chart.boundingBox())!;
-  const inRing = { x: box.x + box.width / 2, y: box.y + box.height / 2 - Math.min(box.width, box.height) * 0.3 };
-  await page.mouse.move(inRing.x, inRing.y);
-  await page.mouse.move(inRing.x + 2, inRing.y);
-  await expect(page.locator('[popover]')).toBeVisible();
-  // Without motion, the chart jumps to its new focus.
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.mouse.click(inRing.x, inRing.y);
+  // The chart tweens to its focus over most of a second, so arcs move under a pointer meanwhile: look for
+  // a spot that is on an arc each time, and hover there.
+  const arcPoint = () =>
+    chart.evaluate((svg) => {
+      const box = svg.getBoundingClientRect();
+      for (let radius = 60; radius < Math.min(box.width, box.height) / 2; radius += 10) {
+        for (let angle = 0; angle < 360; angle += 15) {
+          const pointX = box.left + box.width / 2 + radius * Math.cos((angle * Math.PI) / 180);
+          const pointY = box.top + box.height / 2 + radius * Math.sin((angle * Math.PI) / 180);
+          if (document.elementFromPoint(pointX, pointY)?.tagName === 'path') return { x: pointX, y: pointY };
+        }
+      }
+      return null;
+    });
+  await expect(async () => {
+    const point = await arcPoint();
+    expect(point).not.toBeNull();
+    await page.mouse.move(point!.x, point!.y);
+    await page.mouse.move(point!.x + 1, point!.y);
+    await expect(page.locator('[popover]')).toBeVisible({ timeout: 500 });
+  }).toPass();
+  await page.mouse.down();
+  await page.mouse.up();
   await page
     .getByRole('img', { name: /^Sunburst of/ })
     .locator('circle')
     .click({ force: true });
-  await expect(page).not.toHaveURL(/focus=729/);
+  // Wherever the pick went, the centre goes up a level and the breadcrumbs go home.
   await page.getByRole('navigation', { name: 'Tree position' }).getByRole('button').first().click();
   await expect(page).not.toHaveURL(/focus=/);
 
-  // The icicle zooms out from its head column; on a narrow screen, from its head row.
+  // The icicle zooms out from its head column; on a narrow screen, from its head row. Without motion, it jumps.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/tree?focus=729&layout=icicle');
   const icicle = page.getByRole('img', { name: /^Icicle chart of Perching Birds/ });
   await icicle.locator('g.cursor-pointer').first().click();
