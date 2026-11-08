@@ -5,12 +5,20 @@ import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import { loadEnv } from 'vite';
 import serviceWorker from './integrations/service-worker.ts';
+import packageJson from './package.json' with { type: 'json' };
+
+const BUILD_ID_LENGTH = 7;
 
 // Make .env values visible to build-time Node code (GBIF transport, SW
 // integration) without overriding variables already set by CI.
 for (const [k, v] of Object.entries(loadEnv(process.env.NODE_ENV ?? 'production', process.cwd(), ''))) {
   process.env[k] ??= v;
 }
+
+// Shown at the foot of Settings. Only CI builds have a commit to name, so local builds show the version alone.
+process.env.PUBLIC_APP_VERSION ??= packageJson.version;
+// Only assign when set: process.env turns undefined into the string "undefined".
+if (process.env.GITHUB_SHA) process.env.PUBLIC_BUILD_ID ??= process.env.GITHUB_SHA.slice(0, BUILD_ID_LENGTH);
 
 // public/_redirects rewrites /species/view/{key} to the view page on Pages; do the same in dev
 // (`astro preview` drops Vite plugins, so it 404s there).
