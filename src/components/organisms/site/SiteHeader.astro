@@ -2,6 +2,7 @@
 /** Site header: brand, omnibox (client:idle), main navigation, theme toggle. */
 import ThemeToggle from '~/components/atoms/ThemeToggle.astro';
 import Wordmark from '~/components/atoms/Wordmark.astro';
+import { HOME_URL } from '~/lib/contact';
 import Omnibox, { type SearchMode } from './Omnibox.vue';
 
 interface Props {
@@ -24,7 +25,7 @@ const nav = [
 ---
 
 <header class="app-header">
-  <a href="/" class="brand pill flex items-center px-3.5 text-[2rem]">
+  <a href={HOME_URL} class="brand pill flex items-center px-3.5 text-[2rem]">
     <span class="sr-only">Taxonomap home</span>
     <Wordmark compact />
   </a>

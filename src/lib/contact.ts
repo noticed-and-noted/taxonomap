@@ -1,2 +1,2 @@
-/** Where people write about privacy, the terms or a problem with the site. */
-export const CONTACT_EMAIL = 'privacy@taxonomap.com';
+/** The Taxonomap home site, where the logo links. */
+export const HOME_URL = 'https://taxonomap.com';

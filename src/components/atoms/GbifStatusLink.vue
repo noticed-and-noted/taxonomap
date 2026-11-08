@@ -11,7 +11,7 @@ import { GBIF_STATUS_URL } from '~/lib/gbif';
 </template>
 
 <style scoped>
-/* It sits in muted message text; full text colour keeps it readable as a link, as in .prose. */
+/* It sits in muted message text; full text colour keeps it readable as a link. */
 a {
   color: var(--text);
 }
