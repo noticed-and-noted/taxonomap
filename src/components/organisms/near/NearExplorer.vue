@@ -35,6 +35,7 @@ import {
   $nearRadius,
   $nearTab,
   $nearThisMonth,
+  DEFAULT_RADIUS_KM,
   exitNearMode,
   setNearLocation,
   zoomForRadius,
@@ -79,9 +80,21 @@ const tableNote = computed(() =>
   species.value.length >= NEAR_SPECIES ? `the ${NEAR_SPECIES} most recorded` : undefined,
 );
 
+/** The step under the thumb while it is being dragged, before the radius is committed on release. */
+const draggedStep = ref<number | null>(null);
+const shownStep = computed(() => draggedStep.value ?? radiusIndex.value);
+
+function stepOf(event: Event): number {
+  return Number((event.target as HTMLInputElement).value);
+}
+
+function onRadiusDrag(event: Event) {
+  draggedStep.value = stepOf(event);
+}
+
 function onRadius(event: Event) {
-  const radiusStep = Number((event.target as HTMLInputElement).value);
-  $nearRadius.set(RADIUS_STEPS_KM[radiusStep] ?? 2);
+  draggedStep.value = null;
+  $nearRadius.set(RADIUS_STEPS_KM[stepOf(event)] ?? DEFAULT_RADIUS_KM);
 }
 
 function locate() {
@@ -242,8 +255,9 @@ onBeforeUnmount(() => {
                 step="1"
                 :value="radiusIndex"
                 class="radius-slider w-full"
-                :style="{ '--progress': Math.max(radiusIndex, 0) / LAST_RADIUS_STEP }"
+                :style="{ '--progress': Math.max(shownStep, 0) / LAST_RADIUS_STEP }"
                 :aria-valuetext="`${radius} kilometres`"
+                @input="onRadiusDrag"
                 @change="onRadius"
               />
               <span class="radius-stops text-[0.625rem] text-subtle" aria-hidden="true">

@@ -22,7 +22,7 @@ import { sortByRank, type NameHit } from '~/lib/gbif';
 import type { Place } from '~/lib/geocode';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
-import { flyToRecords, shouldFitTaxa } from '~/stores/fit-search';
+import { flyToRecords, shouldFitTaxa } from '~/stores/fly-to-taxa';
 import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';

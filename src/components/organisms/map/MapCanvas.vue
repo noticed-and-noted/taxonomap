@@ -57,7 +57,7 @@ import {
   type FlyRequest,
   type HexPoint,
 } from '~/stores/explorer';
-import { flyToLinkedTaxa } from '~/stores/fit-search';
+import { flyToLinkedTaxa } from '~/stores/fly-to-taxa';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
