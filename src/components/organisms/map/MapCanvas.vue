@@ -57,6 +57,7 @@ import {
   type FlyRequest,
   type HexPoint,
 } from '~/stores/explorer';
+import { flyToLinkedTaxa } from '~/stores/fit-search';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
@@ -659,6 +660,7 @@ onMounted(async () => {
   decorateMap(maplibre, element);
   listenToMap();
   listenToStores();
+  flyToLinkedTaxa();
   followRecord();
   listenToPage();
   // A basemap or theme picked while the first style loaded came before the listeners above.
