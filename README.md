@@ -44,3 +44,7 @@ pnpm dev
 ## Data
 
 Occurrence data comes from GBIF.org and its publishers. Records and images in the app credit their dataset or publisher and licence.
+
+## Licence
+
+The code is licensed under the GNU General Public License v3.0; see [LICENSE](LICENSE). Occurrence data and images keep their own licences, as above.
