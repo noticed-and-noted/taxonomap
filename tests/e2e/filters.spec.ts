@@ -74,7 +74,7 @@ test('the publisher search lists the biggest first, and picks by keyboard or poi
   await suggestions.getByRole('option', { name: /iNaturalist/ }).click();
   await page.getByRole('button', { name: 'Remove iNaturalist.org' }).click();
   await expect(page.getByRole('list', { name: 'Selected publishers' })).not.toContainText('iNaturalist');
-  await page.locator('fieldset', { hasText: 'Publisher' }).getByRole('button', { name: 'Clear' }).click();
+  await page.locator('fieldset', { hasText: 'Publisher' }).getByRole('button', { name: 'Clear', exact: true }).click();
   await expect(page).not.toHaveURL(/publisher=/);
 });
 

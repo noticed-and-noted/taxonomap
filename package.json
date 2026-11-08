@@ -30,7 +30,8 @@
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "build:e2e": "node tests/e2e/fake/build.ts",
     "test:e2e": "playwright test",
-    "test:e2e:coverage": "E2E_COVERAGE=1 playwright test"
+    "test:e2e:coverage": "E2E_COVERAGE=1 playwright test",
+    "test:e2e:merge-coverage": "node tests/e2e/merge-coverage.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",

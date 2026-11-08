@@ -1,5 +1,6 @@
-/** Small shared helpers: basemaps, env, country names, the ramp's colours and counts. */
+/** Small shared helpers: basemaps, env, country names, the ramp's colours and counts, the home site. */
 import { countryName } from '~/lib/format';
+import { HOME_URL } from '~/lib/home';
 import { binLabels, formatCount, nice, rampById, rampColors, RAMPS } from '~/lib/ramp';
 
 afterEach(() => {
@@ -89,4 +90,8 @@ describe('ramp', () => {
     expect(formatCount(3e6)).toBe('3M');
     expect(binLabels(0).at(-1)).toBe('5B');
   });
+});
+
+it('names the home site without a trailing slash, so links can append a path', () => {
+  expect(HOME_URL).toMatch(/^https:\/\/[^/]+$/);
 });
