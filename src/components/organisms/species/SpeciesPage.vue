@@ -169,7 +169,10 @@ const englishNames = computed(
         <IntroSkeleton v-else-if="isIntroLoading" />
       </div>
       <div class="space-y-4">
-        <slot name="map" />
+        <!-- The map arrives inside an <astro-island> (display: contents), which space-y can't give a margin to. -->
+        <div v-if="$slots.map">
+          <slot name="map" />
+        </div>
         <section v-if="range" aria-labelledby="range-h">
           <h2 id="range-h" class="mb-2 font-display text-xl">Introduced range</h2>
           <div class="space-y-1.5 text-sm">
