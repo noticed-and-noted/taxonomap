@@ -28,9 +28,12 @@ const atCodec: UrlCodec<LatLng> = {
   serialize: (position) => `${position!.lat.toFixed(3)},${position!.lng.toFixed(3)}`,
 };
 
+/** Radius shown until the viewer picks another. */
+export const DEFAULT_RADIUS_KM: RadiusKm = 2;
+
 const radiusCodec: UrlCodec<RadiusKm> = {
   key: 'r',
-  default: 2,
+  default: DEFAULT_RADIUS_KM,
   scope: 'map',
   history: 'replace',
   parse: (raw) =>

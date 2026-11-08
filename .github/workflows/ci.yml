@@ -61,7 +61,23 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      # A coverage threshold that fails is a warning, not a failed job. A failing test still fails the run.
+      - run: pnpm test:coverage
+        id: coverage
+        continue-on-error: true
+      - name: Warn about coverage
+        if: steps.coverage.outcome == 'failure' && hashFiles('coverage/coverage-summary.json') != ''
+        run: echo '::warning title=Coverage::Unit test coverage is below the threshold. See the coverage step above.'
+      - name: Fail on test failures
+        if: steps.coverage.outcome == 'failure' && hashFiles('coverage/coverage-summary.json') == ''
+        run: exit 1
+      # The badge job on main reads this figure instead of running the tests again.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-coverage
+          path: coverage/coverage-summary.json
+          retention-days: 1
 
   bake:
     name: Bake GBIF data
@@ -168,11 +184,22 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm build:e2e
       - run: pnpm test:e2e --shard=${{ matrix.shard }}/3
+        env:
+          # Only main's figures reach the README. Each shard keeps its raw coverage, and the badge job merges them.
+          E2E_COVERAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'report' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        with:
+          name: e2e-coverage-${{ matrix.shard }}
+          path: coverage/e2e/raw
+          retention-days: 1
 
   coverage-badges:
     name: Coverage badges
     # Only main's figures reach the README. Nothing depends on this job, so it can't hold up a deploy.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # It runs when the unit tests fail too: the badge should show that figure.
+    needs: [unit, e2e]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -184,12 +211,25 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      # The summary is still written when a coverage threshold fails, and the badge should show that figure.
-      - run: pnpm test:coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: unit-coverage
+          path: coverage
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-coverage-*
+          path: coverage/shards
+      # Each shard saw a third of the journeys; together they are the figure the floors hold.
+      # Falling below a floor is a warning, as for the unit tests: the summary is written first, and the badge shows it.
+      - run: pnpm test:e2e:merge-coverage coverage/shards/*
+        id: merge
         continue-on-error: true
-      - run: pnpm build:e2e
-      - run: pnpm test:e2e:coverage
+      - name: Warn about coverage
+        if: steps.merge.outcome == 'failure' && hashFiles('coverage/e2e/coverage-summary.json') != ''
+        run: echo '::warning title=E2E coverage::Journey coverage is below its floor. See the merge step above.'
+      - name: Fail when the merge failed
+        if: steps.merge.outcome == 'failure' && hashFiles('coverage/e2e/coverage-summary.json') == ''
+        run: exit 1
       - name: Draw the badges
         run: |
           draw_badge() {

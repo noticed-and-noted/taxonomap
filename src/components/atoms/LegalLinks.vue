@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /** Links to the privacy notice and the terms and credits; static, so it renders without hydrating. */
+import { HOME_URL } from '~/lib/home';
+
 const LINKS = [
-  { href: '/privacy/', label: 'Privacy' },
-  { href: '/terms/', label: 'Terms and credits' },
+  { href: `${HOME_URL}/privacy/`, label: 'Privacy' },
+  { href: `${HOME_URL}/terms/`, label: 'Terms and credits' },
 ];
 </script>
 

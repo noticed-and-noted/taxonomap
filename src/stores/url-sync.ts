@@ -36,6 +36,8 @@ let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let microtaskQueued = false;
 let listening = false;
 let forcedMode: 'push' | 'replace' | null = null;
+/** The query string the latest link navigation asked for, before the map's own params were put back. */
+let linkSearch = '';
 
 /**
  * Run `fn` with every URL write using `mode` (e.g. animations write with
@@ -52,6 +54,16 @@ export function withHistoryMode(mode: 'push' | 'replace', callback: () => void):
 }
 
 const isBrowser = () => typeof window !== 'undefined' && typeof history !== 'undefined';
+
+/**
+ * The params the link that opened this page asked for. On the way to the map
+ * the address also carries the map's restored params, so ask this, not
+ * location.search, to tell what the link itself named.
+ */
+export function linkParams(): URLSearchParams {
+  return new URLSearchParams(linkSearch);
+}
+
 const isMapParam = (codec: UrlCodec<unknown>) => codec.scope === 'map';
 const onMap = (path: string) => path === '/';
 
@@ -132,11 +144,14 @@ export function syncFromUrl(search = isBrowser() ? window.location.search : ''):
 function listen(): void {
   if (listening || !isBrowser()) return;
   listening = true;
+  linkSearch = window.location.search;
   window.addEventListener('popstate', () => syncFromUrl());
   document.addEventListener('astro:after-swap', () => syncFromUrl());
   // Put the map's params back on internal navigations to the map.
   document.addEventListener('astro:before-preparation', (event) => {
     const navigationEvent = event as Event & { to: URL; navigationType?: string };
+    // Going back or forward is not a link asking for anything.
+    linkSearch = navigationEvent.navigationType === 'traverse' ? '' : navigationEvent.to.search;
     if (
       navigationEvent.navigationType === 'traverse' ||
       navigationEvent.to.origin !== window.location.origin ||

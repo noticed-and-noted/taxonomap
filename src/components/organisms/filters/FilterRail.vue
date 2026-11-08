@@ -8,6 +8,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import BuildInfo from '~/components/atoms/BuildInfo.vue';
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
 import MapSettings from '~/components/molecules/MapSettings.vue';
 import OnboardingSettings from '~/components/molecules/OnboardingSettings.vue';
@@ -150,6 +151,7 @@ function label(name: string, count: number) {
           <SearchFitSetting class="-mx-4 border-t border-border px-4 py-3" />
           <OnboardingSettings class="-mx-4 border-t border-border px-4 py-3" />
           <LegalLinks class="-mx-4 border-t border-border px-4 py-2" />
+          <BuildInfo class="pb-3" />
         </div>
         <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           <FilterGroup :group="current.id" />

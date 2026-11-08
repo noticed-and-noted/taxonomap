@@ -1,2 +1,6 @@
 /sitemap.xml /sitemap-index.xml 301
 /species/view/:key /species/view/ 200
+/privacy https://taxonomap.com/privacy/ 301
+/terms https://taxonomap.com/terms/ 301
+/privacy/ https://taxonomap.com/privacy/ 301
+/terms/ https://taxonomap.com/terms/ 301

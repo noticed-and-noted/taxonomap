@@ -2,11 +2,12 @@
 /** Content-page sign-off: the wordmark, linking home, beside the privacy and terms links. */
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
 import Wordmark from '~/components/atoms/Wordmark.astro';
+import { HOME_URL } from '~/lib/home';
 ---
 
 <footer class="mx-auto w-full max-w-6xl px-4 sm:px-6">
   <div class="sign-off flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-border pb-10 pt-6">
-    <a href="/" class="text-2xl" aria-label="Taxonomap home">
+    <a href={HOME_URL} class="text-2xl" aria-label="Taxonomap home">
       <Wordmark />
     </a>
     <LegalLinks />

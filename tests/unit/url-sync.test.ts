@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { __resetUrlSync, codecs, hrefWith, syncFromUrl, urlAtom } from '~/stores/url-sync';
+import { __resetUrlSync, codecs, hrefWith, linkParams, syncFromUrl, urlAtom } from '~/stores/url-sync';
 
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
@@ -152,6 +152,19 @@ describe('url-sync edge cases', () => {
     expect(navigate('/', 'traverse')).toBe(`${location.origin}/`);
     expect(navigate('/tree')).toBe(`${location.origin}/tree`);
     expect(navigate('https://elsewhere.test/')).toBe('https://elsewhere.test/');
+  });
+
+  it('remembers what the latest link asked for, not the params put back, and nothing after going back', () => {
+    urlAtom(codecs.int('t8', null, { scope: 'map' })).set(9);
+    const navigate = (to: string, navigationType = 'push') =>
+      document.dispatchEvent(
+        Object.assign(new Event('astro:before-preparation'), { to: new URL(to, location.href), navigationType }),
+      );
+    navigate('/?taxon=212');
+    expect(linkParams().get('taxon')).toBe('212');
+    expect(linkParams().has('t8')).toBe(false);
+    navigate('/?taxon=212', 'traverse');
+    expect(linkParams().has('taxon')).toBe(false);
   });
 
   it('keeps map params out of other pages but remembers their values', async () => {

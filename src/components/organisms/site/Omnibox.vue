@@ -20,11 +20,9 @@ import { usePlaceSearch } from '~/composables/usePlaceSearch';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { sortByRank, type NameHit } from '~/lib/gbif';
 import type { Place } from '~/lib/geocode';
-import { boundsAround, recordsView } from '~/lib/map/taxonView';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
-import { $fitOnSearch } from '~/stores/fit-search';
-import { $nearMode } from '~/stores/near';
+import { flyToRecords, shouldFitTaxa } from '~/stores/fly-to-taxa';
 import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
@@ -248,27 +246,8 @@ async function pickTaxon(hit: NameHit) {
     return;
   }
   markDone('search');
-  // Near me keeps the map on its pin.
-  if ($fitOnSearch.get() && !$nearMode.get()) void flyToTaxon(hit.key);
-}
-
-/** Closest the map zooms in on a picked taxon, so a species known from one spot still shows its surroundings. */
-const TAXON_MAX_ZOOM = 6;
-
-/** Zoom out to all of a taxon's records under the other filters, centred on the place with the most. */
-async function flyToTaxon(taxonKey: number) {
-  try {
-    const view = await recordsView({ ...$occurrenceFilter.get(), taxonKeys: [taxonKey] });
-    if (!view) return;
-    $flyTo.set({
-      kind: 'bounds',
-      bbox: boundsAround(view.busiest, view.extent),
-      centre: view.busiest,
-      maxZoom: TAXON_MAX_ZOOM,
-    });
-  } catch {
-    /* stay where we are */
-  }
+  // Just the picked taxon's records, under the other filters.
+  if (shouldFitTaxa()) void flyToRecords({ ...$occurrenceFilter.get(), taxonKeys: [hit.key] });
 }
 
 /** Shows a place on the map, going to the map first from other pages. */

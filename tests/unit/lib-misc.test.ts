@@ -1,6 +1,6 @@
-/** Small shared helpers: basemaps, env, country names, the ramp's colours and counts, the contact address. */
-import { CONTACT_EMAIL } from '~/lib/contact';
+/** Small shared helpers: basemaps, env, country names, the ramp's colours and counts, the home site. */
 import { countryName } from '~/lib/format';
+import { HOME_URL } from '~/lib/home';
 import { binLabels, formatCount, nice, rampById, rampColors, RAMPS } from '~/lib/ramp';
 
 afterEach(() => {
@@ -92,6 +92,6 @@ describe('ramp', () => {
   });
 });
 
-it('gives a contact address on the site’s own domain', () => {
-  expect(CONTACT_EMAIL).toMatch(/^[a-z]+@taxonomap\.com$/);
+it('names the home site without a trailing slash, so links can append a path', () => {
+  expect(HOME_URL).toMatch(/^https:\/\/[^/]+$/);
 });

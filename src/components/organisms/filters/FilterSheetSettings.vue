@@ -1,5 +1,6 @@
 <script setup lang="ts">
-/** The phone Filters sheet's Map tab: basemap, theme, map, reading and search settings, and the legal links. */
+/** The phone Filters sheet's Map tab: basemap, theme, map, reading and search settings, the legal links and the version. */
+import BuildInfo from '~/components/atoms/BuildInfo.vue';
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
 import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
 import MapSettings from '~/components/molecules/MapSettings.vue';
@@ -28,6 +29,9 @@ import ThemePicker from '~/components/molecules/ThemePicker.vue';
     </section>
     <SearchFitSetting />
     <OnboardingSettings />
-    <LegalLinks />
+    <div>
+      <LegalLinks />
+      <BuildInfo />
+    </div>
   </div>
 </template>

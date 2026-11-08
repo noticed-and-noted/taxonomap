@@ -35,6 +35,7 @@ import {
   $nearRadius,
   $nearTab,
   $nearThisMonth,
+  DEFAULT_RADIUS_KM,
   exitNearMode,
   setNearLocation,
   zoomForRadius,
@@ -74,13 +75,26 @@ const area = computed<Area | null>(() =>
 );
 const recordsFilter = computed(() => area.value && nearFilter(area.value));
 const radiusIndex = computed(() => (RADIUS_STEPS_KM as readonly number[]).indexOf(radius.value));
+const LAST_RADIUS_STEP = RADIUS_STEPS_KM.length - 1;
 const tableNote = computed(() =>
   species.value.length >= NEAR_SPECIES ? `the ${NEAR_SPECIES} most recorded` : undefined,
 );
 
+/** The step under the thumb while it is being dragged, before the radius is committed on release. */
+const draggedStep = ref<number | null>(null);
+const shownStep = computed(() => draggedStep.value ?? radiusIndex.value);
+
+function stepOf(event: Event): number {
+  return Number((event.target as HTMLInputElement).value);
+}
+
+function onRadiusDrag(event: Event) {
+  draggedStep.value = stepOf(event);
+}
+
 function onRadius(event: Event) {
-  const radiusStep = Number((event.target as HTMLInputElement).value);
-  $nearRadius.set(RADIUS_STEPS_KM[radiusStep] ?? 2);
+  draggedStep.value = null;
+  $nearRadius.set(RADIUS_STEPS_KM[stepOf(event)] ?? DEFAULT_RADIUS_KM);
 }
 
 function locate() {
@@ -237,15 +251,22 @@ onBeforeUnmount(() => {
               <input
                 type="range"
                 min="0"
-                :max="RADIUS_STEPS_KM.length - 1"
+                :max="LAST_RADIUS_STEP"
                 step="1"
                 :value="radiusIndex"
-                class="mt-1 w-full accent-[var(--accent)]"
+                class="radius-slider w-full"
+                :style="{ '--progress': Math.max(shownStep, 0) / LAST_RADIUS_STEP }"
                 :aria-valuetext="`${radius} kilometres`"
+                @input="onRadiusDrag"
                 @change="onRadius"
               />
-              <span class="flex justify-between text-[0.625rem] text-subtle" aria-hidden="true">
-                <span v-for="radiusKm in RADIUS_STEPS_KM" :key="radiusKm">{{ radiusKm }}</span>
+              <span class="radius-stops text-[0.625rem] text-subtle" aria-hidden="true">
+                <span
+                  v-for="(radiusKm, step) in RADIUS_STEPS_KM"
+                  :key="radiusKm"
+                  :style="{ '--stop': step / LAST_RADIUS_STEP }"
+                  >{{ radiusKm }}</span
+                >
               </span>
             </label>
             <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -351,5 +372,86 @@ onBeforeUnmount(() => {
 }
 .chip:disabled {
   opacity: 0.5;
+}
+
+/* A fixed thumb size, so the stop labels can sit under the thumb's centre at each step. */
+.radius-slider,
+.radius-stops {
+  --thumb-size: 1.25rem;
+}
+
+.radius-slider {
+  /* The thumb's centre travels between half a thumb in from each end, so the fill follows it there. */
+  --filled: calc(var(--thumb-size) / 2 + (100% - var(--thumb-size)) * var(--progress));
+
+  display: block;
+  height: 1.75rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.radius-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) var(--filled), var(--border-strong) var(--filled));
+}
+
+.radius-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) var(--filled), var(--border-strong) var(--filled));
+}
+
+.radius-slider::-webkit-slider-thumb {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  margin-top: calc(2px - var(--thumb-size) / 2);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  appearance: none;
+}
+
+.radius-slider::-moz-range-thumb {
+  width: var(--thumb-size);
+  height: var(--thumb-size);
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-sizing: border-box;
+}
+
+.radius-slider:focus-visible {
+  outline: none;
+}
+
+.radius-slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.radius-slider:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.radius-stops {
+  position: relative;
+  display: block;
+  height: 1lh;
+}
+
+.radius-stops > span {
+  position: absolute;
+  left: calc(var(--thumb-size) / 2 + (100% - var(--thumb-size)) * var(--stop));
+  translate: -50%;
+}
+
+@media (max-width: 639px) {
+  .radius-slider {
+    height: 2.75rem;
+  }
 }
 </style>

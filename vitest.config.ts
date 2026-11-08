@@ -15,7 +15,14 @@ export default defineConfig({
       provider: 'v8',
       // Vue and Astro files are covered by the Playwright journeys, not measured here.
       include: ['src/**/*.ts', 'integrations/**/*.ts'],
-      exclude: ['src/**/*.d.ts', '**/types.ts'],
+      // Type-only and re-export files hold no logic of their own to measure.
+      exclude: [
+        'src/**/*.d.ts',
+        '**/types.ts',
+        'src/components/organisms/site/omniboxOptions.ts',
+        'src/lib/plot.ts',
+        'src/lib/gbif/index.ts',
+      ],
       reporter: ['text-summary', 'html', 'json-summary'],
       // Every measured file is fully covered, so any untested line fails the run.
       thresholds: FULL,

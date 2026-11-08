@@ -7,6 +7,7 @@
  * 100%, and reaching the same failure and race paths through a browser would need far
  * more journeys for no extra safety.
  */
+import { readFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 import type { CoverageReportOptions, V8CoverageEntry } from 'monocart-coverage-reports';
 
@@ -25,11 +26,31 @@ export const COVERAGE_FLOORS = { lines: 100, statements: 97, functions: 94, bran
 export const coverageOptions: CoverageReportOptions = {
   name: 'Taxonomap journeys',
   outputDir: 'coverage/e2e',
-  reports: ['console-summary', 'v8', 'lcovonly', 'json-summary'],
+  // `raw` keeps the unmerged data, so shards run on separate machines can be merged afterwards.
+  reports: ['console-summary', 'v8', 'lcovonly', 'json-summary', 'raw'],
   // Only the site's own bundles, and only our sources inside them (bundles without a sourcemap drop out too).
   entryFilter: (entry) => entry.url.includes('/_astro/'),
   outputFilter: (file) => file.sourcePath.startsWith('src/') && /\.(vue|astro)$/.test(file.sourcePath),
 };
+
+type Metric = keyof typeof COVERAGE_FLOORS;
+
+/**
+ * Holds the written summary to the floors.
+ * @throws When any figure is below its floor.
+ */
+export async function assertCoverageFloors() {
+  const summary = JSON.parse(await readFile(`${coverageOptions.outputDir}/coverage-summary.json`, 'utf8')) as {
+    total: Record<Metric, { pct: number }>;
+  };
+  const short = (Object.keys(COVERAGE_FLOORS) as Metric[]).filter(
+    (metric) => summary.total[metric].pct < COVERAGE_FLOORS[metric],
+  );
+  if (short.length) {
+    const detail = short.map((metric) => `${metric} ${summary.total[metric].pct}% < ${COVERAGE_FLOORS[metric]}%`);
+    throw new Error(`E2E coverage fell below its floor: ${detail.join(', ')}`);
+  }
+}
 
 /**
  * Records a page's JS coverage. V8 drops a document's counts once another replaces it, so
