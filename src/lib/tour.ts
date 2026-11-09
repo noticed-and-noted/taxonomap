@@ -143,7 +143,5 @@ export function tipPosition(
   };
   // Covering a spotlit box is better than sitting off screen, where the buttons can't be reached.
   const visiblePlaces = places.filter(isOnScreen);
-  return (
-    visiblePlaces.find(isClear) ?? visiblePlaces[0] ?? { left: clampLeft(centredLeft), top: VIEWPORT_EDGE }
-  );
+  return visiblePlaces.find(isClear) ?? visiblePlaces[0] ?? { left: clampLeft(centredLeft), top: VIEWPORT_EDGE };
 }
