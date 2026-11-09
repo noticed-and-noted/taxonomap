@@ -110,7 +110,7 @@ function overlaps(first: ScreenBox, second: ScreenBox): boolean {
 /**
  * Places the tip by its target (beside a tall side column, else above or below it), trying
  * each place in turn, then the top and bottom of the page, for one that stays on screen and
- * covers no spotlit box. With none, it takes the first.
+ * covers no spotlit box. With none, it takes the first one on screen, even over a box.
  * @param box The main spotlit box.
  * @param viewport The page's size.
  * @param tip The tip's size in px.
@@ -133,10 +133,17 @@ export function tipPosition(
     { left: centredLeft, bottom: VIEWPORT_EDGE },
   ].map((place) => ({ ...place, left: clampLeft(place.left) }));
   const spotlit = [box, ...avoid];
-  const fits = (place: TipPosition) => {
+  const isOnScreen = (place: TipPosition) => {
     const rect = rectOf(place, viewport, tip);
-    const isOnScreen = rect.top >= 0 && rect.top + rect.height <= viewport.height;
-    return isOnScreen && !spotlit.some((other) => overlaps(rect, other));
+    return rect.top >= 0 && rect.top + rect.height <= viewport.height;
   };
-  return places.find(fits) ?? places[0]!;
+  const isClear = (place: TipPosition) => {
+    const rect = rectOf(place, viewport, tip);
+    return !spotlit.some((other) => overlaps(rect, other));
+  };
+  // Covering a spotlit box is better than sitting off screen, where the buttons can't be reached.
+  const visiblePlaces = places.filter(isOnScreen);
+  return (
+    visiblePlaces.find(isClear) ?? visiblePlaces[0] ?? { left: clampLeft(centredLeft), top: VIEWPORT_EDGE }
+  );
 }
