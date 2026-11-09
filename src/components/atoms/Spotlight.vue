@@ -237,13 +237,14 @@ defineExpose({ measure });
   left: 50%;
   top: 50%;
   translate: -50% -50%;
-  width: min(26rem, calc(100vw - 2rem));
+  width: min(27rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
 }
 
 .spotlight-card.centred.wide {
-  width: min(40rem, calc(100vw - 2rem));
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 1.3rem;
 }
 
 .spotlight-card:focus {
