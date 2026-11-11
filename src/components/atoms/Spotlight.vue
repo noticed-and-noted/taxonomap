@@ -240,6 +240,10 @@ defineExpose({ measure });
   width: min(27rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
+
+  /* A column, so a slotted child with min-height 0 can take the leftover height and scroll on its own. */
+  display: flex;
+  flex-direction: column;
 }
 
 .spotlight-card.centred.wide {
