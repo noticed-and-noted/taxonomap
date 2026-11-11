@@ -89,6 +89,11 @@ describe('busiestInView', () => {
     expect(busiestInView(flatMap(), hexes)?.properties.total).toBe(9);
   });
 
+  it('prefers a cell near the middle of the screen over a busier one further out', () => {
+    stubMatchMedia(true);
+    expect(busiestInView(flatMap(), [hexAt([-5, 5], 3), hexAt([-30, 0], 80)])?.properties.total).toBe(3);
+  });
+
   it('falls back to the default panel width when the token is unset', () => {
     stubMatchMedia(true);
     expect(busiestInView(flatMap(), [hexAt([-5, 0], 3), hexAt([10, 0], 30)])?.properties.total).toBe(3);

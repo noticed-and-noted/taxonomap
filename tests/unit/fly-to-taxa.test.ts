@@ -9,7 +9,7 @@ vi.mock('~/lib/map/taxonView', async (importOriginal) => ({
   recordsView: (...args: unknown[]) => recordsView(...args),
 }));
 
-const SOME_RECORDS = { extent: [-10, 40, 10, 60], busiest: [2, 48] };
+const SOME_RECORDS = { extent: [-10, 40, 10, 60], centre: [2, 48] };
 
 async function stores(search = '') {
   vi.resetModules();
@@ -31,11 +31,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('flyToRecords', () => {
-  it('flies to the box around the records, centred on the busiest place and not zoomed in past the cap', async () => {
+  it('flies to the middle of the records, out far enough to hold them and not zoomed in past the cap', async () => {
     const { flyToRecords, $flyTo } = await stores();
     await flyToRecords({ taxonKeys: [212] });
     expect(recordsView).toHaveBeenCalledWith({ taxonKeys: [212] });
-    expect($flyTo.get()).toMatchObject({ kind: 'bounds', centre: [2, 48], maxZoom: 6 });
+    expect($flyTo.get()).toEqual({ kind: 'bounds', bbox: [-10, 40, 10, 60], centre: [2, 48], maxZoom: 6 });
   });
 
   it('uses the map’s current filter when given none', async () => {

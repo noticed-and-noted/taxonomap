@@ -1,6 +1,6 @@
 /**
  * The floating chrome over the map (header, side panel, bottom sheet), how much of the map it covers,
- * and where the tour and hints may point: the busiest cell clear of it, facing the viewer on the globe.
+ * and where the tour and hints may point: the busiest cell near the middle and clear of it, facing the viewer on the globe.
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import type { ScreenBox } from '~/lib/tour';
@@ -11,6 +11,8 @@ import type { CoveredEdges } from './recordFit';
 const BUSIEST_MARGIN = 120;
 /** The same with the bottom sheet, which leaves a short band of map; the tip moves itself off the hex there. */
 const SHEET_MARGIN = 40;
+/** How far from the screen's centre the tour first looks for its hex, as a share of the map's shorter side. */
+const CENTRAL_SHARE = 0.2;
 /** cos of the widest angle from the map's centre a tour hex may sit at (60°), so it faces the viewer on the globe. */
 const FACING_COS = 0.5;
 /** The bottom sheet's height when it opens (BottomSheet's half snap), as a share of the page. */
@@ -58,13 +60,15 @@ function isFacing(map: MlMap, [lng, lat]: LngLat): boolean {
 }
 
 /**
- * The cell with the most records that faces the viewer, clear of the floating chrome and the cell panel.
+ * The cell with the most records near the middle of the screen (or anywhere in view when none is), facing the
+ * viewer and clear of the floating chrome and the cell panel.
  * @param hexes The loaded cells.
  */
 export function busiestInView(map: MlMap, hexes: readonly Hex[]): Hex | undefined {
   const box = map.getContainer().getBoundingClientRect();
   const covered = coveredWithPanel(map, box);
-  let busiest: Hex | undefined;
+  const centralRadius = Math.min(box.width, box.height) * CENTRAL_SHARE;
+  const clear: { hex: Hex; fromCentre: number }[] = [];
   for (const hex of hexes) {
     const centre = hexCentre(hex);
     const point = map.project(centre);
@@ -73,9 +77,19 @@ export function busiestInView(map: MlMap, hexes: readonly Hex[]): Hex | undefine
       point.x < box.width - covered.right - covered.margin &&
       point.y > covered.top + covered.margin &&
       point.y < box.height - covered.bottom - covered.margin;
-    if (isClear && isFacing(map, centre) && hex.properties.total > (busiest?.properties.total ?? 0)) busiest = hex;
+    const fromCentre = Math.hypot(point.x - box.width / 2, point.y - box.height / 2);
+    if (isClear && isFacing(map, centre)) clear.push({ hex, fromCentre });
   }
-  return busiest;
+  const central = clear.filter((cell) => cell.fromCentre <= centralRadius);
+  return busiest((central.length > 0 ? central : clear).map((cell) => cell.hex));
+}
+
+/** The cell with the most records. */
+function busiest(hexes: readonly Hex[]): Hex | undefined {
+  return hexes.reduce<Hex | undefined>(
+    (most, hex) => (hex.properties.total > (most?.properties.total ?? 0) ? hex : most),
+    undefined,
+  );
 }
 
 /** A cell outline's box on screen, in viewport px. */

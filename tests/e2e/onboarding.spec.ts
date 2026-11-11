@@ -6,13 +6,13 @@ test.use({ showTour: true });
 test('the tour walks the map once, then hands over to the checklist', { tag: '@mobile' }, async ({ page }) => {
   await page.goto('/');
   const tour = page.getByRole('dialog', { name: 'Welcome to Taxonomap' });
-  await expect(tour).toContainText('A record is one find of one organism');
+  await expect(tour).toContainText('Each hex you see on the globe contains records');
   await page.getByRole('button', { name: 'Start tour' }).click();
 
-  for (const title of ['Every hex is a count', 'Inside a hex', 'Search', 'Filters', 'Beyond the map']) {
+  for (const title of ['Every hex contains records', 'Inside a hex', 'Search', 'Filters', 'Beyond the map']) {
     await expect(page.getByRole('dialog', { name: title })).toBeVisible();
     // The hex steps outline the hex, plus the legend or the cell panel.
-    if (title === 'Every hex is a count' || title === 'Inside a hex') {
+    if (title === 'Every hex contains records' || title === 'Inside a hex') {
       await expect(page.locator('.spotlight-ring')).toHaveCount(2);
     }
     // The last step has nothing left to skip.
@@ -151,7 +151,7 @@ test('the tour keeps Tab inside its card, goes back a step, and waits for slow c
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Start tour' }).click();
-  const step = page.getByRole('dialog', { name: 'Every hex is a count' });
+  const step = page.getByRole('dialog', { name: 'Every hex contains records' });
   await expect(step).toBeVisible();
   await step.getByRole('button', { name: 'Next' }).focus();
   for (let press = 0; press < 4; press++) await page.keyboard.press('Tab');

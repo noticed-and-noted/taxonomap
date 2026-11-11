@@ -237,13 +237,18 @@ defineExpose({ measure });
   left: 50%;
   top: 50%;
   translate: -50% -50%;
-  width: min(26rem, calc(100vw - 2rem));
+  width: min(27rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
+
+  /* A column, so a slotted child with min-height 0 can take the leftover height and scroll on its own. */
+  display: flex;
+  flex-direction: column;
 }
 
 .spotlight-card.centred.wide {
-  width: min(40rem, calc(100vw - 2rem));
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 1.3rem;
 }
 
 .spotlight-card:focus {

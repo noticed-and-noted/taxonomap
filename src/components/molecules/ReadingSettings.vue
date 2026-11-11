@@ -52,9 +52,10 @@ const id = useId();
 </script>
 
 <template>
-  <div class="@container">
-    <div class="grid gap-4 @lg:grid-cols-2">
-      <div class="space-y-3">
+  <div class="flex min-h-0 flex-col @container">
+    <div class="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 @lg:grid-cols-2 @lg:grid-rows-1">
+      <!-- Scrolls on its own in a short card, so the preview above stays in view. -->
+      <div class="fade-list fade-scroll -mx-2 space-y-3 overflow-y-auto px-2">
         <fieldset>
           <legend class="mb-1.5 text-sm font-medium">Text size</legend>
           <div class="flex w-fit rounded-md border border-border bg-surface p-0.5">
@@ -124,7 +125,10 @@ const id = useId();
         </div>
       </div>
 
-      <figure v-if="!props.inSettings" class="self-start rounded-lg border border-border bg-bg p-3">
+      <figure
+        v-if="!props.inSettings"
+        class="order-first self-start rounded-lg @lg:order-none border border-border bg-bg p-3"
+      >
         <figcaption class="mb-2 text-xs text-subtle">Preview</figcaption>
         <p class="font-display text-lg">Red fox</p>
         <p class="sci-name text-sm text-muted">Vulpes vulpes</p>

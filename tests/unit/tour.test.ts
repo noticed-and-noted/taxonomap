@@ -66,10 +66,10 @@ describe('the tip', () => {
     expect(tipPosition(sheet, phone, { width: 343, height: 150 }, [hex])).toEqual({ left: 16, top: 16 });
   });
 
-  it('keeps its first place when nowhere is clear', () => {
+  it('stays on screen, over the target, when nowhere is clear', () => {
     expect(tipPosition({ left: 0, top: 0, width: 1000, height: 800 }, viewport, tip)).toEqual({
       left: 340,
-      bottom: 812,
+      top: 16,
     });
   });
 });

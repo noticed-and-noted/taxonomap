@@ -53,15 +53,26 @@ describe('gridLevel', () => {
     for (const lat of [0, 30, 60, 80, -75]) expect(level(1.5 - zoomDrop(lat), lat)).toBe(1);
   });
 
-  it('waits until a zoom level past filling the view before coarsening', () => {
-    // Equator-equivalent zoom 3.5: the globe fills the view, but not by enough yet.
-    expect([0, 60, 80].map((lat) => level(3.5 - zoomDrop(lat), lat))).toEqual([3, 3, 3]);
+  it('already has coarser polar cells by the time the globe fills the view', () => {
+    // Equator-equivalent zoom 3.1, just past filling: the streaky view straight down on the South Pole.
+    expect([0, 60, 80, -89.8].map((lat) => level(3.1 - zoomDrop(lat), lat))).toEqual([3, 2, 2, 2]);
   });
 
-  it('switches at one point, not gradually', () => {
-    const at = fillZoom(WIDTH, HEIGHT) + 1; // a zoom level past filling the view
-    expect(level(at - 0.01 - zoomDrop(80), 80)).toBe(Math.floor(at - 0.01));
-    expect(level(at - zoomDrop(80), 80)).toBe(Math.floor(at) - 2);
+  it('never makes cells coarser while zooming in', () => {
+    for (const lat of [0, 55, 61, 70, 76, 82, 85, -89.8]) {
+      let previous = 0;
+      for (let equatorZoom = 0; equatorZoom < 11.9; equatorZoom += 0.01) {
+        const current = level(equatorZoom - zoomDrop(lat), lat);
+        expect(current).toBeGreaterThanOrEqual(previous);
+        previous = current;
+      }
+    }
+  });
+
+  it('changes at most one level while panning round a pole just past filling the view', () => {
+    // A seal's range round Antarctica at equator-equivalent zoom 4.1: the grid only moves at the 75.5° band.
+    const levels = [-60, -70, -76, -81.2, -83, -89].map((lat) => level(4.1 - zoomDrop(lat), lat));
+    expect(levels).toEqual([3, 3, 2, 2, 2, 2]);
   });
 
   it('coarsens the grid in whole steps in polar bands once zoomed in past that', () => {

@@ -1,6 +1,6 @@
-/** Centring a picked taxon's extent on its busiest place. */
+/** Centring a picked taxon's extent on the middle of its records. */
 import type { Hex } from '~/lib/map/occGrid';
-import { boundsAround, distanceAndDirection, nearestRecords, recordsView } from '~/lib/map/taxonView';
+import { distanceAndDirection, middleOf, nearestRecords, recordsView } from '~/lib/map/taxonView';
 
 const decodedHexes = vi.hoisted(() => ({ current: [] as Hex[] }));
 vi.mock('~/lib/map/occGrid', async (importOriginal) => ({
@@ -36,15 +36,18 @@ describe('recordsView', () => {
     vi.unstubAllGlobals();
   });
 
-  it('spans the home cells with records and centres on the busiest', async () => {
+  it('spans the home cells with records and centres on the middle of the records', async () => {
     decodedHexes.current = [
-      cell([10, 50], 5),
-      cell([-20, 10], 40),
+      cell([10, 0], 30),
+      cell([-20, 0], 15),
       // A wrapped copy from the tile's padding, and an empty cell: neither counts.
       cell([179, 0], 999, false),
       cell([100, -60], 0),
     ];
-    expect(await recordsView(freshFilter())).toEqual({ extent: [-20.5, 9.5, 10.5, 50.5], busiest: [-20, 10] });
+    const view = await recordsView(freshFilter());
+    expect(view?.extent).toEqual([-20.5, -0.5, 10.5, 0.5]);
+    expect(view?.centre[0]).toBeCloseTo(0, 0);
+    expect(view?.centre[1]).toBeCloseTo(0);
   });
 
   it('handles more points than a function call takes as arguments', async () => {
@@ -52,14 +55,38 @@ describe('recordsView', () => {
     expect((await recordsView(freshFilter()))?.extent).toEqual([-150.5, -0.5, 149.5, 0.5]);
   });
 
-  it('keeps the busiest cell when it comes first', async () => {
-    decodedHexes.current = [cell([10, 50], 40), cell([-20, 10], 5)];
-    expect((await recordsView(freshFilter()))?.busiest).toEqual([10, 50]);
+  it('centres no nearer a pole than the globe can fly to', async () => {
+    decodedHexes.current = [-180, -90, 0, 90].map((lng) => cell([lng, -60], 1));
+    expect((await recordsView(freshFilter()))?.centre[1]).toBe(-70);
+  });
+
+  it('falls back to the busiest cell when the records ring the globe', async () => {
+    decodedHexes.current = [cell([0, 0], 5), cell([90, 0], 6), cell([180, 0], 5), cell([-90, 0], 6)];
+    expect((await recordsView(freshFilter()))?.centre).toEqual([90, 0]);
   });
 
   it('is null with no records', async () => {
     decodedHexes.current = [cell([0, 0], 0)];
     expect(await recordsView(freshFilter())).toBeNull();
+  });
+});
+
+describe('middleOf', () => {
+  it('leans towards the cells with more records', () => {
+    const [lng = 0] = middleOf([cell([0, 0], 3), cell([40, 0], 1)]) ?? [];
+    expect(lng).toBeGreaterThan(5);
+    expect(lng).toBeLessThan(15);
+  });
+
+  it('centres a ring of records round the south pole on the pole', () => {
+    const ring = [-180, -90, 0, 90].map((lng) => cell([lng, -60], 1));
+    expect(middleOf(ring)?.[1]).toBeCloseTo(-90);
+  });
+
+  it('averages across the antimeridian the short way round', () => {
+    const [lng = 0, lat = 0] = middleOf([cell([170, 0], 1), cell([-170, 0], 1)]) ?? [];
+    expect(Math.abs(lng)).toBeCloseTo(180);
+    expect(lat).toBeCloseTo(0);
   });
 });
 
@@ -135,26 +162,5 @@ describe('distanceAndDirection', () => {
       distanceKm: expect.closeTo(222, -1),
       direction: 'east',
     });
-  });
-});
-
-const toMercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-
-describe('boundsAround', () => {
-  it('keeps the extent and centres on the point', () => {
-    const [west, south, east, north] = boundsAround([10, 50], [-10, 40, 20, 60]);
-    expect(west).toBeLessThanOrEqual(-10);
-    expect(east).toBeGreaterThanOrEqual(20);
-    expect(south).toBeLessThanOrEqual(40);
-    expect(north).toBeCloseTo(60);
-    expect((west + east) / 2).toBeCloseTo(10);
-    expect((toMercatorY(south) + toMercatorY(north)) / 2).toBeCloseTo(toMercatorY(50));
-  });
-
-  it('never spans more than the world', () => {
-    const [west, south, east, north] = boundsAround([170, 80], [-180, -80, 180, 84]);
-    expect(east - west).toBeLessThanOrEqual(360);
-    expect(south).toBeGreaterThanOrEqual(-85);
-    expect(north).toBeLessThanOrEqual(85);
   });
 });

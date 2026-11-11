@@ -15,7 +15,7 @@ import { compact, full } from '~/lib/format';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
-import { hexCentre, zoomPastLevel, type Hex } from '~/lib/map/occGrid';
+import { hexCentre, zoomDrop, zoomPastLevel, type Hex } from '~/lib/map/occGrid';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { PIN_CURSOR } from '~/lib/map/pinCursors';
 import { createRecordFit } from '~/lib/map/recordFit';
@@ -247,8 +247,14 @@ function flyToBounds(request: Extract<FlyRequest, { kind: 'bounds' }>) {
     map.fitBounds(bounds, { ...fit, duration: prefersReducedMotion() ? 0 : FIT_DURATION_MS });
     return;
   }
-  const zoom = map.cameraForBounds(bounds, fit)?.zoom ?? map.getZoom();
-  fly({ kind: 'point', lng: request.centre[0], lat: request.centre[1], zoom });
+  const camera = map.cameraForBounds(bounds, fit);
+  const [lng, lat] = request.centre;
+  if (!camera?.center || camera.zoom === undefined) return fly({ kind: 'point', lng, lat, zoom: map.getZoom() });
+  // The globe draws at its centre's scale: keep the size that fits the box, wherever the centre is.
+  const boxLat = Array.isArray(camera.center) ? camera.center[1] : camera.center.lat;
+  // Below the least zoom MapLibre's globe flights near a pole can stall or land elsewhere.
+  const zoom = Math.max(map.getMinZoom(), camera.zoom + zoomDrop(boxLat) - zoomDrop(lat));
+  fly({ kind: 'point', lng, lat, zoom });
 }
 
 function fly(request: FlyRequest) {
@@ -512,6 +518,8 @@ function onLoadChange(load: { loading: boolean }) {
 
 /** Store → map: view, basemap, ramp, selection, mode, "near me" and fly requests. */
 function listenToStores() {
+  // A flight planned before the first style loads is measured on the flat map and breaks when the globe switches on.
+  const globeReady = new Promise<void>((resolve) => map?.once('style.load', () => resolve()));
   cleanups.push(
     $basemap.listen(() => void rebuildStyle()),
     $mapLoad.listen(onLoadChange),
@@ -538,8 +546,8 @@ function listenToStores() {
     ...[$nearAt, $nearRadius, $mapMode].map((store) => store.listen(() => setData('near', nearData()))),
     $flyTo.subscribe((request) => {
       if (!request) return;
-      fly(request);
       $flyTo.set(null);
+      void globeReady.then(() => fly(request));
     }),
     $reading.listen(() => map?.setPixelRatio(mapPixelRatio())),
     $busiestHexRequest.subscribe((request) => {

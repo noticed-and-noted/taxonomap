@@ -141,27 +141,30 @@ const emit = defineEmits<{
   color: var(--type);
   background: color-mix(in srgb, var(--type) 16%, transparent);
 }
-/* Tooltip to the left, so the scroll box never clips it above or below. */
-.type-code::after {
-  content: attr(data-tip);
-  position: absolute;
-  right: calc(100% + 0.375rem);
-  top: 50%;
-  translate: 0 -50%;
-  z-index: 2;
-  padding: 0.125rem 0.375rem;
-  border-radius: var(--radius-sm);
-  background: var(--text);
-  color: var(--bg);
-  font-weight: 400;
-  letter-spacing: 0;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 120ms;
-}
-.type-code:hover::after,
-.type-code:focus-visible::after {
-  opacity: 1;
+/* Tooltip to the left, so the scroll box never clips it above or below. Hover devices only: on touch
+   it is never seen, and its hidden box sits over the list's scroll surface. */
+@media (hover: hover) {
+  .type-code::after {
+    content: attr(data-tip);
+    position: absolute;
+    right: calc(100% + 0.375rem);
+    top: 50%;
+    translate: 0 -50%;
+    z-index: 2;
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--radius-sm);
+    background: var(--text);
+    color: var(--bg);
+    font-weight: 400;
+    letter-spacing: 0;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms;
+  }
+  .type-code:hover::after,
+  .type-code:focus-visible::after {
+    opacity: 1;
+  }
 }
 </style>

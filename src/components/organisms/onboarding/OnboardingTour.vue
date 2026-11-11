@@ -59,20 +59,20 @@ function pickHex() {
 
 const STEPS: TourStep[] = [
   {
-    title: 'Every hex is a count',
-    body: 'Each hex counts the records found inside it. Darker hexes hold more, and the legend shows how many, on a log scale.',
+    title: 'Every hex contains records',
+    body: 'Each hex contains records found in that area. They will grow and shrink depending on your zoom level.',
     enter: pickHex,
     targets: () => [$busiestHexBox.get(), boxOf('[data-tour="legend"]')],
   },
   {
     title: 'Inside a hex',
-    body: 'Clicking a hex opens this panel: its record count, the species found there, single records, and the months they turn up.',
+    body: 'Clicking a hex opens this panel: its record count, the species found there and a list of the records found inside. Click on a record for more information about it.',
     enter: () => $selectedHex.get() && $panel.set('hex'),
     targets: () => [$selectedHex.get() ? boxOf(PANEL_SELECTOR) : null, $busiestHexBox.get()],
   },
   {
     title: 'Search',
-    body: 'Find a species, a group such as birds, or a place. Picking a species shows only its records.',
+    body: 'Find a species by common name or by scientific name. You can also search for places.',
     targets: () => [boxOf('[data-tour="search"]')],
   },
   {
@@ -82,7 +82,7 @@ const STEPS: TourStep[] = [
   },
   {
     title: 'Beyond the map',
-    body: 'Tree of life browses every group by its records. Open any species in the list for its photos and seasons.',
+    body: 'Clicking on a species will take you to a profile page with more information about it. There is also a representation of the Tree of life that allows you to explore every group by its records.',
     targets: () => [boxOf('[data-tour="nav"]'), speciesListBox()],
   },
 ];
@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
     :targets="currentTargets"
     :step-key="stepIndex"
     :labelledby="titleId"
-    :wide="isReadingOpen"
+    :wide="!step"
     @settled="onSettled"
     @close="end"
   >
@@ -146,33 +146,36 @@ onBeforeUnmount(() => {
     </template>
     <template v-else-if="!step">
       <h2 :id="titleId" class="font-display text-xl">Welcome to Taxonomap</h2>
-      <p class="mt-2 text-sm text-muted">
-        The map is built on GBIF, the Global Biodiversity Information Facility: billions of records pooled from museums,
-        herbaria, research surveys and nature apps like iNaturalist.
+      <p class="mt-3 text-sm text-muted">
+        Each hex you see on the globe contains records of species found within that area. These records come from the
+        <a href="https://www.gbif.org/occurrence/search" target="_blank" rel="noopener">GBIF occurrence database</a>, a
+        collection of the major biodiversity datasets.
       </p>
-      <p class="mt-2 text-sm text-muted">
-        A record is one find of one organism: what it was, where, and when. It might be a museum specimen, a photo, or a
-        sighting in a survey. Each hex counts the records found inside it.
+      <p class="mt-3 text-sm text-muted">
+        Records can be sightings, samples, fossils and more. They date all the way back to 1500 and are updated
+        continuously. Continue with the tour for a quick run through of the rest of the features.
       </p>
-      <button type="button" class="reading-link" @click="isReadingOpen = true">
-        <svg
-          viewBox="0 0 24 24"
-          class="size-5"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.7"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="4.5" r="1.5" />
-          <path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5 9 21M12 14.5l3 6.5" />
-        </svg>
-        Reading and display options
-      </button>
-      <div class="mt-4 flex justify-end gap-2">
-        <button type="button" class="tour-btn" @click="end">Skip</button>
-        <button type="button" class="tour-btn primary" @click="go(0)">Start tour</button>
+      <div class="mt-3 flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+        <button type="button" class="reading-link mr-auto" @click="isReadingOpen = true">
+          <svg
+            viewBox="0 0 24 24"
+            class="size-5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="4.5" r="1.5" />
+            <path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5 9 21M12 14.5l3 6.5" />
+          </svg>
+          Reading and display options
+        </button>
+        <div class="flex w-full gap-2 sm:w-auto">
+          <button type="button" class="reading-link skip-tour px-3" @click="end">Skip</button>
+          <button type="button" class="tour-btn primary flex-2 sm:flex-none" @click="go(0)">Start tour</button>
+        </div>
       </div>
     </template>
     <template v-else>
@@ -195,13 +198,22 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  margin-top: 0.75rem;
   min-height: 2.75rem;
   color: var(--text);
   font-size: 0.875rem;
   text-decoration: underline;
   text-decoration-color: var(--accent);
   text-underline-offset: 0.2em;
+}
+
+.skip-tour {
+  color: var(--text-muted);
+  text-decoration-color: currentColor;
+}
+
+.reading-link.skip-tour:hover {
+  color: var(--text-muted);
+  text-decoration-color: var(--accent);
 }
 
 .reading-link:hover {

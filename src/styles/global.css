@@ -51,8 +51,8 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* A modal <dialog> makes the page inert but still lets it scroll. */
-  html:has(dialog:modal) {
+  /* A modal <dialog> makes the page inert but still lets it scroll; so does the modal tour spotlight. */
+  html:has(dialog:modal, .spotlight:not(.click-through)) {
     overflow: hidden;
   }
 
