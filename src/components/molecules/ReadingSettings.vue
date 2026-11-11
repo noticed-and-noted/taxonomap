@@ -125,7 +125,10 @@ const id = useId();
         </div>
       </div>
 
-      <figure v-if="!props.inSettings" class="order-first self-start rounded-lg @lg:order-none border border-border bg-bg p-3">
+      <figure
+        v-if="!props.inSettings"
+        class="order-first self-start rounded-lg @lg:order-none border border-border bg-bg p-3"
+      >
         <figcaption class="mb-2 text-xs text-subtle">Preview</figcaption>
         <p class="font-display text-lg">Red fox</p>
         <p class="sci-name text-sm text-muted">Vulpes vulpes</p>
