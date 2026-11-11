@@ -3,7 +3,7 @@
  * names taxa but no view (the species and tree pages' "View on map").
  */
 import type { TileFilter } from '~/lib/gbif';
-import { boundsAround, recordsView } from '~/lib/map/taxonView';
+import { recordsView } from '~/lib/map/taxonView';
 import { $flyTo, $occurrenceFilter, $taxonKeys } from './explorer';
 import { $fitOnSearch } from './fit-search';
 import { $nearMode } from './near';
@@ -13,19 +13,14 @@ import { linkParams } from './url-sync';
 const TAXON_MAX_ZOOM = 6;
 
 /**
- * Zoom out to all of a filter's records, centred on the place with the most.
+ * Zoom out to all of a filter's records, centred on the middle of them.
  * @param filter The records to show; defaults to the map's current filter.
  */
 export async function flyToRecords(filter: TileFilter = $occurrenceFilter.get()) {
   try {
     const view = await recordsView(filter);
     if (!view) return;
-    $flyTo.set({
-      kind: 'bounds',
-      bbox: boundsAround(view.busiest, view.extent),
-      centre: view.busiest,
-      maxZoom: TAXON_MAX_ZOOM,
-    });
+    $flyTo.set({ kind: 'bounds', bbox: view.extent, centre: view.centre, maxZoom: TAXON_MAX_ZOOM });
   } catch {
     /* Best effort: if the lookup fails (offline, GBIF down) the map stays where it is. */
   }

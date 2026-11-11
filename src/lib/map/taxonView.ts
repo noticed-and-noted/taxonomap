@@ -1,22 +1,54 @@
 /**
  * Where the map goes when a species or group is picked in search: out far
- * enough to hold every record, centred on the place with the most of them.
+ * enough to hold every record, centred on the middle of them.
  */
 import { occurrenceTileTemplate, type TileFilter } from '~/lib/gbif';
 import { decodeHexes, hexCentre, type Hex, type LngLat } from './occGrid';
 
-/** Hexes across the one world tile the busiest place is picked from: cells about 400 km wide at the equator. */
+/** Hexes across the one world tile the records' middle is found from: cells about 400 km wide at the equator. */
 const WORLD_HEX_PER_TILE = 100;
-/** Latitude limit of a centred box: Mercator, and so fitting, runs out near the poles. */
-const MAX_LAT = 85;
 
 export type Bbox = readonly [west: number, south: number, east: number, north: number];
+
+/**
+ * Farthest from the equator the view is centred. The globe draws larger nearer a pole at the same zoom,
+ * and MapLibre won't reliably fly below the map's least zoom, so past this a polar range fills the view.
+ */
+const MAX_CENTRE_LAT = 70;
 
 export interface RecordsView {
   /** Box around every cell with records, clipped to the world. */
   extent: Bbox;
-  /** Centre of the cell with the most records. */
-  busiest: LngLat;
+  /** The middle of the cells with records (no nearer a pole than MAX_CENTRE_LAT), or the busiest cell when they ring the globe. */
+  centre: LngLat;
+}
+
+/** Below this length the records' mean direction is noise: records spread all round the globe have no middle. */
+const MIN_MEAN_LENGTH = 0.1;
+
+const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+const toDegrees = (radians: number) => (radians * 180) / Math.PI;
+
+/**
+ * The middle of the records on the globe: the mean of their cells' centres as 3D unit vectors, weighted
+ * by record count, so a range that crosses the antimeridian or rings a pole is averaged the right way
+ * round, and a few stray records (zoo animals abroad) don't drag the view off the rest.
+ * @returns The middle, or null when the records spread evenly all round the globe.
+ */
+export function middleOf(hexes: Hex[]): LngLat | null {
+  let [sumX, sumY, sumZ, records] = [0, 0, 0, 0];
+  for (const hex of hexes) {
+    const [lng, lat] = hexCentre(hex);
+    const [lambda, phi] = [toRadians(lng), toRadians(lat)];
+    const { total } = hex.properties;
+    sumX += total * Math.cos(phi) * Math.cos(lambda);
+    sumY += total * Math.cos(phi) * Math.sin(lambda);
+    sumZ += total * Math.sin(phi);
+    records += total;
+  }
+  const [meanX, meanY, meanZ] = [sumX / records, sumY / records, sumZ / records];
+  if (Math.hypot(meanX, meanY, meanZ) < MIN_MEAN_LENGTH) return null;
+  return [toDegrees(Math.atan2(meanY, meanX)), toDegrees(Math.atan2(meanZ, Math.hypot(meanX, meanY)))];
 }
 
 /**
@@ -68,18 +100,19 @@ async function fetchWorldHexes(url: string): Promise<Hex[] | null> {
 /**
  * Where a filter's records are, from a coarse world grid of them. Unlike GBIF's
  * capabilities extent, this honours every filter the map does (continent, year…).
- * @returns The records' extent and busiest place, or null when there are none or the tile can't be loaded.
+ * @returns The records' extent and middle, or null when there are none or the tile can't be loaded.
  */
 export async function recordsView(filter: TileFilter): Promise<RecordsView | null> {
   const hexes = await worldHexes(filter);
   if (!hexes?.length) return null;
   const busiest = hexes.reduce((best, hex) => (hex.properties.total > best.properties.total ? hex : best));
-  return { extent: extentOf(hexes), busiest: hexCentre(busiest) };
+  const [lng, lat] = middleOf(hexes) ?? hexCentre(busiest);
+  const centre: LngLat = [lng, Math.max(-MAX_CENTRE_LAT, Math.min(MAX_CENTRE_LAT, lat))];
+  return { extent: extentOf(hexes), centre };
 }
 
 const EARTH_RADIUS_KM = 6371;
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'] as const;
-const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 
 export interface NearestRecords {
   /** Box around the nearest cell with records, to fly to. */
@@ -104,7 +137,7 @@ export function distanceAndDirection(
     Math.sin(deltaLambda) * Math.cos(toPhi),
     Math.cos(fromPhi) * Math.sin(toPhi) - Math.sin(fromPhi) * Math.cos(toPhi) * Math.cos(deltaLambda),
   );
-  const sector = Math.round(((bearing * 180) / Math.PI + 360) / 45) % COMPASS.length;
+  const sector = Math.round((toDegrees(bearing) + 360) / 45) % COMPASS.length;
   return { distanceKm, direction: COMPASS[sector]! };
 }
 
@@ -124,25 +157,4 @@ export async function nearestRecords(filter: TileFilter, point: LngLat): Promise
   }
   if (!nearest) return null;
   return { extent: extentOf([nearest.hex]), distanceKm: nearest.distanceKm, direction: nearest.direction };
-}
-
-const toMercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-const fromMercatorY = (mercatorY: number) => (Math.atan(Math.exp(mercatorY)) * 360) / Math.PI - 90;
-
-/**
- * The smallest box centred on a point that still holds the whole extent.
- * Latitudes mirror in Mercator, so the point is also the centre of the fitted view.
- * @param centre The [lng, lat] the box is centred on.
- * @param extent The box it must hold.
- */
-export function boundsAround([lng, lat]: LngLat, [west, south, east, north]: Bbox): Bbox {
-  const halfWidth = Math.min(180, Math.max(lng - west, east - lng));
-  const centreY = toMercatorY(lat);
-  const halfHeight = Math.max(centreY - toMercatorY(south), toMercatorY(north) - centreY);
-  return [
-    lng - halfWidth,
-    Math.max(-MAX_LAT, fromMercatorY(centreY - halfHeight)),
-    lng + halfWidth,
-    Math.min(MAX_LAT, fromMercatorY(centreY + halfHeight)),
-  ];
 }
