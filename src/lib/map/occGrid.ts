@@ -48,10 +48,11 @@ export function fillZoom(width: number, height: number): number {
 }
 
 /**
- * How many zoom levels past filling the view polar cells switch to coarser
- * ones (each level doubles the globe's size).
+ * How many zoom levels before the globe fills the view polar cells start to
+ * coarsen (each level doubles the globe's size). By the time a polar view
+ * fills the screen its cells are already coarser, so none shrink to a blur.
  */
-const POLAR_COARSEN_FROM = 1;
+const POLAR_COARSEN_START = 0.5;
 
 /**
  * The grid level for a view (w × h px), from MapLibre's zoom and the
@@ -59,10 +60,12 @@ const POLAR_COARSEN_FROM = 1;
  *
  * The base is the zoom as if centred on the equator (MapLibre's zoom plus its
  * drop): MapLibre keeps that constant as you pan the globe, so panning keeps
- * the same grid. Zoomed in POLAR_COARSEN_FROM levels past the globe filling
- * the view, the grid is coarser by whole levels in polar bands, where Mercator
- * cells would be tiny: one level from 60°, two from 75.5°, three from 82.8°
- * (where MapLibre's drop reaches each whole level). Below 60° nothing changes.
+ * the same grid. In polar bands, where Mercator cells would be tiny, the grid
+ * is coarser by up to a whole level per band: one from 60°, two from 75.5°,
+ * three from 82.8° (where MapLibre's drop reaches each whole level). That
+ * coarsening ramps in a level per zoom level from POLAR_COARSEN_START before
+ * the globe fills the view, so zooming in never makes cells coarser and there
+ * is no single zoom where they jump. Below 60° nothing changes.
  *
  * Once the map is flat (zoom 12+) panning leaves MapLibre's zoom alone and
  * Mercator cells keep their size on screen, so the zoom is used as is.
@@ -73,8 +76,9 @@ export function gridLevel(zoom: number, lat: number, width: number, height: numb
   if (zoom >= FLAT_FROM) return level(zoom);
   const drop = zoomDrop(lat);
   const equatorZoom = zoom + drop;
-  const close = equatorZoom >= fillZoom(width, height) + POLAR_COARSEN_FROM;
-  return level(equatorZoom - (close ? Math.floor(drop + 1e-9) : 0));
+  const band = Math.floor(drop + 1e-9);
+  const ramp = Math.max(0, equatorZoom - (fillZoom(width, height) - POLAR_COARSEN_START));
+  return level(equatorZoom - Math.min(band, ramp));
 }
 
 /** How closely zoomPastLevel finds a switch: well under a frame of a wheel zoom. */
