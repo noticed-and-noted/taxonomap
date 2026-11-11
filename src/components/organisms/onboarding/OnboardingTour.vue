@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
           Reading and display options
         </button>
         <div class="flex w-full gap-2 sm:w-auto">
-          <button type="button" class="tour-btn flex-1 sm:flex-none" @click="end">Skip</button>
+          <button type="button" class="reading-link skip-tour px-3" @click="end">Skip</button>
           <button type="button" class="tour-btn primary flex-2 sm:flex-none" @click="go(0)">Start tour</button>
         </div>
       </div>
@@ -204,6 +204,16 @@ onBeforeUnmount(() => {
   text-decoration: underline;
   text-decoration-color: var(--accent);
   text-underline-offset: 0.2em;
+}
+
+.skip-tour {
+  color: var(--text-muted);
+  text-decoration-color: currentColor;
+}
+
+.reading-link.skip-tour:hover {
+  color: var(--text-muted);
+  text-decoration-color: var(--accent);
 }
 
 .reading-link:hover {
