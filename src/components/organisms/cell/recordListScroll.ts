@@ -30,19 +30,21 @@ export function revealInList(box: HTMLElement | undefined, element: HTMLElement 
   else if (rowRect.bottom > bottom) box.scrollTop += Math.min(rowRect.bottom - bottom, top - boxRect.top);
 }
 
+/** The list's on-screen box, as left, top, right and bottom. */
+function listBox(box: HTMLElement) {
+  const { left, right } = box.getBoundingClientRect();
+  const { top, bottom } = visibleBounds(box);
+  return { left, top, right, bottom };
+}
+
 /**
  * Clips the view-transition overlay to the list's on-screen box, so a row's moving photo and name can't draw over
  * the panel. The overlay sits above the whole page, out of reach of the list's own overflow.
- * @returns A function that removes the clip.
  */
-function clipTransitionToList(box: HTMLElement | undefined) {
-  if (!box) return () => {};
-  const { left, right } = box.getBoundingClientRect();
-  const { top, bottom } = visibleBounds(box);
+function clipTransitionTo({ left, top, right, bottom }: ReturnType<typeof listBox>) {
   const root = document.documentElement;
   root.style.setProperty('--records-clip', `rect(${top}px ${right}px ${bottom}px ${left}px)`);
   root.classList.add('records-transition');
-  return () => root.classList.remove('records-transition');
 }
 
 /**
@@ -52,10 +54,23 @@ function clipTransitionToList(box: HTMLElement | undefined) {
  * @returns Resolves once the transition has finished and the clip is gone.
  */
 export async function startListTransition(box: HTMLElement | undefined, update: () => Promise<void>) {
-  const unclip = clipTransitionToList(box);
+  const before = box && listBox(box);
+  if (before) clipTransitionTo(before);
+  // A short list grows or shrinks as a row opens or closes, so the clip covers the list both before and after.
+  const updateAndWiden = async () => {
+    await update();
+    if (!box || !before) return;
+    const after = listBox(box);
+    clipTransitionTo({
+      left: Math.min(before.left, after.left),
+      top: Math.min(before.top, after.top),
+      right: Math.max(before.right, after.right),
+      bottom: Math.max(before.bottom, after.bottom),
+    });
+  };
   try {
-    await document.startViewTransition(update).finished;
+    await document.startViewTransition(updateAndWiden).finished;
   } finally {
-    unclip();
+    document.documentElement.classList.remove('records-transition');
   }
 }

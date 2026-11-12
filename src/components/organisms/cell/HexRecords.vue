@@ -325,7 +325,7 @@ function toggle(occurrence: Occurrence) {
   outline: none;
 }
 /* While a row opens or closes, only the list and that row's photo and name animate, and the overlay is clipped to the
-   list (clipTransitionToList). The page stays out, live underneath, or the clip would hide it. Global: these hang
+   list (startListTransition). The page stays out, live underneath, or the clip would hide it. Global: these hang
    off <html>, which a scoped selector would never match. */
 .clips-transition {
   view-transition-name: rec-list;
