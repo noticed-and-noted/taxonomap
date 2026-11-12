@@ -1,4 +1,4 @@
-import { classificationOf } from '~/lib/species/data';
+import { classificationOf, isAnimal } from '~/lib/species/data';
 import { speciesPath } from '~/lib/species/links';
 import { englishName, groupByLanguage, languageName, otherEnglishNames, slugify } from '~/lib/species/names';
 
@@ -135,5 +135,11 @@ describe('species helpers', () => {
         genusKey: 2492460,
       }).map((taxon) => taxon.rank),
     ).toEqual(['KINGDOM', 'GENUS']);
+  });
+
+  it('counts only the animal kingdom as animal', () => {
+    expect(isAnimal([{ key: 1, name: 'Animalia', rank: 'KINGDOM' }])).toBe(true);
+    expect(isAnimal([{ key: 6, name: 'Plantae', rank: 'KINGDOM' }])).toBe(false);
+    expect(isAnimal([])).toBe(false);
   });
 });
