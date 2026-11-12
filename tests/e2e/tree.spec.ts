@@ -155,7 +155,7 @@ test('the header search moves the tree to a group, and a selected group without 
   context,
 }) => {
   // Perching Birds' iNaturalist taxon, remembered from before; iNaturalist then fails, so it has no photo.
-  await context.addInitScript(() => localStorage.setItem('inat-ids-v3', JSON.stringify([[729, 7251]])));
+  await context.addInitScript(() => localStorage.setItem('inat-ids-v4', JSON.stringify([[729, 7251]])));
   await page.route(/\/inat\/v2\/taxa/, (route) => route.fulfill({ status: 400, body: '' }));
   await page.goto('/tree');
   const box = page.getByRole('combobox', { name: 'Search species or places' });

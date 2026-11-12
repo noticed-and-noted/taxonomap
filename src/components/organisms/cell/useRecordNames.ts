@@ -4,8 +4,8 @@
  * options appear, a batch at a time, and shared between the two.
  */
 import { computed, shallowRef, type Ref } from 'vue';
-import type { Occurrence } from '~/lib/gbif';
-import { aboutKey, recordScientificName } from '~/lib/record-fields';
+import type { Occurrence, Rank } from '~/lib/gbif';
+import { aboutKey, aboutRank, recordScientificName } from '~/lib/record-fields';
 import { commonNames as lookupCommonNames, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 import { tidy } from '~/lib/species/names';
 
@@ -33,13 +33,17 @@ function useNameLookups(species: () => readonly SpeciesRow[], tableNames: Ref<Re
   const pendingNames = shallowRef(new Set<number>());
   const askedNames = new Set<number>();
 
-  /** Names for species the table hasn't named, one request a batch. */
-  async function nameSpecies(keys: Iterable<number | undefined>, signal?: AbortSignal) {
+  /** Names for species (or, with `ranks`, higher taxa) the table hasn't named, one request a batch. */
+  async function nameSpecies(
+    keys: Iterable<number | undefined>,
+    signal?: AbortSignal,
+    ranks?: ReadonlyMap<number, Rank>,
+  ) {
     const missing = [...new Set(keys)].filter(
       (key): key is number => key !== undefined && !tableNames.value.has(key) && !lateNames.value.has(key),
     );
     for (const batch of batches(missing)) {
-      const found = await lookupCommonNames(batch, signal);
+      const found = await lookupCommonNames(batch, signal, ranks);
       if (signal?.aborted) return;
       if (found.size) lateNames.value = new Map([...lateNames.value, ...found]);
     }
@@ -95,6 +99,16 @@ export function useRecordNames(species: () => readonly SpeciesRow[]) {
     const known = key ? (tableNames.value.get(key) ?? lateNames.value.get(key)) : undefined;
     return known ?? (occurrence.vernacularName && tidy(occurrence.vernacularName));
   };
+  /** Names each record's taxon at its own rank, so a record named only to class isn't named after one of its species. */
+  const nameRecords = (occurrences: readonly Occurrence[], signal?: AbortSignal) => {
+    const ranks = new Map(
+      occurrences.flatMap((occurrence) => {
+        const key = aboutKey(occurrence);
+        return key === undefined ? [] : [[key, aboutRank(occurrence)] as const];
+      }),
+    );
+    return nameSpecies(ranks.keys(), signal, ranks);
+  };
   const recordName = (occurrence: Occurrence) =>
     recordCommonName(occurrence) ?? recordScientificName(occurrence) ?? 'Unnamed record';
 
@@ -107,6 +121,7 @@ export function useRecordNames(species: () => readonly SpeciesRow[]) {
     recordCommonName,
     recordName,
     nameSpecies,
+    nameRecords,
     nameOptions,
   };
 }

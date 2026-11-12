@@ -131,6 +131,7 @@ export interface Occurrence extends HigherKeys {
   acceptedTaxonKey?: number;
   scientificName?: string;
   acceptedScientificName?: string;
+  taxonRank?: Rank;
   vernacularName?: string;
   /** The source's own taxon ID (for iNaturalist records, the iNaturalist taxon ID). */
   taxonID?: string;

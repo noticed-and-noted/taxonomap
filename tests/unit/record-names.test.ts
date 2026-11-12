@@ -2,7 +2,9 @@
 import type { Occurrence } from '~/lib/gbif';
 import type { SpeciesRow } from '~/lib/species/groups';
 
-const commonNames = vi.hoisted(() => vi.fn<(keys: number[], signal?: AbortSignal) => Promise<Map<number, string>>>());
+const commonNames = vi.hoisted(() =>
+  vi.fn<(keys: number[], signal?: AbortSignal, ranks?: ReadonlyMap<number, string>) => Promise<Map<number, string>>>(),
+);
 const resolveNames = vi.hoisted(() => vi.fn<(keys: number[]) => Promise<Map<number, string>>>());
 
 vi.mock('~/lib/species/groups', () => ({ commonNames, resolveNames }));
@@ -42,6 +44,19 @@ describe('useRecordNames', () => {
     expect(recordNames.labelOf(ROWS[2]!)).toBe('Magpie');
     await recordNames.nameSpecies([3]);
     expect(commonNames).toHaveBeenCalledTimes(2);
+  });
+
+  it('looks up each record’s taxon at its own rank', async () => {
+    const recordNames = await names();
+    await recordNames.nameRecords([record({ speciesKey: 5 }), record({ taxonKey: 136, taxonRank: 'CLASS' })]);
+    const [keys, , ranks] = commonNames.mock.calls[0]!;
+    expect(keys).toEqual([5, 136]);
+    expect(ranks).toEqual(
+      new Map([
+        [5, 'SPECIES'],
+        [136, 'CLASS'],
+      ]),
+    );
   });
 
   it('drops names that arrive after the lookup was cancelled', async () => {

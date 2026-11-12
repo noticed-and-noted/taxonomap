@@ -178,7 +178,7 @@ test('a species page plays iNaturalist recordings, steps between them and drops 
   context,
 }) => {
   // The blackbird's iNaturalist taxon, as an earlier visit would have remembered it.
-  await context.addInitScript(() => localStorage.setItem('inat-ids-v3', JSON.stringify([[2490719, 12716]])));
+  await context.addInitScript(() => localStorage.setItem('inat-ids-v4', JSON.stringify([[2490719, 12716]])));
   const recording = (id: number) => ({
     id,
     uri: `https://www.inaturalist.org/observations/${id}`,
@@ -216,7 +216,7 @@ test('a species page plays iNaturalist recordings, steps between them and drops 
 
 test('a species page without photos, map tiles or its chart library still reads', async ({ page, context }) => {
   // A remembered iNaturalist taxon that iNaturalist then fails to return: the photo lookup fails outright.
-  await context.addInitScript(() => localStorage.setItem('inat-ids-v3', JSON.stringify([[2490719, 12716]])));
+  await context.addInitScript(() => localStorage.setItem('inat-ids-v4', JSON.stringify([[2490719, 12716]])));
   await page.route(/\/inat\/v2\/taxa/, (route) => route.fulfill({ status: 400, body: '' }));
   await page.route(/\.mvt(\?|$)/, (route) => route.fulfill({ status: 500, body: '' }));
   await page.route(/\/_astro\/plot\.[\w-]+\.js$/, (route) => route.abort('failed'));

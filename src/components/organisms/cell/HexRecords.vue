@@ -70,7 +70,7 @@ async function load(more = false) {
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
-    void names.nameSpecies(response.results.map(aboutKey), signal);
+    void names.nameRecords(response.results, signal);
     total.value = response.count;
   });
 }
