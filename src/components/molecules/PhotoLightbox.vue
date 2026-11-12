@@ -185,7 +185,9 @@ defineExpose({ open });
 
       <!-- Count and name, level with the close button. The name stays with no photo. -->
       <div class="overlay absolute left-2 top-4 flex max-w-[calc(100%-4.5rem)] items-center gap-1.5">
-        <span v-if="current" class="chip chip-title tabular-nums">{{ index + 1 }} / {{ images.length }}</span>
+        <span v-if="current" class="chip chip-title shrink-0 whitespace-nowrap tabular-nums"
+          >{{ index + 1 }} / {{ images.length }}</span
+        >
         <a
           v-if="name && href"
           :href="href"
