@@ -29,8 +29,9 @@
   /* IUCN Red List fills; each pairs with its -text colour at 4.5:1 or better. */
   --iucn-lc: #2c4437;
   --iucn-lc-text: #f2ede2;
-  --iucn-nt: #b7c46a;
-  --iucn-vu: #f0d060;
+  --iucn-nt: #d9c25c;
+  --iucn-nt-text: #1d1404;
+  --iucn-vu: var(--iucn-nt);
   --iucn-en: #f39a5b;
   --iucn-cr: #ff8a7a;
   --iucn-threat-text: #1d1404;
@@ -58,8 +59,9 @@
   --map-land: var(--bg);
   --iucn-lc: #3f5c4c;
   --iucn-lc-text: #fffaf0;
-  --iucn-nt: #5f6e12;
-  --iucn-vu: #8a6a00;
+  --iucn-nt: #dca91c;
+  --iucn-nt-text: #1d1404;
+  --iucn-vu: var(--iucn-nt);
   --iucn-en: #b35a00;
   --iucn-cr: #b3261e;
   --iucn-threat-text: #fffaf0;
@@ -81,8 +83,7 @@
   --ramp-7: #e8e2b0;
 
   /* Extinct reads as the text colour. */
-  --iucn-nt-text: var(--iucn-threat-text);
-  --iucn-vu-text: var(--iucn-threat-text);
+  --iucn-vu-text: var(--iucn-nt-text);
   --iucn-en-text: var(--iucn-threat-text);
   --iucn-cr-text: var(--iucn-threat-text);
   --iucn-ew: var(--text);

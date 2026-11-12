@@ -66,7 +66,7 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 
 ### IUCN Red List
 
-`--iucn-{lc,nt,vu,en,cr,ew,ex}` fill the code square in the species page's Red List chip, each with a matching `-text` colour (4.5:1 or better). Threat levels rise in hue and lightness from Lichen-green to coral in forest, and to brick red on paper. Extinct uses the text colour. The chip always shows the category name too, so the colour is never the only cue. Species GBIF lists as "not evaluated" or "data deficient" get no chip.
+`--iucn-{lc,nt,vu,en,cr,ew,ex}` fill the code square in the species page's Red List chip, each with a matching `-text` colour (4.5:1 or better). Threat levels rise in hue and lightness from amber (Near threatened and Vulnerable share one colour) to coral in forest, and from bright amber (with dark text) to brick red on paper. Extinct uses the text colour. The chip always shows the category name too, so the colour is never the only cue. Species GBIF lists as "not evaluated" or "data deficient" get no chip.
 
 ### Range dots
 
