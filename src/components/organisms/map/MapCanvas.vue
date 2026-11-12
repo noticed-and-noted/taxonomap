@@ -59,12 +59,15 @@ import {
 } from '~/stores/explorer';
 import { flyToLinkedTaxa } from '~/stores/fly-to-taxa';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
+import { $lightboxOpen } from '~/stores/lightbox';
 import { $ramp } from '~/stores/ramp';
 import { $reading, mapPixelRatio, prefersReducedMotion } from '~/stores/reading';
 import WebglNotice from './WebglNotice.vue';
 
 const container = ref<HTMLDivElement>();
 const unsupported = useStore($mapUnsupported);
+/** Hidden, the canvas drops out of the page's drawing, so zooming a photo doesn't redraw it too. */
+const isLightboxOpen = useStore($lightboxOpen);
 const tooltip = ref<{ x: number; y: number; text: string; wkt: string } | null>(null);
 
 let map: MlMap | undefined;
@@ -362,6 +365,9 @@ type MapLibre = typeof import('maplibre-gl');
 /** MapLibre's own tile and label cross-fade. */
 const MAP_FADE_MS = 200;
 
+/** Canvas pixels per CSS pixel while a lightbox hides the map. */
+const PAUSED_PIXEL_RATIO = 1;
+
 /** Loads MapLibre and points it at the bundled worker. */
 async function loadMapLibre(): Promise<MapLibre> {
   const [maplibre, worker] = await Promise.all([
@@ -550,6 +556,8 @@ function listenToStores() {
       void globeReady.then(() => fly(request));
     }),
     $reading.listen(() => map?.setPixelRatio(mapPixelRatio())),
+    // Hidden behind a lightbox, the smallest drawing buffer frees the most memory for the photo's pinch-zoom.
+    $lightboxOpen.listen((isOpen) => map?.setPixelRatio(isOpen ? PAUSED_PIXEL_RATIO : mapPixelRatio())),
     $busiestHexRequest.subscribe((request) => {
       if (!request) return;
       $busiestHexRequest.set(null);
@@ -685,7 +693,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="map-canvas relative size-full" data-testid="map">
-    <div ref="container" class="size-full" role="region" aria-label="Occurrence map"></div>
+    <div
+      ref="container"
+      class="size-full"
+      :class="{ invisible: isLightboxOpen }"
+      role="region"
+      aria-label="Occurrence map"
+    ></div>
     <div class="crosshair" aria-hidden="true"></div>
     <div
       v-if="tooltip"

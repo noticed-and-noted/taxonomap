@@ -7,13 +7,14 @@
  * usually instant. Open it with the exposed `open(index)`. Up and down arrows (or swipes) call `onStepRow` (`@step-row`),
  * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { usePhotoPreload } from '~/composables/usePhotoPreload';
 import { useSwipe } from '~/composables/useSwipe';
 import { photoCrossOrigin, thumbnailUrl, type UsableImage } from '~/lib/gbif';
+import { $lightboxOpen } from '~/stores/lightbox';
 import PhotoLightboxFilmstrip from './PhotoLightboxFilmstrip.vue';
 
 /**
@@ -74,6 +75,7 @@ function show(imageIndex: number) {
  */
 function open(imageIndex: number) {
   isOpen.value = true;
+  $lightboxOpen.set(true);
   areControlsHidden.value = false;
   // Already open when a list steps to its next record.
   if (!dialog.value?.open) dialog.value?.showModal();
@@ -112,6 +114,17 @@ const swipeIcon = computed(() => {
   return hasPhotos ? 'arrows-horizontal' : undefined;
 });
 
+/** Unmounts the photo and lets the map run again. */
+function onClose() {
+  isOpen.value = false;
+  $lightboxOpen.set(false);
+}
+
+// A page swap can unmount the lightbox while it's open, which fires no close event.
+onBeforeUnmount(() => {
+  if (isOpen.value) $lightboxOpen.set(false);
+});
+
 /** A click on the backdrop, outside the stage, closes the dialog. */
 function onBackdrop(event: MouseEvent) {
   if (event.target === dialog.value) dialog.value?.close();
@@ -128,7 +141,7 @@ defineExpose({ open });
     :aria-label="`${name} photos`"
     @keydown="onKey"
     @click="onBackdrop"
-    @close="isOpen = false"
+    @close="onClose"
   >
     <div
       v-if="isOpen"
