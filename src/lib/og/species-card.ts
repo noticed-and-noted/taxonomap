@@ -115,20 +115,19 @@ const PHOTO_SIZE = 630;
 const TEXT_PANEL_WIDTH = WIDTH - PHOTO_SIZE;
 const LONG_TITLE_LENGTH = 24;
 const INITIALS_COUNT = 2;
-const WORDMARK_SIZE = 40;
+/** The wordmark's type size: the logo is drawn at the same em as the header's. */
+const WORDMARK_SIZE = 32;
 /*
- * The wordmark artwork is 911 × 301 units at 200 to the em. Its top edge is the top of the old typed
- * wordmark's text box and its origin sits 12 units left of the old first letter, so a small negative margin
- * keeps the letters where they were; the extra height below is the fern's stem, which the bottom margin
- * absorbs so the names below don't move.
+ * The logo artwork is 819 × 159 units in the fern mark's own units, 117.273 to the em, with a 12-unit margin
+ * all round. Negative margins pull that margin out so the mark's edge lines up with the names below.
  */
-const ART_UNITS_PER_EM = 200;
-const ART_WIDTH = 911;
-const ART_HEIGHT = 301;
-const OLD_TEXT_BOX_HEIGHT = 275;
-const ART_LEFT_INSET = 12;
+const ART_UNITS_PER_EM = 117.273;
+const ART_WIDTH = 819;
+const ART_HEIGHT = 159;
+const ART_MARGIN = 12;
+const WORDMARK_GAP_BELOW = 24;
 
-/** The Taxonomap wordmark: the hand-drawn artwork from docs/brand/wordmark-dark.svg. */
+/** The Taxonomap logo: the artwork from docs/brand/wordmark-dark.svg. */
 function wordmark(art: string): El {
   const scale = WORDMARK_SIZE / ART_UNITS_PER_EM;
   return element(
@@ -136,8 +135,8 @@ function wordmark(art: string): El {
     {
       width: ART_WIDTH * scale,
       height: ART_HEIGHT * scale,
-      marginLeft: -ART_LEFT_INSET * scale,
-      marginBottom: 24 - (ART_HEIGHT - OLD_TEXT_BOX_HEIGHT) * scale,
+      margin: -ART_MARGIN * scale,
+      marginBottom: WORDMARK_GAP_BELOW - ART_MARGIN * scale,
     },
     undefined,
     { src: art },

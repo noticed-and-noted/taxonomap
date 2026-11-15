@@ -82,7 +82,7 @@ const css = (name: string, fallback: string) =>
 /** Theme colours from the CSS custom properties (fallbacks match the dark theme). */
 function colors(): MapColors {
   return {
-    accent: css('--accent', '#f0b443'),
+    accent: css('--accent', '#e89141'),
     accentContrast: css('--accent-contrast', '#1d1404'),
     bg: css('--bg', '#0e1813'),
     land: css('--map-land', '#2c4437'),

@@ -6,6 +6,7 @@
  */
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import { detectBrowser, WEBGL_HELP } from '~/lib/map/webglHelp';
+import { BALL, COIL, COIL_STROKE_WIDTH, LEAF, MARK_VIEWBOX } from '~/lib/wordmark';
 
 const browserId = detectBrowser(navigator.userAgent);
 const help = WEBGL_HELP.find((entry) => entry.id === browserId)!;
@@ -17,25 +18,17 @@ const retry = () => window.location.reload();
   <div class="webgl-notice absolute inset-0 flex justify-center overflow-y-auto bg-bg px-4" role="alert">
     <!-- my-auto, not items-center, so a notice taller than the screen scrolls instead of losing its top. -->
     <div class="my-auto w-full max-w-md text-center">
-      <svg viewBox="16 7 32 53" class="mx-auto mb-3 h-14" aria-hidden="true">
-        <g fill="none" stroke="var(--accent)" stroke-width="4.5" stroke-linecap="round">
-          <path d="M40.08 58C40.08 47.97 39.88 38.33 32 37.14"></path>
-          <path
-            d="M32 37.14C28.68 36.65 24.99 35.58 22.45 33.05C19.92 30.51 18.5 27.08 18.5 23.5C18.5 19.92 19.92 16.49 22.45 13.95C24.99 11.42 28.42 10 32 10C34.78 10 37.4 11.15 39.37 13.12C41.34 15.09 42.37 18.16 42.37 20.95C42.37 23.73 41.05 26.38 38.96 28C36.86 29.62 34.81 29.86 32.43 29.86C31.14 29.86 28.72 29.42 27.3 28C25.88 26.58 24.95 24.42 24.95 22.83C24.95 21.24 25.78 19.01 26.9 17.88C28.03 16.76 30.2 15.62 32.43 16.05"
-          ></path>
-        </g>
+      <svg :viewBox="MARK_VIEWBOX" class="mx-auto mb-3 h-14" aria-hidden="true">
+        <path :d="BALL" fill="var(--accent)"></path>
         <path
-          d="M33.47 18.93C34.9 18.93 35.97 17.85 35.97 16.43C35.97 15.35 35.17 13.93 33.47 13.93C32.04 13.93 30.97 15 30.97 16.43C30.97 17.85 32.04 18.93 33.47 18.93Z"
-          fill="var(--accent)"
+          :d="COIL"
+          fill="none"
+          stroke="var(--accent)"
+          :stroke-width="COIL_STROKE_WIDTH"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         ></path>
-        <path
-          d="M38.56 49.18C33.93 49.84 29.69 49.28 28.46 43.83C31.66 47.01 34.58 42.45 38.56 49.18Z"
-          fill="var(--text-muted)"
-        ></path>
-        <path
-          d="M40.05 46.02C45.52 40.34 46.54 44.08 50.23 40.7C49.5 45.39 45.22 48.42 40.05 46.02Z"
-          fill="var(--text-muted)"
-        ></path>
+        <path :d="LEAF" fill="var(--leaf)"></path>
       </svg>
       <h2 class="text-xl">The map can’t draw on this device</h2>
       <p class="mt-1 text-sm text-muted">
