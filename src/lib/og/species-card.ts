@@ -118,12 +118,12 @@ const INITIALS_COUNT = 2;
 /** The wordmark's type size: the logo is drawn at the same em as the header's. */
 const WORDMARK_SIZE = 32;
 /*
- * The logo artwork is 819 × 159 units in the fern mark's own units, 117.273 to the em, with a 12-unit margin
+ * The logo artwork is 721 × 140 units, 104.78 to the em, with a 12-unit margin
  * all round. Negative margins pull that margin out so the mark's edge lines up with the names below.
  */
-const ART_UNITS_PER_EM = 117.273;
-const ART_WIDTH = 819;
-const ART_HEIGHT = 159;
+const ART_UNITS_PER_EM = 104.78;
+const ART_WIDTH = 721;
+const ART_HEIGHT = 140;
 const ART_MARGIN = 12;
 const WORDMARK_GAP_BELOW = 24;
 

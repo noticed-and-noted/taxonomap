@@ -1,10 +1,10 @@
 ---
-import { BALL, COIL, COIL_STROKE_WIDTH, LEAF, MARK_VIEWBOX } from '~/lib/wordmark';
+import { BALL, COIL, COIL_STROKE_WIDTH, LEAF, LOCKUP, MARK_VIEWBOX } from '~/lib/wordmark';
 
 /**
- * The Taxonomap logo: the fern mark to the left of the word, laid out as on the brand board. The word is real
- * text in the wordmark font (global.css), so it renders as the board does at every size. Coloured from the
- * theme tokens. Decorative (the surrounding link carries the label); sized by the parent's font-size.
+ * The Taxonomap logo, drawn from the designed artwork (docs/brand/wordmark-light.svg): the fern mark beside the
+ * outlined word. Coloured from the theme tokens. Decorative (the surrounding link carries the label); the word
+ * is 1em, so the logo sizes from the parent's font-size.
  */
 interface Props {
   /** Below 640 px show the mark alone, as the header does. */
@@ -17,35 +17,41 @@ const { compact = false, fernOnly = false } = Astro.props;
 ---
 
 <span class:list={['wordmark', { compact, 'fern-only': fernOnly }]} aria-hidden="true">
-  <svg class="mark" viewBox={MARK_VIEWBOX}>
+  <svg class="full" viewBox={LOCKUP.viewBox}>
+    <path class="ball" d={LOCKUP.ball} />
+    <path class="coil" d={LOCKUP.coil} stroke-width={LOCKUP.coilStrokeWidth} />
+    <path class="leaf" d={LOCKUP.leaf} />
+    <path class="letters" d={LOCKUP.letters} />
+  </svg>
+  <svg class="fern-alone" viewBox={MARK_VIEWBOX}>
     <path class="ball" d={BALL} />
     <path class="coil" d={COIL} stroke-width={COIL_STROKE_WIDTH} />
     <path class="leaf" d={LEAF} />
   </svg>
-  <span class="word">Taxonomap</span>
 </span>
 
 <style>
   .wordmark {
     display: flex;
-    align-items: center;
-    gap: 0.19em;
     line-height: 1;
-    white-space: nowrap;
   }
 
-  /* The mark is 1.1 times the type size; 110 x 129 units. */
-  .mark {
-    flex: none;
-    width: 0.938em;
-    height: 1.1em;
+  /* 697 x 106 artwork units at 104.78 to the em. The p's tail hangs just below. */
+  .full {
+    width: 6.652em;
+    height: 1.012em;
+    overflow: visible;
   }
 
-  .word {
-    font-family: 'Taxonomap Wordmark', var(--font-serif);
-    font-weight: 600;
-    letter-spacing: 0.045em;
-    color: var(--text);
+  /* The mark's own bounds, 110 x 129 units, at the lockup's mark height. */
+  .fern-alone {
+    display: none;
+    width: 0.863em;
+    height: 1.012em;
+  }
+
+  .letters {
+    fill: var(--text);
   }
 
   .ball {
@@ -63,13 +69,21 @@ const { compact = false, fernOnly = false } = Astro.props;
     fill: var(--leaf);
   }
 
-  .fern-only .word {
+  .fern-only .full {
     display: none;
   }
 
+  .fern-only .fern-alone {
+    display: block;
+  }
+
   @media (max-width: 639.98px) {
-    .compact .word {
+    .compact .full {
       display: none;
+    }
+
+    .compact .fern-alone {
+      display: block;
     }
   }
 </style>
