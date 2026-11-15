@@ -673,7 +673,7 @@ describe('finding iNaturalist taxa cheaply', () => {
     network(world);
     await (await load()).leadPhotos(species(1, 2));
     // Each with iNaturalist's name, null here: these taxa have none.
-    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([
+    expect(JSON.parse(store.get('inat-ids-v4')!)).toEqual([
       [1, 101, null],
       [2, 102, null],
     ]);
@@ -688,11 +688,11 @@ describe('finding iNaturalist taxa cheaply', () => {
   });
 
   it('forgets a remembered ID iNaturalist no longer has, so the next visit looks it up afresh', async () => {
-    const store = stubStorage({ 'inat-ids-v3': JSON.stringify([[1, 999]]) });
+    const store = stubStorage({ 'inat-ids-v4': JSON.stringify([[1, 999]]) });
     network({ ...base, gbifAny: { 1: [occ(11, 'g.jpg')] } });
     const { images } = await (await load()).leadPhotos(species(1));
     expect(label(images.get(1)!)).toBe('gbif:g.jpg');
-    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([]);
+    expect(JSON.parse(store.get('inat-ids-v4')!)).toEqual([]);
   });
 
   it('never searches iNaturalist by name: a species GBIF holds no record of keeps GBIF photos', async () => {
@@ -761,14 +761,14 @@ describe('remembered iNaturalist IDs', () => {
 
   it('reads what an earlier visit stored, ignoring what is not an ID pair', async () => {
     stubStorage({
-      'inat-ids-v3': JSON.stringify([[1, 11], ['x', 2], [3, 'y'], [4, 44], 5]),
+      'inat-ids-v4': JSON.stringify([[1, 11], ['x', 2], [3, 'y'], [4, 44], 5]),
     });
     const loaded = await load();
     expect([1, 3, 4].map(loaded.knownInatId)).toEqual([11, undefined, 44]);
   });
 
   it('starts empty when the stored value is not JSON', async () => {
-    stubStorage({ 'inat-ids-v3': '{' });
+    stubStorage({ 'inat-ids-v4': '{' });
     expect((await load()).knownInatId(1)).toBeUndefined();
   });
 
@@ -787,7 +787,7 @@ describe('remembered iNaturalist IDs', () => {
     loaded.forgetInatId(9);
     loaded.forgetInatId(2);
     expect(setItem).toHaveBeenCalledTimes(3);
-    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([[1, 12]]);
+    expect(JSON.parse(store.get('inat-ids-v4')!)).toEqual([[1, 12]]);
   });
 
   it('remembers names beside IDs, keeping a name while the ID stays the same', async () => {
@@ -807,7 +807,7 @@ describe('remembered iNaturalist IDs', () => {
     expect(loaded.knownInatName(3)).toBeUndefined();
     loaded.rememberInatMatches(new Map([[1, { id: 12 }]]));
     expect(loaded.knownInatName(1)).toBeUndefined();
-    expect(JSON.parse(store.get('inat-ids-v3')!)).toEqual([
+    expect(JSON.parse(store.get('inat-ids-v4')!)).toEqual([
       [2, 22, null],
       [1, 12],
     ]);
@@ -815,7 +815,7 @@ describe('remembered iNaturalist IDs', () => {
 
   it('reads stored names, ignoring ones that are not text', async () => {
     stubStorage({
-      'inat-ids-v3': JSON.stringify([
+      'inat-ids-v4': JSON.stringify([
         [1, 11, 'Robin'],
         [2, 22, null],
         [3, 33, 5],
@@ -830,7 +830,7 @@ describe('remembered iNaturalist IDs', () => {
     const store = stubStorage();
     const loaded = await load();
     loaded.rememberInatMatches(new Map(Array.from({ length: 3002 }, (_unused, index) => [index, { id: index + 1 }])));
-    const kept = JSON.parse(store.get('inat-ids-v3')!) as [number, number][];
+    const kept = JSON.parse(store.get('inat-ids-v4')!) as [number, number][];
     expect(kept).toHaveLength(3000);
     expect(kept[0]).toEqual([2, 3]);
   });

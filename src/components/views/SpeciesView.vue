@@ -18,7 +18,7 @@ import SpeciesSounds from '~/components/organisms/species/SpeciesSounds.vue';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { classifyError, type UiErrorKind } from '~/lib/gbif';
 import { speciesCharts } from '~/lib/species/charts';
-import { loadSpeciesData, type SpeciesData } from '~/lib/species/data';
+import { isAnimal, loadSpeciesData, type SpeciesData } from '~/lib/species/data';
 import { nameMeaning, type NamePart } from '~/lib/species/etymology';
 import { withInatName } from '~/lib/species/inat-name';
 import { loadSpeciesManifest, similarItems, speciesPath, type SpeciesManifest } from '~/lib/species/links';
@@ -91,7 +91,7 @@ onMounted(load);
       <SpeciesGallery :taxon-key="data.key" :rank="data.rank" :name="data.commonName ?? data.canonicalName" />
     </template>
     <template #sounds>
-      <SpeciesSounds :taxon-key="data.key" :rank="data.rank" />
+      <SpeciesSounds :taxon-key="data.key" :rank="data.rank" :is-animal="isAnimal(data.classification)" />
     </template>
     <template v-if="data.siblings.length" #similar>
       <SimilarSpecies :species="similarItems(data.siblings, manifest)" />

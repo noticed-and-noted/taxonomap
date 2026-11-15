@@ -103,6 +103,13 @@ export function classificationOf(usage: NameUsage): TaxonRef[] {
   return out;
 }
 
+const ANIMAL_KINGDOM = 'Animalia';
+
+/** Whether a lineage sits in the animal kingdom, the only one whose members make recordable sounds. */
+export function isAnimal(classification: readonly TaxonRef[]): boolean {
+  return classification.some(({ rank, name }) => rank === 'KINGDOM' && name === ANIMAL_KINGDOM);
+}
+
 /** URL slug for a species page, from its canonical name. */
 export function speciesSlug(usage: Pick<NameUsage, 'canonicalName' | 'scientificName'>): string {
   return slugify(usage.canonicalName ?? usage.scientificName);

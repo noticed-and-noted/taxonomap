@@ -1,5 +1,13 @@
 import type { Occurrence } from '~/lib/gbif';
-import { aboutKey, accuracy, recordDate, recordScientificName, typeCode, typeLabel } from '~/lib/record-fields';
+import {
+  aboutKey,
+  aboutRank,
+  accuracy,
+  recordDate,
+  recordScientificName,
+  typeCode,
+  typeLabel,
+} from '~/lib/record-fields';
 
 const record = (fields: Partial<Occurrence>) => ({ key: 1, ...fields }) as Occurrence;
 
@@ -8,6 +16,11 @@ describe('record fields', () => {
     expect(aboutKey(record({ speciesKey: 5, acceptedTaxonKey: 6, taxonKey: 7 }))).toBe(5);
     expect(aboutKey(record({ acceptedTaxonKey: 6, taxonKey: 7 }))).toBe(6);
     expect(aboutKey(record({ taxonKey: 7 }))).toBe(7);
+  });
+
+  it('gives the linked taxon’s rank: a species, else the rank the record was named to', () => {
+    expect(aboutRank(record({ speciesKey: 5, taxonRank: 'SUBSPECIES' }))).toBe('SPECIES');
+    expect(aboutRank(record({ taxonKey: 136, taxonRank: 'CLASS' }))).toBe('CLASS');
   });
 
   it('prefers the accepted species name', () => {

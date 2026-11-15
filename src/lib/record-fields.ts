@@ -3,7 +3,7 @@
  * type codes, dates, accuracy and the names the row and its links use.
  */
 import { BASIS_LABELS, distance } from '~/lib/format';
-import type { Occurrence } from '~/lib/gbif';
+import type { Occurrence, Rank } from '~/lib/gbif';
 
 /** Three-letter codes for GBIF's basis of record, short enough for a narrow column. */
 export const TYPE_CODES: Record<string, string> = {
@@ -24,6 +24,11 @@ const OBSERVER_BLURRED = /request of the observer/i;
 /** Taxon for the about page: the species, else whatever the record was named to (a genus or family). */
 export function aboutKey(occurrence: Occurrence): number | undefined {
   return occurrence.speciesKey ?? occurrence.acceptedTaxonKey ?? occurrence.taxonKey;
+}
+
+/** The rank of the taxon `aboutKey` picks: a species, else the rank the record was named to. */
+export function aboutRank(occurrence: Occurrence): Rank {
+  return occurrence.speciesKey === undefined ? (occurrence.taxonRank ?? 'SPECIES') : 'SPECIES';
 }
 
 /** The accepted name, so the row matches the about page it links to (a synonym's record shows its accepted taxon). */

@@ -70,7 +70,7 @@ async function load(more = false) {
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
-    void names.nameSpecies(response.results.map(aboutKey), signal);
+    void names.nameRecords(response.results, signal);
     total.value = response.count;
   });
 }
@@ -325,7 +325,7 @@ function toggle(occurrence: Occurrence) {
   outline: none;
 }
 /* While a row opens or closes, only the list and that row's photo and name animate, and the overlay is clipped to the
-   list (clipTransitionToList). The page stays out, live underneath, or the clip would hide it. Global: these hang
+   list (startListTransition). The page stays out, live underneath, or the clip would hide it. Global: these hang
    off <html>, which a scoped selector would never match. */
 .clips-transition {
   view-transition-name: rec-list;

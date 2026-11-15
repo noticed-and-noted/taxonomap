@@ -4,9 +4,9 @@
  * remembering the name too means a row named before needs no request at all. Held in
  * localStorage, newest last, capped.
  */
-// v3: v2 could hold matches found by searching iNaturalist by name, not through a GBIF record.
+// v4: v3 could hold a higher taxon matched as one of its species (the cell's record list asked at the wrong rank).
 // Entries are [key, id] or [key, id, name | null]: pairs still read, just without a name.
-const STORAGE_KEY = 'inat-ids-v3';
+const STORAGE_KEY = 'inat-ids-v4';
 const MAX_ENTRIES = 3000;
 
 /** A remembered match: the name is null when iNaturalist has none, and absent when not yet seen. */

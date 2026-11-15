@@ -23,6 +23,7 @@ import {
   vernacularNamesByTaxon,
   type NamedFacetCount,
   type OccurrenceFilter,
+  type Rank,
   type UsableImage,
   type VernacularName,
 } from '~/lib/gbif';
@@ -140,11 +141,16 @@ export async function resolveNames(keys: readonly number[], signal?: AbortSignal
  * English common names: iNaturalist's (none when remembered from before, else one batched GBIF
  * record search and one iNaturalist request per 30), then `gbifCommonNames` for the keys
  * iNaturalist doesn't name. Keys with no English name are left out.
+ * @param ranks Each key's rank, for keys above species; the rest are species.
  */
-export async function commonNames(keys: readonly number[], signal?: AbortSignal): Promise<Map<number, string>> {
+export async function commonNames(
+  keys: readonly number[],
+  signal?: AbortSignal,
+  ranks?: ReadonlyMap<number, Rank>,
+): Promise<Map<number, string>> {
   if (signal?.aborted) return new Map();
   const fromInat = await inatNames(
-    keys.map((key) => ({ key, rank: 'SPECIES' as const })),
+    keys.map((key) => ({ key, rank: ranks?.get(key) ?? 'SPECIES' })),
     { ...(signal && { signal }) },
   ).catch(() => new Map<number, string | null>());
   const names = new Map([...fromInat].flatMap(([key, name]): [number, string][] => (name ? [[key, name]] : [])));

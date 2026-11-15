@@ -11,17 +11,20 @@ import type { Rank } from '~/lib/gbif';
 import type { UsableSound } from '~/lib/gbif/licence';
 import { taxonSounds } from '~/lib/photos/taxon-sounds';
 
-const props = defineProps<{ taxonKey: number; rank: Rank }>();
+const props = defineProps<{ taxonKey: number; rank: Rank; isAnimal: boolean }>();
 
 const sounds = shallowRef<UsableSound[]>([]);
 const position = ref(0);
-// Only species have sounds, so other ranks never hold a space for them.
-const isLoading = ref(props.rank === 'SPECIES');
+// Only animal species have sounds, so plants and other ranks never hold a space for them.
+const hasSounds = props.isAnimal && props.rank === 'SPECIES';
+const isLoading = ref(hasSounds);
 
 const currentSound = computed(() => sounds.value[position.value]);
 const hasSeveral = computed(() => sounds.value.length > 1);
 
 onMounted(async () => {
+  if (!hasSounds) return;
+
   // The page reads fine without sounds, so a failed lookup just leaves them out.
   sounds.value = await taxonSounds({ key: props.taxonKey, rank: props.rank }).catch(() => []);
   isLoading.value = false;
