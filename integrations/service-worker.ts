@@ -51,7 +51,7 @@ const noGraphqlErrors = {
   },
 };
 
-/** What gets precached: the offline page, built JS/CSS and the Latin font subsets (only what the build produced). */
+/** What gets precached: the offline page, built JS/CSS, the Latin font subsets and the wordmark font (only what the build produced). */
 function precacheOptions(outDir: string) {
   return {
     globDirectory: outDir,
@@ -59,6 +59,7 @@ function precacheOptions(outDir: string) {
       ...(existsSync(`${outDir}/${OFFLINE_PAGE}`) ? [OFFLINE_PAGE] : []),
       '_astro/*.{js,css}',
       '_astro/*-latin-*-normal*.woff2',
+      '_astro/taxonomap-wordmark.*.ttf',
       'favicon.svg',
       'manifest.webmanifest',
     ],

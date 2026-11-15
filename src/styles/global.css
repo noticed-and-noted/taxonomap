@@ -3,6 +3,17 @@
 @import '@fontsource-variable/source-serif-4';
 @import './tokens.css';
 
+/*
+ * The wordmark's font: Fraunces (OFL) cut to the letters of "Taxonomap", with the brand's settings fixed in
+ * (SemiBold, optical size 70, softness 20, wonky off), so the logo renders as real text, as on the brand board.
+ */
+@font-face {
+  font-family: 'Taxonomap Wordmark';
+  src: url('../assets/fonts/taxonomap-wordmark.ttf') format('truetype');
+  font-weight: 600;
+  font-display: block;
+}
+
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *, :root:not([data-theme='light']) *));
 @custom-variant light (&:where([data-theme='light'], [data-theme='light'] *));
 

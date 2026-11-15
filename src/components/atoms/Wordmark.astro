@@ -1,10 +1,10 @@
 ---
-import { BALL, COIL, COIL_STROKE_WIDTH, LEAF, LETTERS, LOCKUP_VIEWBOX, MARK_VIEWBOX } from '~/lib/wordmark';
+import { BALL, COIL, COIL_STROKE_WIDTH, LEAF, MARK_VIEWBOX } from '~/lib/wordmark';
 
 /**
- * The Taxonomap logo: the fern mark to the left of the wordmark, from docs/brand/wordmark-light.svg (Fraunces
- * letters, outlined, so no font loads). Coloured from the theme tokens. Decorative (the surrounding link
- * carries the label); the mark is 1.1em tall, so the logo sizes from the parent's font-size.
+ * The Taxonomap logo: the fern mark to the left of the word, laid out as on the brand board. The word is real
+ * text in the wordmark font (global.css), so it renders as the board does at every size. Coloured from the
+ * theme tokens. Decorative (the surrounding link carries the label); sized by the parent's font-size.
  */
 interface Props {
   /** Below 640 px show the mark alone, as the header does. */
@@ -17,45 +17,35 @@ const { compact = false, fernOnly = false } = Astro.props;
 ---
 
 <span class:list={['wordmark', { compact, 'fern-only': fernOnly }]} aria-hidden="true">
-  <svg class="full" viewBox={LOCKUP_VIEWBOX}>
-    <path class="ball" d={BALL} />
-    <path class="coil" d={COIL} stroke-width={COIL_STROKE_WIDTH} />
-    <path class="leaf" d={LEAF} />
-    <g class="letters">
-      {LETTERS.map((path) => (
-        <path d={path} />
-      ))}
-    </g>
-  </svg>
-  <svg class="fern-alone" viewBox={MARK_VIEWBOX}>
+  <svg class="mark" viewBox={MARK_VIEWBOX}>
     <path class="ball" d={BALL} />
     <path class="coil" d={COIL} stroke-width={COIL_STROKE_WIDTH} />
     <path class="leaf" d={LEAF} />
   </svg>
+  <span class="word">Taxonomap</span>
 </span>
 
 <style>
   .wordmark {
     display: flex;
+    align-items: center;
+    gap: 0.19em;
     line-height: 1;
+    white-space: nowrap;
   }
 
-  /* 795 x 129 mark units, with the mark's 129 units at 1.1em. The p's tail hangs just below. */
-  .full {
-    width: 6.779em;
-    height: 1.1em;
-    overflow: visible;
-  }
-
-  /* The mark's own bounds, 110 x 129 units. */
-  .fern-alone {
-    display: none;
+  /* The mark is 1.1 times the type size; 110 x 129 units. */
+  .mark {
+    flex: none;
     width: 0.938em;
     height: 1.1em;
   }
 
-  .letters {
-    fill: var(--text);
+  .word {
+    font-family: 'Taxonomap Wordmark', var(--font-serif);
+    font-weight: 600;
+    letter-spacing: 0.045em;
+    color: var(--text);
   }
 
   .ball {
@@ -73,21 +63,13 @@ const { compact = false, fernOnly = false } = Astro.props;
     fill: var(--leaf);
   }
 
-  .fern-only .full {
+  .fern-only .word {
     display: none;
   }
 
-  .fern-only .fern-alone {
-    display: block;
-  }
-
   @media (max-width: 639.98px) {
-    .compact .full {
+    .compact .word {
       display: none;
-    }
-
-    .compact .fern-alone {
-      display: block;
     }
   }
 </style>

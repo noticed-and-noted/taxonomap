@@ -4,15 +4,15 @@ The rules for how Taxonomap looks. Read this before changing anything visual: co
 
 The code is the source of truth. This file explains it and names where each part lives; if they disagree, fix this file.
 
-| Part                         | Lives in                                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Colour, radius, motion       | `src/styles/tokens.css`                                                                                                              |
-| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                                                              |
-| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                                                            |
-| Logo                         | `docs/brand/wordmark-light.svg` (the master artwork); paths in `src/lib/wordmark.ts`, drawn by `src/components/atoms/Wordmark.astro` |
-| Favicon                      | `public/favicon.svg`                                                                                                                 |
-| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, logo with outlined letters, README banners)                                |
-| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                                                            |
+| Part                         | Lives in                                                                                                                                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Colour, radius, motion       | `src/styles/tokens.css`                                                                                                                                                                           |
+| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                                                                                                                           |
+| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                                                                                                                         |
+| Logo                         | `docs/brand/wordmark-light.svg` (the master artwork); mark paths in `src/lib/wordmark.ts`, word in `src/assets/fonts/taxonomap-wordmark.ttf`, both drawn by `src/components/atoms/Wordmark.astro` |
+| Favicon                      | `public/favicon.svg`                                                                                                                                                                              |
+| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, logo with outlined letters, README banners)                                                                                             |
+| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                                                                                                                         |
 
 ## Principles
 
@@ -89,14 +89,14 @@ The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. T
 
 ## Typography
 
-| Role               | Font                        | Token / class                            | Notes                                                  |
-| ------------------ | --------------------------- | ---------------------------------------- | ------------------------------------------------------ |
-| Interface and body | Lexend (variable)           | `--font-sans` (the default)              | Everything that isn't a heading                        |
-| Headings, display  | Source Serif 4 (variable)   | `--font-serif`, `h1–h3`, `.font-display` | Optical sizing on, tracking −1%                        |
-| Scientific names   | Source Serif 4 italic       | `.sci-name`                              | Every Latin binomial, everywhere                       |
-| Wordmark only      | Fraunces SemiBold, outlined | none (artwork, not a loaded font)        | The letters are drawn shapes; the font is never loaded |
+| Role               | Font                                         | Token / class                                                      | Notes                                                                                                                                          |
+| ------------------ | -------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interface and body | Lexend (variable)                            | `--font-sans` (the default)                                        | Everything that isn't a heading                                                                                                                |
+| Headings, display  | Source Serif 4 (variable)                    | `--font-serif`, `h1–h3`, `.font-display`                           | Optical sizing on, tracking −1%                                                                                                                |
+| Scientific names   | Source Serif 4 italic                        | `.sci-name`                                                        | Every Latin binomial, everywhere                                                                                                               |
+| Wordmark only      | Fraunces SemiBold, cut to the logo's letters | `'Taxonomap Wordmark'` (`src/assets/fonts/taxonomap-wordmark.ttf`) | A 5 KB static cut with the brand settings fixed in, so `Wordmark.astro` sets the word as real text. Logo files and images use outlined letters |
 
-- Fonts are self-hosted through `@fontsource` packages. Don't add Google Fonts links. The sans and serif files are preloaded in `BaseLayout.astro`.
+- Fonts are self-hosted through `@fontsource` packages. Don't add Google Fonts links. The sans, serif and wordmark files are preloaded in `BaseLayout.astro`.
 - Use sentence case for headings, buttons and labels.
 - Use `tabular-nums` wherever counts sit in columns or change live.
 
@@ -106,7 +106,9 @@ The logo is a **fiddlehead fern** (a frond unfurling: life still being discovere
 
 - **The wordmark**: Fraunces SemiBold, optical size 70, softness 20, no wonky letters, letter spacing 0.045em. Capital T, the rest lowercase. The mark is 1.1 times the type size and sits 0.19em from the T, centred on the line. Never retype the wordmark, and never show the plain word as a logo. In running text the name is plain "Taxonomap".
 - **The mark**: a coil ending in a ball, on a stem that sweeps down to the left, with one leaf. Coil, stem and ball use `--accent`; the leaf uses `--leaf`. The letters use `--text`. So the logo follows the theme with no extra artwork.
-- **The artwork is the master.** `docs/brand/wordmark-light.svg` holds the letters (outlined from the font, so it never loads) and the mark, in the mark's own units (viewBox 79 62 110 129 for the mark alone, 117.273 units to the em); `wordmark-dark.svg` is the same artwork recoloured. Change the master, then update its copies: the paths in `src/lib/wordmark.ts` (drawn by `Wordmark.astro`, `WebglNotice.vue` and `ChecklistFinish.vue`), the README banners, the mark files, the app icon and the favicon. The Open Graph card reads `wordmark-dark.svg` directly. `Wordmark.astro` draws the mark 1.1em tall, so the logo sizes from the parent's font-size (22 px in the header pill).
+- **The artwork is the master.** `docs/brand/wordmark-light.svg` holds the letters (outlined from the font) and the mark, in the mark's own units (viewBox 79 62 110 129 for the mark alone, 117.273 units to the em); `wordmark-dark.svg` is the same artwork recoloured. Change the master, then update its copies: the mark's paths in `src/lib/wordmark.ts` (drawn by `Wordmark.astro`, `WebglNotice.vue` and `ChecklistFinish.vue`) and, for the letters, the wordmark font, the README banners, the mark files, the app icon and the favicon. The Open Graph card reads `wordmark-dark.svg` directly. `Wordmark.astro` draws the mark 1.1em tall, so the logo sizes from the parent's font-size (22 px in the header pill).
+- **On screen the word is text.** `Wordmark.astro` draws the mark as SVG and sets "Taxonomap" in the wordmark font beside it, because browsers render small text bolder than outlined shapes and the board is drawn as text. Files and images (logo files, banners, Open Graph cards, press kit) use the outlined letters, which match the text exactly at large sizes.
+- **Re-cutting the wordmark font** after a change to the wordmark's settings: from the Fraunces variable font (Google Fonts, OFL), run `hb-subset Fraunces.ttf --text=Taxonomp --instance="wght=600,opsz=70,SOFT=20,WONK=0" --layout-features='*' -o src/assets/fonts/taxonomap-wordmark.ttf` (HarfBuzz), with the new values. Then re-outline the letters in the logo files to match.
 - **Small screens**: below 640 px the header shows the mark alone (the letters are hidden). The link keeps its "Taxonomap home" label for screen readers.
 - **Clear space**: keep at least half the coil's width clear around the logo. The bare mark stays at least 24 px tall; below that, use the app tile.
 - **Colourways**: on forest, Amber mark and Bone letters. On paper, Rust mark and Forest letters. The leaf is Leaf on both. One colour: all Forest on paper or Amber.
