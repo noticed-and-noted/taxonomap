@@ -17,6 +17,7 @@ export type Predicate =
   | { type: 'and' | 'or'; predicates: Predicate[] }
   | { type: 'equals'; key: string; value: string }
   | { type: 'in'; key: string; values: string[] }
+  | { type: 'like'; key: string; value: string }
   | { type: 'within'; geometry: string };
 
 /** A facet value with its taxon's scientific name or dataset's title, when GBIF has one. */
@@ -355,4 +356,67 @@ export async function vernacularNamesByTaxon(
     if (taxon) byTaxon.set(key, taxon.vernacularNames ?? []);
   }
   return byTaxon;
+}
+
+/** Most recorders findRecorders returns. */
+export const MAX_RECORDER_RESULTS = 10;
+
+/** Recorder names asked for: room for co-recorders on the same records, which don't match what's typed. */
+const RECORDERS_TO_FILTER = 30;
+
+/** A recorder name as GBIF holds it, with its records under the filter. */
+export interface RecorderHit {
+  name: string;
+  count: number;
+}
+
+/**
+ * The ways GBIF may hold a typed name. Its name matching is case-sensitive, so
+ * the text is tried as typed, in title case and in capitals.
+ * shortcut: only word starts are capitalised ("Obrien", not "O'Brien"); add spellings if viewers miss names.
+ */
+export function recorderSpellings(query: string): string[] {
+  const typed = query.trim().replace(/\s+/g, ' ');
+  const titleCase = typed.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_match, space: string, letter: string) => {
+    return space + letter.toUpperCase();
+  });
+  return [...new Set([typed, titleCase, typed.toUpperCase()])];
+}
+
+/** The filter's predicate, narrowed to recorders whose name starts with any spelling of the query. */
+function recorderPredicate(query: string, filter: OccurrenceFilter): Predicate {
+  const predicate = toPredicate(filterToParams(filter));
+  // GBIF's like reads * and ? as wildcards, so typed ones are dropped.
+  const typed = query.replace(/[*?]/g, '').trim();
+  if (!typed) return predicate;
+
+  const likes = recorderSpellings(typed).map((spelling): Predicate => {
+    return { type: 'like', key: 'recordedBy', value: `${spelling}*` };
+  });
+  return { ...predicate, predicates: [...predicate.predicates, { type: 'or', predicates: likes }] };
+}
+
+/**
+ * Recorder names that match what's typed, word by word, most records first, with their
+ * records under the filter. An empty query lists the biggest recorders.
+ */
+export async function findRecorders(
+  query: string,
+  filter: OccurrenceFilter,
+  signal?: AbortSignal,
+): Promise<RecorderHit[]> {
+  const data = await runQuery<{ occurrenceSearch: { facet: { recordedBy: { key: string; count: number }[] } } }>(
+    `query Recorders($predicate: Predicate) {
+      occurrenceSearch(predicate: $predicate) {
+        facet { recordedBy(size: ${RECORDERS_TO_FILTER}) { key count } }
+      }
+    }`,
+    { predicate: recorderPredicate(query, filter) },
+    { signal },
+  );
+
+  return data.occurrenceSearch.facet.recordedBy
+    .map((bucket) => ({ name: bucket.key, count: bucket.count }))
+    .filter((hit) => nameMatches(hit.name, query))
+    .slice(0, MAX_RECORDER_RESULTS);
 }

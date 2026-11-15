@@ -9,6 +9,7 @@ import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTHS } from '~
 import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
 import type { ScreenBox } from '~/lib/tour';
 import { $publisherKeys, $publisherNames, publisherName } from './publisher';
+import { $recorders } from './recorder';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const BASIS_OF_RECORD: readonly BasisOfRecord[] = [
@@ -360,6 +361,12 @@ export const FILTERS: readonly Filter[] = [
     (basis) => BASIS_LABELS[basis]!,
   ),
   list($publisherKeys, 'how', (publishers) => ({ publishers }), publisherName),
+  list(
+    $recorders,
+    'how',
+    (recorders) => ({ recorders }),
+    (name) => name,
+  ),
   flag($hasPhoto, 'how', { hasImage: true }, 'Has photo'),
   flag($hasSound, 'how', { hasSound: true }, 'Has sound'),
 ];

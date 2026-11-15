@@ -270,17 +270,20 @@ export const codecs = {
       ...options,
     };
   },
-  /** Comma-separated set of strings matching `pattern`, sorted for stable URLs, at most `limit` items. */
+  /**
+   * Set of strings matching `pattern`, joined by `separator` (a comma unless the values can hold one),
+   * sorted for stable URLs, at most `limit` items.
+   */
   stringSet(
     key: string,
-    { pattern, limit = Infinity }: { pattern: RegExp; limit?: number },
+    { pattern, limit = Infinity, separator = ',' }: { pattern: RegExp; limit?: number; separator?: string },
     options: Partial<UrlCodec<string[]>> = {},
   ): UrlCodec<string[]> {
     return {
       key,
       default: [],
-      parse: (raw) => [...new Set(raw.split(',').filter((value) => pattern.test(value)))].sort().slice(0, limit),
-      serialize: (value) => [...value].sort().join(','),
+      parse: (raw) => [...new Set(raw.split(separator).filter((value) => pattern.test(value)))].sort().slice(0, limit),
+      serialize: (value) => [...value].sort().join(separator),
       ...options,
     };
   },

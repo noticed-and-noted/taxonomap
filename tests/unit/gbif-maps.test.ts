@@ -120,6 +120,54 @@ describe('datasets and organisations', () => {
     expect(variables.predicate.predicates).toEqual([{ type: 'in', key: 'continent', values: ['EUROPE'] }]);
   });
 
+  it('spell a typed recorder name as typed, in title case and in capitals', async () => {
+    const api = await gbif();
+    expect(api.recorderSpellings('  jack  sha ')).toEqual(['jack sha', 'Jack Sha', 'JACK SHA']);
+    expect(api.recorderSpellings('Émile')).toEqual(['Émile', 'ÉMILE']);
+  });
+
+  it('find recorders by any spelling of the name, keeping co-recorders that do not match out', async () => {
+    const calls = stubNetwork(() => ({
+      data: {
+        occurrenceSearch: {
+          facet: {
+            recordedBy: [
+              { key: 'Jack Shaw', count: 5 },
+              { key: 'JACK SHAW', count: 16 },
+              { key: 'Bill Sabis', count: 1 },
+            ],
+          },
+        },
+      },
+    }));
+    const api = await gbif();
+    await expect(api.findRecorders('jack sha*', { continents: ['EUROPE'] })).resolves.toEqual([
+      { name: 'Jack Shaw', count: 5 },
+      { name: 'JACK SHAW', count: 16 },
+    ]);
+    const { predicate } = JSON.parse(calls[0]!.searchParams.get('variables')!);
+    expect(predicate.predicates).toEqual([
+      { type: 'in', key: 'continent', values: ['EUROPE'] },
+      {
+        type: 'or',
+        predicates: [
+          { type: 'like', key: 'recordedBy', value: 'jack sha*' },
+          { type: 'like', key: 'recordedBy', value: 'Jack Sha*' },
+          { type: 'like', key: 'recordedBy', value: 'JACK SHA*' },
+        ],
+      },
+    ]);
+  });
+
+  it('lists the biggest recorders for an empty query, with no name predicate', async () => {
+    const calls = stubNetwork(() => ({
+      data: { occurrenceSearch: { facet: { recordedBy: [{ key: 'Big Recorder', count: 9 }] } } },
+    }));
+    const api = await gbif();
+    await expect(api.findRecorders(' ', {})).resolves.toEqual([{ name: 'Big Recorder', count: 9 }]);
+    expect(JSON.parse(calls[0]!.searchParams.get('variables')!).predicate.predicates).toEqual([]);
+  });
+
   it('lists the biggest publishers for an empty query, sending no text', async () => {
     const calls = stubNetwork(() => ({
       data: { occurrencePublisherSuggest: [{ key: 'big', count: 9, publisher: { title: 'Big' } }] },

@@ -86,7 +86,25 @@ test('a publisher search that fails says so', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /^How recorded/ }).click();
   await page.getByRole('combobox', { name: 'Publisher' }).fill('garden');
-  await expect(page.getByText('Publisher search is unavailable. Try again shortly.')).toBeVisible();
+  await expect(page.getByText('Searching publishers is unavailable. Try again shortly.')).toBeVisible();
+});
+
+test('the recorder search picks a name as GBIF holds it, and a link keeps it', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /^How recorded/ }).click();
+  const box = page.getByRole('combobox', { name: 'Recorded by' });
+  const suggestions = page.getByRole('listbox', { name: 'Recorded by suggestions' });
+
+  // Typed in lower case, the name is still found under its own spelling.
+  await box.fill('birder');
+  await expect(suggestions.getByRole('option')).toHaveCount(1);
+  await box.press('Enter');
+  await expect(page.getByRole('list', { name: 'Selected recorders' })).toContainText('A. Birder');
+  await expect(page).toHaveURL(/recorder=A\.(\+|%20)Birder/);
+
+  await page.reload();
+  await page.getByRole('button', { name: /^How recorded/ }).click();
+  await expect(page.getByRole('list', { name: 'Selected recorders' })).toContainText('A. Birder');
 });
 
 test('a shared link names its publishers', async ({ page }) => {

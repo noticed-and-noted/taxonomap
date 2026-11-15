@@ -149,6 +149,10 @@ const SPLITS: Record<string, [string | number, number][]> = {
     [DATASETS[1]!.key, 0.3],
   ],
   basisOfRecord: [['HUMAN_OBSERVATION', 1]],
+  recordedBy: [
+    ['A. Birder', 0.8],
+    ['A. Recordist', 0.2],
+  ],
 };
 
 /** The species a search's filters select. */
