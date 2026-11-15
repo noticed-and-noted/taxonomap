@@ -4,20 +4,20 @@ The rules for how Taxonomap looks. Read this before changing anything visual: co
 
 The code is the source of truth. This file explains it and names where each part lives; if they disagree, fix this file.
 
-| Part                         | Lives in                                                                                             |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Colour, radius, motion       | `src/styles/tokens.css`                                                                              |
-| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                              |
-| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                            |
-| Wordmark                     | `docs/brand/wordmark-light.svg` (the master artwork), drawn by `src/components/atoms/Wordmark.astro` |
-| Favicon                      | `public/favicon.svg`                                                                                 |
-| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, wordmark with outlined letters)            |
-| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                            |
+| Part                         | Lives in                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Colour, radius, motion       | `src/styles/tokens.css`                                                                                                              |
+| Fonts, Tailwind theme, bases | `src/styles/global.css`                                                                                                              |
+| Map density ramps            | `src/lib/ramp.ts` (choice stored by `src/stores/ramp.ts`)                                                                            |
+| Logo                         | `docs/brand/wordmark-light.svg` (the master artwork); paths in `src/lib/wordmark.ts`, drawn by `src/components/atoms/Wordmark.astro` |
+| Favicon                      | `public/favicon.svg`                                                                                                                 |
+| Logo artwork                 | `docs/brand/` (mark, app icon, light and one-colour cuts, logo with outlined letters, README banners)                                |
+| Brand board                  | Claude artifact "Taxonomap brand" (canvas, for reference)                                                                            |
 
 ## Principles
 
 - **The data is the colour.** Chrome stays quiet (forest and paper neutrals) so the density hexes and photos carry the page. One accent, used sparingly.
-- **Field notebook, not dashboard.** Serif headings, a hand-lettered wordmark, warm paper in light mode. Avoid glossy gradients, glows and neon.
+- **Field notebook, not dashboard.** Serif headings, a soft serif wordmark, warm paper in light mode. Avoid glossy gradients, glows and neon.
 - **Two equal themes.** Dark "forest" is the default; light "paper" is a full theme, not an afterthought. Every change is checked in both.
 - **Accessible by default.** Text meets WCAG 2.2 AA (4.5:1) on `--bg` and `--surface` in both themes. Never rely on hue alone.
 
@@ -36,31 +36,33 @@ Always use the tokens (`var(--accent)`, or Tailwind's `bg-surface`, `text-muted`
 | `--border`          | `#2c4437`                | Moss   | Hairlines                         |
 | `--border-strong`   | `#3f5c4c`                |        | Emphasised dividers               |
 | `--text`            | `#f2ede2`                | Bone   | Body text, wordmark (15.5:1)      |
-| `--text-muted`      | `#a8b8ae`                | Lichen | Secondary text, fern leaflets     |
+| `--text-muted`      | `#a8b8ae`                | Lichen | Secondary text (8.7:1)            |
 | `--text-subtle`     | `#93a79b`                |        | Captions, metadata (7.1:1)        |
-| `--accent`          | `#f0b443`                | Pollen | Selection, focus, the fern's coil |
+| `--accent`          | `#e89141`                | Amber  | Selection, focus, the fern's coil |
 | `--accent-contrast` | `#1d1404`                |        | Text on an accent fill            |
-| `--accent-soft`     | `rgb(240 180 67 / 0.16)` |        | Selected-row and active tints     |
-| `--focus`           | `#f6c86a`                |        | Focus ring                        |
+| `--accent-soft`     | `rgb(232 145 65 / 0.16)` |        | Selected-row and active tints     |
+| `--focus`           | `#f2a865`                |        | Focus ring                        |
 | `--danger`          | `#ff8a7a`                |        | Errors                            |
 
 ### Light theme (`[data-theme='light']` on `<html>`)
 
-| Token               | Value                  | Name   | Use                                   |
-| ------------------- | ---------------------- | ------ | ------------------------------------- |
-| `--bg`              | `#f5efe3`              | Paper  | Page background                       |
-| `--surface`         | `#fdfaf3`              | Vellum | Panels, pills, cards                  |
-| `--surface-2`       | `#efe7d7`              |        | Hover, nested surfaces                |
-| `--surface-3`       | `#e5dbc6`              |        | Pressed                               |
-| `--border`          | `#d8ccb5`              | Sand   | Hairlines                             |
-| `--border-strong`   | `#b9a989`              |        | Emphasised dividers                   |
-| `--text`            | `#0e1813`              | Forest | Body text, wordmark (15.8:1)          |
-| `--text-muted`      | `#3f5c4c`              | Fern   | Secondary text, fern leaflets (6.4:1) |
-| `--text-subtle`     | `#556159`              |        | Captions, metadata (5.7:1)            |
-| `--accent`          | `#9c5200`              | Rust   | Selection, focus, the fern's coil     |
-| `--accent-contrast` | `#fffaf0`              |        | Text on an accent fill                |
-| `--accent-soft`     | `rgb(156 82 0 / 0.12)` |        | Selected-row and active tints         |
-| `--danger`          | `#b3261e`              |        | Errors                                |
+| Token               | Value                   | Name   | Use                               |
+| ------------------- | ----------------------- | ------ | --------------------------------- |
+| `--bg`              | `#f5efe3`               | Paper  | Page background                   |
+| `--surface`         | `#fdfaf3`               | Vellum | Panels, pills, cards              |
+| `--surface-2`       | `#efe7d7`               |        | Hover, nested surfaces            |
+| `--surface-3`       | `#e5dbc6`               |        | Pressed                           |
+| `--border`          | `#d8ccb5`               | Sand   | Hairlines                         |
+| `--border-strong`   | `#b9a989`               |        | Emphasised dividers               |
+| `--text`            | `#0e1813`               | Forest | Body text, wordmark (15.8:1)      |
+| `--text-muted`      | `#3f5c4c`               | Fern   | Secondary text (6.4:1)            |
+| `--text-subtle`     | `#556159`               |        | Captions, metadata (5.7:1)        |
+| `--accent`          | `#a45710`               | Rust   | Selection, focus, the fern's coil |
+| `--accent-contrast` | `#fffaf0`               |        | Text on an accent fill            |
+| `--accent-soft`     | `rgb(164 87 16 / 0.12)` |        | Selected-row and active tints     |
+| `--danger`          | `#b3261e`               |        | Errors                            |
+
+`--leaf` (`#27553a`, Leaf) colours the leaf on the fern mark in both themes. It is decoration, not text: on forest it sits low (2.1:1), as drawn.
 
 **Accent rules.** The accent marks what is selected, active or focused, plus the fern in the logo. It is not a decoration colour and not a second button style. Text on an accent fill uses `--accent-contrast`.
 
@@ -87,12 +89,12 @@ The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. T
 
 ## Typography
 
-| Role               | Font                      | Token / class                            | Notes                                                  |
-| ------------------ | ------------------------- | ---------------------------------------- | ------------------------------------------------------ |
-| Interface and body | Lexend (variable)         | `--font-sans` (the default)              | Everything that isn't a heading                        |
-| Headings, display  | Source Serif 4 (variable) | `--font-serif`, `h1–h3`, `.font-display` | Optical sizing on, tracking −1%                        |
-| Scientific names   | Source Serif 4 italic     | `.sci-name`                              | Every Latin binomial, everywhere                       |
-| Wordmark only      | Patrick Hand, outlined    | none (artwork, not a loaded font)        | The letters are drawn shapes; the font is never loaded |
+| Role               | Font                        | Token / class                            | Notes                                                  |
+| ------------------ | --------------------------- | ---------------------------------------- | ------------------------------------------------------ |
+| Interface and body | Lexend (variable)           | `--font-sans` (the default)              | Everything that isn't a heading                        |
+| Headings, display  | Source Serif 4 (variable)   | `--font-serif`, `h1–h3`, `.font-display` | Optical sizing on, tracking −1%                        |
+| Scientific names   | Source Serif 4 italic       | `.sci-name`                              | Every Latin binomial, everywhere                       |
+| Wordmark only      | Fraunces SemiBold, outlined | none (artwork, not a loaded font)        | The letters are drawn shapes; the font is never loaded |
 
 - Fonts are self-hosted through `@fontsource` packages. Don't add Google Fonts links. The sans and serif files are preloaded in `BaseLayout.astro`.
 - Use sentence case for headings, buttons and labels.
@@ -100,19 +102,19 @@ The hexes are shaded on a log scale through 8 stops, `--ramp-0` to `--ramp-7`. T
 
 ## Logo
 
-The logo is the word **Taxonomap** hand-lettered from Patrick Hand, with a **fiddlehead fern** (an unfurling fern frond) in place of the first "o": life still being discovered.
+The logo is a **fiddlehead fern** (a frond unfurling: life still being discovered) to the left of the word **Taxonomap** in Fraunces SemiBold.
 
-- **Capital T, the rest lowercase**, always with the fern as the first "o". Never write the wordmark in another font, and never show the plain word as a logo. In running text the name is plain "Taxonomap".
-- **The fern**: a 1½-turn coil ending in a ball, on a stem that drops below the baseline, with two leaflets. Coil and stem use `--accent`; leaflets use `--text-muted`. The letters use `--text`. So the mark follows the theme with no extra artwork.
-- **The artwork is the master.** `docs/brand/wordmark-light.svg` holds the letters (outlined, re-spaced and reshaped by hand) and the fern; `wordmark-dark.svg` is the same artwork recoloured. Never retype the wordmark in the font. Change the master, then update its copies: the paths in `Wordmark.astro`, the README banners, and (for the fern) the mark files, app icon, favicon, `WebglNotice.vue` and `ChecklistFinish.vue`. The Open Graph card reads `wordmark-dark.svg` directly. The artwork is 200 units to the em: `Wordmark.astro` frames the letters in the old typed line box, 1 em tall, so it sizes from the parent's font-size.
-- **Small screens**: below 640 px the header shows the fern alone (the letters are hidden). The link keeps its "Taxonomap home" label for screen readers.
-- **Clear space**: keep at least half the coil's width clear around the mark.
-- **Colourways**: on forest, Pollen coil and Lichen leaflets. On paper, Rust coil and Fern leaflets. One colour: all Forest on paper or Pollen.
+- **The wordmark**: Fraunces SemiBold, optical size 70, softness 20, no wonky letters, letter spacing 0.045em. Capital T, the rest lowercase. In the artwork the mark is about as tall as the type size and sits 0.17em from the T. Never retype the wordmark, and never show the plain word as a logo. In running text the name is plain "Taxonomap".
+- **The mark**: a coil ending in a ball, on a stem that sweeps down to the left, with one leaf. Coil, stem and ball use `--accent`; the leaf uses `--leaf`. The letters use `--text`. So the logo follows the theme with no extra artwork.
+- **The artwork is the master.** `docs/brand/wordmark-light.svg` is the logo as designed on the brand board (exported from it, letters outlined); `wordmark-dark.svg` is the same artwork recoloured. Never retype the wordmark. Change the master, then update its copies: the paths in `src/lib/wordmark.ts` (`LOCKUP`, drawn by `Wordmark.astro`; the mark alone as `BALL`, `COIL` and `LEAF`, drawn by `Wordmark.astro` on phones, `WebglNotice.vue` and `ChecklistFinish.vue`), the README banners, the mark files, the app icon and the favicon. The Open Graph card reads `wordmark-dark.svg` directly. The artwork is 104.78 units to the em: `Wordmark.astro` draws it with the word at 1em, so the logo sizes from the parent's font-size (22 px in the header pill).
+- **Small screens**: below 640 px the header shows the mark alone (the letters are hidden). The link keeps its "Taxonomap home" label for screen readers.
+- **Clear space**: keep at least half the coil's width clear around the logo. The bare mark stays at least 24 px tall; below that, use the app tile.
+- **Colourways**: on forest, Amber mark and Bone letters. On paper, Rust mark and Forest letters. The leaf is Leaf on both. One colour: all Forest on paper or Amber.
 
 ### Icons
 
-- **Favicon** (`public/favicon.svg`): the app icon as is (the full fern with leaflets on a Forest rounded square, rx 14 of 64), so the browser tab matches the logo. At 16 px the leaflets blur to a hint of grey; that is accepted.
-- **App icon** (`docs/brand/app-icon.svg`): the full fern with leaflets on the tile, for 32 px and up (social avatars, home screens). `src/pages/icons/[name].png.ts` renders the PNG cuts from it at build: 192 and 512 px for the web app manifest, a full-bleed 180 px `apple-touch-icon` (iOS rounds the corners itself), and a full-bleed maskable 512 px with the fern shrunk into Android's safe zone.
+- **Favicon** (`public/favicon.svg`): the app icon as is (the mark on a Forest rounded square, rx 14 of 64), so the browser tab matches the logo. At 16 px the leaf merges into the tile; that is accepted.
+- **App icon** (`docs/brand/app-icon.svg`): the mark on the tile, for 32 px and up (social avatars, home screens). `src/pages/icons/[name].png.ts` renders the PNG cuts from it at build: 192 and 512 px for the web app manifest, a full-bleed 180 px `apple-touch-icon` (iOS rounds the corners itself), and a full-bleed maskable 512 px with the mark shrunk into Android's safe zone.
 - **Browser bar**: `theme-color` follows the chosen theme (`--bg`: Forest or Paper). Its two values sit on the meta tag in `BaseLayout.astro`.
 - Don't add other logo variants; derive from these files.
 
