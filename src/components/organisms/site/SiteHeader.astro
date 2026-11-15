@@ -138,5 +138,18 @@ const nav = [
     .theme-pill {
       display: none;
     }
+
+    /* The mark alone: a square pill with the mark in its middle. */
+    .brand {
+      justify-content: center;
+      aspect-ratio: 1;
+      padding-inline: 0;
+      font-size: 1.75rem;
+    }
+
+    /* The leaf weighs the mark's bounds to the right; nudge it to sit centred by eye. */
+    .brand :global(.wordmark) {
+      translate: 2px;
+    }
   }
 </style>
