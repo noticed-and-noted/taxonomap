@@ -21,6 +21,8 @@ export interface Refinements {
   eventDate?: string | undefined;
   /** Publishing organisation keys (publishingOrg), OR'd. */
   publishers?: readonly string[] | undefined;
+  /** Recorder names exactly as GBIF holds them (recordedBy, case-sensitive), OR'd. */
+  recorders?: readonly string[] | undefined;
 }
 
 /** Query parameters for the refinement filters (media, basis of record, and so on). */
@@ -36,6 +38,7 @@ export function refinementParams(refinements: Refinements): Params {
     iucnRedListCategory: refinements.iucn,
     eventDate: refinements.eventDate,
     publishingOrg: refinements.publishers,
+    recordedBy: refinements.recorders,
   };
 }
 

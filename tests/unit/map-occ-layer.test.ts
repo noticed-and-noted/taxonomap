@@ -352,6 +352,8 @@ describe('occurrence layer', () => {
       if (key(request) === '7/8') return new Response(null, { status: 503 });
       if (key(request) === '8/7') return new Response(null, { status: 400 });
       if (key(request) === '7/7') return new Response(null, { status: 404 });
+      if (key(request) === '9/8')
+        return new Response('Tile is missing the expected layer: occurrence', { status: 400 });
       return new ArrayBuffer(0);
     });
     const map = fakeMap();
@@ -362,11 +364,13 @@ describe('occurrence layer', () => {
     expect($gbifStale.get()).toBe(true);
     // The view is not whole while tiles keep failing, so nothing is drawn.
     expect(o.onCells).not.toHaveBeenCalled();
-    // Failed tiles are asked for again next time; the empty and missing ones are kept.
+    // Failed tiles are asked for again next time; the empty and missing ones (GBIF's empty-tile 400 too) are kept.
     map.fire('moveend');
     await settle();
     const times = (tileId: string) => asked.filter((tile) => key(tile) === tileId).length;
-    expect([times('8/8'), times('7/8'), times('8/7'), times('7/7'), times('9/9')]).toEqual([2, 2, 2, 1, 1]);
+    expect([times('8/8'), times('7/8'), times('8/7'), times('7/7'), times('9/8'), times('9/9')]).toEqual([
+      2, 2, 2, 1, 1, 1,
+    ]);
   });
 
   it('waits for the map to load', async () => {

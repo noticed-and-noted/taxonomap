@@ -156,6 +156,15 @@ function toLngLat(coord: LngLatLike): LngLat {
   return 'lng' in coord ? [coord.lng, coord.lat] : [coord.lon, coord.lat];
 }
 
+/** GBIF's ad hoc tiles answer some empty tiles with a 400 saying so, rather than a 404 or 204. */
+const EMPTY_TILE_MESSAGE = 'missing the expected layer';
+
+/** Whether a response is GBIF's 400 for an empty tile, which must count as loaded or the view never draws. */
+async function isEmptyTileError(response: Response): Promise<boolean> {
+  if (response.status !== 400) return false;
+  return (await response.clone().text()).includes(EMPTY_TILE_MESSAGE);
+}
+
 /** One tile to fetch: which filter and grid level it belongs to, and its cache key. */
 interface Job {
   key: string;
@@ -295,7 +304,7 @@ class OccLayerController {
       this.#options.onFailed();
       return undefined;
     }
-    if (response.status === 404) return [];
+    if (response.status === 404 || (await isEmptyTileError(response))) return [];
     if (!response.ok) {
       if (response.status === 429 || response.status >= 500) $gbifStale.set(true);
       return undefined;

@@ -36,6 +36,11 @@ describe('refinements', () => {
     expect(needsAdhoc({ publishers: [PUBLISHER] })).toBe(true);
   });
 
+  it('sends recorders as a repeated recordedBy, on adhoc tiles', () => {
+    expect(refinementParams({ recorders: ['Jack Shaw'] }).recordedBy).toEqual(['Jack Shaw']);
+    expect(needsAdhoc({ recorders: ['Jack Shaw'] })).toBe(true);
+  });
+
   it('sends publishers as a repeated publishingOrg', () => {
     expect(refinementParams({ publishers: [PUBLISHER] }).publishingOrg).toEqual([PUBLISHER]);
   });
@@ -146,6 +151,26 @@ describe('explorer filter stores', () => {
     expect(explorer.$filterPills.get().map((pill) => [pill.group, pill.text])).toEqual([['how', 'iNaturalist.org']]);
     explorer.$filterPills.get()[0]?.clear();
     expect(publisher.$publisherKeys.get()).toEqual([]);
+  });
+
+  it('filter by recorders, keeping commas in their names, and refuse one twice', async () => {
+    const explorer = await import('~/stores/explorer');
+    const recorder = await import('~/stores/recorder');
+    explorer.clearFilters();
+    expect(recorder.addRecorder('Shaw, Jack')).toBe(true);
+    expect(recorder.addRecorder('Shaw, Jack')).toBe(false);
+    recorder.addRecorder('Jack Shaw');
+    expect(explorer.$occurrenceFilter.get()).toEqual({ recorders: ['Jack Shaw', 'Shaw, Jack'] });
+    recorder.removeRecorder('Jack Shaw');
+    expect(explorer.$filterPills.get().map((pill) => [pill.group, pill.text])).toEqual([['how', 'Shaw, Jack']]);
+    explorer.clearFilters();
+  });
+
+  it('keep sets of names that hold commas in the URL, joined by another separator', async () => {
+    const { codecs } = await import('~/stores/url-sync');
+    const codec = codecs.stringSet('recorder', { pattern: /^[^|]+$/, separator: '|' });
+    expect(codec.serialize(['Shaw, Jack', 'Jack Shaw'])).toBe('Jack Shaw|Shaw, Jack');
+    expect(codec.parse('Shaw, Jack|Jack Shaw|Shaw, Jack')).toEqual(['Jack Shaw', 'Shaw, Jack']);
   });
 
   it('refuse a publisher twice or past the limit, and remove one by key', async () => {

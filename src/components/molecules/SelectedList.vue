@@ -5,7 +5,7 @@ export const SCROLL_AFTER = 5;
 
 <script setup lang="ts" generic="Item extends { key: string | number }">
 /**
- * The picked values of a multi-select filter (taxa, publishers) as accent rows, each with a
+ * The picked values of a multi-select filter (taxa, publishers, recorders) as accent rows, each with a
  * remove button. The default slot fills a row; past SCROLL_AFTER rows the list scrolls with
  * edge fades, and a newly added row is brought into view.
  */
@@ -35,7 +35,7 @@ watch(
     const added = next.find((key) => !previous.includes(key));
     if (added === undefined) return;
     await nextTick();
-    list.value?.querySelector(`[data-key="${added}"]`)?.scrollIntoView({ block: 'nearest' });
+    list.value?.querySelector(`[data-key="${CSS.escape(String(added))}"]`)?.scrollIntoView({ block: 'nearest' });
   },
 );
 </script>
