@@ -42,7 +42,8 @@ export const MAX_TAXA = 10;
 /** Allowed "max coordinate uncertainty" steps, in metres. */
 export const UNCERTAINTY_STEPS_M = [10, 100, 1000, 10000] as const;
 
-export const PANELS = ['none', 'hex', 'filters'] as const;
+/** `hex`: the selected cell's results; `results`: every record the filters match. */
+export const PANELS = ['none', 'hex', 'results', 'filters'] as const;
 export type Panel = (typeof PANELS)[number];
 
 export interface MapView {
@@ -384,6 +385,18 @@ export const $occurrenceFilter = computed(filterValues, (values): OccurrenceFilt
   });
   return out;
 });
+
+/**
+ * What the results panel lists: the selected cell under the filters, or everything the filters match when no
+ * cell is selected. Null while a selected cell's geometry is still being found.
+ */
+export const $resultsFilter = computed(
+  [$selectedHex, $hexGeometry, $occurrenceFilter],
+  (hex, geometry, filter): OccurrenceFilter | null => {
+    if (!hex) return filter;
+    return geometry ? { ...filter, geometry: geometry.wkt } : null;
+  },
+);
 
 /**
  * The set filters (other than taxa) as pills, with the rail group each sits in.

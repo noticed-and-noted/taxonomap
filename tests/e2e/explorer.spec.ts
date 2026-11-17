@@ -14,10 +14,11 @@ test('the header search and the What filter add to one list of taxa', { tag: '@m
     .first()
     .click();
   await expect(page).toHaveURL(/taxon=212%2C2492462/);
+  // Phones swap the chips for one Clear all button.
+  test.skip(info.project.name === 'mobile', 'the sheet shares the same picker');
   await expect(page.getByRole('button', { name: 'Remove taxon filter Birds' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Remove taxon filter European Robin/i })).toBeVisible();
 
-  test.skip(info.project.name === 'mobile', 'the sheet shares the same picker');
   await page.getByRole('button', { name: 'What, 2 active' }).click();
   const picker = page.getByRole('combobox', { name: 'Species and groups' });
   await picker.fill('blackbird');
@@ -547,13 +548,27 @@ test('a pick past the What list’s limit says why it was not added', async ({ p
   await expect(page.getByText('You can show up to 10 species or groups.', { exact: false }).first()).toBeVisible();
 });
 
-test('the legend slides away and back, and the cell panel closes to no selection', async ({ page }) => {
+test('the legend and the results panel slide away and back, the panel keeping its cell', async ({ page }) => {
   await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
   await page.getByRole('button', { name: 'Slide legend away' }).click();
   await page.getByRole('button', { name: 'Show legend' }).click();
   await expect(page.getByRole('button', { name: 'Slide legend away' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close panel' }).click();
-  await expect(page).not.toHaveURL(/hex=/);
+  await page.getByRole('button', { name: 'Explore panel' }).click();
+  await expect(page).not.toHaveURL(/panel=/);
+  await expect(page).toHaveURL(/hex=/);
+  await page.getByRole('button', { name: 'Explore panel' }).click();
+  await expect(page).toHaveURL(/panel=hex/);
+});
+
+test('Explore lists every matching record when no cell is selected', { tag: '@mobile' }, async ({ page }) => {
+  await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0');
+  // The phone's Explore button, or the side panel's Explore tab on wider screens.
+  await page
+    .getByRole('button', { name: /^Explore( panel)?$/ })
+    .filter({ visible: true })
+    .click();
+  await expect(page).toHaveURL(/panel=results/);
+  await expect(page.getByRole('heading', { name: 'All results' })).toBeVisible();
 });
 
 test('open filters move between the rail and the sheet as the window crosses the phone width', async ({ page }) => {

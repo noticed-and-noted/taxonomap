@@ -34,6 +34,8 @@ async function setup() {
   const explorer = await import('~/stores/explorer');
   const { useHexSummary } = await import('~/composables/useHexSummary');
   explorer.$hexGeometry.set(null);
+  // A cell is selected but not yet found, so nothing loads until a test sets its geometry.
+  explorer.$selectedHex.set([0.5, 0.5, 0]);
   const scope = effectScope();
   const summary = scope.run(() => useHexSummary())!;
   return { explorer, summary, stop: () => scope.stop() };

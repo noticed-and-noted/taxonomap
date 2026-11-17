@@ -195,7 +195,6 @@ async function restoreHex() {
     return;
   }
   $hexGeometry.set(geometry);
-  if ($panel.get() === 'none') $panel.set('hex');
 }
 
 /** The outline of the hex the tour or a hint points at, kept so its box can follow the map. */

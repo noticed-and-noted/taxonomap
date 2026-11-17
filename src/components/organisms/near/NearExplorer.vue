@@ -52,6 +52,11 @@ const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
 
 const panelOpen = ref(true);
+/**
+ * The basemap switcher starts tucked at the screen edge, where the map page's own switcher was, then slides out
+ * beside the panel, so the top bar's pills slide along with it.
+ */
+const hasSlidIn = ref(false);
 const startLeaving = () => $nearLeaving.set(true);
 const geoState = ref<'idle' | 'asking' | 'denied' | 'unavailable'>('idle');
 const { loading, error, run: runArea, cancel: cancelArea } = useLatestLoad();
@@ -166,6 +171,8 @@ watch(area, () => void loadArea(), { deep: true });
 watch([at, radius], flyToArea);
 
 onMounted(() => {
+  // Two frames, so the tucked position is drawn before it slides.
+  requestAnimationFrame(() => requestAnimationFrame(() => (hasSlidIn.value = true)));
   $mapMode.set('pin');
   void loadSpeciesManifest();
   flyToArea();
@@ -193,7 +200,7 @@ onBeforeUnmount(() => {
     <!-- Basemap stays in near me; it slides with the panel when it's tucked away. -->
     <div
       class="near-bar pointer-events-none absolute right-3 top-3 *:pointer-events-auto"
-      :class="{ tucked: !panelOpen }"
+      :class="{ tucked: !panelOpen || !hasSlidIn }"
     >
       <div class="hidden sm:block"><BasemapSwitcher /></div>
     </div>
@@ -203,6 +210,7 @@ onBeforeUnmount(() => {
         title="What’s near me"
         :open="panelOpen"
         collapsible
+        tab-label="Near me"
         dismissible="Leave near me"
         @close="panelOpen = false"
         @open="panelOpen = true"
@@ -338,7 +346,7 @@ onBeforeUnmount(() => {
     height: 75dvh;
   }
 }
-/* Desktop: beside the panel, which is always on screen (open, or tucked to a strip). */
+/* Desktop: beside the panel while it's open, at the screen edge once it's tucked away. */
 @media (min-width: 768px) {
   .near-bar {
     right: calc(var(--panel-width) + 1.5rem);
@@ -346,7 +354,7 @@ onBeforeUnmount(() => {
   }
   /* The same distance SidePanel's .collapsed moves the panel, so they slide together. */
   .near-bar.tucked {
-    transform: translateX(calc(var(--panel-width) + 0.75rem - 4rem));
+    transform: translateX(calc(var(--panel-width) + 0.75rem));
   }
   /* Centred on the map left of the open panel, and narrow enough to clear the rail and the panel. */
   .beside-panel {

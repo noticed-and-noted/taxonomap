@@ -1,5 +1,5 @@
 /**
- * Data for the selected hex, with no N+1 calls:
+ * Data for the selected hex (or every record the filters match, with none selected), with no N+1 calls:
  *  1. one facet request (limit=0): total count, classes, months and the top species
  *  2. picking a group: one facet request for that group's top species (cached per cell)
  *  3. names from the baked index, then from the facet itself (GBIF's GraphQL
@@ -15,7 +15,7 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import { MONTHS_IN_YEAR, monthCounts, namedOccurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
 import { rememberCount } from '~/lib/map/cellCounts';
 import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
-import { $hexGeometry, $occurrenceFilter } from '~/stores/explorer';
+import { $hexGeometry, $occurrenceFilter, $resultsFilter } from '~/stores/explorer';
 import { useLatestLoad } from './useLatestLoad';
 
 /** Species rows per list (the whole cell, or one group). */
@@ -81,16 +81,15 @@ async function fetchCellLists(
   return { groups, rows };
 }
 
-/** The top species of one group within a cell. */
-function fetchGroupRows(cellFilter: OccurrenceFilter, wkt: string, classKey: number | null, signal: AbortSignal) {
-  const groupFilter = { ...cellFilter, geometry: wkt, ...(classKey !== null && { classKey }) };
+/** The top species of one group within the listed area. */
+function fetchGroupRows(areaFilter: OccurrenceFilter, classKey: number | null, signal: AbortSignal) {
+  const groupFilter = { ...areaFilter, ...(classKey !== null && { classKey }) };
   return topSpecies(groupFilter, { limit: HEX_SPECIES, signal });
 }
 
-/** Everything about the selected hex; see the file comment for the request plan. */
+/** Everything about the selected hex, or about all results when none is selected; see the file comment. */
 export function useHexSummary() {
-  const geometry = useStore($hexGeometry);
-  const filter = useStore($occurrenceFilter);
+  const area = useStore($resultsFilter);
   const { loading, error, run, cancel } = useLatestLoad();
   const { species, cellSpecies, group, show, reset, select } = useSpeciesLists();
   const count = ref<number | null>(null);
@@ -98,25 +97,25 @@ export function useHexSummary() {
   const classes = shallowRef<ClassGroup[]>([]);
 
   async function load() {
-    const hexGeometry = geometry.value;
+    const areaFilter = area.value;
     reset();
-    // Clear the old cell's count so the panel shows its skeleton, not a stale number.
+    // Clear the old count so the panel shows its skeleton, not a stale number.
     count.value = null;
-    if (!hexGeometry) {
+    if (!areaFilter) {
       cancel();
       classes.value = [];
       return;
     }
     await run(async (signal) => {
-      const hexFilter = { ...filter.value, geometry: hexGeometry.wkt };
-      const result = await fetchCellFacets(hexFilter, signal);
+      const result = await fetchCellFacets(areaFilter, signal);
       if (signal.aborted) return;
       count.value = result.count;
       // The map's tooltip shows this cell's exact count from now on.
-      rememberCount(filter.value, hexGeometry.wkt, result.count);
+      const cell = $hexGeometry.get();
+      if (cell) rememberCount($occurrenceFilter.get(), cell.wkt, result.count);
       months.value = monthCounts(result.facets.month);
 
-      const { groups, rows } = await fetchCellLists(hexFilter, result, signal);
+      const { groups, rows } = await fetchCellLists(areaFilter, result, signal);
       if (signal.aborted) return;
       classes.value = groups;
       show(null, rows);
@@ -125,16 +124,20 @@ export function useHexSummary() {
 
   /** Narrow the list to one group (null for all), loading its species the first time. */
   async function pickGroup(key: number | null) {
-    const hexGeometry = geometry.value;
-    if (!hexGeometry || key === group.value) return;
+    const areaFilter = area.value;
+    if (!areaFilter || key === group.value) return;
     if (select(key)) return;
     await run(async (signal) => {
-      const rows = await fetchGroupRows(filter.value, hexGeometry.wkt, key, signal);
+      const rows = await fetchGroupRows(areaFilter, key, signal);
       if (!signal.aborted) show(key, rows);
     });
   }
 
-  watch([geometry, () => JSON.stringify(filter.value)], () => void load(), { immediate: true });
+  watch(
+    () => JSON.stringify(area.value),
+    () => void load(),
+    { immediate: true },
+  );
 
   return { loading, error, count, months, classes, species, cellSpecies, group, pickGroup, reload: load };
 }

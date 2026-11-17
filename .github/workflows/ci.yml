@@ -61,16 +61,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # A coverage threshold that fails is a warning, not a failed job. A failing test still fails the run.
+      # Fails on a failing test or on coverage below the threshold, so a gap shows on the PR, not just in a warning.
       - run: pnpm test:coverage
-        id: coverage
-        continue-on-error: true
-      - name: Warn about coverage
-        if: steps.coverage.outcome == 'failure' && hashFiles('coverage/coverage-summary.json') != ''
-        run: echo '::warning title=Coverage::Unit test coverage is below the threshold. See the coverage step above.'
-      - name: Fail on test failures
-        if: steps.coverage.outcome == 'failure' && hashFiles('coverage/coverage-summary.json') == ''
-        run: exit 1
       # The badge job on main reads this figure instead of running the tests again.
       - uses: actions/upload-artifact@v4
         if: always()

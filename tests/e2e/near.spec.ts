@@ -40,8 +40,8 @@ test('geolocation is rounded to ~100 m before use', async ({ page, context }) =>
 test('lists species in a sortable table that one group can narrow', async ({ page }) => {
   await page.goto(LONDON);
   await expect(page.getByRole('link', { name: /Common Blackbird/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Hide What’s near me' }).click();
-  await page.getByRole('button', { name: 'Show What’s near me' }).click();
+  await page.getByRole('button', { name: 'Near me panel' }).click();
+  await page.getByRole('button', { name: 'Near me panel' }).click();
   await page.getByRole('button', { name: /^Species/ }).click();
   await expect(page.getByRole('columnheader', { name: /Species/ })).toHaveAttribute('aria-sort', 'ascending');
   await page.getByRole('button', { name: 'Filter' }).click();

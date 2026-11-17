@@ -15,6 +15,7 @@ const YEARS = {
   ],
 };
 const CELL = { ring: [] as [number, number][], wkt: 'POLYGON((0 0,1 0,1 1,0 0))', tileTotal: 9 };
+const CELL_POINT = [0.5, 0.5, 0] as const;
 
 async function load() {
   vi.resetModules();
@@ -52,6 +53,7 @@ describe('useHexSummary', () => {
       };
     });
     const { explorer, hex } = await load();
+    explorer.$selectedHex.set(CELL_POINT);
     const { result: summary, stop } = run(() => hex.useHexSummary());
     expect(summary.count.value).toBeNull();
     explorer.$hexGeometry.set(CELL);
@@ -86,6 +88,7 @@ describe('useHexSummary', () => {
   it('reports a failure as a UI error kind', async () => {
     stubNetwork(() => new Response('bad', { status: 400 }));
     const { explorer, hex } = await load();
+    explorer.$selectedHex.set(CELL_POINT);
     const { result: summary, stop } = run(() => hex.useHexSummary());
     explorer.$hexGeometry.set(CELL);
     await vi.waitFor(() => expect(summary.error.value).toBe('bad-request'));
@@ -93,15 +96,19 @@ describe('useHexSummary', () => {
     stop();
   });
 
-  it('clears when the cell is deselected', async () => {
-    stubNetwork((url) => (isGraphql(url) ? namedFacets(5, 'classKey', []) : snapshots({ tree: TREE })(url)));
+  it('waits for a selected cell, and lists all results once it is deselected', async () => {
+    const calls = stubNetwork((url) =>
+      isGraphql(url) ? namedFacets(5, 'classKey', []) : snapshots({ tree: TREE })(url),
+    );
     const { explorer, hex } = await load();
+    explorer.$selectedHex.set(CELL_POINT);
     const { result: summary, stop } = run(() => hex.useHexSummary());
-    explorer.$hexGeometry.set(CELL);
-    await vi.waitFor(() => expect(summary.count.value).toBe(5));
-    explorer.$hexGeometry.set(null);
     await nextTick();
-    expect(summary.count.value).toBeNull();
+    expect(calls.filter(isGraphql)).toHaveLength(0);
+
+    explorer.clearHexSelection();
+    await vi.waitFor(() => expect(summary.count.value).toBe(5));
+    expect(calls.filter(isGraphql)[0]!.searchParams.get('variables')).not.toContain('POLYGON');
     stop();
   });
 });

@@ -36,11 +36,13 @@ const { compact = false, fernOnly = false } = Astro.props;
     line-height: 1;
   }
 
-  /* 654 x 106 artwork units at 104.78 to the em. The p's tail hangs just below. */
+  /* 652.5 x 115 artwork units (LOCKUP's viewBox) at 104.78 to the em. The p's tail makes the box deeper below
+     the logo than above it, so it drops 5 units: a container that centres the box then centres the mark and
+     capitals. A translate moves the drawing without changing the space it takes. */
   .full {
-    width: 6.242em;
-    height: 1.012em;
-    overflow: visible;
+    width: 6.227em;
+    height: 1.098em;
+    translate: 0 0.048em;
   }
 
   /* The mark's own bounds, 110 x 129 units, at the lockup's mark height. */

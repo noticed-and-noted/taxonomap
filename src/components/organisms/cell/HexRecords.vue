@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Individual records in the selected cell, a page at a time in GBIF's order, as a table with a short record
+ * Individual records in the selected cell (or all results), a page at a time in GBIF's order, as a table with a short record
  * type code (FOS, SPE…; the full type on hover). A row expands to its photo (opening a lightbox of all its
  * photos) and details. No column sorts: GBIF's occurrence search has no sort parameter. A species filter
  * narrows the list. Pass `filter` to list another area's records (near me) instead of the selected cell's.
@@ -19,7 +19,7 @@ import { recordPlace } from '~/lib/map/recordPlace';
 import { aboutKey } from '~/lib/record-fields';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
-import { $hexGeometry, $occurrenceFilter, $recordPlace } from '~/stores/explorer';
+import { $recordPlace, $resultsFilter } from '~/stores/explorer';
 import HexRecordDetails from './HexRecordDetails.vue';
 import HexRecordRow from './HexRecordRow.vue';
 import HexRecordsSpeciesFilter from './HexRecordsSpeciesFilter.vue';
@@ -31,16 +31,13 @@ const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
 
 const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceFilter | null; fill?: boolean }>();
 
-const geometry = useStore($hexGeometry);
-const storeFilter = useStore($occurrenceFilter);
+const resultsFilter = useStore($resultsFilter);
 const manifest = useStore($speciesManifest);
 const { loading, error, run } = useLatestLoad();
 const names = useRecordNames(() => props.species);
 const uniqueId = useId();
-/** The listed area: the `filter` prop, else the selected cell under the map's filters. */
-const area = computed(
-  () => props.filter ?? (geometry.value ? { ...storeFilter.value, geometry: geometry.value.wkt } : null),
-);
+/** The listed area: the `filter` prop, else the results panel's (the selected cell, or all results). */
+const area = computed(() => props.filter ?? resultsFilter.value);
 
 /** Chosen speciesKey, or '' for all species. */
 const speciesKey = ref<number | ''>('');
