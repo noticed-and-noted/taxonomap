@@ -66,6 +66,11 @@ describe('the tip', () => {
     expect(tipPosition(sheet, phone, { width: 343, height: 150 }, [hex])).toEqual({ left: 16, top: 16 });
   });
 
+  it('pins to the top, centred, when the tip is taller than the page', () => {
+    const shortPage = { width: 1000, height: 100 };
+    expect(tipPosition({ left: 0, top: 0, width: 40, height: 30 }, shortPage, tip)).toEqual({ left: 340, top: 16 });
+  });
+
   it('stays on screen, over the target, when nowhere is clear', () => {
     expect(tipPosition({ left: 0, top: 0, width: 1000, height: 800 }, viewport, tip)).toEqual({
       left: 340,

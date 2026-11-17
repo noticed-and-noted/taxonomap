@@ -21,6 +21,8 @@ describe('record fields', () => {
   it('gives the linked taxon’s rank: a species, else the rank the record was named to', () => {
     expect(aboutRank(record({ speciesKey: 5, taxonRank: 'SUBSPECIES' }))).toBe('SPECIES');
     expect(aboutRank(record({ taxonKey: 136, taxonRank: 'CLASS' }))).toBe('CLASS');
+    // A record that names no rank is taken as a species.
+    expect(aboutRank(record({ taxonKey: 136 }))).toBe('SPECIES');
   });
 
   it('prefers the accepted species name', () => {

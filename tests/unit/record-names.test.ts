@@ -59,6 +59,13 @@ describe('useRecordNames', () => {
     );
   });
 
+  it('skips a record with no taxon to look up', async () => {
+    const recordNames = await names();
+    await recordNames.nameRecords([record({ speciesKey: 5 }), record({})]);
+    const [keys] = commonNames.mock.calls[0]!;
+    expect([...keys]).toEqual([5]);
+  });
+
   it('drops names that arrive after the lookup was cancelled', async () => {
     const recordNames = await names();
     const controller = new AbortController();
