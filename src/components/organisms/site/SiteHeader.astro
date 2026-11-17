@@ -152,4 +152,11 @@ const nav = [
       translate: 2px;
     }
   }
+
+  /* The full logo sits centred by its bounds but reads low in the pill; lift it to sit centred by eye. */
+  @media (min-width: 640px) {
+    .brand :global(.wordmark) {
+      translate: 0 -1px;
+    }
+  }
 </style>

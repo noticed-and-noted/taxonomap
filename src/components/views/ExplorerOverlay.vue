@@ -208,26 +208,28 @@ onBeforeUnmount(() => {
       <!-- Phone: Explore, Filters and Near me (the rail is hidden), grouped at the right. Explore opens all results;
            wider screens have the results panel's own tab. -->
       <div class="phone-row ml-auto flex shrink-0 rail:hidden">
-        <button
-          v-if="!near"
-          type="button"
-          class="pill-btn phone-btn explore-btn"
-          :aria-expanded="allResultsOpen"
-          @click="toggleAllResults"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            class="size-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            aria-hidden="true"
+        <Transition name="fade">
+          <button
+            v-if="!near"
+            type="button"
+            class="pill-btn phone-btn explore-btn"
+            :aria-expanded="allResultsOpen"
+            @click="toggleAllResults"
           >
-            <path :d="listIcon" />
-          </svg>
-          Explore
-        </button>
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path :d="listIcon" />
+            </svg>
+            Explore
+          </button>
+        </Transition>
         <!-- One pill: Filters with its count, and once any are set, a × that clears them all. -->
         <span class="filters-pill" :class="{ active: activeFilters }">
           <button
@@ -564,5 +566,14 @@ onBeforeUnmount(() => {
   .near:has(.near-bar.tucked) .top-bar {
     right: 0.75rem;
   }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--dur-slow) var(--ease);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -52,6 +52,11 @@ const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
 
 const panelOpen = ref(true);
+/**
+ * The basemap switcher starts tucked at the screen edge, where the map page's own switcher was, then slides out
+ * beside the panel, so the top bar's pills slide along with it.
+ */
+const hasSlidIn = ref(false);
 const startLeaving = () => $nearLeaving.set(true);
 const geoState = ref<'idle' | 'asking' | 'denied' | 'unavailable'>('idle');
 const { loading, error, run: runArea, cancel: cancelArea } = useLatestLoad();
@@ -166,6 +171,8 @@ watch(area, () => void loadArea(), { deep: true });
 watch([at, radius], flyToArea);
 
 onMounted(() => {
+  // Two frames, so the tucked position is drawn before it slides.
+  requestAnimationFrame(() => requestAnimationFrame(() => (hasSlidIn.value = true)));
   $mapMode.set('pin');
   void loadSpeciesManifest();
   flyToArea();
@@ -193,7 +200,7 @@ onBeforeUnmount(() => {
     <!-- Basemap stays in near me; it slides with the panel when it's tucked away. -->
     <div
       class="near-bar pointer-events-none absolute right-3 top-3 *:pointer-events-auto"
-      :class="{ tucked: !panelOpen }"
+      :class="{ tucked: !panelOpen || !hasSlidIn }"
     >
       <div class="hidden sm:block"><BasemapSwitcher /></div>
     </div>
