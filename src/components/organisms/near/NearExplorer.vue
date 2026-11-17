@@ -203,6 +203,7 @@ onBeforeUnmount(() => {
         title="What’s near me"
         :open="panelOpen"
         collapsible
+        tab-label="Near me"
         dismissible="Leave near me"
         @close="panelOpen = false"
         @open="panelOpen = true"
@@ -338,7 +339,7 @@ onBeforeUnmount(() => {
     height: 75dvh;
   }
 }
-/* Desktop: beside the panel, which is always on screen (open, or tucked to a strip). */
+/* Desktop: beside the panel while it's open, at the screen edge once it's tucked away. */
 @media (min-width: 768px) {
   .near-bar {
     right: calc(var(--panel-width) + 1.5rem);
@@ -346,7 +347,7 @@ onBeforeUnmount(() => {
   }
   /* The same distance SidePanel's .collapsed moves the panel, so they slide together. */
   .near-bar.tucked {
-    transform: translateX(calc(var(--panel-width) + 0.75rem - 4rem));
+    transform: translateX(calc(var(--panel-width) + 0.75rem));
   }
   /* Centred on the map left of the open panel, and narrow enough to clear the rail and the panel. */
   .beside-panel {

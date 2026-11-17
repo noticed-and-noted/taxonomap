@@ -5,12 +5,19 @@
  * instead of removing it; `open` asks for it back.
  * `dismissible` (with collapsible): a close button that emits `dismiss`,
  * for leaving the whole mode rather than tucking the panel away.
+ * `tabLabel` (with collapsible): a word written up the tucked panel's tab.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import BottomSheet from '~/components/atoms/BottomSheet.vue';
 import SidePanel from '~/components/atoms/SidePanel.vue';
 
-const props = defineProps<{ title: string; open: boolean; collapsible?: boolean; dismissible?: string }>();
+const props = defineProps<{
+  title: string;
+  open: boolean;
+  collapsible?: boolean;
+  dismissible?: string;
+  tabLabel?: string;
+}>();
 /** `closing`: a dismissed sheet has started sliding away; `dismiss` follows once it's gone. */
 const emit = defineEmits<{ close: []; open: []; dismiss: []; closing: [] }>();
 /**
@@ -62,6 +69,7 @@ onBeforeUnmount(() => {
     :collapsed="!open"
     :closable="!!dismissible"
     :close-label="dismissible"
+    :tab-label="tabLabel"
     @close="emit('dismiss')"
     @collapse="emit('close')"
     @expand="emit('open')"

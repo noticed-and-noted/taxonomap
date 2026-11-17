@@ -1,12 +1,14 @@
 <script setup lang="ts">
 /**
  * Map-page controls (client:only): taxon chip, filter rail, basemap
- * switcher, legend, and the side panel / bottom sheet.
- * On small screens the filters move into the sheet behind a Filters button.
+ * switcher, legend, and the results and filters panels (side panel / bottom sheet).
+ * On small screens the filters move into the sheet behind a Filters button, and
+ * the chips give way to a count and a clear button on it.
  * "Near me" (`?near=1`) swaps these controls for the NearExplorer panel.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import UiIcon from '~/components/atoms/UiIcon.vue';
 import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import HexPanel from '~/components/organisms/cell/HexPanel.vue';
@@ -81,11 +83,35 @@ function toggleNear() {
 }
 
 const pinIcon = 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z';
+const listIcon = 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01';
 
-const hexOpen = computed(() => !near.value && panel.value === 'hex' && hex.value !== null);
+const allResultsOpen = computed(() => panel.value === 'results');
+const resultsOpen = computed(
+  () => !near.value && (allResultsOpen.value || (panel.value === 'hex' && hex.value !== null)),
+);
 const filtersOpen = computed(() => panel.value === 'filters');
-const panelOpen = computed(() => hexOpen.value || filtersOpen.value);
-const panelTitle = computed(() => (filtersOpen.value ? 'Filters' : 'Selected cell'));
+const panelOpen = computed(() => resultsOpen.value || filtersOpen.value);
+const resultsTitle = computed(() => (hex.value ? 'Selected cell' : 'All results'));
+
+/** Shows the results panel: the selected cell's, or all results when none is selected. */
+function showResults() {
+  $panel.set(hex.value ? 'hex' : 'results');
+}
+
+/** Tucks the results panel away, keeping the selected cell. */
+function hideResults() {
+  $panel.set('none');
+}
+
+/** The phone Explore button: lists everything the filters match (dropping the selected cell), or hides that list. */
+function toggleAllResults() {
+  if (allResultsOpen.value) {
+    $panel.set('none');
+    return;
+  }
+  clearHexSelection();
+  $panel.set('results');
+}
 
 /** Below this width panels are bottom sheets (ResponsivePanel), which cover the dock. */
 const SHEET_QUERY = '(max-width: 767.98px)';
@@ -109,13 +135,13 @@ const onSheetQuery = (event: MediaQueryListEvent) => (hasSheets.value = event.ma
 
 /** The phone Filters button: opens the sheet, or closes it back to the cell panel if one is selected. */
 function openFilters() {
-  $panel.set(filtersOpen.value ? (hex.value ? 'hex' : 'none') : 'filters');
+  if (filtersOpen.value) closeFilters();
+  else $panel.set('filters');
 }
 
-/** Closes the open panel: the filters back to the cell, or the cell's selection. */
-function closePanel() {
-  if (filtersOpen.value) $panel.set(hex.value ? 'hex' : 'none');
-  else clearHexSelection();
+/** Closes the filters, back to the cell panel if one is selected. */
+function closeFilters() {
+  $panel.set(hex.value ? 'hex' : 'none');
 }
 
 /** Crossing the phone width with filters open: move them between the rail's flyout and the sheet, on the same group. */
@@ -128,7 +154,7 @@ function swapFilterLayout(event: MediaQueryListEvent) {
     $panel.set('filters');
   } else if (filtersOpen.value) {
     $railOpen.set(filterTab.value);
-    closePanel();
+    closeFilters();
   }
 }
 
@@ -159,16 +185,13 @@ onBeforeUnmount(() => {
     <OnboardingTour v-if="!tourSeen && !near && !mapUnsupported" />
     <ChecklistHint v-if="hintId && !near" :id="hintId" :key="hintId" />
     <div
-      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto max-rail:gap-0"
+      class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
-      <div class="min-w-0 rail:flex-auto" :class="{ 'max-rail:mr-2': near }"><TaxonChip /></div>
+      <div class="hidden min-w-0 rail:block rail:flex-auto"><TaxonChip /></div>
       <!-- Below the row, centred on the page, so the chips can fill the row. -->
       <MapProgress v-if="!near" class="absolute left-1/2 top-9 -translate-x-1/2 rail:top-11" />
-      <div
-        v-if="!near"
-        class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap rail:flex rail:flex-1"
-      >
-        <button type="button" class="near-btn" data-tour="near" @click="toggleNear">
+      <div class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap rail:flex rail:flex-1">
+        <button type="button" class="pill-btn near-btn" data-tour="near" :aria-pressed="near" @click="toggleNear">
           <svg
             viewBox="0 0 24 24"
             class="size-4"
@@ -182,42 +205,81 @@ onBeforeUnmount(() => {
           Near me
         </button>
       </div>
-      <!-- Phone: Near me + Filters button (the rail is hidden). Grouped at the right, so Filters stays put while
-           Near me fades. -->
-      <div class="ml-auto flex shrink-0 rail:hidden">
-        <Transition name="fade">
+      <!-- Phone: Explore, Filters and Near me (the rail is hidden), grouped at the right. Explore opens all results;
+           wider screens have the results panel's own tab. -->
+      <div class="phone-row ml-auto flex shrink-0 rail:hidden">
+        <button
+          v-if="!near"
+          type="button"
+          class="pill-btn phone-btn explore-btn"
+          :aria-expanded="allResultsOpen"
+          @click="toggleAllResults"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path :d="listIcon" />
+          </svg>
+          Explore
+        </button>
+        <!-- One pill: Filters with its count, and once any are set, a × that clears them all. -->
+        <span class="filters-pill" :class="{ active: activeFilters }">
           <button
-            v-if="!near || nearLeaving"
             type="button"
-            class="near-btn near-phone"
-            data-tour="near"
-            @click="toggleNear"
+            class="filters-btn"
+            data-tour="filters"
+            :aria-expanded="filtersOpen"
+            @click="openFilters"
           >
             <svg
               viewBox="0 0 24 24"
               class="size-4"
               fill="none"
               stroke="currentColor"
-              stroke-width="1.8"
+              stroke-width="2"
               aria-hidden="true"
             >
-              <path :d="pinIcon" />
+              <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
-            <span class="sr-only">Near me</span>
+            Filters
+            <span v-if="activeFilters" class="count-badge tabular-nums"
+              >{{ activeFilters }}<span class="sr-only"> active</span></span
+            >
           </button>
-        </Transition>
+          <button
+            v-if="activeFilters"
+            type="button"
+            class="filters-clear"
+            aria-label="Clear filters"
+            @click="clearFilters"
+          >
+            <UiIcon name="close" size="0.875rem" />
+          </button>
+        </span>
         <button
           type="button"
-          class="filters-btn"
-          data-tour="filters"
-          :aria-expanded="filtersOpen"
-          :class="{ active: activeFilters }"
-          @click="openFilters"
+          class="pill-btn phone-btn near-btn"
+          data-tour="near"
+          :aria-pressed="near"
+          @click="toggleNear"
         >
-          <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M4 6h16M7 12h10M10 18h4" />
+          <svg
+            viewBox="0 0 24 24"
+            class="size-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            aria-hidden="true"
+          >
+            <path :d="pinIcon" />
           </svg>
-          Filters<span v-if="activeFilters" class="tabular-nums"> ({{ activeFilters }})</span>
+          Near me
         </button>
       </div>
       <!-- From tablet width up; Near me draws its own beside its panel. -->
@@ -254,7 +316,19 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="pointer-events-auto">
-      <ResponsivePanel :title="panelTitle" :open="panelOpen" @close="closePanel">
+      <!-- Only fills while open, so a tucked panel makes no requests. -->
+      <ResponsivePanel
+        v-if="!near"
+        :title="resultsTitle"
+        :open="resultsOpen"
+        collapsible
+        tab-label="Explore"
+        @close="hideResults"
+        @open="showResults"
+      >
+        <HexPanel v-if="resultsOpen" />
+      </ResponsivePanel>
+      <ResponsivePanel title="Filters" :open="filtersOpen" @close="closeFilters">
         <template v-if="filtersOpen" #top>
           <FilterSheetTabs v-model="filterTab" />
         </template>
@@ -270,20 +344,19 @@ onBeforeUnmount(() => {
             Clear all
           </button>
         </template>
-        <div v-if="filtersOpen" class="sm:space-y-4 md:pt-0 pt-4">
+        <div class="sm:space-y-4 md:pt-0 pt-4">
           <FilterSheetSettings v-if="filterTab === 'settings'" role="tabpanel" />
           <div v-else role="tabpanel">
             <FilterGroup :group="filterTab" />
           </div>
         </div>
-        <HexPanel v-else />
       </ResponsivePanel>
     </div>
   </div>
 </template>
 
 <style scoped>
-.filters-btn {
+.pill-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -294,40 +367,92 @@ onBeforeUnmount(() => {
   background: var(--surface);
   color: var(--text-muted);
   font-size: 0.8125rem;
-  box-shadow: var(--shadow);
-}
-
-.near-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 0.8125rem;
+  white-space: nowrap;
   box-shadow: var(--shadow);
   cursor: pointer;
 }
-.near-btn:hover {
+.pill-btn:hover {
   color: var(--text);
-}
-.near-phone,
-.filters-btn {
-  flex-shrink: 0;
-}
-.near-phone {
-  width: 2rem;
-  margin-right: 0.5rem; /* the phone row has no gap, so the chips' scroll box can meet this button */
-  justify-content: center;
-  padding: 0;
 }
 
-.filters-btn.active {
-  color: var(--text);
+/* Near me is the page's other way in, so it stands out from the plain pills. */
+.near-btn,
+.near-btn:hover {
   border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.near-btn:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--text));
+}
+.phone-btn {
+  flex-shrink: 0;
+}
+
+/* Styled as a pill-btn, split in two: the × only shows while filters are set. */
+.filters-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.filters-pill.active {
+  border-color: var(--accent);
+}
+.filters-btn,
+.filters-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.75rem;
+  border-radius: inherit;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.filters-pill.active .filters-btn,
+.filters-btn:hover,
+.filters-clear:hover {
+  color: var(--text);
+}
+/* Squared at the join, so the divider is a straight line. */
+.filters-btn:has(+ .filters-clear) {
+  border-radius: 999px 0 0 999px;
+}
+.filters-clear {
+  padding: 0 0.625rem;
+  border-left: 1px solid var(--accent);
+  border-radius: 0 999px 999px 0;
+}
+.count-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 0.6875rem;
+}
+
+/* Explore, Filters and Near me share a 360px phone's row, so they sit closer there. */
+.phone-row {
+  gap: 0.5rem;
+}
+@media (max-width: 399.98px) {
+  .top-bar,
+  .phone-row {
+    gap: 0.25rem;
+  }
+  .top-bar .pill-btn,
+  .filters-btn {
+    gap: 0.25rem;
+    padding: 0 0.4375rem;
+  }
 }
 
 .bottom-dock {
@@ -366,10 +491,17 @@ onBeforeUnmount(() => {
   }
 }
 
+/* Where the results panel is a side panel, its own Explore tab opens it. */
+@media (min-width: 768px) {
+  .explore-btn {
+    display: none;
+  }
+}
+
 /* Phone-only controls (scoped display would otherwise beat a rail:hidden utility). */
 @media (min-width: 1000px) {
-  .filters-btn,
-  .near-phone {
+  .filters-pill,
+  .phone-btn {
     display: none;
   }
 }
@@ -404,6 +536,9 @@ onBeforeUnmount(() => {
 
 /* Keep the dock, flyout and map notes clear of the desktop side panel. */
 @media (min-width: 768px) {
+  .top-bar {
+    transition: right var(--dur-slow) var(--ease);
+  }
   .panel-open .top-bar {
     right: calc(var(--panel-width) + 1.5rem);
     /* MapProgress centres in this narrowed bar; this keeps a long note from running under the panel or rail. */
@@ -425,18 +560,9 @@ onBeforeUnmount(() => {
     right: calc(var(--panel-width) + 1.5rem);
     transition: right var(--dur-slow) var(--ease);
   }
-  /* Follows NearExplorer's basemap switcher when the list is tucked to a strip (its .near-bar.tucked). */
+  /* Follows NearExplorer's basemap switcher to the screen edge when the list is tucked away (its .near-bar.tucked). */
   .near:has(.near-bar.tucked) .top-bar {
-    right: 4.75rem;
+    right: 0.75rem;
   }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity var(--dur-slow) var(--ease);
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 </style>

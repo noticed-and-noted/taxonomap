@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Selected cell summary: record count, a sortable species table that can be
+ * Results summary for the selected cell, or for every record the filters match
+ * when no cell is selected: record count, a sortable species table that can be
  * narrowed to one group, and radial seasonality.
  */
 import { useStore } from '@nanostores/vue';
@@ -11,7 +12,7 @@ import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
 import { HEX_SPECIES, useHexSummary } from '~/composables/useHexSummary';
 import { full } from '~/lib/format';
 import { loadSpeciesManifest } from '~/lib/species/links';
-import { $hexGeometry } from '~/stores/explorer';
+import { $hexGeometry, $selectedHex } from '~/stores/explorer';
 import { $taxa } from '~/stores/taxon';
 import HexRecords from './HexRecords.vue';
 import SpeciesTable from './SpeciesTable.vue';
@@ -31,11 +32,12 @@ const tableNote = computed(() => {
 });
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
+const hex = useStore($selectedHex);
 const tab = ref<'species' | 'records'>('species');
 </script>
 
 <template>
-  <div v-if="!geometry" role="status" aria-label="Finding the selected cell">
+  <div v-if="hex && !geometry" role="status" aria-label="Finding the selected cell">
     <SkeletonBlock height="1.875rem" width="50%" />
     <p class="mt-1 text-sm text-subtle">Finding the selected cell on the map…</p>
   </div>
@@ -61,7 +63,8 @@ const tab = ref<'species' | 'records'>('species');
         <template v-else-if="count !== null">
           <p class="font-display text-3xl leading-none tabular-nums">{{ full(count) }}</p>
           <p class="mt-1 text-sm text-muted">
-            record{{ count === 1 ? '' : 's' }} in this cell<span v-if="taxa.length === 1">
+            record{{ count === 1 ? '' : 's' }}{{ hex ? ' in this cell' : ''
+            }}<span v-if="taxa.length === 1">
               for <span v-if="taxa[0]?.commonName">{{ taxa[0].commonName }}</span
               ><span v-else class="sci-name">{{ taxa[0]?.scientificName }}</span></span
             ><span v-else-if="taxa.length"> for {{ taxa.length }} selected taxa</span>
