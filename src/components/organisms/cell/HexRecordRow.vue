@@ -9,7 +9,7 @@ import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import type { Occurrence, UsableImage } from '~/lib/gbif';
 import { initials } from '~/lib/format';
-import { recordDate, recordScientificName, typeCode, typeLabel } from '~/lib/record-fields';
+import { recordDate, recordDateTime, recordScientificName, typeCode, typeLabel } from '~/lib/record-fields';
 
 defineProps<{
   occurrence: Occurrence;
@@ -78,12 +78,22 @@ const emit = defineEmits<{
         </span>
       </button>
     </td>
-    <td class="py-1.5">
+    <td class="py-1.5 text-center">
       <span class="type-code" tabindex="0" :data-tip="typeLabel(occurrence)" :aria-label="typeLabel(occurrence)">{{
         typeCode(occurrence)
       }}</span>
     </td>
-    <td class="truncate py-1.5 pr-4 text-right text-xs tabular-nums">{{ recordDate(occurrence) ?? '—' }}</td>
+    <td class="py-1.5 pr-4 text-right text-xs tabular-nums">
+      <span
+        v-if="recordDateTime(occurrence)"
+        class="tip"
+        tabindex="0"
+        :data-tip="recordDateTime(occurrence)"
+        :aria-label="recordDateTime(occurrence)"
+        >{{ recordDate(occurrence) }}</span
+      >
+      <template v-else>{{ recordDate(occurrence) ?? '—' }}</template>
+    </td>
   </tr>
 </template>
 
@@ -130,6 +140,9 @@ const emit = defineEmits<{
 :root[data-theme='light'] .record[data-type='MATERIAL_CITATION'] {
   --type: #185fa5;
 }
+.tip {
+  position: relative;
+}
 .type-code {
   position: relative;
   display: inline-block;
@@ -144,7 +157,8 @@ const emit = defineEmits<{
 /* Tooltip to the left, so the scroll box never clips it above or below. Hover devices only: on touch
    it is never seen, and its hidden box sits over the list's scroll surface. */
 @media (hover: hover) {
-  .type-code::after {
+  .type-code::after,
+  .tip::after {
     content: attr(data-tip);
     position: absolute;
     right: calc(100% + 0.375rem);
@@ -163,7 +177,9 @@ const emit = defineEmits<{
     transition: opacity 120ms;
   }
   .type-code:hover::after,
-  .type-code:focus-visible::after {
+  .type-code:focus-visible::after,
+  .tip:hover::after,
+  .tip:focus-visible::after {
     opacity: 1;
   }
 }

@@ -227,12 +227,12 @@ function toggle(occurrence: Occurrence) {
             <col class="w-14" />
             <col />
             <col class="w-[3.25rem]" />
-            <col class="w-[6.5rem]" />
+            <col class="w-[5.4rem]" />
           </colgroup>
           <tbody>
             <tr>
               <td colspan="2" class="py-1.5 pl-4" aria-hidden="true">Species</td>
-              <td class="py-1.5" aria-hidden="true">Type</td>
+              <td class="py-1.5 text-center" aria-hidden="true">Type</td>
               <td class="py-1.5 pr-4 text-right">
                 <button
                   type="button"
@@ -261,7 +261,7 @@ function toggle(occurrence: Occurrence) {
             <col class="w-14" />
             <col />
             <col class="w-[3.25rem]" />
-            <col class="w-[6.5rem]" />
+            <col class="w-[5.4rem]" />
           </colgroup>
           <thead class="sr-only">
             <tr>

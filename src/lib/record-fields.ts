@@ -41,6 +41,19 @@ export function recordDate(occurrence: Occurrence): string | undefined {
   return occurrence.eventDate?.slice(0, 10) ?? (occurrence.year ? String(occurrence.year) : undefined);
 }
 
+/** A date with no time, as GBIF writes one (YYYY-MM-DD). */
+const DATE_ONLY_LENGTH = 10;
+
+/**
+ * The record's full event date and time for the date's tooltip ("2024-05-06 10:00:00 UTC", or a range
+ * such as "2010-10-14 – 2010-10-20"); undefined when the date alone is all it has.
+ */
+export function recordDateTime(occurrence: Occurrence): string | undefined {
+  const eventDate = occurrence.eventDate;
+  if (!eventDate || eventDate.length <= DATE_ONLY_LENGTH) return undefined;
+  return eventDate.replaceAll('T', ' ').replaceAll('Z', ' UTC').replace('/', ' – ');
+}
+
 /** The basis of record in words, for the type code's tooltip. */
 export function typeLabel(occurrence: Occurrence): string {
   return (
