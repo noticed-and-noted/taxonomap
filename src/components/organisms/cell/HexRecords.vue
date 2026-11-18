@@ -233,7 +233,7 @@ function toggle(occurrence: Occurrence) {
             <tr>
               <td colspan="2" class="py-1.5 pl-4" aria-hidden="true">Species</td>
               <td class="py-1.5" aria-hidden="true">Type</td>
-              <td class="py-1.5 pr-4">
+              <td class="py-1.5 pr-4 text-right">
                 <button
                   type="button"
                   class="sort"

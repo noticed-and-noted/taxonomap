@@ -83,7 +83,7 @@ const emit = defineEmits<{
         typeCode(occurrence)
       }}</span>
     </td>
-    <td class="truncate py-1.5 pr-4 text-xs tabular-nums">{{ recordDate(occurrence) ?? '—' }}</td>
+    <td class="truncate py-1.5 pr-4 text-right text-xs tabular-nums">{{ recordDate(occurrence) ?? '—' }}</td>
   </tr>
 </template>
 
