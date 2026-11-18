@@ -214,7 +214,9 @@ function occurrenceSearch(params: URLSearchParams) {
     return facet(field, counts, Number(params.get(`${field}.facetLimit`) ?? facetLimit), offset);
   });
   const today = new Date();
-  const results = Array.from({ length: Math.min(limit, species.length * 3) }, (_unused, index) => {
+  const recordOffset = Number(params.get('offset') ?? 0);
+  const results = Array.from({ length: Math.min(limit, species.length * 3) }, (_unused, position) => {
+    const index = recordOffset + position;
     const taxon = species[index % species.length]!;
     const day = new Date(today.getTime() - (index + 1) * 86_400_000).toISOString().slice(0, 10);
     return {

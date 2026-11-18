@@ -5,6 +5,7 @@
  * takes its column.
  */
 import type { StyleValue } from 'vue';
+import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import type { Occurrence, UsableImage } from '~/lib/gbif';
@@ -24,9 +25,13 @@ defineProps<{
   commonName?: string | undefined;
   /** The record's display name: its common name, else its scientific name. */
   name: string;
+  /** Whether the common name is still being looked up: a skeleton holds its place above the scientific name. */
+  isNamePending?: boolean;
   /** View-transition names for the photo and name while the row opens or closes. */
   photoStyle?: StyleValue | undefined;
   nameStyle?: StyleValue | undefined;
+  /** View-transition name for the scientific name while it takes the place of a name that never came. */
+  scientificNameStyle?: StyleValue | undefined;
 }>();
 const emit = defineEmits<{
   toggle: [];
@@ -69,10 +74,13 @@ const emit = defineEmits<{
         @click.stop="emit('toggle')"
       >
         <span class="inline-block max-w-full align-top" :style="nameStyle">
-          <span class="block truncate" :class="{ 'sci-name': !commonName }">{{ name }}</span>
+          <span v-if="isNamePending" class="block"><NameSkeleton /></span>
+          <span v-else-if="commonName" class="block truncate">{{ commonName }}</span>
+          <span v-else class="sci-name block truncate" :style="scientificNameStyle">{{ name }}</span>
           <span
-            v-if="commonName && recordScientificName(occurrence)"
+            v-if="(commonName || isNamePending) && recordScientificName(occurrence)"
             class="sci-name block truncate text-xs text-muted"
+            :style="isNamePending ? scientificNameStyle : undefined"
             >{{ recordScientificName(occurrence) }}</span
           >
         </span>

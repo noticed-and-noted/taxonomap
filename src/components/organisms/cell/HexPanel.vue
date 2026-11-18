@@ -5,14 +5,14 @@
  * narrowed to one group, and radial seasonality.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
 import { HEX_SPECIES, useHexSummary } from '~/composables/useHexSummary';
 import { full } from '~/lib/format';
 import { loadSpeciesManifest } from '~/lib/species/links';
-import { $hexGeometry, $selectedHex } from '~/stores/explorer';
+import { $hexGeometry, $openRecord, $selectedHex } from '~/stores/explorer';
 import { $taxa } from '~/stores/taxon';
 import HexRecords from './HexRecords.vue';
 import SpeciesTable from './SpeciesTable.vue';
@@ -33,7 +33,9 @@ const tableNote = computed(() => {
 onMounted(() => void loadSpeciesManifest());
 const geometry = useStore($hexGeometry);
 const hex = useStore($selectedHex);
-const tab = ref<'species' | 'records'>('species');
+// A link or reload with a record open opens the records on it.
+const tab = ref<'species' | 'records'>($openRecord.get() === null ? 'species' : 'records');
+watch(tab, (mode) => mode === 'species' && $openRecord.set(null));
 </script>
 
 <template>

@@ -1,4 +1,5 @@
 /** Names for the cell's record list and species filter: the table's, then looked up a batch at a time. */
+import type { ApplyNames } from '~/components/organisms/cell/useRecordNames';
 import type { Occurrence } from '~/lib/gbif';
 import type { SpeciesRow } from '~/lib/species/groups';
 
@@ -17,9 +18,9 @@ const ROWS: SpeciesRow[] = [
 
 const record = (fields: Partial<Occurrence>) => ({ key: 9, ...fields }) as Occurrence;
 
-async function names(rows: SpeciesRow[] = ROWS) {
+async function names(rows: SpeciesRow[] = ROWS, applyNames?: ApplyNames) {
   const { useRecordNames } = await import('~/components/organisms/cell/useRecordNames');
-  return useRecordNames(() => rows);
+  return useRecordNames(() => rows, applyNames);
 }
 
 beforeEach(() => {
@@ -99,6 +100,53 @@ describe('useRecordNames', () => {
     resolveNames.mockRejectedValue(new Error('down'));
     await expect(recordNames.nameOptions([3])).rejects.toThrow('down');
     expect(recordNames.pendingNames.value.size).toBe(0);
+  });
+
+  it('marks a record’s name pending until its first lookup is back, and never again after', async () => {
+    let finish = () => {};
+    commonNames.mockImplementation(
+      (keys) =>
+        new Promise((resolve) => {
+          finish = () => resolve(new Map(keys.flatMap((key) => (key === 3 ? [[3, 'Magpie']] : []))));
+        }),
+    );
+    const recordNames = await names();
+    const magpie = record({ speciesKey: 3 });
+    const nameless = record({ speciesKey: 8 });
+    const lookup = recordNames.nameRecords([magpie, nameless, record({ speciesKey: 1 })]);
+    expect([magpie, nameless, record({ speciesKey: 1 })].map(recordNames.isNamePending)).toEqual([true, true, false]);
+    finish();
+    await lookup;
+    expect([magpie, nameless].map(recordNames.isNamePending)).toEqual([false, false]);
+    const again = recordNames.nameRecords([nameless]);
+    expect(recordNames.isNamePending(nameless)).toBe(false);
+    finish();
+    await again;
+    expect(recordNames.isNamePending(record({}))).toBe(false);
+  });
+
+  it('hands each batch to the page with the keys that have no name, to show when it likes', async () => {
+    const applied: number[][] = [];
+    const applyNames: ApplyNames = (nameless, update) => {
+      applied.push([...nameless]);
+      expect(recordNames.isNamePending(record({ speciesKey: 3 }))).toBe(true);
+      update();
+    };
+    const recordNames = await names(ROWS, applyNames);
+    await recordNames.nameSpecies([3, 8]);
+    expect(applied).toEqual([[8]]);
+    expect(recordNames.recordName(record({ speciesKey: 3 }))).toBe('Magpie');
+  });
+
+  it('stops waiting on keys whose lookup was cancelled', async () => {
+    const recordNames = await names();
+    const controller = new AbortController();
+    commonNames.mockImplementation(async () => {
+      controller.abort();
+      return new Map();
+    });
+    await recordNames.nameRecords([record({ speciesKey: 8 })], controller.signal);
+    expect(recordNames.isNamePending(record({ speciesKey: 8 }))).toBe(false);
   });
 
   it('names a record by its species, else the name typed on it, else its scientific name', async () => {

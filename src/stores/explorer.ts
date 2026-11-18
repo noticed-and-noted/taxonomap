@@ -151,6 +151,8 @@ const hexCodec: UrlCodec<HexPoint> = {
 
 export const $selectedHex = urlAtom(hexCodec);
 export const $panel = urlAtom(codecs.enumOf('panel', PANELS, 'none', { scope: 'map' }));
+/** The record open in the cell's (or near me's) record list. Replaced, not pushed: stepping through rows adds no history. */
+export const $openRecord = urlAtom(codecs.int('record', null, { history: 'replace', scope: 'map' }));
 export const $basemap = urlAtom(codecs.enumOf('base', BASEMAP_IDS, 'plain', { history: 'replace', scope: 'map' }));
 
 /* ---- Ephemeral (not in the URL): derived from URL state or one-shot requests ---- */
@@ -224,6 +226,7 @@ export const $busiestHexBox = atom<ScreenBox | null>(null);
 export function clearHexSelection(): void {
   $selectedHex.set(null);
   $hexGeometry.set(null);
+  $openRecord.set(null);
   if ($panel.get() === 'hex') $panel.set('none');
 }
 

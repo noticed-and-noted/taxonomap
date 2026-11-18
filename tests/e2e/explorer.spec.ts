@@ -214,7 +214,27 @@ test('the cell panel lists records with their type, expands one and filters them
   await search.fill(name.slice(0, 4));
   await page.getByRole('option', { name: new RegExp(`^${name}`) }).click();
   await expect(search).toHaveValue(name);
-  await expect(rows).toHaveCount(3);
+  // Record rows only: the open record stays open when the filter still lists it.
+  await expect(rows.filter({ has: page.locator('[aria-expanded]') })).toHaveCount(3);
+});
+
+test('an open record lives in the URL, and a reload opens it again, even past the first page', async ({ page }) => {
+  await page.goto('/?taxon=212&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');
+  await page.getByRole('tab', { name: 'Records' }).click();
+  const rows = page.getByRole('table', { name: 'Records' }).locator('tbody tr');
+  await page.getByRole('button', { name: /^Show more/ }).click();
+  const last = rows.filter({ has: page.locator('[aria-expanded]') }).last();
+  const key = await last.getAttribute('data-record');
+  await last.getByRole('button').first().click();
+  await expect(page).toHaveURL(new RegExp(`record=${key}`));
+
+  await page.reload();
+  const opened = page.locator(`tbody tr[data-record="${key}"] [aria-expanded="true"]`);
+  await expect(opened).toBeVisible();
+  await expect(page.getByRole('link', { name: /GBIF record/ })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Species' }).click();
+  await expect(page).not.toHaveURL(/record=/);
 });
 
 /** Opens the cell panel's records and expands the first one. */

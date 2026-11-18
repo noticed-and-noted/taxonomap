@@ -28,7 +28,7 @@ import {
   type SpeciesRow,
 } from '~/lib/near/data';
 import { loadSpeciesManifest } from '~/lib/species/links';
-import { $flyTo, $mapMode, $occurrenceFilter } from '~/stores/explorer';
+import { $flyTo, $mapMode, $occurrenceFilter, $openRecord } from '~/stores/explorer';
 import {
   $nearAt,
   $nearLeaving,
@@ -153,7 +153,11 @@ async function pickGroup(key: number | null) {
   });
 }
 
-const setTab = (nextTab: 'species' | 'recent') => $nearTab.set(nextTab);
+/** Switches list; leaving the records closes the open one, so the URL doesn't keep it. */
+const setTab = (nextTab: 'species' | 'recent') => {
+  $nearTab.set(nextTab);
+  if (nextTab === 'species') $openRecord.set(null);
+};
 
 /** Frame the pin and radius, zooming out if the panels leave too little room; filter changes leave the view where it is. */
 function flyToArea() {
