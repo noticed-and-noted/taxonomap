@@ -282,6 +282,93 @@ function toOccurrence(record: GraphqlRecord, speciesKey: number | undefined): Oc
   return speciesKey === undefined ? occurrence : { ...occurrence, speciesKey };
 }
 
+/** Oldest or newest first, as GraphQL spells it. */
+export type DateOrder = 'ASC' | 'DESC';
+
+/** GraphQL won't page past this many records (`from` + `size`); REST goes much deeper. */
+export const MAX_DATED_RECORDS = 6000;
+
+/** One taxon in a GraphQL record's classification. Keys come as strings. */
+interface ClassifiedTaxon {
+  key: string;
+  name: string;
+  rank: Rank;
+}
+
+/** A listed record as GraphQL sends it: taxa under `classification`, some text fields as lists. */
+type ListedGraphqlRecord = Omit<GraphqlRecord, 'datasetName' | 'recordedBy'> & {
+  datasetName?: string[] | null;
+  recordedBy?: string[] | null;
+  classification?: {
+    usage?: ClassifiedTaxon | null;
+    acceptedUsage?: Omit<ClassifiedTaxon, 'rank'> | null;
+    classification?: ClassifiedTaxon[] | null;
+  } | null;
+};
+
+/** The ranks whose key and name a record carries flat, as REST's `familyKey` and `family`. */
+const HIGHER_RANKS: readonly Rank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GENUS', 'SPECIES'];
+
+/** The record fields the cell's record list reads: its row, its details and its place on the map. */
+const LISTED_RECORD_FIELDS =
+  `${RECORD_FIELDS} datasetName publishingOrgKey basisOfRecord eventDate year recordedBy vernacularName ` +
+  'decimalLatitude decimalLongitude coordinateUncertaintyInMeters informationWithheld ' +
+  'classification { usage { key name rank } acceptedUsage { key name } classification { key name rank } }';
+
+/**
+ * One page of records matching a filter, by date, newest or oldest first: what REST's search can't sort.
+ * Pages past MAX_DATED_RECORDS come back empty, as GBIF refuses them.
+ * @returns The records as REST's search sends them, and how many match in all.
+ */
+export async function searchOccurrencesByDate(
+  filter: OccurrenceFilter,
+  page: { order: DateOrder; limit: number; offset: number },
+  signal?: AbortSignal,
+): Promise<{ count: number; results: Occurrence[] }> {
+  const size = Math.min(page.limit, MAX_DATED_RECORDS - page.offset);
+  if (size <= 0) return { count: 0, results: [] };
+
+  const data = await runQuery<{
+    occurrenceSearch: { documents: { total: number; results: ListedGraphqlRecord[] } };
+  }>(
+    `query DatedRecords($predicate: Predicate) {
+      occurrenceSearch(predicate: $predicate) {
+        documents(size: ${size}, from: ${page.offset}, sortBy: eventDate, sortOrder: ${page.order}) {
+          total results { ${LISTED_RECORD_FIELDS} }
+        }
+      }
+    }`,
+    { predicate: toPredicate(filterToParams(filter)) },
+    { signal },
+  );
+
+  const { total, results } = data.occurrenceSearch.documents;
+  return { count: total, results: results.map(toListedOccurrence) };
+}
+
+/** A listed GraphQL record as REST's occurrence: taxa as flat keys and names, lists joined into one line. */
+function toListedOccurrence(record: ListedGraphqlRecord): Occurrence {
+  const { classification, datasetName, recordedBy, ...flat } = record;
+  const { usage, acceptedUsage } = classification ?? {};
+  const higher = (classification?.classification ?? []).filter((taxon) => HIGHER_RANKS.includes(taxon.rank));
+  const higherFields = higher.flatMap((taxon) => {
+    const field = taxon.rank.toLowerCase();
+    return [
+      [`${field}Key`, Number(taxon.key)],
+      [field, taxon.name],
+    ];
+  });
+
+  return {
+    ...toOccurrence(flat, undefined),
+    ...Object.fromEntries(higherFields),
+    ...(usage && { taxonKey: Number(usage.key), scientificName: usage.name, taxonRank: usage.rank }),
+    ...(acceptedUsage && { acceptedTaxonKey: Number(acceptedUsage.key), acceptedScientificName: acceptedUsage.name }),
+    ...(datasetName?.length && { datasetName: datasetName.join(', ') }),
+    ...(recordedBy?.length && { recordedBy: recordedBy.join(', ') }),
+  };
+}
+
 /** Most publishers findPublishers returns. */
 export const MAX_PUBLISHER_RESULTS = 10;
 

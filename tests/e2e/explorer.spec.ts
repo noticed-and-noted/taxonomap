@@ -620,7 +620,7 @@ test('the request meter, with ?debug=requests, hides and shows with Ctrl+D and r
 
 test('a record list that fails to load offers to try again', async ({ page }) => {
   let isDown = true;
-  await page.route(/\/v1\/occurrence\/search\?.*limit=(?!0\b)\d+/, (route) =>
+  await page.route(/\/graphql\?.*DatedRecords/, (route) =>
     isDown ? route.fulfill({ status: 500, body: '' }) : route.fallback(),
   );
   await page.goto('/?taxon=212&view=-1.50,52.50,5.0&hex=-1.5000,52.5000&panel=hex');

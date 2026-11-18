@@ -340,7 +340,40 @@ function search(query: string, predicate: PredicatePart) {
       return { ...bucket, occurrences: { documents: { results: occurrenceSearch(recordSearch).results } } };
     });
   }
-  return { documents: { total: occurrenceSearch(search).count }, facet };
+  return { documents: { total: occurrenceSearch(search).count, ...datedRecords(query, search) }, facet };
+}
+
+/** The ranks a fake record carries flat, as GraphQL lists them under `classification`. */
+const CLASSIFIED_RANKS = ['kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species'];
+
+/** A search's page of records by date (searchOccurrencesByDate), in GraphQL's shape; none for other searches. */
+function datedRecords(query: string, search: URLSearchParams) {
+  const page = /documents\(size: (\d+), from: (\d+), sortBy: eventDate, sortOrder: (ASC|DESC)\)/.exec(query);
+  if (!page) return {};
+  const [, size, from, order] = page;
+  const recordSearch = new URLSearchParams(search);
+  recordSearch.set('limit', size!);
+  recordSearch.set('offset', from!);
+  // The REST fake lists records newest first.
+  const newestFirst = occurrenceSearch(recordSearch).results;
+  const ordered = order === 'DESC' ? newestFirst : [...newestFirst].reverse();
+  return { results: ordered.map(toGraphqlRecord) };
+}
+
+/** A fake REST record as GraphQL sends it: taxa under `classification`, recorders as a list. */
+function toGraphqlRecord(record: ReturnType<typeof occurrenceSearch>['results'][number]) {
+  const fields = record as unknown as Record<string, unknown>;
+  const classification = CLASSIFIED_RANKS.filter((rank) => fields[`${rank}Key`] !== undefined).map((rank) => ({
+    key: String(fields[`${rank}Key`]),
+    name: String(fields[rank]),
+    rank: rank.toUpperCase(),
+  }));
+  const usage = { key: String(record.taxonKey), name: record.scientificName, rank: 'SPECIES' };
+  return {
+    ...record,
+    recordedBy: [record.recordedBy],
+    classification: { usage, acceptedUsage: usage, classification },
+  };
 }
 
 function speciesSearch(params: URLSearchParams) {

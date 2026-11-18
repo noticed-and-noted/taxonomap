@@ -1,20 +1,29 @@
 <script setup lang="ts">
 /**
- * Individual records in the selected cell (or all results), a page at a time in GBIF's order, as a table with a short record
- * type code (FOS, SPE…; the full type on hover). A row expands to its photo (opening a lightbox of all its
- * photos) and details. No column sorts: GBIF's occurrence search has no sort parameter. A species filter
+ * Individual records in the selected cell (or all results), a page at a time by date (newest first, or oldest), as a table with a
+ * short record type code (FOS, SPE…; the full type on hover). A row expands to its photo (opening a lightbox of all
+ * its photos) and details. Only the date sorts: GBIF's GraphQL search sorts, REST's doesn't. A species filter
  * narrows the list. Pass `filter` to list another area's records (near me) instead of the selected cell's.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
+import UiIcon from '~/components/atoms/UiIcon.vue';
 import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ListSkeleton from '~/components/molecules/ListSkeleton.vue';
 import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { useScrollFade } from '~/composables/useScrollFade';
 import { full } from '~/lib/format';
-import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
+import {
+  MAX_DATED_RECORDS,
+  searchOccurrencesByDate,
+  usableImages,
+  type DateOrder,
+  type Occurrence,
+  type OccurrenceFilter,
+  type UsableImage,
+} from '~/lib/gbif';
 import { recordPlace } from '~/lib/map/recordPlace';
 import { aboutKey } from '~/lib/record-fields';
 import type { SpeciesRow } from '~/lib/species/groups';
@@ -41,9 +50,11 @@ const area = computed(() => props.filter ?? resultsFilter.value);
 
 /** Chosen speciesKey, or '' for all species. */
 const speciesKey = ref<number | ''>('');
+const dateOrder = ref<DateOrder>('DESC');
 const records = shallowRef<Occurrence[]>([]);
 const total = ref<number | null>(null);
-const hasMore = computed(() => total.value !== null && records.value.length < total.value);
+// GraphQL pages no deeper than MAX_DATED_RECORDS, however many match.
+const hasMore = computed(() => total.value !== null && records.value.length < Math.min(total.value, MAX_DATED_RECORDS));
 /** Expanded row's occurrence key. */
 const expanded = ref<number | null>(null);
 const scroller = ref<HTMLElement>();
@@ -63,7 +74,8 @@ async function load(more = false) {
   await run(async (signal) => {
     const pageFilter = { ...baseFilter, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
     const offset = more ? records.value.length : 0;
-    const response = await searchOccurrences(pageFilter, { limit: PAGE_SIZE, offset }, signal);
+    const page = { order: dateOrder.value, limit: PAGE_SIZE, offset };
+    const response = await searchOccurrencesByDate(pageFilter, page, signal);
     if (signal.aborted) return;
     records.value = more ? [...records.value, ...response.results] : response.results;
     if (!more) expanded.value = null;
@@ -81,7 +93,7 @@ watch(
   },
   { immediate: true },
 );
-watch(speciesKey, () => void load());
+watch([speciesKey, dateOrder], () => void load());
 watch(records, () => void nextTick(updateFade));
 
 // Mark the expanded record on the map, when it has coordinates.
@@ -209,8 +221,8 @@ function toggle(occurrence: Occurrence) {
 
     <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
     <div v-if="records.length" :class="{ 'flex min-h-0 flex-1 flex-col': fill }">
-      <div class="head-row -mx-4 text-xs text-subtle" aria-hidden="true">
-        <table class="w-full table-fixed text-sm">
+      <div class="head-row -mx-4 text-xs text-subtle">
+        <table class="w-full table-fixed text-sm" role="presentation">
           <colgroup>
             <col class="w-14" />
             <col />
@@ -219,9 +231,18 @@ function toggle(occurrence: Occurrence) {
           </colgroup>
           <tbody>
             <tr>
-              <td colspan="2" class="py-1.5 pl-4">Species</td>
-              <td class="py-1.5">Type</td>
-              <td class="py-1.5 pr-4">Date</td>
+              <td colspan="2" class="py-1.5 pl-4" aria-hidden="true">Species</td>
+              <td class="py-1.5" aria-hidden="true">Type</td>
+              <td class="py-1.5 pr-4">
+                <button
+                  type="button"
+                  class="sort"
+                  :aria-label="dateOrder === 'DESC' ? 'Date, newest first' : 'Date, oldest first'"
+                  @click="dateOrder = dateOrder === 'DESC' ? 'ASC' : 'DESC'"
+                >
+                  Date<UiIcon :name="dateOrder === 'DESC' ? 'sort-desc' : 'sort-asc'" class="ml-0.5" />
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -247,7 +268,7 @@ function toggle(occurrence: Occurrence) {
               <th scope="col">Photo</th>
               <th scope="col">Species</th>
               <th scope="col">Type</th>
-              <th scope="col">Date</th>
+              <th scope="col" :aria-sort="dateOrder === 'DESC' ? 'descending' : 'ascending'">Date</th>
             </tr>
           </thead>
           <tbody :class="{ 'used-pointer': usedPointer }" @keydown="onListKey" @pointerdown="usedPointer = true">
@@ -295,7 +316,7 @@ function toggle(occurrence: Occurrence) {
           <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="4.5rem" height="0.75rem" /></span>
         </ListSkeleton>
         <button
-          v-else-if="total !== null && records.length < total"
+          v-else-if="total !== null && hasMore"
           type="button"
           class="mx-4 mt-2 w-[calc(100%-2rem)] rounded-md border border-border py-1 text-sm hover:bg-surface-2"
           @click="load(true)"
@@ -332,6 +353,12 @@ function toggle(occurrence: Occurrence) {
 }
 :global(html.records-transition::view-transition) {
   clip-path: var(--records-clip);
+}
+.sort {
+  color: inherit;
+}
+.sort:hover {
+  color: var(--text);
 }
 .head-row {
   overflow-y: hidden;
