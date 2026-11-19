@@ -1,20 +1,29 @@
 <script setup lang="ts">
 /**
- * Individual records in the selected cell (or all results), a page at a time in GBIF's order, as a table with a short record
- * type code (FOS, SPE…; the full type on hover). A row expands to its photo (opening a lightbox of all its
- * photos) and details. No column sorts: GBIF's occurrence search has no sort parameter. A species filter
+ * Individual records in the selected cell (or all results), a page at a time by date (newest first, or oldest), as a table with a
+ * short record type code (FOS, SPE…; the full type on hover). A row expands to its photo (opening a lightbox of all
+ * its photos) and details. Only the date sorts: GBIF's GraphQL search sorts, REST's doesn't. A species filter
  * narrows the list. Pass `filter` to list another area's records (near me) instead of the selected cell's.
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
+import UiIcon from '~/components/atoms/UiIcon.vue';
 import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ListSkeleton from '~/components/molecules/ListSkeleton.vue';
 import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { useScrollFade } from '~/composables/useScrollFade';
 import { full } from '~/lib/format';
-import { searchOccurrences, usableImages, type Occurrence, type OccurrenceFilter, type UsableImage } from '~/lib/gbif';
+import {
+  MAX_DATED_RECORDS,
+  searchOccurrencesByDate,
+  usableImages,
+  type DateOrder,
+  type Occurrence,
+  type OccurrenceFilter,
+  type UsableImage,
+} from '~/lib/gbif';
 import { recordPlace } from '~/lib/map/recordPlace';
 import { aboutKey } from '~/lib/record-fields';
 import type { SpeciesRow } from '~/lib/species/groups';
@@ -24,9 +33,12 @@ import HexRecordDetails from './HexRecordDetails.vue';
 import HexRecordRow from './HexRecordRow.vue';
 import HexRecordsSpeciesFilter from './HexRecordsSpeciesFilter.vue';
 import { revealInList, startListTransition } from './recordListScroll';
-import { useRecordNames } from './useRecordNames';
+import { useOpenRecord } from './useOpenRecord';
+import { useRecordNames, type ApplyNames } from './useRecordNames';
 
 const PAGE_SIZE = 20;
+/** Skeleton rows while a new order loads: about the list's height. */
+const RESORT_SKELETON_ROWS = 8;
 const ROW_KEYS: Record<string, number> = { ArrowDown: 1, ArrowUp: -1 };
 
 const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceFilter | null; fill?: boolean }>();
@@ -34,18 +46,24 @@ const props = defineProps<{ species: readonly SpeciesRow[]; filter?: OccurrenceF
 const resultsFilter = useStore($resultsFilter);
 const manifest = useStore($speciesManifest);
 const { loading, error, run } = useLatestLoad();
-const names = useRecordNames(() => props.species);
+const names = useRecordNames(() => props.species, applyNames);
 const uniqueId = useId();
 /** The listed area: the `filter` prop, else the results panel's (the selected cell, or all results). */
 const area = computed(() => props.filter ?? resultsFilter.value);
 
 /** Chosen speciesKey, or '' for all species. */
 const speciesKey = ref<number | ''>('');
+const dateOrder = ref<DateOrder>('DESC');
 const records = shallowRef<Occurrence[]>([]);
+/** How many of the listed records came from the search: a record opened from the URL can sit first as well. */
+const searchedCount = ref(0);
 const total = ref<number | null>(null);
-const hasMore = computed(() => total.value !== null && records.value.length < total.value);
-/** Expanded row's occurrence key. */
-const expanded = ref<number | null>(null);
+// GraphQL pages no deeper than MAX_DATED_RECORDS, however many match.
+const hasMore = computed(() => total.value !== null && searchedCount.value < Math.min(total.value, MAX_DATED_RECORDS));
+/** True while the list reloads in the other order: the rows wait, the header and count stay. */
+const isResorting = ref(false);
+/** Expanded row's occurrence key, kept in the URL. */
+const { expanded, withOpenRecord } = useOpenRecord();
 const scroller = ref<HTMLElement>();
 const { fadeBottom, update: updateFade } = useScrollFade(scroller);
 
@@ -55,21 +73,63 @@ const aboutHref = (occurrence: Occurrence) => {
   return key ? speciesPath(key, manifest.value) : undefined;
 };
 
-/** Loads the first page of records, or with `more` the next page after those listed. */
-async function load(more = false) {
+/** What a load fetches: a fresh first page, the first page in the other order (the rows stay until it's back), or the next page. */
+type LoadKind = 'first' | 'resort' | 'more';
+
+/** Loads a page of records (see LoadKind). */
+async function load(kind: LoadKind = 'first') {
   const baseFilter = area.value;
-  if (!more) records.value = [];
+  const more = kind === 'more';
+  isResorting.value = kind === 'resort';
+  if (kind === 'first') records.value = [];
   if (!baseFilter) return;
   await run(async (signal) => {
     const pageFilter = { ...baseFilter, ...(speciesKey.value !== '' && { speciesKeys: [speciesKey.value] }) };
-    const offset = more ? records.value.length : 0;
-    const response = await searchOccurrences(pageFilter, { limit: PAGE_SIZE, offset }, signal);
+    const page = { order: dateOrder.value, limit: PAGE_SIZE, offset: more ? searchedCount.value : 0 };
+    const response = await searchOccurrencesByDate(pageFilter, page, signal);
     if (signal.aborted) return;
-    records.value = more ? [...records.value, ...response.results] : response.results;
-    if (!more) expanded.value = null;
-    void names.nameRecords(response.results, signal);
+    const nextRecords = more ? withNextPage(response.results) : await withOpenRecord(response.results, signal);
+    if (signal.aborted) return;
+    records.value = nextRecords;
+    searchedCount.value = (more ? searchedCount.value : 0) + response.results.length;
+    isResorting.value = false;
+    void names.nameRecords(nextRecords, signal);
     total.value = response.count;
   });
+}
+
+/** The listed records and the next page after them, less the record opened from the URL, already listed first. */
+function withNextPage(page: readonly Occurrence[]): Occurrence[] {
+  const listed = new Set(records.value.map((occurrence) => occurrence.key));
+  return [...records.value, ...page.filter((occurrence) => !listed.has(occurrence.key))];
+}
+
+/** Taxa whose scientific name is moving up into the place of a common name that never came. */
+const growingTaxa = shallowRef(new Set<number>());
+
+/** The scientific name's view-transition name while it grows into the name's place. */
+function scientificNameStyle(occurrence: Occurrence) {
+  const key = aboutKey(occurrence);
+  return key !== undefined && growingTaxa.value.has(key)
+    ? { viewTransitionName: `rec-sci-${occurrence.key}` }
+    : undefined;
+}
+
+/** Shows a batch of names; where the scientific name takes a missing name's place, it moves up as a view transition. */
+async function applyNames(...[nameless, update]: Parameters<ApplyNames>) {
+  // An opening or closing row's transition is running: start no other, or it would cut that one short.
+  const canAnimate = nameless.length > 0 && !!document.startViewTransition && animating.value === null;
+  if (!canAnimate) return update();
+  growingTaxa.value = new Set(nameless);
+  await nextTick();
+  try {
+    await startListTransition(scroller.value, async () => {
+      update();
+      await nextTick();
+    });
+  } finally {
+    growingTaxa.value = new Set();
+  }
 }
 
 // Another cell, area or filter: the picked species may not be there any more.
@@ -82,6 +142,7 @@ watch(
   { immediate: true },
 );
 watch(speciesKey, () => void load());
+watch(dateOrder, () => void load('resort'));
 watch(records, () => void nextTick(updateFade));
 
 // Mark the expanded record on the map, when it has coordinates.
@@ -123,7 +184,7 @@ async function openPhotos(occurrence: Occurrence) {
 /** The record `delta` rows from `key`; stepping down past the last loaded record loads the next page first. */
 async function recordFrom(key: number | undefined, delta: number) {
   const isPastEnd = delta > 0 && positionOf(key) + delta >= records.value.length;
-  if (isPastEnd && hasMore.value && !loading.value) await load(true);
+  if (isPastEnd && hasMore.value && !loading.value) await load('more');
   const position = positionOf(key);
   return position < 0 ? undefined : records.value[position + delta];
 }
@@ -199,8 +260,10 @@ function toggle(occurrence: Occurrence) {
     </InlineAlert>
 
     <ListSkeleton v-else-if="loading && !records.length" label="Loading records" :fill="fill">
-      <span class="w-[3.25rem] shrink-0"><SkeletonBlock width="2rem" height="1rem" rounded="sm" /></span>
-      <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="4.5rem" height="0.75rem" /></span>
+      <span class="flex w-[3.25rem] shrink-0 justify-center">
+        <SkeletonBlock width="2rem" height="1rem" rounded="sm" />
+      </span>
+      <span class="flex w-[5.4rem] shrink-0 justify-end"><SkeletonBlock width="4rem" height="0.75rem" /></span>
     </ListSkeleton>
     <p v-else-if="!records.length" class="text-sm text-muted">No records to show.</p>
     <p v-else-if="total !== null" class="text-xs text-subtle" aria-live="polite">
@@ -209,19 +272,28 @@ function toggle(occurrence: Occurrence) {
 
     <!-- Column headers sit above the scroll box; colgroups and a stable scrollbar gutter keep the columns aligned. -->
     <div v-if="records.length" :class="{ 'flex min-h-0 flex-1 flex-col': fill }">
-      <div class="head-row -mx-4 text-xs text-subtle" aria-hidden="true">
-        <table class="w-full table-fixed text-sm">
+      <div class="head-row -mx-4 text-xs text-subtle">
+        <table class="w-full table-fixed text-sm" role="presentation">
           <colgroup>
             <col class="w-14" />
             <col />
             <col class="w-[3.25rem]" />
-            <col class="w-[6.5rem]" />
+            <col class="w-[5.4rem]" />
           </colgroup>
           <tbody>
             <tr>
-              <td colspan="2" class="py-1.5 pl-4">Species</td>
-              <td class="py-1.5">Type</td>
-              <td class="py-1.5 pr-4">Date</td>
+              <td colspan="2" class="py-1.5 pl-4" aria-hidden="true">Species</td>
+              <td class="py-1.5 text-center" aria-hidden="true">Type</td>
+              <td class="py-1.5 pr-4 text-right">
+                <button
+                  type="button"
+                  class="sort"
+                  :aria-label="dateOrder === 'DESC' ? 'Date, newest first' : 'Date, oldest first'"
+                  @click="dateOrder = dateOrder === 'DESC' ? 'ASC' : 'DESC'"
+                >
+                  Date<UiIcon :name="dateOrder === 'DESC' ? 'sort-desc' : 'sort-asc'" class="ml-0.5" />
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -235,19 +307,19 @@ function toggle(occurrence: Occurrence) {
         ]"
         @scroll.passive="updateFade"
       >
-        <table class="w-full table-fixed text-sm" aria-label="Records">
+        <table v-if="!isResorting" class="w-full table-fixed text-sm" aria-label="Records">
           <colgroup>
             <col class="w-14" />
             <col />
             <col class="w-[3.25rem]" />
-            <col class="w-[6.5rem]" />
+            <col class="w-[5.4rem]" />
           </colgroup>
           <thead class="sr-only">
             <tr>
               <th scope="col">Photo</th>
               <th scope="col">Species</th>
               <th scope="col">Type</th>
-              <th scope="col">Date</th>
+              <th scope="col" :aria-sort="dateOrder === 'DESC' ? 'descending' : 'ascending'">Date</th>
             </tr>
           </thead>
           <tbody :class="{ 'used-pointer': usedPointer }" @keydown="onListKey" @pointerdown="usedPointer = true">
@@ -260,6 +332,8 @@ function toggle(occurrence: Occurrence) {
                 :is-photo-loaded="isPhotoLoaded(occurrence)"
                 :common-name="names.recordCommonName(occurrence)"
                 :name="names.recordName(occurrence)"
+                :is-name-pending="names.isNamePending(occurrence)"
+                :scientific-name-style="scientificNameStyle(occurrence)"
                 :photo-style="transitionName(occurrence, 'photo')"
                 :name-style="transitionName(occurrence, 'name')"
                 @toggle="toggle(occurrence)"
@@ -290,15 +364,21 @@ function toggle(occurrence: Occurrence) {
           </tbody>
         </table>
 
-        <ListSkeleton v-if="loading" label="Loading more records" :rows="3">
-          <span class="w-[3.25rem] shrink-0"><SkeletonBlock width="2rem" height="1rem" rounded="sm" /></span>
-          <span class="w-[5.5rem] shrink-0"><SkeletonBlock width="4.5rem" height="0.75rem" /></span>
+        <ListSkeleton
+          v-if="loading"
+          :label="isResorting ? 'Loading records' : 'Loading more records'"
+          :rows="isResorting ? RESORT_SKELETON_ROWS : 3"
+        >
+          <span class="flex w-[3.25rem] shrink-0 justify-center">
+            <SkeletonBlock width="2rem" height="1rem" rounded="sm" />
+          </span>
+          <span class="flex w-[5.4rem] shrink-0 justify-end"><SkeletonBlock width="4rem" height="0.75rem" /></span>
         </ListSkeleton>
         <button
-          v-else-if="total !== null && records.length < total"
+          v-else-if="total !== null && hasMore"
           type="button"
           class="mx-4 mt-2 w-[calc(100%-2rem)] rounded-md border border-border py-1 text-sm hover:bg-surface-2"
-          @click="load(true)"
+          @click="load('more')"
         >
           Show more ({{ full(records.length) }} of {{ full(total) }})
         </button>
@@ -332,6 +412,12 @@ function toggle(occurrence: Occurrence) {
 }
 :global(html.records-transition::view-transition) {
   clip-path: var(--records-clip);
+}
+.sort {
+  color: inherit;
+}
+.sort:hover {
+  color: var(--text);
 }
 .head-row {
   overflow-y: hidden;

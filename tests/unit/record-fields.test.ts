@@ -4,6 +4,7 @@ import {
   aboutRank,
   accuracy,
   recordDate,
+  recordDateTime,
   recordScientificName,
   typeCode,
   typeLabel,
@@ -36,6 +37,16 @@ describe('record fields', () => {
     expect(recordDate(record({ eventDate: '2024-05-06T10:00:00' }))).toBe('2024-05-06');
     expect(recordDate(record({ year: 1999 }))).toBe('1999');
     expect(recordDate(record({}))).toBeUndefined();
+  });
+
+  it('gives the full date and time for the tooltip, only when there is more than the date', () => {
+    expect(recordDateTime(record({ eventDate: '2024-05-06T10:00:00' }))).toBe('2024-05-06 10:00:00');
+    expect(recordDateTime(record({ eventDate: '2026-11-02T17:36:18Z' }))).toBe('2026-11-02 17:36:18 UTC');
+    expect(recordDateTime(record({ eventDate: '2010-10-14T09:24/2010-10-14T09:49' }))).toBe(
+      '2010-10-14 09:24 – 2010-10-14 09:49',
+    );
+    expect(recordDateTime(record({ eventDate: '2024-05-06' }))).toBeUndefined();
+    expect(recordDateTime(record({ year: 1999 }))).toBeUndefined();
   });
 
   it('codes and labels the basis of record', () => {

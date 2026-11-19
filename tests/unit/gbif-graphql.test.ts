@@ -224,6 +224,68 @@ describe('firstRecordsByTaxon', () => {
   });
 });
 
+describe('searchOccurrencesByDate', () => {
+  it('sorts by date and reads taxa and lists back as REST records', async () => {
+    const calls = stubNetwork(() => ({
+      data: {
+        occurrenceSearch: {
+          documents: {
+            total: 41,
+            results: [
+              {
+                key: 70,
+                publisher: null,
+                datasetName: ['Garden birds'],
+                recordedBy: ['Ann', 'Bob'],
+                classification: {
+                  usage: { key: '7', name: 'Erithacus rubecula (Linnaeus, 1758)', rank: 'SPECIES' },
+                  acceptedUsage: { key: '7', name: 'Erithacus rubecula (Linnaeus, 1758)' },
+                  classification: [
+                    { key: '212', name: 'Aves', rank: 'CLASS' },
+                    { key: '7', name: 'Erithacus rubecula', rank: 'SPECIES' },
+                  ],
+                },
+              },
+              { key: 71, classification: null },
+            ],
+          },
+        },
+      },
+    }));
+    const api = await gbif();
+    const page = await api.searchOccurrencesByDate({ taxonKey: 212 }, { order: 'DESC', limit: 20, offset: 40 });
+    expect(page).toEqual({
+      count: 41,
+      results: [
+        {
+          key: 70,
+          datasetName: 'Garden birds',
+          recordedBy: 'Ann, Bob',
+          classKey: 212,
+          class: 'Aves',
+          speciesKey: 7,
+          species: 'Erithacus rubecula',
+          taxonKey: 7,
+          scientificName: 'Erithacus rubecula (Linnaeus, 1758)',
+          taxonRank: 'SPECIES',
+          acceptedTaxonKey: 7,
+          acceptedScientificName: 'Erithacus rubecula (Linnaeus, 1758)',
+        },
+        { key: 71 },
+      ],
+    });
+    expect(sent(calls[0]!).query).toContain('documents(size: 20, from: 40, sortBy: eventDate, sortOrder: DESC)');
+  });
+
+  it('stops paging where GBIF does, without asking', async () => {
+    const calls = stubNetwork(() => undefined);
+    const api = await gbif();
+    const page = { order: 'ASC', limit: 20, offset: api.MAX_DATED_RECORDS } as const;
+    expect(await api.searchOccurrencesByDate({}, page)).toEqual({ count: 0, results: [] });
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('vernacularNamesByTaxon', () => {
   it('looks up every taxon in one request, leaving out those GBIF does not know', async () => {
     const robin = { vernacularName: 'Robin', language: 'eng' };
