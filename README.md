@@ -2,8 +2,6 @@
   <img src="docs/brand/reddit-banner-globe.png" alt="Taxonomap: explore species records from around the world. A visual explorer for GBIF occurrence data." width="100%">
 </picture>
 
-# Taxonomap
-
 ![Unit test coverage](https://github.com/jack-sandeman/taxonomap/blob/badges/coverage-unit.svg?raw=true)
 ![E2E test coverage](https://github.com/jack-sandeman/taxonomap/blob/badges/coverage-e2e.svg?raw=true)
 
