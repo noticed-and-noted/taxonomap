@@ -192,6 +192,9 @@ function facet(field: string, counts: Map<string, number>, limit: number, offset
   };
 }
 
+const RECORD_KEY_BASE = 4_000_000_000;
+const RECORD_KEY_STRIDE = 10;
+
 function occurrenceSearch(params: URLSearchParams) {
   const species = speciesFor(params);
   const share = shareFor(params);
@@ -213,47 +216,58 @@ function occurrenceSearch(params: URLSearchParams) {
     for (const [key, rawCount] of counts) counts.set(key, Math.round(rawCount));
     return facet(field, counts, Number(params.get(`${field}.facetLimit`) ?? facetLimit), offset);
   });
-  const today = new Date();
   const recordOffset = Number(params.get('offset') ?? 0);
   const results = Array.from({ length: Math.min(limit, species.length * 3) }, (_unused, position) => {
     const index = recordOffset + position;
-    const taxon = species[index % species.length]!;
-    const day = new Date(today.getTime() - (index + 1) * 86_400_000).toISOString().slice(0, 10);
-    return {
-      key: 4_000_000_000 + taxon.key * 10 + Math.floor(index / species.length),
-      datasetKey: DATASETS[0]!.key,
-      publishingOrgKey: 'garden-bird-club',
-      publisher: 'Garden Bird Club',
-      license: 'http://creativecommons.org/licenses/by/4.0/legalcode',
-      ...Object.fromEntries(
-        Object.entries(usage(taxon)).filter(([key]) =>
-          /Key$|^(kingdom|phylum|class|order|family|genus|species)$/.test(key),
-        ),
-      ),
-      taxonKey: taxon.key,
-      species: taxon.name,
-      scientificName: `${taxon.name} (Linnaeus, 1758)`,
-      basisOfRecord: 'HUMAN_OBSERVATION',
-      decimalLatitude: 51.5,
-      decimalLongitude: -0.12,
-      eventDate: day,
-      year: Number(day.slice(0, 4)),
-      month: Number(day.slice(5, 7)),
-      country: 'United Kingdom of Great Britain and Northern Ireland',
-      countryCode: 'GB',
-      recordedBy: 'A. Birder',
-      media: [
-        { type: 'StillImage', identifier: `https://photos.example/${taxon.key}/${index}.jpg`, creator: 'A. Birder' },
-        {
-          type: 'Sound',
-          format: 'audio/vnd.wave',
-          identifier: `https://sounds.example/${taxon.key}/${index}.wav`,
-          creator: 'A. Recordist',
-        },
-      ],
-    };
+    return fakeRecord(species[index % species.length]!, index, Math.floor(index / species.length));
   });
   return { offset: 0, limit, endOfRecords: results.length < limit, count, results, facets };
+}
+
+/** A fake record of `taxon`: the `index`th in a search's list, keyed by taxon and `round` (see recordFromKey). */
+function fakeRecord(taxon: Taxon, index: number, round: number) {
+  const day = new Date(Date.now() - (index + 1) * 86_400_000).toISOString().slice(0, 10);
+  return {
+    key: RECORD_KEY_BASE + taxon.key * RECORD_KEY_STRIDE + round,
+    datasetKey: DATASETS[0]!.key,
+    publishingOrgKey: 'garden-bird-club',
+    publisher: 'Garden Bird Club',
+    license: 'http://creativecommons.org/licenses/by/4.0/legalcode',
+    ...Object.fromEntries(
+      Object.entries(usage(taxon)).filter(([key]) =>
+        /Key$|^(kingdom|phylum|class|order|family|genus|species)$/.test(key),
+      ),
+    ),
+    taxonKey: taxon.key,
+    species: taxon.name,
+    scientificName: `${taxon.name} (Linnaeus, 1758)`,
+    basisOfRecord: 'HUMAN_OBSERVATION',
+    decimalLatitude: 51.5,
+    decimalLongitude: -0.12,
+    eventDate: day,
+    year: Number(day.slice(0, 4)),
+    month: Number(day.slice(5, 7)),
+    country: 'United Kingdom of Great Britain and Northern Ireland',
+    countryCode: 'GB',
+    recordedBy: 'A. Birder',
+    media: [
+      { type: 'StillImage', identifier: `https://photos.example/${taxon.key}/${index}.jpg`, creator: 'A. Birder' },
+      {
+        type: 'Sound',
+        format: 'audio/vnd.wave',
+        identifier: `https://sounds.example/${taxon.key}/${index}.wav`,
+        creator: 'A. Recordist',
+      },
+    ],
+  };
+}
+
+/** The fake record a key names, as `/v1/occurrence/{key}` returns it; undefined for keys no search lists. */
+function recordFromKey(key: number) {
+  const taxon = byKey.get(Math.floor((key - RECORD_KEY_BASE) / RECORD_KEY_STRIDE));
+  if (!taxon) return undefined;
+  const round = (key - RECORD_KEY_BASE) % RECORD_KEY_STRIDE;
+  return fakeRecord(taxon, round, round);
 }
 
 interface PredicatePart {
@@ -555,6 +569,11 @@ export function answer(url: URL): FakeResponse | undefined {
   if (path.startsWith('/basemap/')) return path.endsWith('.json') ? missing() : png();
 
   if (path === '/v1/occurrence/search') return json(occurrenceSearch(params));
+  let match = /^\/v1\/occurrence\/(\d+)$/.exec(path);
+  if (match) {
+    const record = recordFromKey(Number(match[1]));
+    return record ? json(record) : missing();
+  }
   if (path === '/graphql') return json(graphql(params));
   if (path === '/v1/species/search') return json(speciesSearch(params));
   if (path === '/v1/species/suggest') {
@@ -565,7 +584,7 @@ export function answer(url: URL): FakeResponse | undefined {
         .map(usage),
     );
   }
-  let match = /^\/v1\/species\/(\d+)(?:\/(\w+))?$/.exec(path);
+  match = /^\/v1\/species\/(\d+)(?:\/(\w+))?$/.exec(path);
   if (match) {
     const taxon = byKey.get(Number(match[1]));
     if (!taxon) return missing();
