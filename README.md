@@ -7,13 +7,13 @@
 
 Live site found here https://app.taxonomap.com
 
-An interactive map that visualises all of the biodiversity data stored in [GBIF’s](https://www.gbif.org) databases. You can explore the globe and click on any hex which will show you all the species that have been recorded in that area. You can sort by time, taxon, record type, and more. 
+An interactive map that visualises all of the biodiversity data stored in [GBIF’s](https://www.gbif.org) databases. You can explore the globe and click on any hex which will show you all the species that have been recorded in that area. You can sort by time, taxon, record type, and more.
 
 ![The application home page](docs/brand/example.png)
 
 - See where records are on the map, and filter by species, date, place, record type and other fields
 - Click a hexagon to list the species recorded there and the induvidual records
-- Open a species page for photos, a description from Wikipedia, charts and other details 
+- Open a species page for photos, a description from Wikipedia, charts and other details
 - Browse the tree of life from kingdoms down to species, as a sunburst or icicle chart
 - See what's near you, by dropping a pin or providing your location
 
