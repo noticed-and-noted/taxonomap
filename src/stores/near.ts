@@ -4,6 +4,7 @@
  */
 import { atom } from 'nanostores';
 import { RADIUS_STEPS_KM, roundLatLng, type RadiusKm } from '~/lib/gbif/params';
+import { $openRecord } from './explorer';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export type LatLng = { lat: number; lng: number } | null;
@@ -65,6 +66,8 @@ export function exitNearMode(): void {
   $nearRadius.set(radiusCodec.default);
   $nearThisMonth.set(false);
   $nearTab.set('species');
+  // Near me's open record would otherwise stay open in the next cell's record list.
+  $openRecord.set(null);
 }
 
 /** Map zoom that frames a radius comfortably. */
