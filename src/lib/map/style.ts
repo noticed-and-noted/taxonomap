@@ -142,10 +142,10 @@ function recordLayers(accent: string, bg: string): LayerSpecification[] {
 }
 
 /**
- * The zoom from which an expanded record's dot shows: once its cell is wide enough on screen for the dot
- * to say where in the cell the record is.
+ * The zoom from which an expanded record's dot shows: once its cell (or near me's circle) is wide enough
+ * on screen for the dot to say where in it the record is.
  * @param zoom The map's zoom now.
- * @param cellWidthPx The cell's width on screen now, or null for a record listed outside a cell (near me).
+ * @param cellWidthPx The cell's or circle's width on screen now, or null when there is neither.
  */
 export function recordDotMinZoom(zoom: number, cellWidthPx: number | null): number {
   if (cellWidthPx === null) return RECORD_MIN_ZOOM;

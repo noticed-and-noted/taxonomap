@@ -12,6 +12,7 @@ import { useStore } from '@nanostores/vue';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { compact, full } from '~/lib/format';
+import { circleRing } from '~/lib/gbif/params';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
@@ -580,24 +581,34 @@ function followRecord() {
     $recordPlace.listen(fit),
     $hexGeometry.listen(sizeRecordPlace),
     $gridLevel.listen(sizeRecordPlace),
+    $nearAt.listen(sizeRecordPlace),
+    $nearRadius.listen(sizeRecordPlace),
     () => recordMap.off('moveend', sizeRecordPlace),
   );
 }
 
 /**
- * Show an expanded record's dot from the zoom where its cell is wide enough on screen to hold it, and an
- * obscured record's square from RECORD_MIN_ZOOM; either from the zoom where the grid turns finer than the
- * selected cell if sooner: mid-gesture, before the new cells load.
+ * Show an expanded record's dot from the zoom where its cell (or near me's circle) is wide enough on screen
+ * to hold it, and an obscured record's square from RECORD_MIN_ZOOM; either from the zoom where the grid
+ * turns finer than the selected cell if sooner: mid-gesture, before the new cells load.
  */
 function sizeRecordPlace() {
   if (!map?.getLayer(RECORD_DOT_LAYER)) return;
-  const xs = $hexGeometry.get()?.ring.map((position) => map!.project(position).x);
-  const cellWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
-  const finerMinZoom = cellWidth === null ? Infinity : gridFinerZoom();
+  const cellRing = $hexGeometry.get()?.ring;
+  const xs = (cellRing ?? nearRing())?.map((position) => map!.project(position).x);
+  const areaWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
+  const finerMinZoom = cellRing ? gridFinerZoom() : Infinity;
   const maxZoom = map.getMaxZoom() + 1;
-  map.setLayerZoomRange(RECORD_DOT_LAYER, Math.min(recordDotMinZoom(map.getZoom(), cellWidth), finerMinZoom), maxZoom);
+  map.setLayerZoomRange(RECORD_DOT_LAYER, Math.min(recordDotMinZoom(map.getZoom(), areaWidth), finerMinZoom), maxZoom);
   for (const layer of RECORD_AREA_LAYERS)
     map.setLayerZoomRange(layer, Math.min(RECORD_MIN_ZOOM, finerMinZoom), maxZoom);
+}
+
+/** Near me's circle while the map is in pin mode, else undefined. */
+function nearRing(): [number, number][] | undefined {
+  const at = $nearAt.get();
+  if ($mapMode.get() !== 'pin' || !at) return undefined;
+  return circleRing(at.lat, at.lng, $nearRadius.get());
 }
 
 /** The zoom where the grid at the map's latitude turns finer than the selected cell; Infinity if never or unknown. */
