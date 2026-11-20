@@ -2,9 +2,24 @@
 import ExplorerOverlay from '~/components/views/ExplorerOverlay.vue';
 import AppShell from '~/layouts/AppShell.astro';
 import BaseLayout from '~/layouts/BaseLayout.astro';
+
+// Tells search engines what the app is; the Organization lives on taxonomap.com.
+const STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  '@id': 'https://app.taxonomap.com/#app',
+  name: 'Taxonomap',
+  url: 'https://app.taxonomap.com/',
+  description: 'Explore species records from around the world',
+  applicationCategory: 'ReferenceApplication',
+  operatingSystem: 'Web',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'GBP' },
+  publisher: { '@id': 'https://taxonomap.com/#organization' },
+};
 ---
 
 <BaseLayout title="Taxonomap: Explore species records from around the world">
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c')} />
   <AppShell map="full" search="map">
     <h1 class="sr-only">Global map of species occurrence records</h1>
     <ExplorerOverlay client:only="vue" />
