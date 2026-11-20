@@ -14,7 +14,13 @@ const STRUCTURED_DATA = {
   applicationCategory: 'ReferenceApplication',
   operatingSystem: 'Web',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'GBP' },
-  publisher: { '@id': 'https://taxonomap.com/#organization' },
+  // Named here too: search engines don't reliably follow an @id to another domain.
+  publisher: {
+    '@type': 'Organization',
+    '@id': 'https://taxonomap.com/#organization',
+    name: 'Taxonomap',
+    url: 'https://taxonomap.com/',
+  },
 };
 ---
 
