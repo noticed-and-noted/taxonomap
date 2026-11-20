@@ -32,7 +32,7 @@ const retry = () => window.location.reload();
       </svg>
       <h2 class="text-xl">The map can’t draw on this device</h2>
       <p class="mt-1 text-sm text-muted">
-        It needs WebGL, which {{ help.name }} has turned off or doesn’t support. The tree of life and species pages
+        It needs WebGL, which {{ help.name }} has turned off or doesn’t support. The Tree of Life and species pages
         still work.
       </p>
 
@@ -53,7 +53,7 @@ const retry = () => window.location.reload();
             href="/tree/"
             class="inline-flex min-h-11 items-center rounded-md border border-border px-3 text-text transition-colors duration-(--dur-fast) ease-field hover:bg-surface-2 sm:min-h-9"
           >
-            Tree of life
+            Tree of Life
           </a>
         </div>
         <details class="mt-4 border-t border-border pt-3">

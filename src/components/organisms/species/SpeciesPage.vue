@@ -133,7 +133,7 @@ const englishNames = computed(
         <a
           :href="`/tree/?focus=${speciesData.key}`"
           class="rounded-md border border-border px-3 py-2 hover:border-accent"
-          >Tree of life</a
+          >Tree of Life</a
         >
       </div>
     </header>

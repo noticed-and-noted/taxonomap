@@ -82,7 +82,7 @@ const STEPS: TourStep[] = [
   },
   {
     title: 'Beyond the map',
-    body: 'Clicking on a species will take you to a profile page with more information about it. There is also a representation of the Tree of life that allows you to explore every group by its records.',
+    body: 'Clicking on a species will take you to a profile page with more information about it. There is also a representation of the Tree of Life that allows you to explore every group by its records.',
     targets: () => [boxOf('[data-tour="nav"]'), speciesListBox()],
   },
 ];

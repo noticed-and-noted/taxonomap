@@ -1,5 +1,5 @@
 /**
- * Tree of life model. The top four ranks come from /data/tree.json (or load live
+ * Tree of Life model. The top four ranks come from /data/tree.json (or load live
  * when the bake left none); deeper levels load live, three requests per expansion (no per-node calls):
  *   children (names) · occurrence facet on the child rank (records) ·
  *   species-search facet on higherTaxonKey (species counts).

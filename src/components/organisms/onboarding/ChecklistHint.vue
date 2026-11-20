@@ -46,7 +46,7 @@ onBeforeUnmount(() => {
   stopWatchingDone();
   stopFollowingHex();
   if (hint.value.needsHex) $busiestHexBox.set(null);
-  // Leaving the page (Tree of life) ends the hint, so it doesn't come back on return; a newer hint stays.
+  // Leaving the page (Tree of Life) ends the hint, so it doesn't come back on return; a newer hint stays.
   if ($checklistHint.get() === props.id) close();
 });
 </script>

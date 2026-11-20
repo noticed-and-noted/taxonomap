@@ -70,7 +70,7 @@ export const HINTS: Record<ChecklistId, Hint> = {
     targets: () => [boxOf('[data-tour="near"]')],
   },
   tree: {
-    body: 'Open Tree of life, then click a group to go down a rank.',
+    body: 'Open Tree of Life, then click a group to go down a rank.',
     targets: () => [boxOf('[data-tour="nav"] a[href="/tree/"]')],
   },
   style: {

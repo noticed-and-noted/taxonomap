@@ -30,7 +30,7 @@ test.describe(() => {
 
     await context.unroute('**/*');
     await context.setOffline(false);
-    await expect(page.getByRole('heading', { name: 'Tree of life' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Tree of Life' })).toBeVisible();
   });
 
   test('name searches are saved by the service worker', async ({ page }) => {

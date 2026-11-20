@@ -228,6 +228,6 @@ test('a species page without photos, map tiles or its chart library still reads'
     page.getByText('The chart could not be drawn; the data table below has the same figures.').first(),
   ).toBeVisible();
   // Leaving through the header keeps the page's islands until they are swapped out.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Tree of life' }).click();
-  await expect(page.getByRole('heading', { name: 'Tree of life' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Tree of Life' }).click();
+  await expect(page.getByRole('heading', { name: 'Tree of Life' })).toBeVisible();
 });

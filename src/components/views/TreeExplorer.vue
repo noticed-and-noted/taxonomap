@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Tree of life browser (client:only). Baked kingdom→order levels, live
+ * Tree of Life browser (client:only). Baked kingdom→order levels, live
  * lazy-loading below; sunburst or icicle (icicle by default on narrow
  * screens); records vs species sizing.
  * Selecting a node only moves the tree; it leaves the shared taxon filter
@@ -219,7 +219,7 @@ const share = (node: TreeNode) => {
     aria-labelledby="tree-h"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h1 id="tree-h" class="font-display text-2xl">Tree of life</h1>
+      <h1 id="tree-h" class="font-display text-2xl">Tree of Life</h1>
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <SegmentedControl v-model="metric" legend="Size by" :options="METRIC_OPTIONS" />
         <SegmentedControl v-model="layout" legend="Layout" :options="LAYOUT_OPTIONS" />
