@@ -97,50 +97,58 @@ watch(
         {{ initials(name) }}
       </span>
     </div>
-    <!-- Stretched to the photo's height so the buttons line up with its bottom edge. -->
-    <dl class="flex min-w-0 flex-col gap-1 self-stretch text-xs [overflow-wrap:anywhere]">
-      <div v-if="occurrence.recordedBy">
-        <dt class="text-subtle">Recorded by</dt>
-        <dd>{{ occurrence.recordedBy }}</dd>
-      </div>
-      <div v-if="isObservation && accuracy(occurrence)">
-        <dt class="text-subtle">Accuracy</dt>
-        <dd>{{ accuracy(occurrence) }}</dd>
-      </div>
-      <div v-if="publisher">
-        <dt class="text-subtle">Publisher</dt>
-        <dd>{{ publisher }}</dd>
-      </div>
-      <div v-if="source">
-        <dt class="text-subtle">Source</dt>
-        <dd>{{ source }}</dd>
-      </div>
-      <dd class="mt-auto flex gap-1.5">
-        <a
-          v-if="aboutHref"
-          :href="aboutHref"
-          class="record-action record-action-icon"
-          :aria-label="`About ${name}`"
-          :title="`About ${name}`"
+    <!-- Out of flow so the photo alone sets the height: long details scroll and the buttons line up with its bottom edge. -->
+    <div class="relative min-w-0 self-stretch">
+      <div class="absolute inset-0 flex flex-col gap-1.5 text-xs">
+        <dl
+          class="details fade-list fade-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto [overflow-wrap:anywhere]"
+          tabindex="0"
+          aria-label="Record details"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 11v5M12 8h.01" />
-          </svg>
-        </a>
-        <a
-          :href="`https://www.gbif.org/occurrence/${occurrence.key}`"
-          target="_blank"
-          rel="noopener"
-          class="record-action"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
-          </svg>
-          GBIF<span class="sr-only"> record (opens in a new tab)</span>
-        </a>
-      </dd>
-    </dl>
+          <div v-if="occurrence.recordedBy">
+            <dt class="text-subtle">Recorded by</dt>
+            <dd>{{ occurrence.recordedBy }}</dd>
+          </div>
+          <div v-if="isObservation && accuracy(occurrence)">
+            <dt class="text-subtle">Accuracy</dt>
+            <dd>{{ accuracy(occurrence) }}</dd>
+          </div>
+          <div v-if="publisher">
+            <dt class="text-subtle">Publisher</dt>
+            <dd>{{ publisher }}</dd>
+          </div>
+          <div v-if="source">
+            <dt class="text-subtle">Source</dt>
+            <dd>{{ source }}</dd>
+          </div>
+        </dl>
+        <div class="flex gap-1.5">
+          <a
+            v-if="aboutHref"
+            :href="aboutHref"
+            class="record-action record-action-icon"
+            :aria-label="`About ${name}`"
+            :title="`About ${name}`"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 11v5M12 8h.01" />
+            </svg>
+          </a>
+          <a
+            :href="`https://www.gbif.org/occurrence/${occurrence.key}`"
+            target="_blank"
+            rel="noopener"
+            class="record-action"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+            </svg>
+            GBIF<span class="sr-only"> record (opens in a new tab)</span>
+          </a>
+        </div>
+      </div>
+    </div>
     <SoundPlayer v-if="sound" :key="sound.url" class="col-span-2" :sound="sound" />
   </div>
 </template>
@@ -190,6 +198,7 @@ watch(
     min-width: 2.5rem;
   }
 }
+.details:focus-visible,
 .enlarge:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
