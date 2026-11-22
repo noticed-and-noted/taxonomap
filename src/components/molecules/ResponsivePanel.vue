@@ -10,6 +10,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import BottomSheet from '~/components/atoms/BottomSheet.vue';
 import SidePanel from '~/components/atoms/SidePanel.vue';
+import { SIDE_PANEL_QUERY } from '~/lib/breakpoints';
 
 const props = defineProps<{
   title: string;
@@ -48,7 +49,7 @@ function update() {
 }
 
 onMounted(() => {
-  mediaQuery = window.matchMedia('(min-width: 768px)');
+  mediaQuery = window.matchMedia(SIDE_PANEL_QUERY);
   update();
   mediaQuery.addEventListener('change', update);
   // `close` doesn't bubble, so listen in the capture phase.

@@ -13,15 +13,19 @@
  */
 import { useStore } from '@nanostores/vue';
 import { navigate } from 'astro:transitions/client';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
+import { useKeyboardFit } from '~/composables/useKeyboardFit';
 import { useNameSearch } from '~/composables/useNameSearch';
 import { usePlaceSearch } from '~/composables/usePlaceSearch';
+import { useTimedNotice } from '~/composables/useTimedNotice';
 import { loadNameIndex } from '~/lib/data/name-index';
 import { sortByRank, type NameHit } from '~/lib/gbif';
 import type { Place } from '~/lib/geocode';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
-import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
+import { MAX_TAXA, viewParam } from '~/stores/explorer';
+import { $occurrenceFilter } from '~/stores/filters';
+import { $flyTo } from '~/stores/map-messages';
 import { flyToRecords, shouldFitTaxa } from '~/stores/fly-to-taxa';
 import { exitNearMode } from '~/stores/near';
 import { markDone } from '~/stores/onboarding';
@@ -84,15 +88,7 @@ const searchBox = useTemplateRef('searchBox');
 const input = computed(() => searchBox.value?.input);
 
 /** Short note shown under the box when a pick could not be applied (the What list is full). */
-const notice = ref('');
-let noticeTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** Shows a notice under the box for a few seconds. */
-function announce(text: string) {
-  notice.value = text;
-  clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => (notice.value = ''), NOTICE_MS);
-}
+const { notice, announce } = useTimedNotice(NOTICE_MS);
 
 /** What is loading, if anything: shown in the place row's spot. */
 const searching = computed(() =>
@@ -343,44 +339,20 @@ function onBlur(event: FocusEvent) {
   if (!next || !(event.currentTarget as HTMLElement).parentElement?.contains(next)) close();
 }
 
-/** Keep the dropdown inside the visible area: on-screen keyboards shrink the
-   visual viewport (not the layout one) on iOS and Android, hiding its foot. */
 const dropdown = ref<HTMLDivElement>();
-const fitHeight = ref<number | null>(null);
 const isShown = computed(
   () =>
     open.value &&
     (options.value.length > 0 || !!searching.value || (inPlaces.value && (placeFailed.value || placesAnswered.value))),
 );
-/** Sizes the dropdown to end above an on-screen keyboard. */
-function fit() {
-  // Hidden (v-show) it measures at top 0, which would size it past the keyboard.
-  if (!isShown.value || !dropdown.value) return;
-  const viewport = window.visualViewport;
-  const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
-  fitHeight.value = Math.max(
-    MIN_DROPDOWN_HEIGHT,
-    Math.floor(bottom - dropdown.value.getBoundingClientRect().top - DROPDOWN_MARGIN),
-  );
-}
-// On first use results arrive after `open`, so fit when it actually shows.
-watch(isShown, (shown) => (shown ? void nextTick(fit) : undefined));
+/** Keeps the dropdown above an on-screen keyboard. */
+const fitHeight = useKeyboardFit(dropdown, isShown, { minHeight: MIN_DROPDOWN_HEIGHT, margin: DROPDOWN_MARGIN });
 
 // Search for anything typed before hydration (see query).
 onMounted(() => {
-  window.visualViewport?.addEventListener('resize', fit);
-  window.visualViewport?.addEventListener('scroll', fit);
-  window.addEventListener('resize', fit);
   if (!query.value) return;
   if (document.activeElement === input.value) onFocus();
   onInput();
-});
-
-onBeforeUnmount(() => {
-  clearTimeout(noticeTimer);
-  window.visualViewport?.removeEventListener('resize', fit);
-  window.visualViewport?.removeEventListener('scroll', fit);
-  window.removeEventListener('resize', fit);
 });
 </script>
 

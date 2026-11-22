@@ -9,7 +9,7 @@
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
-import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
+import BasemapSwitcher from '~/components/organisms/settings/BasemapSwitcher.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import HexPanel from '~/components/organisms/cell/HexPanel.vue';
 import FilterGroup from '~/components/organisms/filters/FilterGroup.vue';
@@ -23,16 +23,11 @@ import NearExplorer from '~/components/organisms/near/NearExplorer.vue';
 import ChecklistHint from '~/components/organisms/onboarding/ChecklistHint.vue';
 import OnboardingTour from '~/components/organisms/onboarding/OnboardingTour.vue';
 import TryThis from '~/components/organisms/onboarding/TryThis.vue';
-import { $activeFilterCount, PHONE_QUERY, type FilterGroupId } from '~/lib/filter-groups';
-import {
-  $mapUnsupported,
-  $panel,
-  $railOpen,
-  $selectedHex,
-  $viewCheck,
-  clearFilters,
-  clearHexSelection,
-} from '~/stores/explorer';
+import { NO_RAIL_QUERY, SHEET_QUERY } from '~/lib/breakpoints';
+import { $activeFilterCount, type FilterGroupId } from '~/lib/filter-groups';
+import { clearHexSelection, $panel, $selectedHex } from '~/stores/explorer';
+import { clearFilters } from '~/stores/filters';
+import { $mapUnsupported, $railOpen, $viewCheck } from '~/stores/map-messages';
 import { $nearLeaving, $nearMode, exitNearMode } from '~/stores/near';
 import { $checklistHint, $tourSeen } from '~/stores/onboarding';
 
@@ -113,8 +108,6 @@ function toggleAllResults() {
   $panel.set('results');
 }
 
-/** Below this width panels are bottom sheets (ResponsivePanel), which cover the dock. */
-const SHEET_QUERY = '(max-width: 767.98px)';
 const hasSheets = ref(false);
 /** An open sheet slides the dock away; closing it brings the dock back as the viewer left it. */
 const sheetCoversDock = ref(false);
@@ -161,7 +154,7 @@ function swapFilterLayout(event: MediaQueryListEvent) {
 let phoneQuery: MediaQueryList | undefined;
 let sheetQuery: MediaQueryList | undefined;
 onMounted(() => {
-  phoneQuery = window.matchMedia(PHONE_QUERY);
+  phoneQuery = window.matchMedia(NO_RAIL_QUERY);
   phoneQuery.addEventListener('change', swapFilterLayout);
   sheetQuery = window.matchMedia(SHEET_QUERY);
   hasSheets.value = sheetQuery.matches;

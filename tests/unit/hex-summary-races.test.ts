@@ -31,7 +31,7 @@ async function setup() {
   vi.resetModules();
   calls.facets = [];
   calls.topSpecies = [];
-  const explorer = await import('~/stores/explorer');
+  const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/map-messages')) };
   const { useHexSummary } = await import('~/composables/useHexSummary');
   explorer.$hexGeometry.set(null);
   // A cell is selected but not yet found, so nothing loads until a test sets its geometry.

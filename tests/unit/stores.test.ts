@@ -6,6 +6,7 @@ async function stores(search = '') {
   history.replaceState(null, '', `/${search}`);
   return {
     ...(await import('~/stores/explorer')),
+    ...(await import('~/stores/map-messages')),
     ...(await import('~/stores/near')),
   };
 }

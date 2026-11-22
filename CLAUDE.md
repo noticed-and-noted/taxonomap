@@ -2,6 +2,10 @@
 
 A visual explorer for GBIF occurrence data (Astro, Vue islands, MapLibre). `README.md` covers setup and scripts.
 
+## Architecture
+
+Read `docs/architecture.md` before any change that touches what it describes: stores and URL state, filters, the GBIF or other service clients, baked data, the service worker, pages and layouts, the component levels, or the test suites. Use its recipes for adding a filter, a page, an endpoint, a service or a snapshot. When a change alters the structure it describes, update the guide in the same change.
+
 ## Design system
 
 Follow the design system for any visual change: colours, type, the logo, icons or new components. Use the tokens in `src/styles/tokens.css` rather than raw colour values, and check both the dark and light themes.

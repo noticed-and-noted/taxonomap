@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/vue';
 import { computed } from 'vue';
 import SuggestPicker from '~/components/molecules/SuggestPicker.vue';
 import { findPublishers } from '~/lib/gbif';
-import { $occurrenceFilter } from '~/stores/explorer';
+import { $occurrenceFilter } from '~/stores/filters';
 import {
   $publisherKeys,
   $publisherNames,

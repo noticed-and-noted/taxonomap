@@ -58,7 +58,7 @@ describe('refinements', () => {
 
 describe('explorer filter stores', () => {
   it('feed every URL filter into the occurrence filter, and clear them all', async () => {
-    const explorer = await import('~/stores/explorer');
+    const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/filters')) };
     explorer.$taxonKeys.set([212, 2492462]);
     explorer.$months.set([4]);
     explorer.$continents.set(['EUROPE']);
@@ -79,7 +79,7 @@ describe('explorer filter stores', () => {
   });
 
   it('count set filters per rail group', async () => {
-    const explorer = await import('~/stores/explorer');
+    const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/filters')) };
     explorer.clearFilters();
     explorer.$taxonKeys.set([212, 2492462]);
     explorer.$iucn.set(['VU', 'EN']);
@@ -92,7 +92,7 @@ describe('explorer filter stores', () => {
   });
 
   it('give each set filter but taxa a pill (one per value) that clears it', async () => {
-    const explorer = await import('~/stores/explorer');
+    const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/filters')) };
     explorer.clearFilters();
     explorer.$taxonKeys.set([212]);
     explorer.$iucn.set(['CR', 'VU']);
@@ -127,7 +127,7 @@ describe('explorer filter stores', () => {
   });
 
   it('label one year, continents and record types', async () => {
-    const explorer = await import('~/stores/explorer');
+    const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/filters')) };
     explorer.clearFilters();
     explorer.$dateRange.set({ unit: 'y', from: '2001-01-01', to: '2001-12-31' });
     explorer.$continents.set(['EUROPE', 'ASIA']);
@@ -143,7 +143,7 @@ describe('explorer filter stores', () => {
   });
 
   it('name publisher pills once their names are known, and clear them one at a time', async () => {
-    const explorer = await import('~/stores/explorer');
+    const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/filters')) };
     const publisher = await import('~/stores/publisher');
     explorer.clearFilters();
     publisher.addPublisher({ key: PUBLISHER, title: 'iNaturalist.org' });
@@ -154,7 +154,7 @@ describe('explorer filter stores', () => {
   });
 
   it('filter by recorders, keeping commas in their names, and refuse one twice', async () => {
-    const explorer = await import('~/stores/explorer');
+    const explorer = { ...(await import('~/stores/explorer')), ...(await import('~/stores/filters')) };
     const recorder = await import('~/stores/recorder');
     explorer.clearFilters();
     expect(recorder.addRecorder('Shaw, Jack')).toBe(true);

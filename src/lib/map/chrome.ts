@@ -3,6 +3,7 @@
  * and where the tour and hints may point: the busiest cell near the middle and clear of it, facing the viewer on the globe.
  */
 import type { Map as MlMap } from 'maplibre-gl';
+import { SIDE_PANEL_QUERY } from '~/lib/breakpoints';
 import type { ScreenBox } from '~/lib/tour';
 import { hexCentre, type Hex, type LngLat } from './occGrid';
 import type { CoveredEdges } from './recordFit';
@@ -19,8 +20,6 @@ const FACING_COS = 0.5;
 const SHEET_OPEN_SHARE = 0.55;
 /** The side panel's inset from the map's right edge (right-3). */
 const PANEL_INSET = 12;
-/** From this width the cell panel is a side panel; below it, a bottom sheet. */
-const SIDE_PANEL_QUERY = '(min-width: 768px)';
 const DEFAULT_PANEL_WIDTH = '400px';
 
 /** How much of the map the floating header, bottom sheet and side panel cover, in px per edge. */

@@ -16,6 +16,7 @@ import TreeChart from '~/components/organisms/tree/TreeChart.vue';
 import TreeChildList from '~/components/organisms/tree/TreeChildList.vue';
 import TreeNodeDetails from '~/components/organisms/tree/TreeNodeDetails.vue';
 import TreeSkeleton from '~/components/organisms/tree/TreeSkeleton.vue';
+import { PHONE_QUERY } from '~/lib/breakpoints';
 import { RANK_BY_CODE } from '~/lib/data/ranks';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { classifyError, type UiErrorKind, type UsableImage } from '~/lib/gbif';
@@ -60,8 +61,6 @@ const LAYOUT_OPTIONS = [
   { value: 'sunburst', label: 'Sunburst' },
   { value: 'icicle', label: 'Icicle' },
 ] as const;
-/** Narrow screens get the icicle unless the viewer chose a layout. */
-const NARROW_QUERY = '(max-width: 639.98px)';
 
 /** The chosen layout, or the screen's default; choosing one stores it. */
 const layout = computed({
@@ -195,7 +194,7 @@ function onNarrowChange() {
 }
 
 onMounted(() => {
-  mediaQuery = window.matchMedia(NARROW_QUERY);
+  mediaQuery = window.matchMedia(PHONE_QUERY);
   narrow.value = mediaQuery.matches;
   mediaQuery.addEventListener('change', onNarrowChange);
   void loadSpeciesManifest();

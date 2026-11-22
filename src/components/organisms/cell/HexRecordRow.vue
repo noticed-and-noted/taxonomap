@@ -5,7 +5,7 @@
  * takes its column.
  */
 import type { StyleValue } from 'vue';
-import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import type { Occurrence, UsableImage } from '~/lib/gbif';

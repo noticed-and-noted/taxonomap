@@ -102,7 +102,7 @@ function gbif(override: (url: URL) => unknown = () => undefined) {
 async function build(env: Record<string, string> = {}) {
   vi.resetModules();
   // Registered afresh each time, so the mock hands out this bake's iNaturalist client, not an earlier one's.
-  vi.doMock('~/lib/photos/inat-server', () => import('~/lib/photos/inat'));
+  vi.doMock('~/lib/inat/server', () => import('~/lib/inat/client'));
   vi.unstubAllEnvs();
   for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
   return import('~/lib/bake');

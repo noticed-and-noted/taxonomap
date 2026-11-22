@@ -8,13 +8,13 @@
 import { computed } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import IntroSkeleton from '~/components/molecules/IntroSkeleton.vue';
-import NameMeaning from '~/components/molecules/NameMeaning.vue';
 import RadialSeasonality from '~/components/molecules/RadialSeasonality.vue';
 import { compact, countryName, full, IUCN_LABELS, RANK_LABELS } from '~/lib/format';
 import { LICENCE_URLS } from '~/lib/gbif/licence';
 import type { SpeciesData } from '~/lib/species/data';
 import type { NamePart } from '~/lib/species/etymology';
 import { nameRuns, type WikipediaIntro } from '~/lib/species/wikipedia';
+import NameMeaning from './NameMeaning.vue';
 
 const props = defineProps<{
   data: SpeciesData;

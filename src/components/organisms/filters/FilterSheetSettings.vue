@@ -2,12 +2,12 @@
 /** The phone Filters sheet's Map tab: basemap, theme, map, reading and search settings, the legal links and the version. */
 import BuildInfo from '~/components/atoms/BuildInfo.vue';
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
-import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
-import MapSettings from '~/components/molecules/MapSettings.vue';
-import OnboardingSettings from '~/components/molecules/OnboardingSettings.vue';
-import ReadingSettings from '~/components/molecules/ReadingSettings.vue';
-import SearchFitSetting from '~/components/molecules/SearchFitSetting.vue';
-import ThemePicker from '~/components/molecules/ThemePicker.vue';
+import BasemapSwitcher from '~/components/organisms/settings/BasemapSwitcher.vue';
+import MapSettings from '~/components/organisms/settings/MapSettings.vue';
+import OnboardingSettings from '~/components/organisms/settings/OnboardingSettings.vue';
+import ReadingSettings from '~/components/organisms/settings/ReadingSettings.vue';
+import SearchFitSetting from '~/components/organisms/settings/SearchFitSetting.vue';
+import ThemePicker from '~/components/organisms/settings/ThemePicker.vue';
 </script>
 
 <template>

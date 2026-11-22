@@ -10,21 +10,21 @@ import { computed, ref, useId, watch } from 'vue';
 import type { FilterGroupId } from '~/lib/filter-groups';
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTH_NAMES, MONTHS } from '~/lib/format';
 import {
+  BASIS_OF_RECORD,
   $basisOfRecord,
   $continents,
+  CONTINENTS,
+  $dateRange,
   $exactTaxon,
   $hasPhoto,
   $hasSound,
   $iucn,
+  IUCN_CATEGORIES,
+  MAX_TAXA,
   $maxUncertainty,
   $months,
   monthsAllowed,
   $taxonKeys,
-  $dateRange,
-  BASIS_OF_RECORD,
-  CONTINENTS,
-  IUCN_CATEGORIES,
-  MAX_TAXA,
   UNCERTAINTY_STEPS_M,
 } from '~/stores/explorer';
 import { markDone } from '~/stores/onboarding';

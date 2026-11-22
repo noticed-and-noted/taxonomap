@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue';
 import Spotlight from '~/components/atoms/Spotlight.vue';
 import { HINTS } from '~/lib/tour-targets';
-import { $busiestHexBox, $busiestHexRequest } from '~/stores/explorer';
+import { $busiestHexBox, $busiestHexRequest } from '~/stores/map-messages';
 import { $checklistDone, $checklistHint, CHECKLIST, type ChecklistId } from '~/stores/onboarding';
 
 const props = defineProps<{ id: ChecklistId }>();

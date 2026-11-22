@@ -3,7 +3,7 @@
  * licence, most-voted first, each with the country it was recorded in when that is known.
  */
 import type { UsableSound } from '~/lib/gbif/licence';
-import { countryNames, observationSound, soundObservations, type InatSoundObservation } from './inat';
+import { countryNames, observationSound, soundObservations, type InatSoundObservation } from '~/lib/inat/client';
 import { resolveInatIds, type PhotoTaxon } from './taxon-photos';
 
 /** Most recordings a species page offers. */

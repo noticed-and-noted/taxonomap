@@ -15,7 +15,8 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import { MONTHS_IN_YEAR, monthCounts, namedOccurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
 import { rememberCount } from '~/lib/map/cellCounts';
 import { namedClasses, topSpecies, type ClassGroup, type SpeciesRow } from '~/lib/species/groups';
-import { $hexGeometry, $occurrenceFilter, $resultsFilter } from '~/stores/explorer';
+import { $occurrenceFilter, $resultsFilter } from '~/stores/filters';
+import { $hexGeometry } from '~/stores/map-messages';
 import { useLatestLoad } from './useLatestLoad';
 
 /** Species rows per list (the whole cell, or one group). */

@@ -45,8 +45,8 @@ import {
   observationImages,
   votedObservations,
   type InatTaxon,
-} from './inat';
-import { forgetInatId, type InatMatch, knownInatId, knownInatName, rememberInatMatches } from './inat-ids';
+} from '~/lib/inat/client';
+import { forgetInatId, type InatMatch, knownInatId, knownInatName, rememberInatMatches } from '~/lib/inat/ids';
 
 export const MAX_PHOTOS = 20;
 

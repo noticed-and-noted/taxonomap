@@ -9,7 +9,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';

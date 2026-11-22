@@ -10,12 +10,13 @@ import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import BuildInfo from '~/components/atoms/BuildInfo.vue';
 import LegalLinks from '~/components/atoms/LegalLinks.vue';
-import MapSettings from '~/components/molecules/MapSettings.vue';
-import OnboardingSettings from '~/components/molecules/OnboardingSettings.vue';
-import ReadingSettings from '~/components/molecules/ReadingSettings.vue';
-import SearchFitSetting from '~/components/molecules/SearchFitSetting.vue';
+import MapSettings from '~/components/organisms/settings/MapSettings.vue';
+import OnboardingSettings from '~/components/organisms/settings/OnboardingSettings.vue';
+import ReadingSettings from '~/components/organisms/settings/ReadingSettings.vue';
+import SearchFitSetting from '~/components/organisms/settings/SearchFitSetting.vue';
 import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from '~/lib/filter-groups';
-import { $railOpen, clearFilters } from '~/stores/explorer';
+import { clearFilters } from '~/stores/filters';
+import { $railOpen } from '~/stores/map-messages';
 import { $tourOpen } from '~/stores/onboarding';
 import FilterGroup from './FilterGroup.vue';
 

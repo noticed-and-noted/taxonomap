@@ -14,7 +14,7 @@ import { BASEMAPS, plainStyleUrl, type BasemapId, type RasterDef, type Theme } f
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
-import type { HexGeometry } from '~/stores/explorer';
+import type { HexGeometry } from '~/stores/map-messages';
 import type { RecordPlace } from './recordPlace';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };

@@ -7,7 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { NamesSnapshot } from '~/lib/data/types';
-import { getTaxonNames, inatCommonName, type InatTaxon, TAXON_NAMES_BATCH } from '~/lib/photos/inat-server';
+import { getTaxonNames, inatCommonName, type InatTaxon, TAXON_NAMES_BATCH } from '~/lib/inat/server';
 import { resolveInatIds } from '~/lib/photos/taxon-photos';
 import { bakeDir, queueRequests } from './cache';
 

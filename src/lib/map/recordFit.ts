@@ -5,7 +5,7 @@
  * picked, unless the viewer moved the map or picked another cell since.
  */
 import type { Map as MlMap } from 'maplibre-gl';
-import { $selectedHex, sameView, type MapView } from '~/stores/explorer';
+import { type MapView, sameView, $selectedHex } from '~/stores/explorer';
 import { prefersReducedMotion } from '~/stores/reading';
 import type { RecordArea } from './recordPlace';
 

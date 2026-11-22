@@ -54,7 +54,7 @@ vi.mock('~/lib/species/groups', () => ({
 }));
 
 // Key 8's iNaturalist name was remembered from an earlier lookup.
-vi.mock('~/lib/photos/inat-ids', () => ({
+vi.mock('~/lib/inat/ids', () => ({
   knownInatName: (key: number) => (key === 8 ? 'Remembered eight' : undefined),
 }));
 

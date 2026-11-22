@@ -11,7 +11,7 @@
  */
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import type { UsableImage } from '~/lib/gbif';
-import { knownInatName } from '~/lib/photos/inat-ids';
+import { knownInatName } from '~/lib/inat/ids';
 import { commonNames, gbifCommonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 
 /** Common names looked up per batch, so a search's matches appear as they arrive. */

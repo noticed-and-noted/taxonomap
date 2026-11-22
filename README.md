@@ -12,7 +12,7 @@ An interactive map that visualises all of the biodiversity data stored in [GBIFâ
 ![The application home page](docs/brand/example.png)
 
 - See where records are on the map, and filter by species, date, place, record type and other fields
-- Click a hexagon to list the species recorded there and the induvidual records
+- Click a hexagon to list the species recorded there and the individual records
 - Open a species page for photos, a description from Wikipedia, charts and other details
 - Browse the Tree of Life from kingdoms down to species, as a sunburst or icicle chart
 - See what's near you, by dropping a pin or providing your location
@@ -28,6 +28,10 @@ cp .env.example .env
 pnpm install
 pnpm dev
 ```
+
+## Working on it
+
+[docs/architecture.md](docs/architecture.md) explains how the code fits together, with recipes for adding a filter, a page or a data source. [docs/design-system.md](docs/design-system.md) covers how things look.
 
 ## Data
 

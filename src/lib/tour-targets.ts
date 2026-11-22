@@ -2,7 +2,7 @@
  * Where on the page the tour and the "Try this" hints point: the first laid-out
  * match of a selector, so a desktop control and its phone stand-in can share one.
  */
-import { $busiestHexBox } from '~/stores/explorer';
+import { $busiestHexBox } from '~/stores/map-messages';
 import type { ChecklistId } from '~/stores/onboarding';
 import { clipBox, type ScreenBox } from './tour';
 

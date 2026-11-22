@@ -4,7 +4,7 @@
  * matching GBIF taxa to iNaturalist (including via ancestors).
  */
 import type { NameRow } from '~/lib/data/types';
-import type { InatPhoto, InatTaxon } from '~/lib/photos/inat';
+import type { InatPhoto, InatTaxon } from '~/lib/inat/client';
 
 interface Obs {
   id: number;
@@ -322,7 +322,7 @@ describe('taxon photos', () => {
       gbifAny: {},
     });
     vi.resetModules();
-    const { getTaxa } = await import('~/lib/photos/inat');
+    const { getTaxa } = await import('~/lib/inat/client');
     await getTaxa([5]);
     // The same list always makes the same request, so caches can share it.
     await getTaxa([40, 5]);
@@ -480,7 +480,7 @@ describe('taxon photo edge cases', () => {
 describe('iNaturalist photos', () => {
   it('credit the attribution name, and allow taxa and observations without photos', async () => {
     vi.resetModules();
-    const inat = await import('~/lib/photos/inat');
+    const inat = await import('~/lib/inat/client');
     const photoWithAttribution = { ...photo(1), attribution_name: 'Ann' };
     expect(inat.toImage(photoWithAttribution)).toMatchObject({ creator: 'Ann' });
     expect(inat.toImage({ ...photo(2), attribution: 'odd' })).not.toHaveProperty('creator');
@@ -746,7 +746,7 @@ describe('finding iNaturalist taxa cheaply', () => {
 describe('remembered iNaturalist IDs', () => {
   const load = async () => {
     vi.resetModules();
-    return import('~/lib/photos/inat-ids');
+    return import('~/lib/inat/ids');
   };
 
   it('works for this visit alone when there is no storage', async () => {

@@ -14,13 +14,15 @@ const SOME_RECORDS = { extent: [-10, 40, 10, 60], centre: [2, 48] };
 async function stores(search = '') {
   vi.resetModules();
   history.replaceState(null, '', `/${search}`);
-  const [flyToTaxa, explorer, fitSearch, near] = await Promise.all([
+  const [flyToTaxa, explorer, filters, mapMessages, fitSearch, near] = await Promise.all([
     import('~/stores/fly-to-taxa'),
     import('~/stores/explorer'),
+    import('~/stores/filters'),
+    import('~/stores/map-messages'),
     import('~/stores/fit-search'),
     import('~/stores/near'),
   ]);
-  return { ...flyToTaxa, ...explorer, ...fitSearch, ...near };
+  return { ...flyToTaxa, ...explorer, ...filters, ...mapMessages, ...fitSearch, ...near };
 }
 
 beforeEach(() => {

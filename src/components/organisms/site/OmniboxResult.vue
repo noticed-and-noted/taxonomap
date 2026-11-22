@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** A species, group or place result in the header search: its names, and a taxon's rank and record count. */
-import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import { compact, RANK_LABELS } from '~/lib/format';
 import type { OmniboxOption } from './omniboxOptions';
 
