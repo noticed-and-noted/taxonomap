@@ -150,7 +150,7 @@ describe('screen', () => {
 });
 
 describe('PIN_CURSOR', () => {
-  it('is an SVG cursor centred on its hotspot with a crosshair fallback', () => {
-    expect(PIN_CURSOR).toMatch(/^url\("data:image\/svg\+xml,%3Csvg.*"\) 16 16, crosshair$/);
+  it('is an SVG cursor pointing from its stem tip with a crosshair fallback', () => {
+    expect(PIN_CURSOR).toMatch(/^url\("data:image\/svg\+xml,%3Csvg.*"\) 11 29, crosshair$/);
   });
 });
