@@ -23,6 +23,7 @@ import type { Place } from '~/lib/geocode';
 import { $speciesManifest, loadSpeciesManifest, speciesPath } from '~/lib/species/links';
 import { $flyTo, $occurrenceFilter, MAX_TAXA, viewParam } from '~/stores/explorer';
 import { flyToRecords, shouldFitTaxa } from '~/stores/fly-to-taxa';
+import { exitNearMode } from '~/stores/near';
 import { markDone } from '~/stores/onboarding';
 import { addTaxon, taxonFromHit } from '~/stores/taxon';
 import { $treeFocus } from '~/stores/tree';
@@ -262,6 +263,8 @@ async function pickTaxon(hit: NameHit) {
 function pickPlace(place: Place) {
   finishPick();
   if (props.mode !== 'map') {
+    // The map comes back as it was left, and a Near me panel left open would hold it on its own spot.
+    exitNearMode();
     void navigate(hrefWith('/', { view: viewParam({ lng: place.lng, lat: place.lat, zoom: place.bbox ? 8 : 10 }) }));
     return;
   }
