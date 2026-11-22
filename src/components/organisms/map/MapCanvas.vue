@@ -578,7 +578,7 @@ function followRecord() {
   // The zoom where the grid turns finer moves with the centre's latitude and the filters.
   recordMap.on('moveend', sizeRecordPlace);
   cleanups.push(
-    $recordPlace.listen(fit),
+    $recordPlace.listen((place) => fit(place?.area ?? null)),
     $hexGeometry.listen(sizeRecordPlace),
     $gridLevel.listen(sizeRecordPlace),
     $nearAt.listen(sizeRecordPlace),

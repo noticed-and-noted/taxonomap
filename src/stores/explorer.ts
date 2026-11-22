@@ -7,6 +7,7 @@ import { BASEMAP_IDS } from '~/lib/basemaps';
 import { parseRange, rangeFilter, rangeLabel, serializeRange, type DateRange } from '~/lib/dates';
 import { BASIS_LABELS, CONTINENT_LABELS, distance, IUCN_LABELS, MONTHS } from '~/lib/format';
 import type { BasisOfRecord, Continent, IucnCategory, OccurrenceFilter } from '~/lib/gbif';
+import type { RecordPlace } from '~/lib/map/recordPlace';
 import type { ScreenBox } from '~/lib/tour';
 import { $publisherKeys, $publisherNames, publisherName } from './publisher';
 import { $recorders } from './recorder';
@@ -170,7 +171,7 @@ export interface HexGeometry {
 export const $hexGeometry = atom<HexGeometry | null>(null);
 
 /** Where the record expanded in the records list sits (lib/map/recordPlace.ts), published by HexRecords for the map. */
-export const $recordPlace = atom<GeoJSON.Point | GeoJSON.Polygon | null>(null);
+export const $recordPlace = atom<RecordPlace | null>(null);
 
 export type FlyRequest =
   | {

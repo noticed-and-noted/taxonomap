@@ -139,6 +139,10 @@ export interface Occurrence extends HigherKeys {
   decimalLatitude?: number;
   decimalLongitude?: number;
   coordinateUncertaintyInMeters?: number;
+  /** The place's true shape as WKT, when the source gives one (a grid square, a plot, a transect). */
+  footprintWKT?: string;
+  /** The footprint's spatial reference system: an EPSG code or WKT; empty means WGS84. */
+  footprintSRS?: string;
   /** Why the source held data back, e.g. iNaturalist's note when the observer blurred the location. */
   informationWithheld?: string;
   eventDate?: string;

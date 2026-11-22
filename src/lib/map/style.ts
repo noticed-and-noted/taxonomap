@@ -15,13 +15,14 @@ import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
 import type { HexGeometry } from '~/stores/explorer';
+import type { RecordPlace } from './recordPlace';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 /** Zoomed out further, a record's area (or, outside a cell, its dot) says little more than its cell outline. */
 export const RECORD_MIN_ZOOM = 7;
 export const RECORD_DOT_LAYER = 'selected-record';
-/** The obscured record's square: its fill and dashed edge. */
+/** The record's area (its footprint, uncertainty circle or obscured square): its fill and dashed edge. */
 export const RECORD_AREA_LAYERS = ['record-area', 'record-edge'] as const;
 const RECORD_DOT_RADIUS_PX = 6;
 const RECORD_DOT_STROKE_PX = 3;
@@ -34,7 +35,7 @@ const LAYER_MAX_ZOOM = 24;
 const RECORD_PART = 'record';
 const IS_RECORD_AREA: ExpressionSpecification = [
   'all',
-  ['==', ['geometry-type'], 'Polygon'],
+  ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
   ['==', ['get', 'part'], RECORD_PART],
 ];
 /** Glyphs for raster basemaps, which bring none of their own. */
@@ -106,8 +107,8 @@ function dataLayers(level: number): LayerSpecification[] {
 }
 
 /**
- * The expanded record: a ring, not a filled dot, so it never reads as the near-me pin; an obscured
- * record's square is dashed like the near-me circle, as both mean "somewhere in here".
+ * The expanded record: a ring, not a filled dot, so it never reads as the near-me pin; its area is
+ * dashed like the near-me circle, as both mean "somewhere in here".
  */
 function recordLayers(accent: string, bg: string): LayerSpecification[] {
   const base = { source: 'selected', minzoom: RECORD_MIN_ZOOM } as const;
@@ -370,13 +371,15 @@ export function nearGeoJson(at: { lat: number; lng: number } | null, radiusKm: n
 /** Outline of the selected cell, and the place of the record expanded in its list (lib/map/recordPlace.ts). */
 export function selectedGeoJson(
   geometry: HexGeometry | null,
-  record: GeoJSON.Point | GeoJSON.Polygon | null = null,
+  record: RecordPlace | null = null,
 ): GeoJSON.FeatureCollection {
   if (!geometry && !record) return EMPTY;
   const features: GeoJSON.Feature[] = [];
   if (geometry)
     features.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [geometry.ring] } });
-  if (record) features.push({ type: 'Feature', properties: { part: RECORD_PART }, geometry: record });
+  // The area goes first so the dot draws over its edge.
+  for (const part of [record?.area, record?.point])
+    if (part) features.push({ type: 'Feature', properties: { part: RECORD_PART }, geometry: part });
   return { type: 'FeatureCollection', features };
 }
 

@@ -312,7 +312,7 @@ const HIGHER_RANKS: readonly Rank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'F
 /** The record fields the cell's record list reads: its row, its details and its place on the map. */
 const LISTED_RECORD_FIELDS =
   `${RECORD_FIELDS} datasetName publishingOrgKey basisOfRecord eventDate year recordedBy vernacularName ` +
-  'decimalLatitude decimalLongitude coordinateUncertaintyInMeters informationWithheld ' +
+  'decimalLatitude decimalLongitude coordinateUncertaintyInMeters footprintWKT footprintSRS informationWithheld ' +
   'classification { usage { key name rank } acceptedUsage { key name } classification { key name rank } }';
 
 /**

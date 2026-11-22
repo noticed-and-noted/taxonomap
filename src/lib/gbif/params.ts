@@ -41,14 +41,18 @@ export function circleToWkt(lat: number, lng: number, radiusKm: number, sides = 
 
 /** Closed counter-clockwise ring [lng, lat][] for a (snapped, rounded) circle. */
 export function circleRing(lat: number, lng: number, radiusKm: number, sides = 24): [number, number][] {
-  const radius = snapRadiusKm(radiusKm);
   const centre = roundLatLng(lat, lng);
-  const deltaLat = radius / 110.574;
-  const deltaLng = radius / (111.32 * Math.max(Math.cos((centre.lat * Math.PI) / 180), 1e-6));
+  return exactCircleRing(centre.lat, centre.lng, snapRadiusKm(radiusKm), sides);
+}
+
+/** Closed counter-clockwise ring [lng, lat][] for a circle drawn exactly where and as wide as given. */
+export function exactCircleRing(lat: number, lng: number, radiusKm: number, sides = 24): [number, number][] {
+  const deltaLat = radiusKm / 110.574;
+  const deltaLng = radiusKm / (111.32 * Math.max(Math.cos((lat * Math.PI) / 180), 1e-6));
   const points: [number, number][] = [];
   for (let index = 0; index < sides; index++) {
     const angle = (index / sides) * 2 * Math.PI;
-    points.push([centre.lng + deltaLng * Math.cos(angle), centre.lat + deltaLat * Math.sin(angle)]);
+    points.push([lng + deltaLng * Math.cos(angle), lat + deltaLat * Math.sin(angle)]);
   }
   points.push(points[0] as [number, number]);
   return points;

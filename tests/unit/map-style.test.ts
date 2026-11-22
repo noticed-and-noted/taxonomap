@@ -189,9 +189,26 @@ describe('map GeoJSON', () => {
 
   it('marks the expanded record, with or without a selected cell', () => {
     const point: GeoJSON.Point = { type: 'Point', coordinates: [-0.1, 51.5] };
-    expect(selectedGeoJson(null, point).features).toEqual([
+    expect(selectedGeoJson(null, { point, area: null }).features).toEqual([
       { type: 'Feature', properties: { part: 'record' }, geometry: point },
     ]);
+  });
+
+  it('draws the record’s area under its dot', () => {
+    const point: GeoJSON.Point = { type: 'Point', coordinates: [0, 0] };
+    const area: GeoJSON.Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    };
+    const geometries = selectedGeoJson(null, { point, area }).features.map((feature) => feature.geometry);
+    expect(geometries).toEqual([area, point]);
   });
 
   it('reads a hex feature into its ring, WKT and count', () => {

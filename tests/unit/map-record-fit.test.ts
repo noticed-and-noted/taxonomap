@@ -79,6 +79,19 @@ describe('createRecordFit', () => {
     expect(fitBox).toHaveBeenCalledWith([0, 0, 2, 2], 6);
   });
 
+  it('leaves the map alone for an area too vast to be worth zooming out to', () => {
+    const { fitBox, follow } = setup();
+    follow(square(0, 0, 4));
+    expect(fitBox).not.toHaveBeenCalled();
+  });
+
+  it('fits every polygon of a multipolygon', () => {
+    const { fitBox, follow } = setup();
+    const parts = [square(0, 0, 0.5), square(1.5, 1.5, 0.5)].map((polygon) => polygon.coordinates);
+    follow({ type: 'MultiPolygon', coordinates: parts });
+    expect(fitBox).toHaveBeenCalledWith([0, 0, 2, 2], 6);
+  });
+
   it('goes back to the view from before when the record closes', () => {
     const { map, follow } = setup();
     follow(square(0, 0, 2));

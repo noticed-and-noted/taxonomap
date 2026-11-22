@@ -1,11 +1,12 @@
 /**
- * Keeps an expanded record's whole obscured area (lib/map/recordPlace.ts) in view: zooms out when the
+ * Keeps an expanded record's whole area (lib/map/recordPlace.ts) in view: zooms out when the
  * area doesn't fit the part of the map the panels leave clear, and goes back to the view from before once
  * the record closes or another is picked, unless the viewer moved the map or picked another cell since.
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import { $selectedHex, sameView, type MapView } from '~/stores/explorer';
 import { prefersReducedMotion } from '~/stores/reading';
+import type { RecordArea } from './recordPlace';
 
 /** How much of the map the floating panels cover, in px per edge. */
 export interface CoveredEdges {
@@ -23,6 +24,8 @@ export interface RecordFitOptions {
 }
 
 const RETURN_DURATION_MS = 1200;
+/** Wider or taller than this, an area (a country's centroid with a vast uncertainty, say) isn't worth zooming out for. */
+const MAX_FIT_SPAN_DEGREES = 3;
 
 interface Fitted {
   before: MapView;
@@ -36,19 +39,19 @@ interface Fitted {
  */
 export function createRecordFit({ map, coveredEdges, fitBox }: RecordFitOptions) {
   let fitted: Fitted | null = null;
-  let latest: GeoJSON.Point | GeoJSON.Polygon | null = null;
+  let latest: RecordArea | null = null;
 
   const viewNow = (): MapView => ({ ...map.getCenter(), zoom: map.getZoom() });
 
-  function fitIfHidden(area: GeoJSON.Polygon) {
-    const ring = area.coordinates[0] ?? [];
-    if (isInView(map, ring, coveredEdges())) return;
+  function fitIfHidden(area: RecordArea) {
+    const outline = outerPositions(area);
+    if (isInView(map, outline, coveredEdges()) || isTooWide(outline)) return;
     const current: Fitted = { before: viewNow(), after: null, hex: $selectedHex.get() };
     fitted = current;
     map.once('moveend', () => {
       if (fitted === current) current.after = viewNow();
     });
-    fitBox(boundsOf(ring), map.getZoom());
+    fitBox(boundsOf(outline), map.getZoom());
   }
 
   /** Back to the view before the last fit, if the map is still where the fit left it; `then` runs once there. */
@@ -68,12 +71,25 @@ export function createRecordFit({ map, coveredEdges, fitBox }: RecordFitOptions)
     });
   }
 
-  return (place: GeoJSON.Point | GeoJSON.Polygon | null) => {
-    latest = place;
+  return (area: RecordArea | null) => {
+    latest = area;
     goBack(() => {
-      if (place?.type === 'Polygon' && latest === place) fitIfHidden(place);
+      if (area && latest === area) fitIfHidden(area);
     });
   };
+}
+
+/** The positions of an area's outer rings: holes never reach past them. */
+function outerPositions(area: RecordArea): GeoJSON.Position[] {
+  const polygons = area.type === 'Polygon' ? [area.coordinates] : area.coordinates;
+  return polygons.flatMap((polygon) => polygon[0] ?? []);
+}
+
+/** Whether an outline spans more than is worth zooming out to show. */
+function isTooWide(outline: GeoJSON.Position[]): boolean {
+  if (outline.length === 0) return false;
+  const [west, south, east, north] = boundsOf(outline);
+  return east - west > MAX_FIT_SPAN_DEGREES || north - south > MAX_FIT_SPAN_DEGREES;
 }
 
 function isInView(map: MlMap, ring: GeoJSON.Position[], covered: CoveredEdges): boolean {
