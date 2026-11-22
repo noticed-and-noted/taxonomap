@@ -7,10 +7,11 @@
  * usually instant. Open it with the exposed `open(index)`. Up and down arrows (or swipes) call `onStepRow` (`@step-row`),
  * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import { useImageZoom } from '~/composables/useImageZoom';
 import { usePhotoPreload } from '~/composables/usePhotoPreload';
 import { useSwipe } from '~/composables/useSwipe';
 import { photoCrossOrigin, thumbnailUrl, type UsableImage } from '~/lib/gbif';
@@ -49,9 +50,25 @@ const isOpen = ref(false);
 const current = computed(() => props.images[index.value]);
 const currentSrc = computed(() => (current.value ? thumbnailUrl(current.value, '800x') : undefined));
 
+const stage = ref<HTMLDivElement>();
+const photo = ref<HTMLImageElement>();
+const zoom = useImageZoom(stage, photo);
+watch(currentSrc, zoom.reset);
+
+/** The locator's frame round the part of the photo in view. */
+const locatorFrame = computed(() => {
+  const { left, top, width, height } = zoom.visibleArea.value;
+  const percent = (fraction: number) => `${fraction * 100}%`;
+  return { left: percent(left), top: percent(top), width: percent(width), height: percent(height) };
+});
+
 /** Tapping the photo hides everything over it, for an unobstructed look; tapping again brings it back. */
 const areControlsHidden = ref(false);
-const toggleControls = () => (areControlsHidden.value = !areControlsHidden.value);
+
+/** A tap toggles the controls; the end of a drag that panned or pinched the photo doesn't. */
+function onPhotoClick() {
+  if (!zoom.wasDragged()) areControlsHidden.value = !areControlsHidden.value;
+}
 
 const { settled, failed, attempt, settle, onError, preload } = usePhotoPreload();
 
@@ -101,11 +118,30 @@ function onKey(event: KeyboardEvent) {
   }
 }
 
-// A sideways swipe steps through the photos; an upright one through the records, as the arrow keys do.
-const { isPinchZoomed, onPointerDown, onPointerUp, onPointerCancel } = useSwipe({
+// A sideways swipe steps through the photos; an upright one through the records, as the arrow keys do. Zoomed in or
+// pinching, drags move the photo instead.
+const swipe = useSwipe({
   onSideways: step,
   onUpright: (delta) => props.onStepRow?.(delta),
+  canSwipe: () => !zoom.isZoomed.value && zoom.pressCount() <= 1,
 });
+
+/** Zoom counts the press first, so a second finger can rule the swipe out. */
+function onStagePointerDown(event: PointerEvent) {
+  zoom.onPointerDown(event);
+  swipe.onPointerDown(event);
+}
+
+/** The swipe ends while the zoom still counts this press, so lifting the first of two fingers isn't a swipe. */
+function onStagePointerUp(event: PointerEvent) {
+  swipe.onPointerUp(event);
+  zoom.release(event);
+}
+
+function onStagePointerCancel(event: PointerEvent) {
+  swipe.onPointerCancel();
+  zoom.release(event);
+}
 
 /** The touch hint's arrows: up and down for records, left and right for photos, both when there are both. */
 const swipeIcon = computed(() => {
@@ -117,6 +153,7 @@ const swipeIcon = computed(() => {
 /** Unmounts the photo and lets the map run again. */
 function onClose() {
   isOpen.value = false;
+  zoom.reset();
   $lightboxOpen.set(false);
 }
 
@@ -145,12 +182,17 @@ defineExpose({ open });
   >
     <div
       v-if="isOpen"
+      ref="stage"
       class="stage absolute inset-0"
-      :class="{ 'controls-hidden': areControlsHidden, 'swipes-rows': onStepRow, 'pinch-zoomed': isPinchZoomed }"
-      @click.self="toggleControls"
-      @pointerdown="onPointerDown"
-      @pointerup="onPointerUp"
-      @pointercancel="onPointerCancel"
+      :class="{ 'controls-hidden': areControlsHidden, zoomed: zoom.isZoomed.value }"
+      @click.self="onPhotoClick"
+      @pointerdown="onStagePointerDown"
+      @pointermove="zoom.onPointerMove"
+      @pointerup="onStagePointerUp"
+      @pointercancel="onStagePointerCancel"
+      @wheel="zoom.onWheel"
+      @gesturestart="zoom.onGesture"
+      @gesturechange="zoom.onGesture"
     >
       <SkeletonBlock
         v-if="loading || (currentSrc && !settled.has(currentSrc))"
@@ -171,16 +213,19 @@ defineExpose({ open });
       </p>
       <img
         v-if="!loading && currentSrc && !failed.has(currentSrc)"
+        ref="photo"
         :key="`${currentSrc}#${attempt}`"
         :src="currentSrc"
         :crossorigin="photoCrossOrigin(currentSrc)"
         :alt="name"
         decoding="async"
+        draggable="false"
         class="relative size-full object-contain transition-opacity duration-200"
         :class="settled.has(currentSrc) ? 'opacity-100' : 'opacity-0'"
+        :style="{ transform: zoom.transform.value }"
         @load="settle(currentSrc, true)"
         @error="onError(currentSrc)"
-        @click="toggleControls"
+        @click="onPhotoClick"
       />
 
       <!-- Count and name, level with the close button. The name stays with no photo. -->
@@ -208,9 +253,30 @@ defineExpose({ open });
         </button>
       </template>
 
-      <!-- The strip, from the left, with the credit and key hints beneath it.
+      <!-- The zoom locator when zoomed in, then the strip, from the left, with the credit and key hints beneath it.
            Clicks pass through the band, so taps beside them still reach the photo. -->
       <div class="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col gap-1.5">
+        <!-- Zoomed in: where the view sits on the whole photo, and on the right a way back to all of it. -->
+        <div v-if="zoom.isZoomed.value && currentSrc" class="overlay flex items-end justify-between gap-1.5">
+          <div class="locator" aria-hidden="true">
+            <img
+              :src="currentSrc"
+              :crossorigin="photoCrossOrigin(currentSrc)"
+              alt=""
+              draggable="false"
+              class="block w-full"
+            />
+            <div class="locator-frame" :style="locatorFrame" />
+          </div>
+          <button
+            type="button"
+            class="overlay-button zoom-reset pointer-events-auto"
+            aria-label="Show the whole photo"
+            @click="zoom.reset"
+          >
+            <UiIcon name="reset" size="20" />
+          </button>
+        </div>
         <PhotoLightboxFilmstrip
           v-if="images.length > 1"
           class="overlay"
@@ -348,20 +414,39 @@ kbd {
   top: 50%;
   translate: 0 -50%;
 }
+.zoom-reset {
+  position: static;
+}
+/* The whole photo, small, with the part in view framed and the rest dimmed. Its height follows the photo's shape. */
+.locator {
+  position: relative;
+  width: 4.5rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.5);
+  border-radius: var(--radius-sm);
+  background: black;
+}
+.locator-frame {
+  position: absolute;
+  border: 1.5px solid white;
+  border-radius: 2px;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.5);
+}
+@media (min-width: 640px) {
+  .locator {
+    width: 6rem;
+  }
+}
 .lightbox[open] {
   animation: pop var(--dur) var(--ease);
 }
-/* Sideways drags are swipes (see onPointerUp); the browser keeps vertical panning and pinch-zoom, unless upright
-   drags step through records too. */
+/* Every drag and pinch on the stage is ours: swipes, or zooming and panning the photo (useImageZoom), never the
+   page. The filmstrip scrolls itself, as its own scroll container. */
 .stage {
-  touch-action: pan-y pinch-zoom;
+  touch-action: none;
 }
-.stage.swipes-rows {
-  touch-action: pinch-zoom;
-}
-/* Zoomed in, the browser pans the zoomed page every way (onPointerDown skips swipes then). */
-.stage.pinch-zoomed {
-  touch-action: auto;
+.stage.zoomed img {
+  cursor: grab;
 }
 /* Visibility as well as opacity, so hidden controls can't be tabbed to or tapped. */
 .overlay,

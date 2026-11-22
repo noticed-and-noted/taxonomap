@@ -1,8 +1,7 @@
 /**
  * Touch swipes on an element: a mostly sideways swipe and a mostly upright one call separate handlers.
- * Pinch-zoomed in, drags pan round the zoomed page instead, so they aren't swipes.
+ * The caller can rule swipes out for a while, say while a photo is zoomed in and drags pan it instead.
  */
-import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 /** Travel, in px, that makes a touch a swipe rather than a tap. */
 const SWIPE_DISTANCE = 50;
@@ -11,6 +10,8 @@ const SWIPE_DISTANCE = 50;
 export interface SwipeHandlers {
   onSideways: (step: number) => void;
   onUpright?: (step: number) => void;
+  /** Whether a touch may swipe now; asked as it starts and as it ends. Always, when left out. */
+  canSwipe?: () => boolean;
 }
 
 /**
@@ -19,14 +20,11 @@ export interface SwipeHandlers {
  */
 export function useSwipe(handlers: SwipeHandlers) {
   let swipeStart: { x: number; y: number } | null = null;
-  const isPinchZoomed = ref(false);
-  const trackPinchZoom = (event: Event) => (isPinchZoomed.value = (event.target as VisualViewport).scale > 1);
-  onMounted(() => window.visualViewport?.addEventListener('resize', trackPinchZoom));
-  onBeforeUnmount(() => window.visualViewport?.removeEventListener('resize', trackPinchZoom));
+  const canSwipe = handlers.canSwipe ?? (() => true);
 
-  /** Starts a swipe on a touch, unless the page is zoomed in. */
+  /** Starts a swipe on a touch, when swipes are allowed. */
   function onPointerDown(event: PointerEvent) {
-    const isSwipe = event.pointerType === 'touch' && !isPinchZoomed.value;
+    const isSwipe = event.pointerType === 'touch' && canSwipe();
     swipeStart = isSwipe ? { x: event.clientX, y: event.clientY } : null;
   }
 
@@ -37,7 +35,7 @@ export function useSwipe(handlers: SwipeHandlers) {
 
   /** Ends a swipe, calling the handler for its main direction if it travelled far enough. */
   function onPointerUp(event: PointerEvent) {
-    if (!swipeStart) return;
+    if (!swipeStart || !canSwipe()) return void (swipeStart = null);
     const deltaX = event.clientX - swipeStart.x;
     const deltaY = event.clientY - swipeStart.y;
     swipeStart = null;
@@ -46,5 +44,5 @@ export function useSwipe(handlers: SwipeHandlers) {
     } else if (Math.abs(deltaY) >= SWIPE_DISTANCE) handlers.onUpright?.(deltaY < 0 ? 1 : -1);
   }
 
-  return { isPinchZoomed, onPointerDown, onPointerUp, onPointerCancel };
+  return { onPointerDown, onPointerUp, onPointerCancel };
 }
