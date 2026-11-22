@@ -189,12 +189,20 @@ function onInput() {
 function onFocus() {
   void loadNameIndex(); // warm the index on first focus
   void loadSpeciesManifest(); // so About links go to pre-rendered pages
-  if (query.value) open.value = true;
+  if (query.value) reopen();
 }
 
-/** Puts the list away, keeping what's typed. */
+/**
+ * Puts the list away, keeping what's typed. The highlight resets when the list next opens, not here: on iOS a
+ * tap on the preview's About link blurs the box first, and resetting would re-point the link at the first result.
+ */
 function close() {
   open.value = false;
+}
+
+/** Shows the list again from its first row. */
+function reopen() {
+  open.value = true;
   active.value = 0;
 }
 
@@ -313,7 +321,7 @@ function stepActive(delta: number) {
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
-    open.value = true;
+    if (!open.value) reopen();
     stepActive(1);
   } else if (event.key === 'ArrowUp') {
     event.preventDefault();
