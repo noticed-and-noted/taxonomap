@@ -73,8 +73,23 @@ describe('recordPlace', () => {
     expect(area.coordinates[1]![0]![1]).toEqual([3, 2]);
   });
 
+  it('reads a footprint tagged with heights or measures', () => {
+    for (const tag of ['Z', 'M', 'ZM']) {
+      const wkt = `POLYGON ${tag} ((-79.4 43.7 1, -79.3 43.7 1, -79.3 43.8 1, -79.4 43.8 1, -79.4 43.7 1))`;
+      expect(recordPlace(record({ footprintWKT: wkt }))?.area?.type).toBe('Polygon');
+    }
+  });
+
   it('accepts a footprint in WGS84 however its system is named', () => {
-    for (const footprintSRS of ['EPSG:4326', 'urn:ogc:def:crs:EPSG::4326', 'GEOGCS["WGS 84",DATUM["WGS_1984"]]'])
+    const systems = [
+      'EPSG:4326',
+      'urn:ogc:def:crs:EPSG::4326',
+      'GEOGCS["WGS 84",DATUM["WGS_1984"]]',
+      'EPSG:4258',
+      'EPSG:4269',
+      'GEOGCS["ETRS89"]',
+    ];
+    for (const footprintSRS of systems)
       expect(recordPlace(record({ footprintWKT: SQUARE_WKT, footprintSRS }))?.area?.type).toBe('Polygon');
   });
 

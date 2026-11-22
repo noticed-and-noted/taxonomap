@@ -4,25 +4,29 @@
  */
 import type { Occurrence } from '~/lib/gbif';
 
-const WKT_POLYGON = /^\s*(?<shape>MULTIPOLYGON|POLYGON)\s*(?<body>\(.*\))\s*$/is;
+/** A polygon or multipolygon, with or without a Z, M or ZM tag (the heights and measures are dropped). */
+const WKT_POLYGON = /^\s*(?<shape>MULTIPOLYGON|POLYGON)\s*(?:ZM|Z|M)?\s*(?<body>\(.*\))\s*$/is;
 const NUMBER = String.raw`[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?`;
 /** A position's longitude and latitude, dropping any height or measure after them. */
 const POSITION = new RegExp(String.raw`(${NUMBER})\s+(${NUMBER})(?:\s+${NUMBER})*`, 'g');
 /** A projected system, in metres, that would need reprojecting; GBIF doesn't reproject footprints. */
 const PROJECTED_SRS = /PROJCS|PROJCRS/i;
-/** WGS84 however it is written: "EPSG:4326", an OGC URN ending "::4326", or WKT naming "WGS 84". */
-const WGS84_SRS = /\b4326\b|WGS\s*84/i;
+/**
+ * Longitude and latitude on WGS84 or a datum within a metre or so of it (ETRS89, NAD83), however written:
+ * "EPSG:4326", an OGC URN ending "::4258", or WKT naming the datum.
+ */
+const LNG_LAT_SRS = /\b(?:4326|4258|4269)\b|WGS\s*84|ETRS\s*89|NAD\s*83/i;
 /** A closed ring needs three corners plus the first again. */
 const MIN_RING_POSITIONS = 4;
 
 type Ring = [number, number][];
 
 /**
- * The record's footprint, when it is a polygon in WGS84 longitude and latitude.
+ * The record's footprint, when it is a polygon in longitude and latitude.
  * @returns The polygon, or null without one, in another system, or when the WKT doesn't parse.
  */
 export function footprintArea(occurrence: Occurrence): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
-  if (!occurrence.footprintWKT || !isWgs84(occurrence.footprintSRS)) return null;
+  if (!occurrence.footprintWKT || !isLngLatSrs(occurrence.footprintSRS)) return null;
 
   const { shape, body } = WKT_POLYGON.exec(occurrence.footprintWKT)?.groups ?? {};
   if (!shape || !body) return null;
@@ -33,9 +37,9 @@ export function footprintArea(occurrence: Occurrence): GeoJSON.Polygon | GeoJSON
 }
 
 /** Whether a footprint SRS means plain longitude and latitude; Darwin Core reads an empty one as WGS84. */
-function isWgs84(srs: string | undefined): boolean {
+function isLngLatSrs(srs: string | undefined): boolean {
   if (!srs?.trim()) return true;
-  return WGS84_SRS.test(srs) && !PROJECTED_SRS.test(srs);
+  return LNG_LAT_SRS.test(srs) && !PROJECTED_SRS.test(srs);
 }
 
 /** WKT's parenthesised lists as nested arrays: "((1 2, 3 4))" is [[[1, 2], [3, 4]]]; null if malformed. */

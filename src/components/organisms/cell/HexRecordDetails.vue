@@ -43,20 +43,19 @@ const source = computed(() => props.occurrence.datasetName ?? props.occurrence.p
 const sound = computed(() => usableSounds(props.occurrence)[0]);
 const publisher = ref<string>();
 
-// GBIF splits a record's recorders on "|", and filters by each name as split.
-const recorders = computed(() =>
-  (props.occurrence.recordedBy ?? '')
-    .split('|')
-    .map((recorder) => recorder.trim())
-    .filter(Boolean),
-);
+// GBIF splits a record's recorders on "|", and filters by each name as split. A name listed twice shows once.
+const recorders = computed(() => {
+  const names = (props.occurrence.recordedBy ?? '').split('|').map((recorder) => recorder.trim());
+  return [...new Set(names.filter(Boolean))];
+});
 
 /** Filter the map to a recorder's records from this record's publisher. */
 function filterToRecorder(recorder: string): void {
   $recorders.set([recorder]);
   // Different people share a name across publishers, so keep to the one that published this record.
+  // Without one, an earlier record's publisher filter mustn't linger and hide this recorder's records.
   const publisherKey = props.occurrence.publishingOrgKey;
-  if (publisherKey) $publisherKeys.set([publisherKey]);
+  $publisherKeys.set(publisherKey ? [publisherKey] : []);
 }
 
 /** The hover tooltip of a recorder link (naming its recorder) or the publisher link, centred above it. */

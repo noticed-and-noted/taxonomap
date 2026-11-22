@@ -55,6 +55,8 @@ export function useImageZoom(stage: Ref<HTMLElement | undefined>, photo: Ref<HTM
   function onGesture(event: Event) {
     const gesture = event as GestureEvent;
     event.preventDefault();
+    // iOS sends gestures for a touch pinch too, which the presses already zoom.
+    if (presses.size > 0) return;
     if (event.type === 'gesturestart') lastGestureScale = 1;
     view.zoom(gesture.scale / lastGestureScale, gesture.clientX, gesture.clientY);
     lastGestureScale = gesture.scale;
@@ -67,6 +69,8 @@ export function useImageZoom(stage: Ref<HTMLElement | undefined>, photo: Ref<HTM
     /** Whether the last press moved far enough to be a drag, so its click shouldn't count as a tap. */
     wasDragged: () => travelPx > DRAG_THRESHOLD_PX,
     pressCount: () => presses.size,
+    /** Keeps the zoom within the photo's edges, and the locator true, after the stage changes size. */
+    fitToStage: view.fitToStage,
     /** Back to the whole photo, as when another one shows. */
     reset: () => {
       view.reset();
@@ -106,6 +110,7 @@ function photoView(stage: Ref<HTMLElement | undefined>, photo: Ref<HTMLImageElem
     visibleArea: computed(() => visibleArea(view.value, ...sizes())),
     zoom,
     pan: (deltaX: number, deltaY: number) => (view.value = panBy(view.value, deltaX, deltaY, ...sizes())),
+    fitToStage: () => (view.value = panBy(view.value, 0, 0, ...sizes())),
     reset: () => (view.value = UNZOOMED),
   };
 }

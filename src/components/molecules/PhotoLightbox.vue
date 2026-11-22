@@ -7,7 +7,7 @@
  * usually instant. Open it with the exposed `open(index)`. Up and down arrows (or swipes) call `onStepRow` (`@step-row`),
  * so a list of records can move the lightbox to its neighbours; with no photos it says so. Desktop gets a key legend.
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
@@ -54,6 +54,9 @@ const stage = ref<HTMLDivElement>();
 const photo = ref<HTMLImageElement>();
 const zoom = useImageZoom(stage, photo);
 watch(currentSrc, zoom.reset);
+// The stage's size isn't reactive, so a rotation or window resize re-fits the zoom by hand.
+onMounted(() => window.addEventListener('resize', zoom.fitToStage));
+onBeforeUnmount(() => window.removeEventListener('resize', zoom.fitToStage));
 
 /** The locator's frame round the part of the photo in view. */
 const locatorFrame = computed(() => {
@@ -138,6 +141,7 @@ function onStagePointerUp(event: PointerEvent) {
   zoom.release(event);
 }
 
+/** The browser took the press over (a system gesture, say), so it is neither a swipe nor a drag. */
 function onStagePointerCancel(event: PointerEvent) {
   swipe.onPointerCancel();
   zoom.release(event);
@@ -417,7 +421,8 @@ kbd {
 .zoom-reset {
   position: static;
 }
-/* The whole photo, small, with the part in view framed and the rest dimmed. Its height follows the photo's shape. */
+/* The whole photo, small, with the part in view framed and the rest dimmed. Its height follows the photo's shape.
+   Fixed white and black, like the rest of the stage, since it sits over the photo in both themes. */
 .locator {
   position: relative;
   width: 4.5rem;

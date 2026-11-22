@@ -49,7 +49,11 @@ describe('useImageZoom', () => {
   /** A stage at the top left of the page and a photo, with the gesture handlers bound to them. */
   function setup(natural = { width: 800, height: 400 }) {
     const stage = document.createElement('div');
-    Object.defineProperties(stage, { clientWidth: { value: STAGE.width }, clientHeight: { value: STAGE.height } });
+    // Configurable, so a test can resize the stage.
+    Object.defineProperties(stage, {
+      clientWidth: { value: STAGE.width, configurable: true },
+      clientHeight: { value: STAGE.height, configurable: true },
+    });
     stage.getBoundingClientRect = () => ({ left: 0, top: 0, ...STAGE }) as DOMRect;
     const photo = document.createElement('img');
     Object.defineProperties(photo, {
@@ -142,6 +146,29 @@ describe('useImageZoom', () => {
     expect(zoom.visibleArea.value.width).toBeCloseTo(1 / 3);
     zoom.reset();
     expect(zoom.transform.value).toBe('translate(0px, 0px) scale(1)');
+  });
+
+  it('leaves a touch pinch to the presses, though iOS also reports it as gestures', () => {
+    const { photo, zoom } = setup();
+    zoom.onPointerDown(press(photo, 1, 150, 150));
+    zoom.onPointerDown(press(photo, 2, 250, 150));
+    zoom.onGesture(
+      Object.assign(new Event('gesturestart', { cancelable: true }), { scale: 1, clientX: 200, clientY: 150 }),
+    );
+    zoom.onPointerMove(press(photo, 2, 350, 150));
+    zoom.onGesture(
+      Object.assign(new Event('gesturechange', { cancelable: true }), { scale: 2, clientX: 250, clientY: 150 }),
+    );
+    expect(zoom.transform.value).toMatch(/scale\(2\)/);
+  });
+
+  it('re-fits the zoom and its locator after the stage changes size', () => {
+    const { stage, zoom } = setup();
+    zoom.onWheel(wheel({ ctrlKey: true, deltaY: -100, clientX: 0, clientY: 0 }));
+    const before = zoom.visibleArea.value;
+    Object.defineProperties(stage, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+    zoom.fitToStage();
+    expect(zoom.visibleArea.value).not.toEqual(before);
   });
 
   it('pans nowhere once the stage and photo have gone, as when the lightbox closes mid-zoom', () => {
