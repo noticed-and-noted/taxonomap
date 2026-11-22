@@ -1,7 +1,8 @@
 /**
  * Keeps a large record area (lib/map/recordPlace.ts) in view: zooms out when the area spans over 80% of
- * the part of the map the panels leave clear and doesn't fit it, and goes back to the view from before once
- * the record closes or another is picked, unless the viewer moved the map or picked another cell since.
+ * the part of the map the panels leave clear and doesn't fit it, flies straight on to the next record's area
+ * when that is large too, and goes back to the view from before once the record closes or a smaller one is
+ * picked, unless the viewer moved the map or picked another cell since.
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import { $selectedHex, sameView, type MapView } from '~/stores/explorer';
@@ -45,43 +46,66 @@ export function createRecordFit({ map, coveredEdges, fitBox }: RecordFitOptions)
 
   const viewNow = (): MapView => ({ ...map.getCenter(), zoom: map.getZoom() });
 
-  /** Zoom out to an area that is partly hidden and fills most of the clear map. */
-  function fitIfHidden(area: RecordArea) {
-    const outline = outerPositions(area);
-    const covered = coveredEdges();
-    const isWorthFitting = isLargeOnScreen(map, outline, covered) && !isTooWide(outline);
-    if (!isWorthFitting || isInView(map, outline, covered)) return;
-    const current: Fitted = { before: viewNow(), after: null, hex: $selectedHex.get() };
+  /** Fly to show an outline, returning to `before` when the record closes; zooms in no further than it. */
+  function startFit(outline: GeoJSON.Position[], before: MapView) {
+    const current: Fitted = { before, after: null, hex: $selectedHex.get() };
     fitted = current;
     map.once('moveend', () => {
       if (fitted === current) current.after = viewNow();
     });
-    fitBox(boundsOf(outline), map.getZoom());
+    fitBox(boundsOf(outline), before.zoom);
   }
 
-  /** Back to the view before the last fit, if the map is still where the fit left it; `then` runs once there. */
-  function goBack(then: () => void) {
+  /** Zoom out to an area that is partly hidden and fills most of the clear map. */
+  function fitIfHidden(area: RecordArea) {
+    const outline = outerPositions(area);
+    const covered = coveredEdges();
+    if (!isWorthFitting(map, outline, covered, map.getZoom()) || isInView(map, outline, covered)) return;
+    startFit(outline, viewNow());
+  }
+
+  /** The last fit, if the map is still where it left it; either way the fit is over. */
+  function takeUnmovedFit(): Fitted | null {
     const last = fitted;
     fitted = null;
     const isUnmoved = !!last && $selectedHex.get() === last.hex && (!last.after || sameView(viewNow(), last.after));
-    if (!isUnmoved) return then();
-    // Stop first: a fit still flying ends now, not after `then` is listening.
-    map.stop();
-    map.once('moveend', then);
-    map.easeTo({
-      center: [last.before.lng, last.before.lat],
-      zoom: last.before.zoom,
-      duration: prefersReducedMotion() ? 0 : RETURN_DURATION_MS,
-      essential: false,
-    });
+    return isUnmoved ? last : null;
   }
 
   return (area: RecordArea | null) => {
     latest = area;
-    goBack(() => {
+    const last = takeUnmovedFit();
+    const outline = area ? outerPositions(area) : [];
+    // From one large area to another, fly straight there: going back to the old view between them is a detour.
+    if (last && isWorthFitting(map, outline, coveredEdges(), last.before.zoom)) {
+      map.stop();
+      return startFit(outline, last.before);
+    }
+    const fitNext = () => {
       if (area && latest === area) fitIfHidden(area);
-    });
+    };
+    if (last) returnTo(map, last.before, fitNext);
+    else fitNext();
   };
+}
+
+/** Glide back to a view from before a fit; `then` runs once there. */
+function returnTo(map: MlMap, before: MapView, then: () => void) {
+  // Stop first: a fit still flying ends now, not after `then` is listening.
+  map.stop();
+  map.once('moveend', then);
+  map.easeTo({
+    center: [before.lng, before.lat],
+    zoom: before.zoom,
+    duration: prefersReducedMotion() ? 0 : RETURN_DURATION_MS,
+    essential: false,
+  });
+}
+
+/** Whether an area is big enough to zoom out for, judged as it would look at `zoom`. */
+function isWorthFitting(map: MlMap, outline: GeoJSON.Position[], covered: CoveredEdges, zoom: number): boolean {
+  const scale = 2 ** (zoom - map.getZoom());
+  return isLargeOnScreen(map, outline, covered, scale) && !isTooWide(outline);
 }
 
 /** The positions of an area's outer rings: holes never reach past them. */
@@ -97,8 +121,11 @@ function isTooWide(outline: GeoJSON.Position[]): boolean {
   return east - west > MAX_FIT_SPAN_DEGREES || north - south > MAX_FIT_SPAN_DEGREES;
 }
 
-/** Whether an outline spans more than MIN_FIT_SHARE of the map clear of the panels, across or down. */
-function isLargeOnScreen(map: MlMap, outline: GeoJSON.Position[], covered: CoveredEdges): boolean {
+/**
+ * Whether an outline spans more than MIN_FIT_SHARE of the map clear of the panels, across or down.
+ * @param scale How much bigger the outline would draw than now: 2 for one zoom level in.
+ */
+function isLargeOnScreen(map: MlMap, outline: GeoJSON.Position[], covered: CoveredEdges, scale: number): boolean {
   if (outline.length === 0) return false;
   const { clientWidth: width, clientHeight: height } = map.getContainer();
   const points = outline.map((position) => map.project(position as [number, number]));
@@ -106,8 +133,8 @@ function isLargeOnScreen(map: MlMap, outline: GeoJSON.Position[], covered: Cover
   const ys = points.map((point) => point.y);
   const clearWidth = width - covered.left - covered.right;
   const clearHeight = height - covered.top - covered.bottom;
-  const isWide = Math.max(...xs) - Math.min(...xs) > MIN_FIT_SHARE * clearWidth;
-  return isWide || Math.max(...ys) - Math.min(...ys) > MIN_FIT_SHARE * clearHeight;
+  const isWide = scale * (Math.max(...xs) - Math.min(...xs)) > MIN_FIT_SHARE * clearWidth;
+  return isWide || scale * (Math.max(...ys) - Math.min(...ys)) > MIN_FIT_SHARE * clearHeight;
 }
 
 /** Whether every position of an outline sits on the map clear of the panels. */

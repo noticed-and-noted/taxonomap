@@ -121,12 +121,22 @@ describe('createRecordFit', () => {
     expect(map.easeTo).not.toHaveBeenCalled();
   });
 
-  it('goes back, then fits the next record’s area from there', () => {
+  it('flies straight from one large area to the next, then back to the view from before the first', () => {
     const { map, fitBox, follow } = setup();
     follow(square(0, 0, 2));
     follow(square(-2, -2, 2));
-    expect(map.easeTo).toHaveBeenCalledTimes(1);
+    expect(map.easeTo).not.toHaveBeenCalled();
     expect(fitBox).toHaveBeenLastCalledWith([-2, -2, 0, 0], 6);
+    follow(null);
+    expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({ center: [0, 0], zoom: 6 }));
+  });
+
+  it('goes back before a record whose area is small at the view from before', () => {
+    const { map, fitBox, follow } = setup();
+    follow(square(0, 0, 2));
+    follow(square(0.5, 0.5, 1));
+    expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({ center: [0, 0], zoom: 6 }));
+    expect(fitBox).toHaveBeenCalledOnce();
   });
 
   it('glides back unless motion is reduced', () => {
