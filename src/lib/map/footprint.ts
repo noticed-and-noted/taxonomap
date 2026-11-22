@@ -4,12 +4,13 @@
  */
 import type { Occurrence } from '~/lib/gbif';
 
-const WKT_POLYGON = /^\s*(MULTIPOLYGON|POLYGON)\s*(\(.*\))\s*$/is;
+const WKT_POLYGON = /^\s*(?<shape>MULTIPOLYGON|POLYGON)\s*(?<body>\(.*\))\s*$/is;
 const NUMBER = String.raw`[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?`;
 /** A position's longitude and latitude, dropping any height or measure after them. */
 const POSITION = new RegExp(String.raw`(${NUMBER})\s+(${NUMBER})(?:\s+${NUMBER})*`, 'g');
 /** A projected system, in metres, that would need reprojecting; GBIF doesn't reproject footprints. */
 const PROJECTED_SRS = /PROJCS|PROJCRS/i;
+/** WGS84 however it is written: "EPSG:4326", an OGC URN ending "::4326", or WKT naming "WGS 84". */
 const WGS84_SRS = /\b4326\b|WGS\s*84/i;
 /** A closed ring needs three corners plus the first again. */
 const MIN_RING_POSITIONS = 4;
@@ -22,12 +23,13 @@ type Ring = [number, number][];
  */
 export function footprintArea(occurrence: Occurrence): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
   if (!occurrence.footprintWKT || !isWgs84(occurrence.footprintSRS)) return null;
-  const match = WKT_POLYGON.exec(occurrence.footprintWKT);
-  if (!match) return null;
-  const nested = parseNested(match[2]!);
-  if (match[1]!.toUpperCase() === 'POLYGON') return isPolygon(nested) ? { type: 'Polygon', coordinates: nested } : null;
-  const isMultiPolygon = Array.isArray(nested) && nested.length > 0 && nested.every(isPolygon);
-  return isMultiPolygon ? { type: 'MultiPolygon', coordinates: nested as Ring[][] } : null;
+
+  const { shape, body } = WKT_POLYGON.exec(occurrence.footprintWKT)?.groups ?? {};
+  if (!shape || !body) return null;
+
+  const coordinates = parseNested(body);
+  if (shape.toUpperCase() === 'POLYGON') return isPolygon(coordinates) ? { type: 'Polygon', coordinates } : null;
+  return isMultiPolygon(coordinates) ? { type: 'MultiPolygon', coordinates } : null;
 }
 
 /** Whether a footprint SRS means plain longitude and latitude; Darwin Core reads an empty one as WGS84. */
@@ -48,6 +50,11 @@ function parseNested(body: string): unknown {
     // Malformed WKT from a publisher: the record falls back to its uncertainty circle.
     return null;
   }
+}
+
+/** Whether nested arrays form a multipolygon: one or more polygons. */
+function isMultiPolygon(polygons: unknown): polygons is Ring[][] {
+  return Array.isArray(polygons) && polygons.length > 0 && polygons.every(isPolygon);
 }
 
 /** Whether nested arrays form a polygon: closed rings of in-range longitude and latitude. */

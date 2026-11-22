@@ -31,7 +31,10 @@ export function recordPlace(occurrence: Occurrence): RecordPlace | null {
   const { decimalLongitude: lng, decimalLatitude: lat } = occurrence;
   if (lng === undefined || lat === undefined) return null;
 
-  if (isObscured(occurrence)) return { point: null, area: { type: 'Polygon', coordinates: [obscuredCell(lng, lat)] } };
+  if (isObscured(occurrence)) {
+    const obscuredSquare: GeoJSON.Polygon = { type: 'Polygon', coordinates: [obscuredCell(lng, lat)] };
+    return { point: null, area: obscuredSquare };
+  }
 
   const area = footprintArea(occurrence) ?? uncertaintyCircle(lng, lat, occurrence.coordinateUncertaintyInMeters);
   return { point: { type: 'Point', coordinates: [lng, lat] }, area };
@@ -48,8 +51,11 @@ function uncertaintyCircle(lng: number, lat: number, metres: number | undefined)
   return { type: 'Polygon', coordinates: [exactCircleRing(lat, lng, metres / METRES_PER_KM)] };
 }
 
-// iNaturalist moves the public point at random within the square holding the true one, so snapping it
-// to the grid finds that square: the same one iNaturalist draws on its own map.
+/**
+ * The grid square an obscured iNaturalist record was hidden in, as a closed ring. iNaturalist moves the
+ * public point at random within the square holding the true one, so snapping the point to the grid finds
+ * that square: the same one iNaturalist draws on its own map.
+ */
 function obscuredCell(lng: number, lat: number): [number, number][] {
   const west = Math.floor(lng / OBSCURED_CELL_DEGREES) * OBSCURED_CELL_DEGREES;
   const south = Math.floor(lat / OBSCURED_CELL_DEGREES) * OBSCURED_CELL_DEGREES;
