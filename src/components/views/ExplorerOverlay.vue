@@ -292,7 +292,7 @@ onBeforeUnmount(() => {
     <div
       ref="dock"
       class="bottom-dock pointer-events-auto absolute bottom-3 left-3 rounded-lg p-3"
-      :class="{ stashed: dockHidden }"
+      :class="{ stashed: dockHidden, covered: sheetCoversDock }"
     >
       <!-- Same edge tab as SidePanel's: tucked under the dock so its shadow falls across the join. -->
       <button
@@ -487,8 +487,17 @@ onBeforeUnmount(() => {
 .bottom-dock.stashed {
   transform: translateX(calc(-100% - 0.75rem));
 }
+/* Under an open sheet the stash tab has nothing to show, and iOS Safari can paint the slid dock's layer over the
+   sheet despite its z-index; so once the slide ends, the dock and its tab are hidden outright. */
+.bottom-dock.covered {
+  visibility: hidden;
+  transition:
+    transform 200ms ease,
+    visibility 0s 200ms;
+}
 @media (prefers-reduced-motion: reduce) {
-  .bottom-dock {
+  .bottom-dock,
+  .bottom-dock.covered {
     transition: none;
   }
 }
