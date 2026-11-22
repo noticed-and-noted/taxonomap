@@ -2,17 +2,21 @@
 /**
  * An expanded record's details: its photo (opening the lightbox of all its photos), who recorded it,
  * how precise it is, who published it, its source, its sound, and links to the species and to GBIF.
+ * Clicking a recorder or the publisher filters the map to their records.
  */
 import { computed, ref, watch, type StyleValue } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
+import ChartTip from '~/components/atoms/ChartTip.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import SoundPlayer from '~/components/molecules/SoundPlayer.vue';
 import { getOrganization, type Occurrence, type UsableImage } from '~/lib/gbif';
 import { usableSounds } from '~/lib/gbif/licence';
 import { initials } from '~/lib/format';
 import { accuracy } from '~/lib/record-fields';
+import { $publisherKeys } from '~/stores/publisher';
+import { $recorders } from '~/stores/recorder';
 
 const props = defineProps<{
   occurrence: Occurrence;
@@ -38,6 +42,32 @@ const isObservation = computed(() => props.occurrence.basisOfRecord === 'HUMAN_O
 const source = computed(() => props.occurrence.datasetName ?? props.occurrence.publisher);
 const sound = computed(() => usableSounds(props.occurrence)[0]);
 const publisher = ref<string>();
+
+// GBIF splits a record's recorders on "|", and filters by each name as split.
+const recorders = computed(() =>
+  (props.occurrence.recordedBy ?? '')
+    .split('|')
+    .map((recorder) => recorder.trim())
+    .filter(Boolean),
+);
+
+/** Filter the map to a recorder's records from this record's publisher. */
+function filterToRecorder(recorder: string): void {
+  $recorders.set([recorder]);
+  // Different people share a name across publishers, so keep to the one that published this record.
+  const publisherKey = props.occurrence.publishingOrgKey;
+  if (publisherKey) $publisherKeys.set([publisherKey]);
+}
+
+/** The hover tooltip of a recorder link (naming its recorder) or the publisher link, centred above it. */
+const linkTip = ref<{ recorder?: string | undefined; x: number; y: number }>();
+
+/** Show a link's tooltip when a mouse hovers it; touch taps go straight to the filter. */
+function showLinkTip(event: PointerEvent, recorder?: string): void {
+  if (event.pointerType !== 'mouse') return;
+  const link = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  linkTip.value = { recorder, x: link.left + link.width / 2, y: link.top };
+}
 
 // Records carry only the publishing organisation's key, so its name is looked up.
 watch(
@@ -105,9 +135,24 @@ watch(
           tabindex="0"
           aria-label="Record details"
         >
-          <div v-if="occurrence.recordedBy">
+          <div v-if="recorders.length">
             <dt class="text-subtle">Recorded by</dt>
-            <dd>{{ occurrence.recordedBy }}</dd>
+            <dd>
+              <template v-for="(recorder, index) in recorders" :key="recorder">
+                <template v-if="index">, </template>
+                <button
+                  type="button"
+                  class="filter-link"
+                  @pointerenter="showLinkTip($event, recorder)"
+                  @pointerleave="linkTip = undefined"
+                  @click="filterToRecorder(recorder)"
+                >
+                  {{ recorder }}&nbsp;<UiIcon name="filter" class="filter-icon" /><span class="sr-only"
+                    >, filter the map</span
+                  >
+                </button>
+              </template>
+            </dd>
           </div>
           <div v-if="isObservation && accuracy(occurrence)">
             <dt class="text-subtle">Accuracy</dt>
@@ -115,7 +160,19 @@ watch(
           </div>
           <div v-if="publisher">
             <dt class="text-subtle">Publisher</dt>
-            <dd>{{ publisher }}</dd>
+            <dd>
+              <button
+                type="button"
+                class="filter-link"
+                @pointerenter="showLinkTip($event)"
+                @pointerleave="linkTip = undefined"
+                @click="$publisherKeys.set([occurrence.publishingOrgKey!])"
+              >
+                {{ publisher }}&nbsp;<UiIcon name="filter" class="filter-icon" /><span class="sr-only"
+                  >, filter the map</span
+                >
+              </button>
+            </dd>
           </div>
           <div v-if="source">
             <dt class="text-subtle">Source</dt>
@@ -150,6 +207,15 @@ watch(
       </div>
     </div>
     <SoundPlayer v-if="sound" :key="sound.url" class="col-span-2" :sound="sound" />
+    <ChartTip v-if="linkTip" class="max-w-72!" :x="linkTip.x" :y="linkTip.y" @dismiss="linkTip = undefined">
+      Show only records
+      <template v-if="linkTip.recorder"
+        >by <strong>{{ linkTip.recorder }}</strong></template
+      >
+      <template v-if="publisher">
+        from <strong>{{ publisher }}</strong></template
+      >
+    </ChartTip>
   </div>
 </template>
 
@@ -197,6 +263,28 @@ watch(
   .record-action-icon {
     min-width: 2.5rem;
   }
+}
+.filter-link {
+  text-align: start;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+  transition: color var(--dur-fast) var(--ease);
+}
+.filter-link:hover {
+  color: var(--accent);
+}
+/* Marks the name as a filter rather than a link elsewhere; the nbsp before it keeps it off a line of its own. */
+.filter-icon {
+  color: var(--text-subtle);
+  transition: color var(--dur-fast) var(--ease);
+}
+.filter-link:hover .filter-icon {
+  color: var(--accent);
+}
+.filter-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .details:focus-visible,
 .enlarge:focus-visible {

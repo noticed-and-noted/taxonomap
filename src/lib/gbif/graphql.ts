@@ -346,7 +346,7 @@ export async function searchOccurrencesByDate(
   return { count: total, results: results.map(toListedOccurrence) };
 }
 
-/** A listed GraphQL record as REST's occurrence: taxa as flat keys and names, lists joined into one line. */
+/** A listed GraphQL record as REST's occurrence: taxa as flat keys and names, lists joined into one line (recorders on "|", as REST sends them). */
 function toListedOccurrence(record: ListedGraphqlRecord): Occurrence {
   const { classification, datasetName, recordedBy, ...flat } = record;
   const { usage, acceptedUsage } = classification ?? {};
@@ -365,7 +365,7 @@ function toListedOccurrence(record: ListedGraphqlRecord): Occurrence {
     ...(usage && { taxonKey: Number(usage.key), scientificName: usage.name, taxonRank: usage.rank }),
     ...(acceptedUsage && { acceptedTaxonKey: Number(acceptedUsage.key), acceptedScientificName: acceptedUsage.name }),
     ...(datasetName?.length && { datasetName: datasetName.join(', ') }),
-    ...(recordedBy?.length && { recordedBy: recordedBy.join(', ') }),
+    ...(recordedBy?.length && { recordedBy: recordedBy.join(' | ') }),
   };
 }
 
