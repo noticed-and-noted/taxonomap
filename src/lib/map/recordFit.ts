@@ -116,7 +116,6 @@ function outerPositions(area: RecordArea): GeoJSON.Position[] {
 
 /** Whether an outline spans more than is worth zooming out to show. */
 function isTooWide(outline: GeoJSON.Position[]): boolean {
-  if (outline.length === 0) return false;
   const [west, south, east, north] = boundsOf(outline);
   return east - west > MAX_FIT_SPAN_DEGREES || north - south > MAX_FIT_SPAN_DEGREES;
 }

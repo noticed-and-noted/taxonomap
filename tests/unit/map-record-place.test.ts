@@ -41,6 +41,10 @@ describe('recordPlace', () => {
     expect(recordPlace(record({ informationWithheld: BLURRED }))?.point).toEqual(POINT);
   });
 
+  it('keeps the point for an iNaturalist record that withholds nothing', () => {
+    expect(recordPlace(record({ datasetKey: INATURALIST_DATASET_KEY }))?.point).toEqual(POINT);
+  });
+
   it('draws the uncertainty circle around the point', () => {
     const place = recordPlace(record({ coordinateUncertaintyInMeters: 1000 }));
     expect(place?.point).toEqual(POINT);
@@ -85,5 +89,8 @@ describe('recordPlace', () => {
     );
     expect(fallsBack({ footprintWKT: 'POLYGON ((0 0, 1 0, 1 1' })).toBe(circleLength);
     expect(fallsBack({ footprintWKT: 'LINESTRING (0 0, 1 1)' })).toBe(circleLength);
+    expect(fallsBack({ footprintWKT: 'POLYGON ((0 0, 1 0) 1 1, 0 0))' })).toBe(circleLength);
+    expect(fallsBack({ footprintWKT: 'POLYGON ((0 0, 1 0, 1 1, 5))' })).toBe(circleLength);
+    expect(fallsBack({ footprintWKT: 'MULTIPOLYGON (((0 0, 1 1)))' })).toBe(circleLength);
   });
 });
