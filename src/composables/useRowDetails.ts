@@ -11,6 +11,7 @@
  */
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import type { UsableImage } from '~/lib/gbif';
+import { knownInatName } from '~/lib/photos/inat-ids';
 import { commonNames, gbifCommonNames, photosForKeys, resolveNames, type SpeciesRow } from '~/lib/species/groups';
 
 /** Common names looked up per batch, so a search's matches appear as they arrive. */
@@ -42,6 +43,8 @@ function useLookupState(dataset: () => unknown) {
   const photoDone = ref(new Set<number>());
   /** Common names looked up after load, for rows in view the index had none for. */
   const lateCommon = ref(new Map<number, string>());
+  /** Keys whose common-name lookup answered (named or not); rows without a common name wait for it. */
+  const commonAnswered = ref(new Set<number>());
   /** Name and common-name lookups in flight. */
   const namesInFlight = ref(0);
   const asked = { photo: new Set<number>(), name: new Set<number>(), common: new Set<number>() };
@@ -59,6 +62,7 @@ function useLookupState(dataset: () => unknown) {
     latePhotos.value = new Map();
     photoDone.value = new Set();
     lateCommon.value = new Map();
+    commonAnswered.value = new Set();
   }
 
   /** Start over when the data set changes; returns this data set's controller. */
@@ -78,6 +82,7 @@ function useLookupState(dataset: () => unknown) {
     latePhotos,
     photoDone,
     lateCommon,
+    commonAnswered,
     namesInFlight,
     asked,
     sync,
@@ -86,6 +91,11 @@ function useLookupState(dataset: () => unknown) {
 }
 
 type LookupState = ReturnType<typeof useLookupState>;
+
+/** Marks keys whose common-name lookup answered, named or not. */
+function markCommonAnswered(keys: readonly number[], state: LookupState) {
+  state.commonAnswered.value = new Set([...state.commonAnswered.value, ...keys]);
+}
 
 /** Looks up common names the index had none for, a batch at a time so they show as they arrive. */
 async function lookUpCommonNames(keys: number[], state: LookupState) {
@@ -109,9 +119,11 @@ async function trackNames(state: LookupState, lookup: () => Promise<void>) {
 /** Merges each batch as it arrives, so a search's matches show early. */
 async function lookUpCommonNamesInBatches(ask: number[], mine: AbortController | undefined, state: LookupState) {
   for (let start = 0; start < ask.length; start += COMMON_NAME_BATCH) {
-    const found = await commonNames(ask.slice(start, start + COMMON_NAME_BATCH), mine?.signal);
+    const batch = ask.slice(start, start + COMMON_NAME_BATCH);
+    const found = await commonNames(batch, mine?.signal);
     if (!state.isCurrent(mine)) return;
     mergeInto(state.lateCommon, found);
+    markCommonAnswered(batch, state);
   }
 }
 
@@ -130,7 +142,9 @@ async function mergePhotoCommonNames(
   const unnamed = keys.filter((key) => !found.has(key));
   if (!unnamed.length) return;
   const fromGbif = await gbifCommonNames(unnamed, mine?.signal);
-  if (state.isCurrent(mine)) mergeInto(state.lateCommon, fromGbif);
+  if (!state.isCurrent(mine)) return;
+  mergeInto(state.lateCommon, fromGbif);
+  markCommonAnswered(unnamed, state);
 }
 
 /** Looks up lead photos (whose records also name species, and whose iNaturalist taxa give common names) for rows in view. */
@@ -214,12 +228,18 @@ export function useRowDetails({ rows, dataset, inView, needAllNames }: RowDetail
   });
   watch(needCommon, (keys) => lookUpCommonNames(keys, state), { immediate: true });
 
-  const { lateCommon, lateNames, noName, latePhotos, photoDone, namesInFlight } = state;
+  const { lateCommon, commonAnswered, lateNames, noName, latePhotos, photoDone, namesInFlight } = state;
+  // A name iNaturalist gave on an earlier lookup (this visit or a past one) shows at once, before this table asks.
+  // Its null ("iNaturalist has none") becomes undefined, so GBIF's name can still follow.
+  const commonName = (row: SpeciesRow) =>
+    row.commonName ?? lateCommon.value.get(row.key) ?? knownInatName(row.key) ?? undefined;
   return {
     /** Names or common names are being looked up. */
     isLoadingNames: computed(() => namesInFlight.value > 0),
-    /** The common name, from the index or looked up once in view. */
-    commonName: (row: SpeciesRow) => row.commonName ?? lateCommon.value.get(row.key),
+    /** The common name: from the index, looked up once in view, or remembered from iNaturalist. */
+    commonName,
+    /** Still looking the common name up (show a skeleton above the scientific name). */
+    pendingCommonName: (row: SpeciesRow) => !commonName(row) && !commonAnswered.value.has(row.key),
     /** The scientific name, once known. */
     sciName: (row: SpeciesRow) => (row.unnamed ? lateNames.value.get(row.key) : undefined) ?? row.scientificName,
     /** Still looking the name up (show a skeleton). */

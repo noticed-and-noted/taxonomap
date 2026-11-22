@@ -53,6 +53,11 @@ vi.mock('~/lib/species/groups', () => ({
   },
 }));
 
+// Key 8's iNaturalist name was remembered from an earlier lookup.
+vi.mock('~/lib/photos/inat-ids', () => ({
+  knownInatName: (key: number) => (key === 8 ? 'Remembered eight' : undefined),
+}));
+
 const row = (key: number, extra: Partial<SpeciesRow> = {}): SpeciesRow => ({
   key,
   scientificName: `Species ${key}`,
@@ -82,6 +87,13 @@ beforeEach(() => {
   lookups.gbifGate = null;
   lookups.photosFail = null;
 });
+
+/** Holds every lookup until the returned function is called. */
+function holdLookups(): () => void {
+  let release = () => {};
+  lookups.gate = new Promise((resolve) => (release = resolve));
+  return release;
+}
 
 const image = (key: number) => ({ url: `p${key}`, licence: 'CC0' }) as NonNullable<SpeciesRow['image']>;
 
@@ -132,6 +144,31 @@ describe('useRowDetails', () => {
     await vi.waitFor(() => expect(d.commonName(rows[0]!)).toBe('Common three'));
     expect(lookups.photos).toEqual([]);
     expect(lookups.common).toEqual([[3, 4]]);
+    stop();
+  });
+
+  it('holds a common name’s place until its lookup answers, named or not', async () => {
+    const release = holdLookups();
+    const rows = [row(3), row(7), row(5, { commonName: 'Indexed five' })];
+    const { d, inView, stop } = await setup(rows);
+    expect(rows.map((tableRow) => d.pendingCommonName(tableRow))).toEqual([true, true, false]);
+
+    inView.value = new Set([3, 7, 5]);
+    await vi.waitFor(() => expect(lookups.photos).toHaveLength(1));
+    expect(d.pendingCommonName(rows[0]!)).toBe(true);
+
+    release();
+    await vi.waitFor(() => expect(d.pendingCommonName(rows[1]!)).toBe(false));
+    expect(d.pendingCommonName(rows[0]!)).toBe(false);
+    expect([d.commonName(rows[0]!), d.commonName(rows[1]!)]).toEqual(['iNaturalist three', undefined]);
+    stop();
+  });
+
+  it('shows a remembered iNaturalist name before the row is looked up', async () => {
+    const rows = [row(8)];
+    const { d, stop } = await setup(rows);
+    expect(d.commonName(rows[0]!)).toBe('Remembered eight');
+    expect(d.pendingCommonName(rows[0]!)).toBe(false);
     stop();
   });
 
