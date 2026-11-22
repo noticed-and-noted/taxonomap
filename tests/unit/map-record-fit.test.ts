@@ -79,6 +79,12 @@ describe('createRecordFit', () => {
     expect(fitBox).toHaveBeenCalledWith([0, 0, 2, 2], 6);
   });
 
+  it('leaves the map alone for an area off to the side that would fit in most of the view', () => {
+    const { fitBox, follow } = setup();
+    follow(square(0.5, 0.5, 1));
+    expect(fitBox).not.toHaveBeenCalled();
+  });
+
   it('leaves the map alone for an area too vast to be worth zooming out to', () => {
     const { fitBox, follow } = setup();
     follow(square(0, 0, 4));

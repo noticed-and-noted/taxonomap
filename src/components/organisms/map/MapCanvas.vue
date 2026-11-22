@@ -566,7 +566,7 @@ function listenToStores() {
   );
 }
 
-/** Zoom out to show an expanded record's whole obscured area, and back again (lib/map/recordFit.ts); size its dot. */
+/** Zoom out to show an expanded record's large area, and back again (lib/map/recordFit.ts); size its dot. */
 function followRecord() {
   const recordMap = map;
   if (!recordMap) return;
@@ -589,7 +589,7 @@ function followRecord() {
 
 /**
  * Show an expanded record's dot from the zoom where its cell (or near me's circle) is wide enough on screen
- * to hold it, and an obscured record's square from RECORD_MIN_ZOOM; either from the zoom where the grid
+ * to hold it, and its area from RECORD_MIN_ZOOM; either from the zoom where the grid
  * turns finer than the selected cell if sooner: mid-gesture, before the new cells load.
  */
 function sizeRecordPlace() {

@@ -1,6 +1,6 @@
 /**
- * Keeps an expanded record's whole area (lib/map/recordPlace.ts) in view: zooms out when the
- * area doesn't fit the part of the map the panels leave clear, and goes back to the view from before once
+ * Keeps a large record area (lib/map/recordPlace.ts) in view: zooms out when the area spans over 80% of
+ * the part of the map the panels leave clear and doesn't fit it, and goes back to the view from before once
  * the record closes or another is picked, unless the viewer moved the map or picked another cell since.
  */
 import type { Map as MlMap } from 'maplibre-gl';
@@ -26,6 +26,8 @@ export interface RecordFitOptions {
 const RETURN_DURATION_MS = 1200;
 /** Wider or taller than this, an area (a country's centroid with a vast uncertainty, say) isn't worth zooming out for. */
 const MAX_FIT_SPAN_DEGREES = 3;
+/** An area smaller than this share of the clear map, on both axes, is left as it lies: panning to it would jolt the map for little. */
+const MIN_FIT_SHARE = 0.8;
 
 interface Fitted {
   before: MapView;
@@ -43,9 +45,12 @@ export function createRecordFit({ map, coveredEdges, fitBox }: RecordFitOptions)
 
   const viewNow = (): MapView => ({ ...map.getCenter(), zoom: map.getZoom() });
 
+  /** Zoom out to an area that is partly hidden and fills most of the clear map. */
   function fitIfHidden(area: RecordArea) {
     const outline = outerPositions(area);
-    if (isInView(map, outline, coveredEdges()) || isTooWide(outline)) return;
+    const covered = coveredEdges();
+    const isWorthFitting = isLargeOnScreen(map, outline, covered) && !isTooWide(outline);
+    if (!isWorthFitting || isInView(map, outline, covered)) return;
     const current: Fitted = { before: viewNow(), after: null, hex: $selectedHex.get() };
     fitted = current;
     map.once('moveend', () => {
@@ -92,6 +97,20 @@ function isTooWide(outline: GeoJSON.Position[]): boolean {
   return east - west > MAX_FIT_SPAN_DEGREES || north - south > MAX_FIT_SPAN_DEGREES;
 }
 
+/** Whether an outline spans more than MIN_FIT_SHARE of the map clear of the panels, across or down. */
+function isLargeOnScreen(map: MlMap, outline: GeoJSON.Position[], covered: CoveredEdges): boolean {
+  if (outline.length === 0) return false;
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  const points = outline.map((position) => map.project(position as [number, number]));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const clearWidth = width - covered.left - covered.right;
+  const clearHeight = height - covered.top - covered.bottom;
+  const isWide = Math.max(...xs) - Math.min(...xs) > MIN_FIT_SHARE * clearWidth;
+  return isWide || Math.max(...ys) - Math.min(...ys) > MIN_FIT_SHARE * clearHeight;
+}
+
+/** Whether every position of an outline sits on the map clear of the panels. */
 function isInView(map: MlMap, ring: GeoJSON.Position[], covered: CoveredEdges): boolean {
   const { clientWidth: width, clientHeight: height } = map.getContainer();
   return ring.every((position) => {
