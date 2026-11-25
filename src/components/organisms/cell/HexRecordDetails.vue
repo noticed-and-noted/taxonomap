@@ -58,6 +58,12 @@ function filterToRecorder(recorder: string): void {
   $publisherKeys.set(publisherKey ? [publisherKey] : []);
 }
 
+/** Filter the map to this record's publisher, dropping an earlier recorder filter that would hide its records. */
+function filterToPublisher(publisherKey: string): void {
+  $recorders.set([]);
+  $publisherKeys.set([publisherKey]);
+}
+
 /** The hover tooltip of a recorder link (naming its recorder) or the publisher link, centred above it. */
 const linkTip = ref<{ recorder?: string | undefined; x: number; y: number }>();
 
@@ -165,7 +171,7 @@ watch(
                 class="filter-link"
                 @pointerenter="showLinkTip($event)"
                 @pointerleave="linkTip = undefined"
-                @click="$publisherKeys.set([occurrence.publishingOrgKey!])"
+                @click="filterToPublisher(occurrence.publishingOrgKey!)"
               >
                 {{ publisher }}&nbsp;<UiIcon name="filter" class="filter-icon" /><span class="sr-only"
                   >, filter the map</span

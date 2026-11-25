@@ -2,9 +2,9 @@
  * Keeps a large record area (lib/map/recordPlace.ts) in view: zooms out when the area spans over 80% of
  * the part of the map the panels leave clear and doesn't fit it, flies straight on to the next record's area
  * when that is large too, and goes back to the view from before once the record closes or a smaller one is
- * picked, unless the viewer moved the map or picked another cell since. A record that can't be seen (off the
- * clear map, or an area drawn only from a closer zoom) is flown to, and left the same way; from there the next record
- * is flown to straight, with no stop at the view from before.
+ * picked, unless the viewer moved the map or picked another cell since. The map also flies to a record that
+ * can't be seen (off the clear map, or an area drawn only from a closer zoom), and back when it closes; from
+ * there it goes straight on to the next record, with no stop at the view from before.
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import { type MapView, sameView, $selectedHex } from '~/stores/explorer';

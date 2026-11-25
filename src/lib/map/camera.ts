@@ -73,8 +73,10 @@ export function flyToBounds(map: MlMap, request: BoundsRequest): void {
   }
   const camera = map.cameraForBounds(bounds, fit);
   const [lng, lat] = request.centre;
-  if (!camera?.center || camera.zoom === undefined)
-    return flyToPoint(map, { kind: 'point', lng, lat, zoom: map.getZoom() });
+  if (!camera?.center || camera.zoom === undefined) {
+    flyToPoint(map, { kind: 'point', lng, lat, zoom: map.getZoom() });
+    return;
+  }
   // The globe draws at its centre's scale: keep the size that fits the box, wherever the centre is.
   const boxLat = Array.isArray(camera.center) ? camera.center[1] : camera.center.lat;
   // Below the least zoom MapLibre's globe flights near a pole can stall or land elsewhere.

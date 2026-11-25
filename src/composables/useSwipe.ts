@@ -35,10 +35,11 @@ export function useSwipe(handlers: SwipeHandlers) {
 
   /** Ends a swipe, calling the handler for its main direction if it travelled far enough. */
   function onPointerUp(event: PointerEvent) {
-    if (!swipeStart || !canSwipe()) return void (swipeStart = null);
-    const deltaX = event.clientX - swipeStart.x;
-    const deltaY = event.clientY - swipeStart.y;
+    const start = swipeStart;
     swipeStart = null;
+    if (!start || !canSwipe()) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
     if (Math.abs(deltaX) > Math.abs(deltaY)) {
       if (Math.abs(deltaX) >= SWIPE_DISTANCE) handlers.onSideways(deltaX < 0 ? 1 : -1);
     } else if (Math.abs(deltaY) >= SWIPE_DISTANCE) handlers.onUpright?.(deltaY < 0 ? 1 : -1);

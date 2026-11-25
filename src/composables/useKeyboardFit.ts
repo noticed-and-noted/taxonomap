@@ -22,6 +22,7 @@ export function useKeyboardFit(
   const fitHeight = ref<number | null>(null);
   let isListening = false;
 
+  /** Sizes the dropdown to reach no lower than the visible area's foot. */
   function fit() {
     if (!element.value) return;
     const viewport = window.visualViewport;
@@ -29,6 +30,7 @@ export function useKeyboardFit(
     fitHeight.value = Math.max(minHeight, Math.floor(bottom - element.value.getBoundingClientRect().top - margin));
   }
 
+  /** Refits whenever the keyboard or window changes the visible area. */
   function listen() {
     isListening = true;
     window.visualViewport?.addEventListener('resize', fit);
@@ -36,6 +38,7 @@ export function useKeyboardFit(
     window.addEventListener('resize', fit);
   }
 
+  /** Stops refitting, once the dropdown hides or its owner unmounts. */
   function stopListening() {
     if (!isListening) return;
     isListening = false;
