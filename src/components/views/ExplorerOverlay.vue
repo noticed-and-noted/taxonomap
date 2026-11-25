@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
 
 /* A tab on the dock's right edge slides it off-screen, leaving the tab visible. */
 .bottom-dock {
-  transition: transform 200ms ease;
+  transition: transform var(--dur-fast) var(--ease);
 }
 .bottom-dock.stashed {
   transform: translateX(calc(-100% - 0.75rem));
@@ -487,8 +487,8 @@ onBeforeUnmount(() => {
 .bottom-dock.covered {
   visibility: hidden;
   transition:
-    transform 200ms ease,
-    visibility 0s 200ms;
+    transform var(--dur-fast) var(--ease),
+    visibility 0s var(--dur-fast);
 }
 @media (prefers-reduced-motion: reduce) {
   .bottom-dock,
