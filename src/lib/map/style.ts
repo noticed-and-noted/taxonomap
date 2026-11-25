@@ -19,18 +19,13 @@ import type { RecordPlace } from './recordPlace';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-/** Zoomed out further, a record's area (or, outside a cell, its dot) says little more than its cell outline. */
+/** Zoomed out further, a record's area says little more than its cell outline. */
 export const RECORD_MIN_ZOOM = 7;
 export const RECORD_DOT_LAYER = 'selected-record';
 /** The record's area (its footprint, uncertainty circle or obscured square): its fill and dashed edge. */
 export const RECORD_AREA_LAYERS = ['record-area', 'record-edge'] as const;
 const RECORD_DOT_RADIUS_PX = 6;
 const RECORD_DOT_STROKE_PX = 3;
-const RECORD_DOT_DIAMETER_PX = 2 * (RECORD_DOT_RADIUS_PX + RECORD_DOT_STROKE_PX);
-/** The dot shows once its cell is this many dots wide on screen; narrower, the dot would all but cover the cell. */
-const CELL_WIDTH_IN_DOTS = 3;
-/** MapLibre's highest layer zoom. */
-const LAYER_MAX_ZOOM = 24;
 /** Marks the record's feature in the `selected` source, so its area isn't drawn as the cell outline. */
 const RECORD_PART = 'record';
 const IS_RECORD_AREA: ExpressionSpecification = [
@@ -128,7 +123,8 @@ function recordLayers(accent: string, bg: string): LayerSpecification[] {
       paint: { 'line-color': accent, 'line-width': 2, 'line-dasharray': [3, 2] },
     },
     {
-      ...base,
+      // The dot marks the record at every zoom: in a cell, around a pin or on its own.
+      source: 'selected',
       id: RECORD_DOT_LAYER,
       type: 'circle',
       filter: ['==', ['geometry-type'], 'Point'],
@@ -140,18 +136,6 @@ function recordLayers(accent: string, bg: string): LayerSpecification[] {
       },
     },
   ];
-}
-
-/**
- * The zoom from which an expanded record's dot shows: once its cell (or near me's circle) is wide enough
- * on screen for the dot to say where in it the record is.
- * @param zoom The map's zoom now.
- * @param cellWidthPx The cell's or circle's width on screen now, or null when there is neither.
- */
-export function recordDotMinZoom(zoom: number, cellWidthPx: number | null): number {
-  if (cellWidthPx === null) return RECORD_MIN_ZOOM;
-  const zoomIn = Math.log2((CELL_WIDTH_IN_DOTS * RECORD_DOT_DIAMETER_PX) / cellWidthPx);
-  return Math.min(LAYER_MAX_ZOOM, zoom + zoomIn);
 }
 
 /** Hover, selection and "near me" layers, drawn above everything. */

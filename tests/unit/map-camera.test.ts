@@ -54,6 +54,19 @@ describe('flyMap', () => {
     });
   });
 
+  it('moves a point off centre by at most half the globe’s radius, so a wide panel never pushes it to the rim', () => {
+    const panel = document.createElement('div');
+    panel.className = 'side-panel';
+    panel.getBoundingClientRect = () => new DOMRect(WIDTH - 500, 0, 500, HEIGHT);
+    document.body.append(panel);
+    const map = fakeMap();
+    flyMap(asMap(map), { kind: 'point', lng: 2, lat: 48, zoom: 1 });
+    const halfRadius = (512 * 2) / (2 * Math.PI) / 2;
+    expect(map.flyTo).toHaveBeenCalledWith(expect.objectContaining({ offset: [-halfRadius, 0] }));
+    flyMap(asMap(map), { kind: 'point', lng: 2, lat: 48, zoom: 6 });
+    expect(map.flyTo).toHaveBeenLastCalledWith(expect.objectContaining({ offset: [-250, 0] }));
+  });
+
   it('jumps when the viewer asks for less motion', () => {
     motion.isReduced = true;
     const map = fakeMap();

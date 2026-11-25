@@ -2,12 +2,16 @@
  * Keeps a large record area (lib/map/recordPlace.ts) in view: zooms out when the area spans over 80% of
  * the part of the map the panels leave clear and doesn't fit it, flies straight on to the next record's area
  * when that is large too, and goes back to the view from before once the record closes or a smaller one is
- * picked, unless the viewer moved the map or picked another cell since.
+ * picked, unless the viewer moved the map or picked another cell since. A record that can't be seen (off the
+ * clear map, or an area drawn only from a closer zoom) is flown to, and left the same way; from there the next record
+ * is flown to straight, with no stop at the view from before.
  */
 import type { Map as MlMap } from 'maplibre-gl';
 import { type MapView, sameView, $selectedHex } from '~/stores/explorer';
 import { prefersReducedMotion } from '~/stores/reading';
-import type { RecordArea } from './recordPlace';
+import type { RecordArea, RecordPlace } from './recordPlace';
+import { isOnNearSide } from './screen';
+import { RECORD_AREA_LAYERS } from './style';
 
 /** How much of the map the floating panels cover, in px per edge. */
 export interface CoveredEdges {
@@ -30,8 +34,23 @@ const MAX_FIT_SPAN_DEGREES = 3;
 /** An area smaller than this share of the clear map, on both axes, is left as it lies: panning to it would jolt the map for little. */
 const MIN_FIT_SHARE = 0.8;
 
+/**
+ * How far past the zoom a record shows from to fly: the globe's zoom shifts with latitude on the way, and the
+ * area's threshold is re-measured where the flight lands, so aiming at it exactly can stop just short.
+ */
+const SHOWN_ZOOM_MARGIN = 0.5;
+
+/** A flight to show a record: the outline to fit, no closer than `maxZoom`. */
+interface Flight {
+  outline: GeoJSON.Position[];
+  maxZoom: number;
+  /** True when zooming out to a large area, false when going to a record that can't be seen. */
+  isZoomOut: boolean;
+}
+
 interface Fitted {
   before: MapView;
+  isZoomOut: boolean;
   /** The view the fit ended at; null while it is still flying. */
   after: MapView | null;
   hex: unknown;
@@ -42,51 +61,81 @@ interface Fitted {
  */
 export function createRecordFit({ map, coveredEdges, fitBox }: RecordFitOptions) {
   let fitted: Fitted | null = null;
-  let latest: RecordArea | null = null;
+  let latest: RecordPlace | null = null;
 
-  const viewNow = (): MapView => ({ ...map.getCenter(), zoom: map.getZoom() });
-
-  /** Fly to show an outline, returning to `before` when the record closes; zooms in no further than it. */
-  function startFit(outline: GeoJSON.Position[], before: MapView) {
-    const current: Fitted = { before, after: null, hex: $selectedHex.get() };
+  /** Make a flight, returning to `before` when the record closes. */
+  function startFit({ outline, maxZoom, isZoomOut }: Flight, before: MapView) {
+    const current: Fitted = { before, isZoomOut, after: null, hex: $selectedHex.get() };
     fitted = current;
     map.once('moveend', () => {
-      if (fitted === current) current.after = viewNow();
+      if (fitted === current) current.after = viewOf(map);
     });
-    fitBox(boundsOf(outline), before.zoom);
+    fitBox(boundsOf(outline), maxZoom);
   }
 
-  /** Zoom out to an area that is partly hidden and fills most of the clear map. */
-  function fitIfHidden(area: RecordArea) {
-    const outline = outerPositions(area);
-    const covered = coveredEdges();
-    if (!isWorthFitting(map, outline, covered, map.getZoom()) || isInView(map, outline, covered)) return;
-    startFit(outline, viewNow());
+  /** From a record the map went to, go on to the next (or stay, if it shows), keeping the view to return to. */
+  function goStraightOn(place: RecordPlace, last: Fitted) {
+    map.stop();
+    const flight = flightToShow(map, place, coveredEdges());
+    if (flight) startFit(flight, last.before);
+    else fitted = last;
   }
 
   /** The last fit, if the map is still where it left it; either way the fit is over. */
   function takeUnmovedFit(): Fitted | null {
     const last = fitted;
     fitted = null;
-    const isUnmoved = !!last && $selectedHex.get() === last.hex && (!last.after || sameView(viewNow(), last.after));
+    const isUnmoved = !!last && $selectedHex.get() === last.hex && (!last.after || sameView(viewOf(map), last.after));
     return isUnmoved ? last : null;
   }
 
-  return (area: RecordArea | null) => {
-    latest = area;
+  return (place: RecordPlace | null) => {
+    latest = place;
     const last = takeUnmovedFit();
-    const outline = area ? outerPositions(area) : [];
+    const outline = place ? outlineOf(place) : [];
     // From one large area to another, fly straight there: going back to the old view between them is a detour.
     if (last && isWorthFitting(map, outline, coveredEdges(), last.before.zoom)) {
       map.stop();
-      return startFit(outline, last.before);
+      return startFit({ outline, maxZoom: last.before.zoom, isZoomOut: true }, last.before);
     }
+    if (last && !last.isZoomOut && place) return goStraightOn(place, last);
     const fitNext = () => {
-      if (area && latest === area) fitIfHidden(area);
+      const flight = place && latest === place && flightToShow(map, place, coveredEdges());
+      if (flight) startFit(flight, viewOf(map));
     };
     if (last) returnTo(map, last.before, fitNext);
     else fitNext();
   };
+}
+
+/**
+ * Where to fly to show a record, if anywhere: out to a large area that is partly hidden, else to a record whose
+ * point (or area's middle) is off the clear map, or whose area (with no point) shows only from a closer zoom.
+ * @returns The outline to fit and the zoom to go no closer than, or null to leave the map as it is.
+ */
+function flightToShow(map: MlMap, place: RecordPlace, covered: CoveredEdges): Flight | null {
+  const outline = outlineOf(place);
+  const zoom = map.getZoom();
+  if (isWorthFitting(map, outline, covered, zoom))
+    return isInView(map, outline, covered) ? null : { outline, maxZoom: zoom, isZoomOut: true };
+  // A vast area alone is not worth flying to; a point in one still is.
+  if (!place.point && isTooWide(outline)) return null;
+
+  const target = place.point ? [place.point.coordinates] : outline;
+  if (target.length === 0) return null;
+  const [west, south, east, north] = boundsOf(target);
+  const middle = [(west + east) / 2, (south + north) / 2];
+  // The dot shows at every zoom; an area only from its layer's.
+  const shownFromZoom = place.point ? 0 : (map.getLayer(RECORD_AREA_LAYERS[0])?.minzoom ?? 0);
+  const isUnseen = zoom < shownFromZoom || !isInView(map, [middle], covered);
+  if (!isUnseen) return null;
+  const maxZoom = zoom < shownFromZoom ? shownFromZoom + SHOWN_ZOOM_MARGIN : zoom;
+  return { outline: target, maxZoom, isZoomOut: false };
+}
+
+/** Where the map is now. */
+function viewOf(map: MlMap): MapView {
+  return { ...map.getCenter(), zoom: map.getZoom() };
 }
 
 /** Glide back to a view from before a fit; `then` runs once there. */
@@ -106,6 +155,11 @@ function returnTo(map: MlMap, before: MapView, then: () => void) {
 function isWorthFitting(map: MlMap, outline: GeoJSON.Position[], covered: CoveredEdges, zoom: number): boolean {
   const scale = 2 ** (zoom - map.getZoom());
   return isLargeOnScreen(map, outline, covered, scale) && !isTooWide(outline);
+}
+
+/** A record's area's outer positions, or none when it has no area. */
+function outlineOf(place: RecordPlace): GeoJSON.Position[] {
+  return place.area ? outerPositions(place.area) : [];
 }
 
 /** The positions of an area's outer rings: holes never reach past them. */
@@ -136,11 +190,13 @@ function isLargeOnScreen(map: MlMap, outline: GeoJSON.Position[], covered: Cover
   return isWide || scale * (Math.max(...ys) - Math.min(...ys)) > MIN_FIT_SHARE * clearHeight;
 }
 
-/** Whether every position of an outline sits on the map clear of the panels. */
+/** Whether every position of an outline sits on the map clear of the panels, on the globe's near side. */
 function isInView(map: MlMap, ring: GeoJSON.Position[], covered: CoveredEdges): boolean {
   const { clientWidth: width, clientHeight: height } = map.getContainer();
   return ring.every((position) => {
-    const point = map.project(position as [number, number]);
+    const lngLat = position as [number, number];
+    if (!isOnNearSide(map, lngLat)) return false;
+    const point = map.project(lngLat);
     const isInWidth = point.x >= covered.left && point.x <= width - covered.right;
     return isInWidth && point.y >= covered.top && point.y <= height - covered.bottom;
   });

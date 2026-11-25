@@ -146,11 +146,15 @@ watch(speciesKey, () => void load());
 watch(dateOrder, () => void load('resort'));
 watch(records, () => void nextTick(updateFade));
 
-// Mark the expanded record on the map, when it has coordinates.
-watch(expanded, (key) => {
-  const record = records.value.find((occurrence) => occurrence.key === key);
-  $recordPlace.set(record ? recordPlace(record) : null);
-});
+// Mark the expanded record on the map, when it has coordinates: once it's listed, so one opened from the URL too.
+const expandedRecord = computed(() => records.value.find((occurrence) => occurrence.key === expanded.value));
+watch(
+  () => expandedRecord.value?.key,
+  () => {
+    const record = expandedRecord.value;
+    $recordPlace.set(record ? recordPlace(record) : null);
+  },
+);
 onBeforeUnmount(() => $recordPlace.set(null));
 
 /** Photo URLs that failed to load; they drop out of the row and the lightbox. */

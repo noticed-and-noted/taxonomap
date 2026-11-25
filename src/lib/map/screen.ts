@@ -28,6 +28,12 @@ export function isOnScreen(map: MlMap, [lng, lat]: LngLat): boolean {
   const canvas = map.getCanvas();
   const point = map.project([lng, lat]);
   if (point.x < 0 || point.y < 0 || point.x > canvas.clientWidth || point.y > canvas.clientHeight) return false;
+  return isOnNearSide(map, [lng, lat]);
+}
+
+/** Whether a place is on the globe's near side (always, on the flat map), wherever it falls on the canvas. */
+export function isOnNearSide(map: MlMap, [lng, lat]: LngLat): boolean {
+  const point = map.project([lng, lat]);
   const back = map.unproject([point.x, point.y]);
   const lngDrift = Math.abs(((back.lng - lng + 540) % 360) - 180);
   return Math.abs(back.lat - lat) < ROUND_TRIP_DEGREES && lngDrift < ROUND_TRIP_DEGREES;

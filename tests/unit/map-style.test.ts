@@ -1,15 +1,6 @@
 /** The map's style: our layers spliced into each kind of basemap, and the GeoJSON helpers. */
 import type { MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
-import {
-  buildStyle,
-  EMPTY,
-  fetchStyle,
-  fillColor,
-  geometryOf,
-  nearGeoJson,
-  recordDotMinZoom,
-  selectedGeoJson,
-} from '~/lib/map/style';
+import { buildStyle, EMPTY, fetchStyle, fillColor, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
 import { thresholdsAt } from '~/lib/ramp';
 import { json, stubNetwork } from './helpers/network';
 
@@ -177,14 +168,6 @@ describe('map GeoJSON', () => {
 
   it('outlines the selected cell', () => {
     expect(selectedGeoJson(null)).toBe(EMPTY);
-  });
-
-  it('shows the record’s dot once its cell is three dots wide on screen', () => {
-    expect(recordDotMinZoom(8, 54)).toBe(8);
-    expect(recordDotMinZoom(8, 27)).toBe(9);
-    expect(recordDotMinZoom(8, 108)).toBe(7);
-    expect(recordDotMinZoom(8, null)).toBe(7);
-    expect(recordDotMinZoom(8, 0)).toBe(24);
   });
 
   it('marks the expanded record, with or without a selected cell', () => {

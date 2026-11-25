@@ -13,7 +13,6 @@ import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { PHONE_QUERY } from '~/lib/breakpoints';
 import { compact, full } from '~/lib/format';
-import { circleRing } from '~/lib/gbif/params';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
@@ -448,39 +447,40 @@ function listenToStores() {
   );
 }
 
-/** Zoom out to show an expanded record's large area, and back again (lib/map/recordFit.ts); size its dot. */
+/** Go to an expanded record, or zoom out to its large area, and back again (lib/map/recordFit.ts); size its area. */
 function followRecord() {
   const recordMap = map;
   if (!recordMap) return;
   const fit = createRecordFit({
     map: recordMap,
     coveredEdges: () => coveredEdges(recordMap),
-    fitBox: (bbox, maxZoom) => flyToBounds(recordMap, { kind: 'bounds', bbox, maxZoom }),
+    // To the box's own middle: fitting a padded box on a small globe can leave a lone point on the globe's rim.
+    fitBox: (bbox, maxZoom) => {
+      const [west, south, east, north] = bbox;
+      const centre = [(west + east) / 2, (south + north) / 2] as const;
+      flyToBounds(recordMap, { kind: 'bounds', bbox, maxZoom, centre });
+    },
+  });
+  // As with $flyTo, a flight planned before the first style loads breaks, so a record open from the URL waits for it.
+  let isStyleLoaded = false;
+  recordMap.once('style.load', () => {
+    isStyleLoaded = true;
+    fit($recordPlace.get());
   });
   // The zoom where the grid turns finer moves with the centre's latitude and the filters.
   recordMap.on('moveend', sizeRecordPlace);
   cleanups.push(
-    $recordPlace.listen((place) => fit(place?.area ?? null)),
+    $recordPlace.listen((place) => isStyleLoaded && fit(place)),
     $hexGeometry.listen(sizeRecordPlace),
     $gridLevel.listen(sizeRecordPlace),
-    $nearAt.listen(sizeRecordPlace),
-    $nearRadius.listen(sizeRecordPlace),
     () => recordMap.off('moveend', sizeRecordPlace),
   );
 }
 
-/** Size the expanded record's dot and area for the selected cell or near me's circle (lib/map/recordZoom.ts). */
+/** Size the expanded record's area for the selected cell (lib/map/recordZoom.ts). */
 function sizeRecordPlace() {
   if (!map) return;
-  const cellRing = $hexGeometry.get()?.ring;
-  sizeRecordLayers(map, cellRing ?? nearRing(), cellRing ? gridFinerZoom() : Infinity);
-}
-
-/** Near me's circle while the map is in pin mode, else undefined. */
-function nearRing(): [number, number][] | undefined {
-  const at = $nearAt.get();
-  if ($mapMode.get() !== 'pin' || !at) return undefined;
-  return circleRing(at.lat, at.lng, $nearRadius.get());
+  sizeRecordLayers(map, $hexGeometry.get() ? gridFinerZoom() : Infinity);
 }
 
 /** The zoom where the grid at the map's latitude turns finer than the selected cell; Infinity if never or unknown. */

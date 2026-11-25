@@ -13,6 +13,13 @@ const FIT_PADDING = 60;
 const FIT_MAX_ZOOM = 9;
 const FIT_DURATION_MS = 1200;
 const FLIGHT_DURATION_MS = 1400;
+/** MapLibre's world is this many px wide at zoom 0. */
+const TILE_SIZE_PX = 512;
+/**
+ * The most a point is moved off the globe's centre to clear the chrome, as a share of the globe's radius: zoomed
+ * out, the chrome can be wider than the globe, and a full offset would put the point on its rim or past it.
+ */
+const MAX_OFFSET_SHARE = 0.5;
 
 type BoundsRequest = Extract<FlyRequest, { kind: 'bounds' }>;
 type PointRequest = Extract<FlyRequest, { kind: 'point' }>;
@@ -26,14 +33,21 @@ export function flyMap(map: MlMap, request: FlyRequest): void {
 /** Fly to a point, centred in the part of the map the chrome leaves clear. */
 function flyToPoint(map: MlMap, request: PointRequest): void {
   const covered = coveredEdges(map);
+  const maxOffset = MAX_OFFSET_SHARE * globeRadiusPx(request.zoom);
+  const clamp = (px: number) => Math.max(-maxOffset, Math.min(maxOffset, px));
   // An offset, not camera padding: MapLibre keeps padding after the move.
   map.flyTo({
     center: [request.lng, request.lat],
     zoom: request.zoom,
-    offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
+    offset: [clamp((covered.left - covered.right) / 2), clamp((covered.top - covered.bottom) / 2)],
     duration: prefersReducedMotion() ? 0 : FLIGHT_DURATION_MS,
     essential: false,
   });
+}
+
+/** The globe's radius on screen at a zoom, in px: the world's width there wrapped round a circle. */
+function globeRadiusPx(zoom: number): number {
+  return (TILE_SIZE_PX * 2 ** zoom) / (2 * Math.PI);
 }
 
 /** Fit a box clear of the floating chrome, or fly to a chosen centre at the zoom that fits it. */

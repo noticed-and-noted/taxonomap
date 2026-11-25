@@ -16,7 +16,7 @@ const props = defineProps<{
   title: string;
   open: boolean;
   collapsible?: boolean;
-  dismissible?: string;
+  dismissible?: string | undefined;
   tabLabel?: string;
 }>();
 /** `closing`: a dismissed sheet has started sliding away; `dismiss` follows once it's gone. */
