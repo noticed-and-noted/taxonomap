@@ -1,5 +1,6 @@
 import { GbifNotFoundError, GbifRequestError, GbifUnavailableError } from '~/lib/gbif/errors';
 import { $gbifStale, createHttp, parseRetryAfter, type Transport } from '~/lib/gbif/http';
+import { $requestCounts, resetRequestCounts } from '~/lib/gbif/metrics';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
@@ -145,6 +146,21 @@ describe('http client', () => {
     await client.getJson('/v1/x', undefined, { ttlMs: -1 }); // immediately stale
     await expect(client.getJson('/v1/x')).resolves.toEqual({ v: 'old' });
     expect($gbifStale.get()).toBe(true);
+  });
+
+  it("serves another service's stale copy without the GBIF notice or request meter", async () => {
+    resetRequestCounts();
+    const responses = [json({ v: 'old' }), json({}, 502), json({}, 502), json({}, 502), json({}, 502)];
+    const client = createHttp({
+      base: 'https://other.test',
+      transport: async () => responses.shift()!,
+      sleep: async () => undefined,
+      isGbif: false,
+    });
+    await client.getJson('/x', undefined, { ttlMs: -1 }); // immediately stale
+    await expect(client.getJson('/x')).resolves.toEqual({ v: 'old' });
+    expect($gbifStale.get()).toBe(false);
+    expect($requestCounts.get().json).toBe(0);
   });
 
   it('does not retry 4xx and maps 404 to GbifNotFoundError', async () => {

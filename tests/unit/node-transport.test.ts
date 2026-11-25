@@ -124,6 +124,15 @@ describe('node transport options', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the default cache TTL when the setting is empty', async () => {
+    vi.stubEnv('GBIF_CACHE_TTL_HOURS', '');
+    const fetcher = fakeFetch();
+    const transport = createNodeTransport({ cacheDir: dir, fetchImpl: fetcher.impl });
+    await transport('https://api.test/v1/a');
+    await transport('https://api.test/v1/a');
+    expect(fetcher.seen).toHaveLength(1);
+  });
+
   it('passes the signal on, and keeps a content type the response leaves out', async () => {
     const seen: (AbortSignal | undefined)[] = [];
     const fetchImpl = (async (_url: string, requestInit?: RequestInit) => {

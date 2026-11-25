@@ -150,7 +150,7 @@ export const keyUnit = (key: string): DateUnit => (key.length === 4 ? 'y' : key.
 
 /** URL form: a preset ("5y") or "unit:from..to" with keys at the unit's length ("y:2020..2022", "d:2019-03-12.."). */
 export function parseRange(raw: string): DateRange | undefined {
-  if (raw in PRESETS) return { preset: raw as Preset };
+  if (Object.hasOwn(PRESETS, raw)) return { preset: raw as Preset };
   const match = /^([ymd]):([\d-]*)\.\.([\d-]*)$/.exec(raw);
   if (!match) return undefined;
   const unit = match[1] as DateUnit;

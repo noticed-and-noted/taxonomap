@@ -21,10 +21,3 @@ export const INATURALIST_DATASET_KEY = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
 
 /** GBIF Backbone Taxonomy dataset key. */
 export const BACKBONE_DATASET_KEY = 'd7dddbf4-2cf0-4f39-9b2a-bb099caae36c';
-
-/** Hard API limits verified against the live service. */
-export const LIMITS = {
-  maxPageSize: 300,
-  /** offset + limit must not exceed this. */
-  maxOffsetPlusLimit: 100_001,
-} as const;

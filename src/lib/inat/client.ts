@@ -63,7 +63,8 @@ export function throttle(transport: Transport, burst = BURST, perSecond = PER_SE
 const throttledFetch = throttle((url, requestInit) => globalThis.fetch(url, requestInit));
 
 /** The client for iNaturalist: `transport` under the shared cache and retries. */
-const createInat = (transport: Transport) => createHttp({ base: INAT_API_BASE, transport, defaultTtlMs: 6 * HOUR });
+const createInat = (transport: Transport) =>
+  createHttp({ base: INAT_API_BASE, transport, defaultTtlMs: 6 * HOUR, isGbif: false });
 
 let inat = createInat(throttledFetch);
 

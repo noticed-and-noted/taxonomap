@@ -58,6 +58,7 @@ function wiktionary(): Http {
     defaultTtlMs: DAY,
     cacheSize: 200,
     base: WIKTIONARY_ORIGIN,
+    isGbif: false,
   });
   return client;
 }

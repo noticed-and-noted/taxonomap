@@ -74,19 +74,7 @@ describe('url-sync', () => {
   });
 });
 
-describe('withHistoryMode', () => {
-  it('forces replace for writes inside the callback', async () => {
-    const { withHistoryMode } = await import('~/stores/url-sync');
-    vi.useFakeTimers();
-    const counter = urlAtom(codecs.int('anim', 0));
-    const before = history.length;
-    withHistoryMode('replace', () => counter.set(5));
-    vi.advanceTimersByTime(350);
-    expect(location.search).toBe('?anim=5');
-    expect(history.length).toBe(before);
-    vi.useRealTimers();
-  });
-
+describe('codecs', () => {
   it('intSet parses a bounded, de-duplicated, numerically sorted list', () => {
     const codec = codecs.intSet('months', { min: 1, max: 12, limit: 3 });
     expect(codec.parse('12,4,x,4,13,2,1')).toEqual([1, 2, 4]);

@@ -20,6 +20,8 @@ export interface HttpOptions {
   sleep: (ms: number) => Promise<void>;
   random: () => number;
   now: () => number;
+  /** False for clients of other services: their requests and outages are not GBIF's (the meter, the busy notice). */
+  isGbif: boolean;
 }
 
 export interface RequestOptions {
@@ -49,6 +51,7 @@ const DEFAULT_OPTIONS: HttpOptions = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   random: Math.random,
   now: Date.now,
+  isGbif: true,
 };
 
 /**
@@ -79,10 +82,10 @@ async function requestError(url: string, response: Response): Promise<GbifReques
 }
 
 /** One try: the response, or null if the network failed. A cancelled request throws. */
-async function tryOnce(transport: Transport, url: string, signal: AbortSignal): Promise<Response | null> {
-  countRequest('json');
+async function tryOnce(options: HttpOptions, url: string, signal: AbortSignal): Promise<Response | null> {
+  if (options.isGbif) countRequest('json');
   try {
-    return await transport(url, { signal });
+    return await options.transport(url, { signal });
   } catch (error) {
     if (signal.aborted) throw error;
     return null;
@@ -129,7 +132,7 @@ function createRetryingFetcher(options: HttpOptions) {
       signal.throwIfAborted();
       hasJustWaited = false;
 
-      const response = await tryOnce(options.transport, url, signal);
+      const response = await tryOnce(options, url, signal);
       const body: unknown = response?.ok ? await response.json() : undefined;
       if (response?.ok && isComplete(body)) return body;
       lastStatus = response?.status;
@@ -150,12 +153,15 @@ interface SharedRequest {
   waiting: number;
 }
 
-/** The stale cached copy to serve when GBIF is unavailable; rethrows `error` when there is none. */
-function staleOrThrow(cache: LruCache<unknown>, url: string, error: unknown): unknown {
+/**
+ * The stale cached copy to serve when the service is unavailable; rethrows `error` when there is none.
+ * @param isGbif Whether serving it should raise the "GBIF is busy" notice.
+ */
+function staleOrThrow(cache: LruCache<unknown>, url: string, error: unknown, isGbif: boolean): unknown {
   if (error instanceof GbifUnavailableError) {
     const stale = cache.peek(url);
     if (stale !== undefined) {
-      $gbifStale.set(true);
+      if (isGbif) $gbifStale.set(true);
       return stale;
     }
   }
@@ -193,10 +199,12 @@ function waitUnlessAborted<T>(request: SharedRequest, signal: AbortSignal, onLas
  * One request per URL, shared by every caller. The request has its own
  * controller: a caller's signal only stops that caller waiting, and the
  * request itself is cancelled once no caller is left waiting.
+ * @param isGbif Whether a stale fallback raises the "GBIF is busy" notice.
  */
 function createRequestSharing(
   cache: LruCache<unknown>,
   fetchWithRetry: (path: string, signal: AbortSignal, isComplete?: CompletenessCheck) => Promise<unknown>,
+  isGbif: boolean,
 ) {
   const inFlight = new Map<string, SharedRequest>();
 
@@ -215,7 +223,7 @@ function createRequestSharing(
           cache.set(url, data, ttlMs);
           return data;
         })
-        .catch((error: unknown) => staleOrThrow(cache, url, error))
+        .catch((error: unknown) => staleOrThrow(cache, url, error, isGbif))
         .finally(() => forget(url, request)),
     };
     // Callers that stop waiting are rejected on their own; this only silences the shared copy.
@@ -246,7 +254,7 @@ function createRequestSharing(
 export function createHttp(overrides: Partial<HttpOptions> = {}) {
   const options: HttpOptions = { ...DEFAULT_OPTIONS, ...overrides };
   const cache = new LruCache<unknown>(options.cacheSize);
-  const sharing = createRequestSharing(cache, createRetryingFetcher(options));
+  const sharing = createRequestSharing(cache, createRetryingFetcher(options), options.isGbif);
 
   /**
    * GET JSON from GBIF (`path` on the REST API, or a full URL on another GBIF host). Identical concurrent requests share one request;

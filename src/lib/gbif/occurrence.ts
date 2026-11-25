@@ -1,5 +1,4 @@
 import { DAY, HOUR } from '~/lib/util/time';
-import { LIMITS } from './config';
 import { http } from './http';
 import { yearRangeParam, type Params } from './params';
 import type { BasisOfRecord, Continent, Facet, FacetCount, IucnCategory, Occurrence, OccurrenceSearch } from './types';
@@ -171,30 +170,6 @@ export async function occurrenceCount(filter: OccurrenceFilter, signal?: AbortSi
     { ttlMs: HOUR, ...(signal && { signal }) },
   );
   return response.count;
-}
-
-/**
- * One page of occurrence records. A page beyond GBIF's paging limit comes back empty rather than as an error.
- * @param page Page size (capped) and offset.
- */
-export function searchOccurrences(
-  filter: OccurrenceFilter,
-  page: { limit?: number; offset?: number } = {},
-  signal?: AbortSignal,
-): Promise<OccurrenceSearch> {
-  const limit = Math.min(page.limit ?? 20, LIMITS.maxPageSize);
-  const offset = Math.max(0, page.offset ?? 0);
-  if (offset + limit > LIMITS.maxOffsetPlusLimit) {
-    return Promise.resolve({ offset, limit, endOfRecords: true, count: 0, results: [] });
-  }
-  return http().getJson(
-    '/v1/occurrence/search',
-    { ...filterToParams(filter), limit, offset },
-    {
-      ttlMs: HOUR,
-      ...(signal && { signal }),
-    },
-  );
 }
 
 /**

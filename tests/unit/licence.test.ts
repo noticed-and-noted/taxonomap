@@ -82,10 +82,10 @@ describe('licence', () => {
     expect(usableSounds({ key: 1, license: 'CC0_1_0' } as Occurrence)).toEqual([]);
   });
 
-  it('takes the rights holder and publisher from the media, else the record, with any references', () => {
+  it('takes the rights holder and publisher from the media, else the record', () => {
     const [ownImage, inherited] = usableImages({
       ...occ('CC0_1_0', [
-        { identifier: 'a.jpg', rightsHolder: 'Media RH', publisher: 'Media Pub', references: 'https://ref.test' },
+        { identifier: 'a.jpg', rightsHolder: 'Media RH', publisher: 'Media Pub' },
         { identifier: 'b.jpg' },
       ]),
       speciesKey: 7,
@@ -94,11 +94,9 @@ describe('licence', () => {
     expect(ownImage).toMatchObject({
       rightsHolder: 'Media RH',
       publisher: 'Media Pub',
-      references: 'https://ref.test',
       speciesKey: 7,
     });
     expect(inherited).toMatchObject({ rightsHolder: 'Record RH', publisher: 'Pub' });
-    expect(inherited).not.toHaveProperty('references');
     const bare = usableImages({ key: 2, datasetKey: 'd', license: 'CC0_1_0', media: [{ identifier: 'c.jpg' }] });
     expect(bare[0]).not.toHaveProperty('rightsHolder');
     expect(bare[0]).not.toHaveProperty('publisher');

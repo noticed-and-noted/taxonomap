@@ -77,7 +77,7 @@ const DEFAULT_FACET_LIMIT = 200;
 /** The record fields batched lookups read: enough for an iNaturalist match and for usableImages. */
 const RECORD_FIELDS =
   'key datasetKey taxonID license rightsHolder publisher ' +
-  'media { type identifier license creator rightsHolder publisher references }';
+  'media { type identifier license creator rightsHolder publisher }';
 
 /**
  * GBIF's search predicate for REST query parameters. A range ("1990,2000",

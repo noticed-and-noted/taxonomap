@@ -33,7 +33,7 @@ interface WikiClients {
 let clients: WikiClients | undefined;
 
 function wikiClients(): WikiClients {
-  const options = { transport: sharedTransport(), defaultTtlMs: DAY, cacheSize: 200 };
+  const options = { transport: sharedTransport(), defaultTtlMs: DAY, cacheSize: 200, isGbif: false };
   clients ??= {
     wikidata: createHttp({ ...options, base: WIKIDATA_ORIGIN }),
     wikipedia: createHttp({ ...options, base: WIKIPEDIA_ORIGIN }),

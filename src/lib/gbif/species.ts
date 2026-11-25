@@ -69,15 +69,6 @@ export function getSynonyms(key: number, limit = 100) {
   return http().getJson<Paged<NameUsage>>(`/v1/species/${key}/synonyms`, { limit }, { ttlMs: DAY });
 }
 
-/** The accepted children of a taxon, one page at a time. */
-export function getChildren(key: number, options: { limit?: number; offset?: number } = {}, signal?: AbortSignal) {
-  return http().getJson<Paged<NameUsage>>(
-    `/v1/species/${key}/children`,
-    { limit: options.limit ?? 100, offset: options.offset },
-    { ttlMs: DAY, ...(signal && { signal }) },
-  );
-}
-
 /** GBIF's page-size cap for species search (larger limits are silently cut to this). */
 const SEARCH_PAGE = 1000;
 /** Stops runaway paging; the largest families have about 6,000 accepted genera. */

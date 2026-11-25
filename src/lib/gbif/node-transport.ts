@@ -49,8 +49,8 @@ const DEFAULT_CACHE_TTL_HOURS = 168;
 const DEFAULT_CONCURRENCY = 5;
 const MAX_RETRY_PAUSE_MS = 2 * MINUTE;
 
-/** How long a cached response stays fresh (`GBIF_CACHE_TTL_HOURS`). */
-const defaultCacheTtlMs = () => Number(process.env['GBIF_CACHE_TTL_HOURS'] ?? DEFAULT_CACHE_TTL_HOURS) * HOUR;
+/** How long a cached response stays fresh (`GBIF_CACHE_TTL_HOURS`; 0 turns the cache off, empty keeps the default). */
+const defaultCacheTtlMs = () => Number(process.env['GBIF_CACHE_TTL_HOURS'] || DEFAULT_CACHE_TTL_HOURS) * HOUR;
 
 /** Whether to ignore cached responses (`GBIF_CACHE_REFRESH=1`). */
 const isCacheRefresh = () => process.env['GBIF_CACHE_REFRESH'] === '1';
