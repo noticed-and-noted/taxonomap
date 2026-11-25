@@ -1,5 +1,5 @@
 /** The iNaturalist token bucket: requests cancelled while queued give up their turn. */
-import { throttle } from '~/lib/photos/inat';
+import { throttle } from '~/lib/inat/client';
 import { json, stubNetwork } from './helpers/network';
 
 afterEach(() => vi.useRealTimers());
@@ -60,7 +60,7 @@ describe('getTaxonNames', () => {
       ],
     }));
     vi.resetModules();
-    const { getTaxonNames } = await import('~/lib/photos/inat');
+    const { getTaxonNames } = await import('~/lib/inat/client');
     const taxa = await getTaxonNames([40, 5, 5]);
     expect([...taxa.keys()]).toEqual([5, 40]);
     expect(calls).toHaveLength(1);
@@ -78,7 +78,7 @@ describe('getTaxonNames with a replaced taxon', () => {
       return { results: [{ id: 40, name: 'Forty', rank_level: 10, preferred_common_name: 'Old name' }] };
     });
     vi.resetModules();
-    const { getTaxonNames } = await import('~/lib/photos/inat');
+    const { getTaxonNames } = await import('~/lib/inat/client');
     const taxa = await getTaxonNames([40, 5]);
     expect([...taxa.keys()].sort()).toEqual([40, 5]);
     expect(calls.map((call) => call.pathname)).toEqual(['/v2/taxa', '/v2/taxa/40']);
@@ -90,7 +90,7 @@ describe('getTaxonNames with a replaced taxon', () => {
       url.pathname === '/v2/taxa' ? { results: [{ id: 5, name: 'Five', rank_level: 10 }] } : json({}, 400),
     );
     vi.resetModules();
-    const { getTaxonNames } = await import('~/lib/photos/inat');
+    const { getTaxonNames } = await import('~/lib/inat/client');
     const taxa = await getTaxonNames([40, 5]);
     expect([...taxa.keys()]).toEqual([5]);
     expect(warn).toHaveBeenCalledOnce();
@@ -103,7 +103,7 @@ describe('iNaturalist sounds and places', () => {
 
   async function inat() {
     vi.resetModules();
-    return import('~/lib/photos/inat');
+    return import('~/lib/inat/client');
   }
 
   it('asks for research-grade observations with openly licensed sounds', async () => {
@@ -149,7 +149,7 @@ describe('iNaturalist for the build', () => {
     vi.resetModules();
     const withDiskCache = vi.fn((transport: unknown) => transport);
     vi.doMock('~/lib/gbif/node-transport', () => ({ withDiskCache }));
-    const server = await import('~/lib/photos/inat-server');
+    const server = await import('~/lib/inat/server');
     expect(withDiskCache).toHaveBeenCalledWith(expect.any(Function), {
       cacheDir: expect.stringMatching(/\.cache[/\\]inat$/),
     });

@@ -48,12 +48,9 @@ describe('map tiles', () => {
     expect(api.filterToParams({ taxonKeys: [1, 2], exactTaxon: true })).toMatchObject({ acceptedTaxonKey: [1, 2] });
   });
 
-  it('takes a style and fills in a concrete tile', async () => {
+  it('takes a style', async () => {
     const api = await gbif();
     expect(api.tileParams({}, { style: 'classic.point', srs: 'EPSG:3857' })).toMatchObject({ style: 'classic.point' });
-    expect(api.occurrenceTileUrl({ country: 'GB' }, 3, 4, 5)).toMatch(
-      /^https:\/\/api\.gbif\.org\/v2\/map\/occurrence\/density\/3\/4\/5@1x\.png\?.*country=GB/,
-    );
   });
 
   it('leaves the query off when there is none', async () => {
@@ -72,26 +69,14 @@ describe('map tiles', () => {
     expect(api.gbifBasemapTile(1, 2, 3)).toBe('https://tile.gbif.org/3857/omt/1/2/3@1x.png?style=gbif-dark');
     expect(api.gbifBasemapTile(1, 2, 3, 'light')).toMatch(/style=gbif-light$/);
   });
-
-  it('asks for map capabilities', async () => {
-    const calls = stubNetwork(() => ({ total: 1 }));
-    const api = await gbif();
-    await api.mapCapabilities();
-    await api.mapCapabilities({ taxonKey: 212, country: 'GB' });
-    expect(calls.map((url) => `${url.pathname}${url.search}`)).toEqual([
-      '/v2/map/occurrence/density/capabilities.json',
-      '/v2/map/occurrence/density/capabilities.json?country=GB&taxonKey=212',
-    ]);
-  });
 });
 
 describe('datasets and organisations', () => {
-  it('fetch by key', async () => {
+  it('fetch an organisation by key', async () => {
     const calls = stubNetwork(() => ({ key: 'k', title: 't' }));
     const api = await gbif();
-    await api.getDataset('d1');
     await api.getOrganization('o1');
-    expect(calls.map((url) => url.pathname)).toEqual(['/v1/dataset/d1', '/v1/organization/o1']);
+    expect(calls.map((url) => url.pathname)).toEqual(['/v1/organization/o1']);
   });
 
   it('match publisher names word by word, not inside words', async () => {
@@ -180,7 +165,7 @@ describe('datasets and organisations', () => {
 
 describe('occurrence filters', () => {
   it('limits to georeferenced records, and passes a signal', async () => {
-    const calls = stubNetwork(() => ({ count: 3, results: [] }));
+    stubNetwork(() => ({ count: 3, results: [] }));
     const api = await gbif();
     expect(api.filterToParams({ georeferenced: true })).toMatchObject({
       hasCoordinate: true,
@@ -191,8 +176,6 @@ describe('occurrence filters', () => {
     });
     const controller = new AbortController();
     await expect(api.occurrenceCount({}, controller.signal)).resolves.toBe(3);
-    await api.searchOccurrences({}, undefined, controller.signal);
-    expect(calls[1]!.searchParams.get('limit')).toBe('20');
   });
 
   it('reads a facet response with no facets', async () => {
@@ -204,14 +187,12 @@ describe('occurrence filters', () => {
 
 describe('species endpoints with signals', () => {
   it('pass the signal through and read an empty facet', async () => {
-    const calls = stubNetwork((url) => (url.pathname === '/v1/species/search' ? { results: [] } : { key: 1 }));
+    stubNetwork((url) => (url.pathname === '/v1/species/search' ? { results: [] } : { key: 1 }));
     const api = await gbif();
     const { signal } = new AbortController();
     await api.getSpecies(1, signal);
     await api.getVernacularNames(1, signal);
-    await api.getChildren(1, {}, signal);
     await expect(api.speciesCountsUnder(undefined, 10, signal)).resolves.toEqual(new Map());
-    expect(calls.map((url) => `${url.pathname}${url.search}`)).toContain('/v1/species/1/children?limit=100');
     stubNetwork(() => ({ facets: [{ field: 'HIGHER_TAXON_KEY' }] }));
     await expect((await gbif()).speciesCountsUnder(2)).resolves.toEqual(new Map());
   });

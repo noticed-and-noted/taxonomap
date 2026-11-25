@@ -14,27 +14,23 @@ import { BASEMAPS, plainStyleUrl, type BasemapId, type RasterDef, type Theme } f
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
-import type { HexGeometry } from '~/stores/explorer';
+import type { HexGeometry } from '~/stores/map-messages';
+import type { RecordPlace } from './recordPlace';
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-/** Zoomed out further, a record's area (or, outside a cell, its dot) says little more than its cell outline. */
+/** Zoomed out further, a record's area says little more than its cell outline. */
 export const RECORD_MIN_ZOOM = 7;
 export const RECORD_DOT_LAYER = 'selected-record';
-/** The obscured record's square: its fill and dashed edge. */
+/** The record's area (its footprint, uncertainty circle or obscured square): its fill and dashed edge. */
 export const RECORD_AREA_LAYERS = ['record-area', 'record-edge'] as const;
 const RECORD_DOT_RADIUS_PX = 6;
 const RECORD_DOT_STROKE_PX = 3;
-const RECORD_DOT_DIAMETER_PX = 2 * (RECORD_DOT_RADIUS_PX + RECORD_DOT_STROKE_PX);
-/** The dot shows once its cell is this many dots wide on screen; narrower, the dot would all but cover the cell. */
-const CELL_WIDTH_IN_DOTS = 3;
-/** MapLibre's highest layer zoom. */
-const LAYER_MAX_ZOOM = 24;
 /** Marks the record's feature in the `selected` source, so its area isn't drawn as the cell outline. */
 const RECORD_PART = 'record';
 const IS_RECORD_AREA: ExpressionSpecification = [
   'all',
-  ['==', ['geometry-type'], 'Polygon'],
+  ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
   ['==', ['get', 'part'], RECORD_PART],
 ];
 /** Glyphs for raster basemaps, which bring none of their own. */
@@ -106,8 +102,8 @@ function dataLayers(level: number): LayerSpecification[] {
 }
 
 /**
- * The expanded record: a ring, not a filled dot, so it never reads as the near-me pin; an obscured
- * record's square is dashed like the near-me circle, as both mean "somewhere in here".
+ * The expanded record: a ring, not a filled dot, so it never reads as the near-me pin; its area is
+ * dashed like the near-me circle, as both mean "somewhere in here".
  */
 function recordLayers(accent: string, bg: string): LayerSpecification[] {
   const base = { source: 'selected', minzoom: RECORD_MIN_ZOOM } as const;
@@ -127,7 +123,8 @@ function recordLayers(accent: string, bg: string): LayerSpecification[] {
       paint: { 'line-color': accent, 'line-width': 2, 'line-dasharray': [3, 2] },
     },
     {
-      ...base,
+      // The dot marks the record at every zoom: in a cell, around a pin or on its own.
+      source: 'selected',
       id: RECORD_DOT_LAYER,
       type: 'circle',
       filter: ['==', ['geometry-type'], 'Point'],
@@ -139,18 +136,6 @@ function recordLayers(accent: string, bg: string): LayerSpecification[] {
       },
     },
   ];
-}
-
-/**
- * The zoom from which an expanded record's dot shows: once its cell is wide enough on screen for the dot
- * to say where in the cell the record is.
- * @param zoom The map's zoom now.
- * @param cellWidthPx The cell's width on screen now, or null for a record listed outside a cell (near me).
- */
-export function recordDotMinZoom(zoom: number, cellWidthPx: number | null): number {
-  if (cellWidthPx === null) return RECORD_MIN_ZOOM;
-  const zoomIn = Math.log2((CELL_WIDTH_IN_DOTS * RECORD_DOT_DIAMETER_PX) / cellWidthPx);
-  return Math.min(LAYER_MAX_ZOOM, zoom + zoomIn);
 }
 
 /** Hover, selection and "near me" layers, drawn above everything. */
@@ -370,13 +355,15 @@ export function nearGeoJson(at: { lat: number; lng: number } | null, radiusKm: n
 /** Outline of the selected cell, and the place of the record expanded in its list (lib/map/recordPlace.ts). */
 export function selectedGeoJson(
   geometry: HexGeometry | null,
-  record: GeoJSON.Point | GeoJSON.Polygon | null = null,
+  record: RecordPlace | null = null,
 ): GeoJSON.FeatureCollection {
   if (!geometry && !record) return EMPTY;
   const features: GeoJSON.Feature[] = [];
   if (geometry)
     features.push({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [geometry.ring] } });
-  if (record) features.push({ type: 'Feature', properties: { part: RECORD_PART }, geometry: record });
+  // The area goes first so the dot draws over its edge.
+  for (const part of [record?.area, record?.point])
+    if (part) features.push({ type: 'Feature', properties: { part: RECORD_PART }, geometry: part });
   return { type: 'FeatureCollection', features };
 }
 

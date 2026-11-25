@@ -5,8 +5,8 @@
  */
 import { join } from 'node:path';
 import { withDiskCache } from '~/lib/gbif/node-transport';
-import { configureInat } from './inat';
+import { configureInat } from './client';
 
 configureInat((throttled) => withDiskCache(throttled, { cacheDir: join(process.cwd(), '.cache', 'inat') }));
 
-export * from './inat';
+export * from './client';

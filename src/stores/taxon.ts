@@ -8,7 +8,7 @@ import { nameIndexWithin } from '~/lib/data/name-index';
 import { getSpecies, getVernacularNames, type NameHit, type Rank } from '~/lib/gbif';
 import { inatNames } from '~/lib/photos/taxon-photos';
 import { englishName } from '~/lib/species/names';
-import { $taxonKeys, clearHexSelection, MAX_TAXA } from './explorer';
+import { clearHexSelection, MAX_TAXA, $taxonKeys } from './explorer';
 
 export interface TaxonInfo {
   key: number;

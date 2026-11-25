@@ -6,7 +6,7 @@ test('theme toggle persists across navigation', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.locator('[data-theme-toggle]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.getByRole('link', { name: 'Tree of life' }).click();
+  await page.getByRole('link', { name: 'Tree of Life' }).click();
   await expect(page).toHaveURL(/\/tree/);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
@@ -21,7 +21,7 @@ test(
     // Tag the live DOM node; a remount would replace it.
     await map.evaluate((element) => ((element as HTMLElement).dataset['marker'] = 'first'));
 
-    await page.getByRole('link', { name: 'Tree of life' }).click();
+    await page.getByRole('link', { name: 'Tree of Life' }).click();
     await expect(page).toHaveURL(/\/tree\/$/);
     await page.getByRole('link', { name: 'Map', exact: true }).click();
     await expect(page).toHaveURL(/\/\?photo=1&taxon=2492462/);

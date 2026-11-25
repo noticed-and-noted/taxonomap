@@ -4,7 +4,9 @@
  */
 import type { TileFilter } from '~/lib/gbif';
 import { recordsView } from '~/lib/map/taxonView';
-import { $flyTo, $occurrenceFilter, $taxonKeys } from './explorer';
+import { $taxonKeys } from './explorer';
+import { $occurrenceFilter } from './filters';
+import { $flyTo } from './map-messages';
 import { $fitOnSearch } from './fit-search';
 import { $nearMode } from './near';
 import { linkParams } from './url-sync';

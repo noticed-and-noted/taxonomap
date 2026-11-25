@@ -1,8 +1,7 @@
 import { GBIF_TILE_BASE } from './config';
-import { http } from './http';
 import { hasRefinements, refinementParams, taxonParams, type Refinements } from './occurrence';
 import { toQueryString, yearRangeParam, type Params } from './params';
-import type { BasisOfRecord, MapCapabilities } from './types';
+import type { BasisOfRecord } from './types';
 
 /**
  * Tile URL builders. MapLibre needs templates with literal {z}/{x}/{y}, so the
@@ -69,29 +68,7 @@ export function occurrenceTileTemplate(filter: TileFilter, style: TileStyle = {}
   return `${GBIF_TILE_BASE}/v2/map/occurrence/${kind}/{z}/{x}/{y}${suffix(format)}${queryString ? `?${queryString}` : ''}`;
 }
 
-/** What GBIF's map API holds for a filter (e.g. the year range with data). */
-export function mapCapabilities(filter: Pick<TileFilter, 'taxonKey' | 'country'> = {}): Promise<MapCapabilities> {
-  return http().getJson('/v2/map/occurrence/density/capabilities.json', {
-    taxonKey: filter.taxonKey,
-    country: filter.country,
-  });
-}
-
 /** GBIF's own raster basemap (CORS-enabled), used by the static mini-map. */
 export function gbifBasemapTile(zoom: number, tileX: number, tileY: number, theme: 'dark' | 'light' = 'dark'): string {
   return `https://tile.gbif.org/3857/omt/${zoom}/${tileX}/${tileY}@1x.png?style=gbif-${theme === 'dark' ? 'dark' : 'light'}`;
-}
-
-/** A concrete density PNG tile (not a template). */
-export function occurrenceTileUrl(
-  filter: TileFilter,
-  zoom: number,
-  tileX: number,
-  tileY: number,
-  style: TileStyle = {},
-): string {
-  return occurrenceTileTemplate(filter, style, 'png')
-    .replace('{z}', String(zoom))
-    .replace('{x}', String(tileX))
-    .replace('{y}', String(tileY));
 }

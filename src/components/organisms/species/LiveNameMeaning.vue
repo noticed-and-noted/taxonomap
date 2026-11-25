@@ -5,8 +5,8 @@
  * Wiktionary requests; the section shows once the meanings arrive.
  */
 import { onMounted, shallowRef } from 'vue';
-import NameMeaning from '~/components/molecules/NameMeaning.vue';
 import { nameMeaning, type NamePart } from '~/lib/species/etymology';
+import NameMeaning from './NameMeaning.vue';
 
 const props = defineProps<{ canonicalName: string }>();
 

@@ -44,6 +44,14 @@ const { map = 'full', search } = Astro.props;
 </div>
 
 <style>
+  /* The map page never scrolls, so a downward drag that nothing inside takes (a short record list, the sheet's
+     header) would reach the page and pull to refresh, reloading the map and losing what was open. Other pages,
+     the tree included, keep pull to refresh. */
+  :global(html:has(.app-shell[data-map='full'])),
+  :global(html:has(.app-shell[data-map='full']) body) {
+    overscroll-behavior: none;
+  }
+
   .app-shell {
     position: relative;
     display: grid;

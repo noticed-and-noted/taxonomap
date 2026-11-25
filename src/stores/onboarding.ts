@@ -20,7 +20,7 @@ export const CHECKLIST = [
   { id: 'hex', title: 'Click a hex', hint: 'See the species and records inside' },
   { id: 'when', title: 'Filter to a decade', hint: 'When, then drag the time slider' },
   { id: 'group', title: 'Narrow to one group', hint: 'What, then pick birds, fungi or similar' },
-  { id: 'tree', title: 'Climb the tree of life', hint: 'Open Tree of life and drill down a rank' },
+  { id: 'tree', title: 'Climb the Tree of Life', hint: 'Open Tree of Life and drill down a rank' },
   { id: 'style', title: 'Make it yours', hint: 'Change the map colours or the theme' },
   { id: 'near', title: 'See what’s near you', hint: 'Near me, then use your location or a place' },
 ] as const;

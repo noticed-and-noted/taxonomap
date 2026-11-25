@@ -8,7 +8,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, ref, useId } from 'vue';
-import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import SelectedList, { SCROLL_AFTER } from '~/components/molecules/SelectedList.vue';
@@ -17,7 +17,7 @@ import { loadNameIndex } from '~/lib/data/name-index';
 import { compact, RANK_LABELS } from '~/lib/format';
 import type { NameHit } from '~/lib/gbif';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
-import { $taxonKeys, MAX_TAXA } from '~/stores/explorer';
+import { MAX_TAXA, $taxonKeys } from '~/stores/explorer';
 import { markDone } from '~/stores/onboarding';
 import { $taxa, addTaxon, removeTaxon, taxonFromHit, type TaxonInfo } from '~/stores/taxon';
 

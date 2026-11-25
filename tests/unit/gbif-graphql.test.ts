@@ -260,7 +260,7 @@ describe('searchOccurrencesByDate', () => {
         {
           key: 70,
           datasetName: 'Garden birds',
-          recordedBy: 'Ann, Bob',
+          recordedBy: 'Ann | Bob',
           classKey: 212,
           class: 'Aves',
           speciesKey: 7,

@@ -8,17 +8,11 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue';
 import Spotlight from '~/components/atoms/Spotlight.vue';
-import ReadingSettings from '~/components/molecules/ReadingSettings.vue';
+import ReadingSettings from '~/components/organisms/settings/ReadingSettings.vue';
 import type { ScreenBox } from '~/lib/tour';
 import { boxOf, PANEL_SELECTOR, speciesListBox } from '~/lib/tour-targets';
-import {
-  $busiestHexBox,
-  $busiestHexRequest,
-  $mapLoad,
-  $panel,
-  $selectedHex,
-  clearHexSelection,
-} from '~/stores/explorer';
+import { clearHexSelection, $panel, $selectedHex } from '~/stores/explorer';
+import { $busiestHexBox, $busiestHexRequest, $mapLoad } from '~/stores/map-messages';
 import { $tourOpen, finishTour } from '~/stores/onboarding';
 
 interface TourStep {
@@ -82,7 +76,7 @@ const STEPS: TourStep[] = [
   },
   {
     title: 'Beyond the map',
-    body: 'Clicking on a species will take you to a profile page with more information about it. There is also a representation of the Tree of life that allows you to explore every group by its records.',
+    body: 'Clicking on a species will take you to a profile page with more information about it. There is also a representation of the Tree of Life that allows you to explore every group by its records.',
     targets: () => [boxOf('[data-tour="nav"]'), speciesListBox()],
   },
 ];

@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/vue';
 import { ref, watch } from 'vue';
 import { loadSnapshot } from '~/lib/data/load';
 import { occurrenceFacets } from '~/lib/gbif';
-import { $occurrenceFilter } from '~/stores/explorer';
+import { $occurrenceFilter } from '~/stores/filters';
 import { useLatestLoad } from './useLatestLoad';
 
 export type YearCounts = Map<number, number>;

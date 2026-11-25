@@ -9,6 +9,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
@@ -53,7 +54,7 @@ const broken = ref(new Set<number>());
 // Rows currently scrolled into the results box (or just below it); see observeRows.
 const inView = ref(new Set<number>());
 // Photos, and names the index lacked, looked up as rows come into view.
-const { commonName, sciName, pendingName, photoOf, pendingPhoto, isLoadingNames } = useRowDetails({
+const { commonName, pendingCommonName, sciName, pendingName, photoOf, pendingPhoto, isLoadingNames } = useRowDetails({
   rows: () => props.rows,
   dataset: () => props.groups,
   inView,
@@ -272,10 +273,13 @@ watch([query, group, sortKey, sortDesc], () => {
                     </span>
                     <span v-if="pendingName(row)" class="sr-only">Loading name</span>
                     <span v-else class="flex h-9 min-w-0 flex-col justify-center">
-                      <span class="block truncate group-hover:underline">{{ displayName(row) }}</span>
-                      <span v-if="commonName(row)" class="sci-name block truncate text-xs text-muted">{{
-                        sciName(row)
-                      }}</span>
+                      <span v-if="pendingCommonName(row)" class="block"><NameSkeleton /></span>
+                      <span v-else class="block truncate group-hover:underline">{{ displayName(row) }}</span>
+                      <span
+                        v-if="commonName(row) || pendingCommonName(row)"
+                        class="sci-name block truncate text-xs text-muted"
+                        >{{ sciName(row) }}</span
+                      >
                     </span>
                   </a>
                 </td>

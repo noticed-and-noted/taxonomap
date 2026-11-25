@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Tree of life browser (client:only). Baked kingdom→order levels, live
+ * Tree of Life browser (client:only). Baked kingdom→order levels, live
  * lazy-loading below; sunburst or icicle (icicle by default on narrow
  * screens); records vs species sizing.
  * Selecting a node only moves the tree; it leaves the shared taxon filter
@@ -16,6 +16,7 @@ import TreeChart from '~/components/organisms/tree/TreeChart.vue';
 import TreeChildList from '~/components/organisms/tree/TreeChildList.vue';
 import TreeNodeDetails from '~/components/organisms/tree/TreeNodeDetails.vue';
 import TreeSkeleton from '~/components/organisms/tree/TreeSkeleton.vue';
+import { PHONE_QUERY } from '~/lib/breakpoints';
 import { RANK_BY_CODE } from '~/lib/data/ranks';
 import { compact, RANK_LABELS } from '~/lib/format';
 import { classifyError, type UiErrorKind, type UsableImage } from '~/lib/gbif';
@@ -60,8 +61,6 @@ const LAYOUT_OPTIONS = [
   { value: 'sunburst', label: 'Sunburst' },
   { value: 'icicle', label: 'Icicle' },
 ] as const;
-/** Narrow screens get the icicle unless the viewer chose a layout. */
-const NARROW_QUERY = '(max-width: 639.98px)';
 
 /** The chosen layout, or the screen's default; choosing one stores it. */
 const layout = computed({
@@ -195,7 +194,7 @@ function onNarrowChange() {
 }
 
 onMounted(() => {
-  mediaQuery = window.matchMedia(NARROW_QUERY);
+  mediaQuery = window.matchMedia(PHONE_QUERY);
   narrow.value = mediaQuery.matches;
   mediaQuery.addEventListener('change', onNarrowChange);
   void loadSpeciesManifest();
@@ -219,7 +218,7 @@ const share = (node: TreeNode) => {
     aria-labelledby="tree-h"
   >
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <h1 id="tree-h" class="font-display text-2xl">Tree of life</h1>
+      <h1 id="tree-h" class="font-display text-2xl">Tree of Life</h1>
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <SegmentedControl v-model="metric" legend="Size by" :options="METRIC_OPTIONS" />
         <SegmentedControl v-model="layout" legend="Layout" :options="LAYOUT_OPTIONS" />

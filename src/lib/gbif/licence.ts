@@ -55,7 +55,6 @@ interface ImageBase {
   creator?: string;
   rightsHolder?: string;
   publisher?: string;
-  references?: string;
 }
 
 /** A photo on a GBIF occurrence record, served through GBIF's image cache. */
@@ -107,7 +106,6 @@ export function usableImages(occurrence: Occurrence): GbifImage[] {
       ...((media.publisher ?? occurrence.publisher) && {
         publisher: (media.publisher ?? occurrence.publisher) as string,
       }),
-      ...(media.references && { references: media.references }),
     });
   }
   return images;

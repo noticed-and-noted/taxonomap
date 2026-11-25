@@ -3,7 +3,7 @@
  * Holds a name's place in its line of text while the name is looked up: as tall as the text, in a
  * box as tall as the line. Top-aligned, as a middle-aligned box would stretch the line and move the row.
  */
-import SkeletonBlock from './SkeletonBlock.vue';
+import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 </script>
 
 <template>

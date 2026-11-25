@@ -11,7 +11,7 @@ import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
 import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ListSkeleton from '~/components/molecules/ListSkeleton.vue';
-import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
+import PhotoLightbox from '~/components/organisms/photos/PhotoLightbox.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { useScrollFade } from '~/composables/useScrollFade';
 import { full } from '~/lib/format';
@@ -28,7 +28,8 @@ import { recordPlace } from '~/lib/map/recordPlace';
 import { aboutKey } from '~/lib/record-fields';
 import type { SpeciesRow } from '~/lib/species/groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
-import { $recordPlace, $resultsFilter } from '~/stores/explorer';
+import { $resultsFilter } from '~/stores/filters';
+import { $recordPlace } from '~/stores/map-messages';
 import HexRecordDetails from './HexRecordDetails.vue';
 import HexRecordRow from './HexRecordRow.vue';
 import HexRecordsSpeciesFilter from './HexRecordsSpeciesFilter.vue';
@@ -145,11 +146,15 @@ watch(speciesKey, () => void load());
 watch(dateOrder, () => void load('resort'));
 watch(records, () => void nextTick(updateFade));
 
-// Mark the expanded record on the map, when it has coordinates.
-watch(expanded, (key) => {
-  const record = records.value.find((occurrence) => occurrence.key === key);
-  $recordPlace.set(record ? recordPlace(record) : null);
-});
+// Mark the expanded record on the map, when it has coordinates: once it's listed, so one opened from the URL too.
+const expandedRecord = computed(() => records.value.find((occurrence) => occurrence.key === expanded.value));
+watch(
+  () => expandedRecord.value?.key,
+  () => {
+    const record = expandedRecord.value;
+    $recordPlace.set(record ? recordPlace(record) : null);
+  },
+);
 onBeforeUnmount(() => $recordPlace.set(null));
 
 /** Photo URLs that failed to load; they drop out of the row and the lightbox. */

@@ -5,10 +5,10 @@
  * worker shows the offline page instead (BaseLayout).
  */
 import { useStore } from '@nanostores/vue';
-import BusyNotice from '~/components/molecules/BusyNotice.vue';
-import UpdateNotice from '~/components/molecules/UpdateNotice.vue';
 import { $gbifStale } from '~/lib/gbif';
 import { $applyUpdate } from '~/stores/app-update';
+import BusyNotice from './BusyNotice.vue';
+import UpdateNotice from './UpdateNotice.vue';
 
 const { onMap = false } = defineProps<{
   /** The map shows both notes itself, above its loading ring (MapProgress). */

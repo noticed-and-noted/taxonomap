@@ -3,7 +3,7 @@
  * /species/view/{key} — renders any taxon (species or group) in the browser
  * with the same components as the pre-rendered pages. If it does have a
  * static page, it redirects there instead; if GBIF cannot give us the taxon
- * at all, it falls back to the tree of life, focused on that key. Transient
+ * at all, it falls back to the Tree of Life, focused on that key. Transient
  * failures keep the retry, with the tree offered as an alternative.
  */
 import { onMounted, ref, shallowRef } from 'vue';
@@ -137,7 +137,7 @@ onMounted(load);
       Try again
     </button>
     <p class="mt-6 flex justify-center gap-6">
-      <a v-if="key !== null" :href="treeHref(key)">Open in the tree of life</a>
+      <a v-if="key !== null" :href="treeHref(key)">Open in the Tree of Life</a>
       <a href="/">Back to the map</a>
     </p>
   </div>

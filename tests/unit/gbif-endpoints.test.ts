@@ -34,16 +34,6 @@ describe('occurrence endpoints', () => {
     expect(calls[0]!.search).toBe('?country=GB&limit=0');
   });
 
-  it('caps page size and never asks past the offset limit', async () => {
-    const calls = stubNetwork(() => ({ count: 1, results: [] }));
-    const api = await gbif();
-    await api.searchOccurrences({}, { limit: 1000, offset: -5 });
-    expect(calls[0]!.search).toBe('?limit=300&offset=0');
-    const past = await api.searchOccurrences({}, { limit: 300, offset: 100_000 });
-    expect(past).toMatchObject({ endOfRecords: true, results: [] });
-    expect(calls).toHaveLength(1);
-  });
-
   it('fetches one record by key', async () => {
     const calls = stubNetwork(() => ({ key: 9, datasetKey: 'd' }));
     const api = await gbif();
@@ -61,7 +51,6 @@ describe('species endpoints', () => {
     await api.listByRank('CLASS', 1000);
     await api.getVernacularNames(212);
     await api.getSynonyms(212);
-    await api.getChildren(212, { offset: 100 });
     await api.getParents(212);
     expect(calls.map((url) => `${url.pathname}${url.search}`)).toEqual([
       '/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=Turdus&rank=SPECIES&status=ACCEPTED',
@@ -69,7 +58,6 @@ describe('species endpoints', () => {
       '/v1/species/search?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=1000&offset=1000&rank=CLASS&status=ACCEPTED',
       '/v1/species/212/vernacularNames?limit=1000',
       '/v1/species/212/synonyms?limit=100',
-      '/v1/species/212/children?limit=100&offset=100',
       '/v1/species/212/parents',
     ]);
   });

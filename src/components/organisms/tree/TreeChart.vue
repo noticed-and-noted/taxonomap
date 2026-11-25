@@ -30,7 +30,11 @@ const emit = defineEmits<{ pick: [node: TreeNode]; up: [] }>();
 type HNode = HierarchyRectangularNode<TreeNode>;
 const LEVELS = 3;
 
-/** Okabe–Ito, colour-blind safe, one hue per kingdom. */
+/**
+ * Okabe–Ito, colour-blind safe, one hue per kingdom. Archaea swaps the
+ * palette's yellow for a mid violet: labels are drawn in --bg, and paper
+ * text on the yellow was unreadable (1.2:1).
+ */
 const KINGDOM_COLOURS: Record<string, string> = {
   Animalia: '#E69F00',
   Plantae: '#009E73',
@@ -38,7 +42,7 @@ const KINGDOM_COLOURS: Record<string, string> = {
   Chromista: '#56B4E9',
   Bacteria: '#0072B2',
   Protozoa: '#D55E00',
-  Archaea: '#F0E442',
+  Archaea: '#8E6BC4',
   Viruses: '#999999',
 };
 const colourOf = (node: TreeNode) => KINGDOM_COLOURS[node.kingdom] ?? '#8a9a90';

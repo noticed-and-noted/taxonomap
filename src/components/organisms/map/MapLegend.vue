@@ -3,22 +3,14 @@ import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
-import { $activeFilterCount, FILTER_GROUPS, PHONE_QUERY } from '~/lib/filter-groups';
+import { NO_RAIL_QUERY } from '~/lib/breakpoints';
+import { $activeFilterCount, FILTER_GROUPS } from '~/lib/filter-groups';
 import { zoomDrop } from '~/lib/map/occGrid';
 import { nearestRecords, type NearestRecords } from '~/lib/map/taxonView';
 import { binLabels, rampColors } from '~/lib/ramp';
-import {
-  $flyTo,
-  $gridLevel,
-  $groupCounts,
-  $mapLoad,
-  $mapView,
-  $occurrenceFilter,
-  $panel,
-  $railOpen,
-  $viewCheck,
-  DEFAULT_VIEW,
-} from '~/stores/explorer';
+import { DEFAULT_VIEW, $mapView, $panel } from '~/stores/explorer';
+import { $groupCounts, $occurrenceFilter } from '~/stores/filters';
+import { $flyTo, $gridLevel, $mapLoad, $railOpen, $viewCheck } from '~/stores/map-messages';
 import { $nearMode } from '~/stores/near';
 import { $ramp } from '~/stores/ramp';
 
@@ -112,7 +104,7 @@ function flyToNearest() {
 
 /** Open the filters where this screen keeps them, at the first group with something set. */
 function editFilters() {
-  if (window.matchMedia(PHONE_QUERY).matches) {
+  if (window.matchMedia(NO_RAIL_QUERY).matches) {
     $panel.set('filters');
     return;
   }

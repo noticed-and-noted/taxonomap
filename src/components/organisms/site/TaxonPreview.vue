@@ -6,7 +6,7 @@
  * what the last one was still asking for. Requests go through the cached client.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';

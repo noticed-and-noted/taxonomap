@@ -77,7 +77,7 @@ const DEFAULT_FACET_LIMIT = 200;
 /** The record fields batched lookups read: enough for an iNaturalist match and for usableImages. */
 const RECORD_FIELDS =
   'key datasetKey taxonID license rightsHolder publisher ' +
-  'media { type identifier license creator rightsHolder publisher references }';
+  'media { type identifier license creator rightsHolder publisher }';
 
 /**
  * GBIF's search predicate for REST query parameters. A range ("1990,2000",
@@ -312,7 +312,7 @@ const HIGHER_RANKS: readonly Rank[] = ['KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'F
 /** The record fields the cell's record list reads: its row, its details and its place on the map. */
 const LISTED_RECORD_FIELDS =
   `${RECORD_FIELDS} datasetName publishingOrgKey basisOfRecord eventDate year recordedBy vernacularName ` +
-  'decimalLatitude decimalLongitude coordinateUncertaintyInMeters informationWithheld ' +
+  'decimalLatitude decimalLongitude coordinateUncertaintyInMeters footprintWKT footprintSRS informationWithheld ' +
   'classification { usage { key name rank } acceptedUsage { key name } classification { key name rank } }';
 
 /**
@@ -346,7 +346,7 @@ export async function searchOccurrencesByDate(
   return { count: total, results: results.map(toListedOccurrence) };
 }
 
-/** A listed GraphQL record as REST's occurrence: taxa as flat keys and names, lists joined into one line. */
+/** A listed GraphQL record as REST's occurrence: taxa as flat keys and names, lists joined into one line (recorders on "|", as REST sends them). */
 function toListedOccurrence(record: ListedGraphqlRecord): Occurrence {
   const { classification, datasetName, recordedBy, ...flat } = record;
   const { usage, acceptedUsage } = classification ?? {};
@@ -365,7 +365,7 @@ function toListedOccurrence(record: ListedGraphqlRecord): Occurrence {
     ...(usage && { taxonKey: Number(usage.key), scientificName: usage.name, taxonRank: usage.rank }),
     ...(acceptedUsage && { acceptedTaxonKey: Number(acceptedUsage.key), acceptedScientificName: acceptedUsage.name }),
     ...(datasetName?.length && { datasetName: datasetName.join(', ') }),
-    ...(recordedBy?.length && { recordedBy: recordedBy.join(', ') }),
+    ...(recordedBy?.length && { recordedBy: recordedBy.join(' | ') }),
   };
 }
 

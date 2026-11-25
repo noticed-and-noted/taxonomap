@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, useId } from 'vue';
 import Spotlight from '~/components/atoms/Spotlight.vue';
 import { HINTS } from '~/lib/tour-targets';
-import { $busiestHexBox, $busiestHexRequest } from '~/stores/explorer';
+import { $busiestHexBox, $busiestHexRequest } from '~/stores/map-messages';
 import { $checklistDone, $checklistHint, CHECKLIST, type ChecklistId } from '~/stores/onboarding';
 
 const props = defineProps<{ id: ChecklistId }>();
@@ -46,7 +46,7 @@ onBeforeUnmount(() => {
   stopWatchingDone();
   stopFollowingHex();
   if (hint.value.needsHex) $busiestHexBox.set(null);
-  // Leaving the page (Tree of life) ends the hint, so it doesn't come back on return; a newer hint stays.
+  // Leaving the page (Tree of Life) ends the hint, so it doesn't come back on return; a newer hint stays.
   if ($checklistHint.get() === props.id) close();
 });
 </script>

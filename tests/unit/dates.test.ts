@@ -50,7 +50,16 @@ describe('date ranges', () => {
       expect(serializeRange(parseRange(raw)!)).toBe(raw);
     }
     expect(parseRange('d:2021-03-01..2021-01-15')).toEqual({ unit: 'd', from: '2021-01-15', to: '2021-03-01' });
-    for (const raw of ['3y', 'y:..', 'd:2021-02-30..', 'm:2021-13..', 'y:1499..2000', 'y:2020-01..', '1990-2000']) {
+    for (const raw of [
+      '3y',
+      'y:..',
+      'd:2021-02-30..',
+      'm:2021-13..',
+      'y:1499..2000',
+      'y:2020-01..',
+      '1990-2000',
+      'toString',
+    ]) {
       expect(parseRange(raw)).toBeUndefined();
     }
   });

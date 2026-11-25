@@ -8,7 +8,7 @@ import { useStore } from '@nanostores/vue';
 import { computed } from 'vue';
 import SuggestPicker, { type Suggestion } from '~/components/molecules/SuggestPicker.vue';
 import { findRecorders } from '~/lib/gbif';
-import { $occurrenceFilter } from '~/stores/explorer';
+import { $occurrenceFilter } from '~/stores/filters';
 import { $recorders, addRecorder, MAX_RECORDERS, removeRecorder } from '~/stores/recorder';
 
 const names = useStore($recorders);

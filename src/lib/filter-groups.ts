@@ -3,12 +3,9 @@
  * sheet (phones). Counts are per group, so the rail can badge each icon.
  */
 import { computed } from 'nanostores';
-import { $groupCounts, type FilterGroupId } from '~/stores/explorer';
+import { type FilterGroupId, $groupCounts } from '~/stores/filters';
 
 export { $groupCounts, type FilterGroupId };
-
-/** Below this width the rail is hidden and the filters live in the Filters sheet. */
-export const PHONE_QUERY = '(max-width: 999.98px)';
 
 export interface FilterGroupMeta {
   id: FilterGroupId;

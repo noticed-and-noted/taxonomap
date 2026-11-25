@@ -8,8 +8,6 @@ import {
   circleToWkt,
   configureHttp,
   findImages,
-  getChildren,
-  getDataset,
   getOccurrence,
   getOrganization,
   getParents,
@@ -17,10 +15,8 @@ import {
   getSynonyms,
   getVernacularNames,
   listByRank,
-  mapCapabilities,
   occurrenceFacets,
   occurrenceTileTemplate,
-  searchOccurrences,
   searchVernacular,
   suggestSpecies,
   thumbnailUrl,
@@ -136,12 +132,6 @@ describe('maps', () => {
       expect(Math.max(...errors)).toBeLessThan(0.25);
     });
   });
-
-  it('capabilities', async () => {
-    const capabilities = await mapCapabilities({ taxonKey: AVES });
-    expect(capabilities.total).toBeGreaterThan(0);
-    expect(typeof capabilities.minLat).toBe('number');
-  });
 });
 
 describe('species', () => {
@@ -185,11 +175,6 @@ describe('species', () => {
     expect(result.results[0]).toMatchObject({ key: expect.any(Number), scientificName: expect.any(String) });
   });
 
-  it('children', async () => {
-    const result = await getChildren(AVES, { limit: 5 });
-    expect(result.results[0]).toMatchObject({ key: expect.any(Number), rank: 'ORDER', parentKey: AVES });
-  });
-
   it('parents', async () => {
     const result = await getParents(SPARROW);
     expect(result.map((parent) => parent.rank)).toEqual(expect.arrayContaining(['KINGDOM', 'CLASS', 'GENUS']));
@@ -223,30 +208,11 @@ describe('occurrences', () => {
     expect(await thumb(thumbnailUrl(result.images[0]!, '200x'))).toEqual([200, 'image/jpeg']);
   });
 
-  it('records search + single record', async () => {
-    const result = await searchOccurrences({ taxonKey: ROBIN, georeferenced: true }, { limit: 2 });
-    const first = result.results[0];
-    expect(first).toMatchObject({ key: expect.any(Number), datasetKey: expect.any(String) });
-    expect(typeof first?.decimalLatitude).toBe('number');
-    const one = await getOccurrence(first!.key);
-    expect(one.key).toBe(first!.key);
-  });
-
-  it('respects the 100,000 offset cap without calling GBIF', async () => {
-    const result = await searchOccurrences({ taxonKey: ROBIN }, { offset: 100_000, limit: 300 });
-    expect(result.results).toEqual([]);
-  });
-});
-
-describe('datasets', () => {
-  it('detail', async () => {
-    const dataset = await getDataset(BACKBONE_DATASET_KEY);
-    expect(dataset).toMatchObject({ key: BACKBONE_DATASET_KEY, title: expect.any(String) });
-  });
-
-  it('organization', async () => {
-    const dataset = await getDataset(BACKBONE_DATASET_KEY);
-    const organization = await getOrganization(dataset.publishingOrganizationKey as string);
-    expect(organization).toMatchObject({ key: dataset.publishingOrganizationKey, title: expect.any(String) });
+  it('single record and its publisher', async () => {
+    const { images } = await findImages({ taxonKey: ROBIN }, { limit: 1 });
+    const record = await getOccurrence(images[0]!.occurrenceKey);
+    expect(record).toMatchObject({ key: images[0]!.occurrenceKey, datasetKey: expect.any(String) });
+    const organization = await getOrganization(record.publishingOrgKey as string);
+    expect(organization).toMatchObject({ key: record.publishingOrgKey, title: expect.any(String) });
   });
 });

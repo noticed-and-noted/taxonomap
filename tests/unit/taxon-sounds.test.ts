@@ -1,5 +1,5 @@
 /** A species' sounds: only openly licensed files, capped, named by country and never by the observer's place text. */
-import type { InatSoundObservation } from '~/lib/photos/inat';
+import type { InatSoundObservation } from '~/lib/inat/client';
 
 const SPAIN_ID = 6774;
 const EUROPE_ID = 97391;
@@ -11,8 +11,8 @@ const soundObservations = vi.hoisted(() => vi.fn());
 const countryNames = vi.hoisted(() => vi.fn());
 
 vi.mock('~/lib/photos/taxon-photos', () => ({ resolveInatIds }));
-vi.mock('~/lib/photos/inat', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('~/lib/photos/inat')>()),
+vi.mock('~/lib/inat/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/lib/inat/client')>()),
   soundObservations,
   countryNames,
 }));

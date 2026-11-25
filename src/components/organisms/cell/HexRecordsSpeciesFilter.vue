@@ -5,7 +5,7 @@
  * model to its key; emptying the box sets it back to '' (all species).
  */
 import { computed, ref, useId, watch } from 'vue';
-import NameSkeleton from '~/components/atoms/NameSkeleton.vue';
+import NameSkeleton from '~/components/molecules/NameSkeleton.vue';
 import SearchInput from '~/components/molecules/SearchInput.vue';
 import { useCellNameSearch } from '~/composables/useCellNameSearch';
 import { useSettledQuery } from '~/composables/useSettledQuery';

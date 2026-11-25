@@ -7,7 +7,7 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import BasemapSwitcher from '~/components/molecules/BasemapSwitcher.vue';
+import BasemapSwitcher from '~/components/organisms/settings/BasemapSwitcher.vue';
 import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import HexRecords from '~/components/organisms/cell/HexRecords.vue';
@@ -28,7 +28,9 @@ import {
   type SpeciesRow,
 } from '~/lib/near/data';
 import { loadSpeciesManifest } from '~/lib/species/links';
-import { $flyTo, $mapMode, $occurrenceFilter, $openRecord } from '~/stores/explorer';
+import { $openRecord } from '~/stores/explorer';
+import { $occurrenceFilter } from '~/stores/filters';
+import { $flyTo, $mapMode } from '~/stores/map-messages';
 import {
   $nearAt,
   $nearLeaving,
@@ -265,7 +267,7 @@ onBeforeUnmount(() => {
                 min="0"
                 :max="LAST_RADIUS_STEP"
                 step="1"
-                :value="radiusIndex"
+                :value="shownStep"
                 class="radius-slider w-full"
                 :style="{ '--progress': Math.max(shownStep, 0) / LAST_RADIUS_STEP }"
                 :aria-valuetext="`${radius} kilometres`"

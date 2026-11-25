@@ -35,23 +35,8 @@ let pendingPush = false;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let microtaskQueued = false;
 let listening = false;
-let forcedMode: 'push' | 'replace' | null = null;
 /** The query string the latest link navigation asked for, before the map's own params were put back. */
 let linkSearch = '';
-
-/**
- * Run `fn` with every URL write using `mode` (e.g. animations write with
- * 'replace' so they don't flood the back-button history).
- */
-export function withHistoryMode(mode: 'push' | 'replace', callback: () => void): void {
-  const previousMode = forcedMode;
-  forcedMode = mode;
-  try {
-    callback();
-  } finally {
-    forcedMode = previousMode;
-  }
-}
 
 const isBrowser = () => typeof window !== 'undefined' && typeof history !== 'undefined';
 
@@ -111,8 +96,7 @@ function flush(): void {
 
 function schedule(requested: 'push' | 'replace'): void {
   if (!isBrowser() || applyingFromUrl) return;
-  const mode = forcedMode ?? requested;
-  if (mode === 'push') {
+  if (requested === 'push') {
     pendingPush = true;
     if (flushTimer) clearTimeout(flushTimer);
     flushTimer = undefined;

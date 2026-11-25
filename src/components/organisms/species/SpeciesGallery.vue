@@ -8,7 +8,7 @@ import { onMounted, ref, shallowRef } from 'vue';
 import LicenceBadge from '~/components/atoms/LicenceBadge.vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import ThumbImage from '~/components/atoms/ThumbImage.vue';
-import PhotoLightbox from '~/components/molecules/PhotoLightbox.vue';
+import PhotoLightbox from '~/components/organisms/photos/PhotoLightbox.vue';
 import type { Rank, UsableImage } from '~/lib/gbif';
 import { taxonPhotos } from '~/lib/photos/taxon-photos';
 

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 /** The small interaction composables: dragging, swiping, scroll fades, settled search text and photo loading. */
-import { createApp, defineComponent, effectScope, nextTick, ref } from 'vue';
+import { effectScope, nextTick, ref } from 'vue';
 import { useDragScroll } from '~/composables/useDragScroll';
 import { usePhotoPreload } from '~/composables/usePhotoPreload';
 import { useScrollFade } from '~/composables/useScrollFade';
 import { useSettledQuery } from '~/composables/useSettledQuery';
-import { useSwipe, type SwipeHandlers } from '~/composables/useSwipe';
+import { useSwipe } from '~/composables/useSwipe';
 import { useThumbnail } from '~/composables/useThumbnail';
 import { $requestCounts, resetRequestCounts, type UsableImage } from '~/lib/gbif';
 import { SEARCH_DEBOUNCE_MS } from '~/lib/util/debounce';
@@ -121,21 +121,6 @@ describe('useSettledQuery', () => {
 });
 
 describe('useSwipe', () => {
-  /** Mounts a component using the swipe handlers, so its mount hooks run. */
-  function mountSwipe(handlers: SwipeHandlers) {
-    let swipe!: ReturnType<typeof useSwipe>;
-    const app = createApp(
-      defineComponent({
-        setup() {
-          swipe = useSwipe(handlers);
-          return () => null;
-        },
-      }),
-    );
-    app.mount(document.createElement('div'));
-    return { swipe, unmount: () => app.unmount() };
-  }
-
   function drag(swipe: ReturnType<typeof useSwipe>, deltaX: number, deltaY: number, pointerType = 'touch') {
     swipe.onPointerDown(pointer({ pointerType, clientX: 100, clientY: 100 }));
     swipe.onPointerUp(pointer({ clientX: 100 + deltaX, clientY: 100 + deltaY }));
@@ -144,7 +129,7 @@ describe('useSwipe', () => {
   it('turns long touch drags into steps, sideways or upright', () => {
     const onSideways = vi.fn();
     const onUpright = vi.fn();
-    const { swipe, unmount } = mountSwipe({ onSideways, onUpright });
+    const swipe = useSwipe({ onSideways, onUpright });
     drag(swipe, -60, 5);
     drag(swipe, 60, 5);
     drag(swipe, 20, 5);
@@ -153,32 +138,33 @@ describe('useSwipe', () => {
     drag(swipe, 5, 20);
     expect(onSideways.mock.calls).toEqual([[1], [-1]]);
     expect(onUpright.mock.calls).toEqual([[1], [-1]]);
-    unmount();
   });
 
-  it('ignores mouse drags, cancelled gestures, upright swipes without a handler, and drags while zoomed in', () => {
-    const viewport = Object.assign(new EventTarget(), { scale: 1 });
-    vi.stubGlobal('visualViewport', viewport);
+  it('ignores mouse drags, cancelled gestures and upright swipes without a handler', () => {
     const onSideways = vi.fn();
-    const { swipe, unmount } = mountSwipe({ onSideways });
+    const swipe = useSwipe({ onSideways });
     drag(swipe, -60, 0, 'mouse');
     swipe.onPointerDown(pointer({ pointerType: 'touch', clientX: 100, clientY: 100 }));
     swipe.onPointerCancel();
     swipe.onPointerUp(pointer({ clientX: 0, clientY: 100 }));
     drag(swipe, 0, -60);
-    viewport.scale = 2;
-    viewport.dispatchEvent(new Event('resize'));
-    expect(swipe.isPinchZoomed.value).toBe(true);
-    drag(swipe, -60, 0);
     expect(onSideways).not.toHaveBeenCalled();
-    unmount();
   });
 
-  it('treats a page without a visual viewport as not zoomed', () => {
-    vi.stubGlobal('visualViewport', undefined);
-    const { swipe, unmount } = mountSwipe({ onSideways: () => {} });
-    expect(swipe.isPinchZoomed.value).toBe(false);
-    unmount();
+  it('swipes only while the caller allows it, asking as the touch starts and as it ends', () => {
+    const onSideways = vi.fn();
+    let isAllowed = false;
+    const swipe = useSwipe({ onSideways, canSwipe: () => isAllowed });
+    drag(swipe, -60, 0);
+    isAllowed = true;
+    swipe.onPointerDown(pointer({ pointerType: 'touch', clientX: 100, clientY: 100 }));
+    isAllowed = false;
+    swipe.onPointerUp(pointer({ clientX: 0, clientY: 100 }));
+    isAllowed = true;
+    swipe.onPointerUp(pointer({ clientX: 0, clientY: 100 }));
+    expect(onSideways).not.toHaveBeenCalled();
+    drag(swipe, -60, 0);
+    expect(onSideways).toHaveBeenCalledOnce();
   });
 });
 

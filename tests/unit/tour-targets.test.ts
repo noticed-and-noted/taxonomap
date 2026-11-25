@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /** Where the tour and hints point, and the rail's filter groups. */
-import { $activeFilterCount, FILTER_GROUPS, PHONE_QUERY, SETTINGS } from '~/lib/filter-groups';
+import { $activeFilterCount, FILTER_GROUPS, SETTINGS } from '~/lib/filter-groups';
 import { boxOf, HINTS, PANEL_SELECTOR, speciesListBox } from '~/lib/tour-targets';
-import { $busiestHexBox, $basisOfRecord, $hasPhoto } from '~/stores/explorer';
+import { $basisOfRecord, $hasPhoto } from '~/stores/explorer';
+import { $busiestHexBox } from '~/stores/map-messages';
 
 /** Adds an element with a fixed box, inside `parent` when given. */
 function addBox(markup: string, rect: DOMRect, parent: Element = document.body): Element {
@@ -71,7 +72,6 @@ describe('filter groups', () => {
   it('lists the rail’s groups, then Settings', () => {
     expect(FILTER_GROUPS.map((group) => group.id)).toEqual(['what', 'when', 'where', 'how']);
     expect(SETTINGS.id).toBe('settings');
-    expect(PHONE_QUERY).toContain('max-width');
   });
 
   it('counts every active filter across the groups', () => {

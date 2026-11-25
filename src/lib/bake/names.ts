@@ -3,7 +3,7 @@ import type { NameRow, NamesSnapshot, RankCode } from '~/lib/data/types';
 import { isDev } from '~/lib/env';
 import type { VernacularName } from '~/lib/gbif';
 import { getSpecies, getVernacularNames } from '~/lib/gbif/server';
-import { inatCommonName } from '~/lib/photos/inat';
+import { inatCommonName } from '~/lib/inat/client';
 import { englishName, otherEnglishNames } from '~/lib/species/names';
 import {
   countedFacets,

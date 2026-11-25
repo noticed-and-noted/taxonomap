@@ -17,8 +17,9 @@ const PATHS = {
   'chevron-down': 'm6 9 6 6 6-6',
   calendar: 'M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM16 3v4M8 3v4M4 11h16',
   close: 'M6 6l12 12M18 6 6 18',
+  reset: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4',
   filter: 'M4 7h16M7 12h10M10 17h4',
-  // The header's Tree of life sprout.
+  // The header's Tree of Life sprout.
   tree: 'M12 21V11M12 11c0-4 3-6 7-6 0 4-3 6-7 6zM12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 1 1 0-18zM12 11v5M12 8h.01',
   // A picture frame: mountain and sun.

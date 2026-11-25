@@ -11,31 +11,40 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { useStore } from '@nanostores/vue';
 import type { GeoJSONSource, Map as MlMap, MapMouseEvent } from 'maplibre-gl';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { PHONE_QUERY } from '~/lib/breakpoints';
 import { compact, full } from '~/lib/format';
 import { createHoverCounter, hasKnownEmpty, knownCount } from '~/lib/map/cellCounts';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import { keepGlobeTilesOnWrapJumps } from '~/lib/map/globeWrap';
-import { hexCentre, zoomDrop, zoomPastLevel, type Hex } from '~/lib/map/occGrid';
+import { hexCentre, zoomPastLevel, type Hex } from '~/lib/map/occGrid';
+import { tameAttribution } from '~/lib/map/attribution';
+import { flyMap, flyToBounds } from '~/lib/map/camera';
 import { createOccLayer, type OccLayer, type OccLayerOptions } from '~/lib/map/occLayer';
 import { PIN_CURSOR } from '~/lib/map/pinCursors';
 import { createRecordFit } from '~/lib/map/recordFit';
-import { fillsCanvas, isOnScreen } from '~/lib/map/screen';
+import { sizeRecordLayers } from '~/lib/map/recordZoom';
+import { hasCellInView, viewBounds } from '~/lib/map/screen';
 import {
   buildStyle,
   EMPTY,
   fillColor,
   geometryOf,
   nearGeoJson,
-  RECORD_AREA_LAYERS,
-  RECORD_DOT_LAYER,
-  RECORD_MIN_ZOOM,
-  recordDotMinZoom,
   selectedGeoJson,
   type MapColors,
 } from '~/lib/map/style';
 import type { ScreenBox } from '~/lib/tour';
 import {
   $basemap,
+  clearHexSelection,
+  type HexPoint,
+  $mapView,
+  $panel,
+  sameView,
+  $selectedHex,
+} from '~/stores/explorer';
+import { $occurrenceFilter } from '~/stores/filters';
+import {
   $busiestHexBox,
   $busiestHexRequest,
   $flyTo,
@@ -43,20 +52,12 @@ import {
   $hexGeometry,
   $mapBounds,
   $mapLoad,
-  $mapUnsupported,
   $mapMode,
-  $mapView,
-  $occurrenceFilter,
-  $selectedHex,
-  $panel,
+  $mapUnsupported,
   $recordPlace,
   $tilesFailed,
   $viewCheck,
-  clearHexSelection,
-  sameView,
-  type FlyRequest,
-  type HexPoint,
-} from '~/stores/explorer';
+} from '~/stores/map-messages';
 import { flyToLinkedTaxa } from '~/stores/fly-to-taxa';
 import { $nearAt, $nearRadius, setNearLocation } from '~/stores/near';
 import { $lightboxOpen } from '~/stores/lightbox';
@@ -77,7 +78,7 @@ const cleanups: (() => void)[] = [];
 // MapLibre 6 renders with WebGL2 only; without it the constructor throws.
 const hasWebgl2 = () => Boolean(document.createElement('canvas').getContext('webgl2'));
 
-const isPhone = () => window.matchMedia('(max-width: 639px)').matches;
+const isPhone = () => window.matchMedia(PHONE_QUERY).matches;
 const theme = (): 'dark' | 'light' => (document.documentElement.dataset['theme'] === 'light' ? 'light' : 'dark');
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -221,61 +222,6 @@ function followBusiestHex() {
   if ($busiestHexBox.get()) $busiestHexBox.set(pointedBox());
 }
 
-/** Breathing room between a fitted area and the map's edges, in px. */
-const FIT_PADDING = 60;
-const FIT_MAX_ZOOM = 9;
-const FIT_DURATION_MS = 1200;
-const FLIGHT_DURATION_MS = 1400;
-
-/** Fit a box clear of the floating chrome, or fly to a chosen centre at the zoom that fits it. */
-function flyToBounds(request: Extract<FlyRequest, { kind: 'bounds' }>) {
-  if (!map) return;
-  const covered = coveredEdges(map);
-  const [west, south, east, north] = request.bbox;
-  const bounds: [[number, number], [number, number]] = [
-    [west, south],
-    [east, north],
-  ];
-  const fit = {
-    padding: {
-      top: covered.top + FIT_PADDING,
-      bottom: covered.bottom + FIT_PADDING,
-      left: covered.left + FIT_PADDING,
-      right: covered.right + FIT_PADDING,
-    },
-    maxZoom: request.maxZoom ?? FIT_MAX_ZOOM,
-  };
-  if (!request.centre) {
-    map.fitBounds(bounds, { ...fit, duration: prefersReducedMotion() ? 0 : FIT_DURATION_MS });
-    return;
-  }
-  const camera = map.cameraForBounds(bounds, fit);
-  const [lng, lat] = request.centre;
-  if (!camera?.center || camera.zoom === undefined) return fly({ kind: 'point', lng, lat, zoom: map.getZoom() });
-  // The globe draws at its centre's scale: keep the size that fits the box, wherever the centre is.
-  const boxLat = Array.isArray(camera.center) ? camera.center[1] : camera.center.lat;
-  // Below the least zoom MapLibre's globe flights near a pole can stall or land elsewhere.
-  const zoom = Math.max(map.getMinZoom(), camera.zoom + zoomDrop(boxLat) - zoomDrop(lat));
-  fly({ kind: 'point', lng, lat, zoom });
-}
-
-function fly(request: FlyRequest) {
-  if (!map) return;
-  if (request.kind === 'bounds') {
-    flyToBounds(request);
-    return;
-  }
-  const covered = coveredEdges(map);
-  // An offset, not camera padding: MapLibre keeps padding after the move.
-  map.flyTo({
-    center: [request.lng, request.lat],
-    zoom: request.zoom,
-    offset: [(covered.left - covered.right) / 2, (covered.top - covered.bottom) / 2],
-    duration: prefersReducedMotion() ? 0 : FLIGHT_DURATION_MS,
-    essential: false,
-  });
-}
-
 const records = (count: number, text: string) => `${text} record${count === 1 ? '' : 's'}`;
 
 /** The hovered cell's exact count, once the pointer has rested on it (lib/map/cellCounts.ts). */
@@ -396,63 +342,16 @@ function occLayerOptions(): OccLayerOptions {
   };
 }
 
-/** Below this zoom the canvas corners miss the globe, so the extent is the whole world. */
-const WORLD_BOUNDS_MAX_ZOOM = 2.5;
-const WORLD_BOUNDS: [number, number, number, number] = [-180, -85, 180, 85];
-const MAX_MERCATOR_LAT = 85;
-
-/**
- * Visible extent from the canvas corners and edge midpoints (getBounds() is
- * world-wide under the globe projection). At very low zoom, corners miss the
- * globe: world.
- */
+/** Publish the visible extent. */
 function publishBounds() {
-  if (!map) return;
-  const canvas = map.getCanvas();
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (map.getZoom() < WORLD_BOUNDS_MAX_ZOOM || !width || !height) {
-    $mapBounds.set(WORLD_BOUNDS);
-    return;
-  }
-  const corners = [
-    [0, 0],
-    [width, 0],
-    [0, height],
-    [width, height],
-    [width / 2, 0],
-    [width / 2, height],
-  ].map(([pixelX, pixelY]) => map!.unproject([pixelX as number, pixelY as number]));
-  const lngs = corners.map((corner) => corner.lng);
-  const lats = corners.map((corner) => corner.lat);
-  $mapBounds.set([
-    Math.min(...lngs),
-    Math.max(-MAX_MERCATOR_LAT, Math.min(...lats)),
-    Math.max(...lngs),
-    Math.min(MAX_MERCATOR_LAT, Math.max(...lats)),
-  ]);
-}
-
-/**
- * Whether any cell is drawn in view. A whole-canvas query finds nothing under the globe
- * once the canvas reaches past its rim, so only then look for a cell corner on screen.
- */
-function hasCellInView(map: MlMap): boolean {
-  if (map.queryRenderedFeatures({ layers: [HEX_LAYER] }).length) return true;
-  if (fillsCanvas(map)) return false;
-  const source = map.getLayer(HEX_LAYER)!.source;
-  return map.querySourceFeatures(source).some((feature) => {
-    const { geometry } = feature;
-    if (geometry.type !== 'Polygon') return false;
-    return geometry.coordinates.some((ring) => ring.some(([lng = 0, lat = 0]) => isOnScreen(map, [lng, lat])));
-  });
+  if (map) $mapBounds.set(viewBounds(map));
 }
 
 /** Once the map has settled and every hex tile is in: whether any cell is drawn in view. */
 function publishEmpty() {
   if (!map || $mapLoad.get().loading) return;
   const hasLayer = Boolean(map.getLayer(HEX_LAYER));
-  $viewCheck.set({ isEmpty: !$tilesFailed.get() && hasLayer && !hasCellInView(map) });
+  $viewCheck.set({ isEmpty: !$tilesFailed.get() && hasLayer && !hasCellInView(map, HEX_LAYER) });
 }
 
 /** After a move: publish the new extent and view, unless the view is already the stored one. */
@@ -480,28 +379,11 @@ function decorateMap(maplibre: MapLibre, element: HTMLElement) {
   cleanups.push(() => resizeObserver.disconnect());
 }
 
-/** MapLibre opens the compact attribution once its text arrives; on a phone it covers too much map. */
-function collapseAttribution() {
-  const attribution = container.value?.querySelector('.maplibregl-compact');
-  if (!attribution) return;
-  attribution.classList.remove('maplibregl-compact-show');
-  map?.off('sourcedata', collapseAttribution);
-}
-
-/** Closes the open attribution when a press lands anywhere outside it. */
-function onPointerDownOutsideAttribution(event: PointerEvent) {
-  const attribution = container.value?.querySelector('.maplibregl-compact-show');
-  if (attribution && !attribution.contains(event.target as Node))
-    attribution.classList.remove('maplibregl-compact-show');
-}
-
 /** Wires the map's own events: extent, view, hover, click, style loads and keyboard. */
 function listenToMap() {
   if (!map) return;
   map.once('load', publishBounds);
-  if (isPhone()) map.on('sourcedata', collapseAttribution);
-  document.addEventListener('pointerdown', onPointerDownOutsideAttribution);
-  cleanups.push(() => document.removeEventListener('pointerdown', onPointerDownOutsideAttribution));
+  if (container.value) cleanups.push(tameAttribution(map, container.value, isPhone()));
   map.on('moveend', onMoveEnd);
   map.on('idle', publishEmpty);
   map.on('move', followBusiestHex);
@@ -552,7 +434,7 @@ function listenToStores() {
     $flyTo.subscribe((request) => {
       if (!request) return;
       $flyTo.set(null);
-      void globeReady.then(() => fly(request));
+      void globeReady.then(() => map && flyMap(map, request));
     }),
     $reading.listen(() => map?.setPixelRatio(mapPixelRatio())),
     // Hidden behind a lightbox, the smallest drawing buffer frees the most memory for the photo's pinch-zoom.
@@ -565,39 +447,40 @@ function listenToStores() {
   );
 }
 
-/** Zoom out to show an expanded record's whole obscured area, and back again (lib/map/recordFit.ts); size its dot. */
+/** Go to an expanded record, or zoom out to its large area, and back again (lib/map/recordFit.ts); size its area. */
 function followRecord() {
   const recordMap = map;
   if (!recordMap) return;
   const fit = createRecordFit({
     map: recordMap,
     coveredEdges: () => coveredEdges(recordMap),
-    fitBox: (bbox, maxZoom) => flyToBounds({ kind: 'bounds', bbox, maxZoom }),
+    // To the box's own middle: fitting a padded box on a small globe can leave a lone point on the globe's rim.
+    fitBox: (bbox, maxZoom) => {
+      const [west, south, east, north] = bbox;
+      const centre = [(west + east) / 2, (south + north) / 2] as const;
+      flyToBounds(recordMap, { kind: 'bounds', bbox, maxZoom, centre });
+    },
+  });
+  // As with $flyTo, a flight planned before the first style loads breaks, so a record open from the URL waits for it.
+  let isStyleLoaded = false;
+  recordMap.once('style.load', () => {
+    isStyleLoaded = true;
+    fit($recordPlace.get());
   });
   // The zoom where the grid turns finer moves with the centre's latitude and the filters.
   recordMap.on('moveend', sizeRecordPlace);
   cleanups.push(
-    $recordPlace.listen(fit),
+    $recordPlace.listen((place) => isStyleLoaded && fit(place)),
     $hexGeometry.listen(sizeRecordPlace),
     $gridLevel.listen(sizeRecordPlace),
     () => recordMap.off('moveend', sizeRecordPlace),
   );
 }
 
-/**
- * Show an expanded record's dot from the zoom where its cell is wide enough on screen to hold it, and an
- * obscured record's square from RECORD_MIN_ZOOM; either from the zoom where the grid turns finer than the
- * selected cell if sooner: mid-gesture, before the new cells load.
- */
+/** Size the expanded record's area for the selected cell (lib/map/recordZoom.ts). */
 function sizeRecordPlace() {
-  if (!map?.getLayer(RECORD_DOT_LAYER)) return;
-  const xs = $hexGeometry.get()?.ring.map((position) => map!.project(position).x);
-  const cellWidth = xs ? Math.max(...xs) - Math.min(...xs) : null;
-  const finerMinZoom = cellWidth === null ? Infinity : gridFinerZoom();
-  const maxZoom = map.getMaxZoom() + 1;
-  map.setLayerZoomRange(RECORD_DOT_LAYER, Math.min(recordDotMinZoom(map.getZoom(), cellWidth), finerMinZoom), maxZoom);
-  for (const layer of RECORD_AREA_LAYERS)
-    map.setLayerZoomRange(layer, Math.min(RECORD_MIN_ZOOM, finerMinZoom), maxZoom);
+  if (!map) return;
+  sizeRecordLayers(map, $hexGeometry.get() ? gridFinerZoom() : Infinity);
 }
 
 /** The zoom where the grid at the map's latitude turns finer than the selected cell; Infinity if never or unknown. */

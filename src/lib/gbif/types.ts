@@ -112,7 +112,6 @@ export interface Media {
   type?: 'StillImage' | 'MovingImage' | 'Sound' | (string & {});
   format?: string;
   identifier?: string;
-  references?: string;
   title?: string;
   creator?: string;
   rightsHolder?: string;
@@ -139,6 +138,10 @@ export interface Occurrence extends HigherKeys {
   decimalLatitude?: number;
   decimalLongitude?: number;
   coordinateUncertaintyInMeters?: number;
+  /** The place's true shape as WKT, when the source gives one (a grid square, a plot, a transect). */
+  footprintWKT?: string;
+  /** The footprint's spatial reference system: an EPSG code or WKT; empty means WGS84. */
+  footprintSRS?: string;
   /** Why the source held data back, e.g. iNaturalist's note when the observer blurred the location. */
   informationWithheld?: string;
   eventDate?: string;
@@ -158,16 +161,6 @@ export interface OccurrenceSearch extends Paged<Occurrence> {
   facets?: Facet[];
 }
 
-export interface Dataset {
-  key: string;
-  title: string;
-  publishingOrganizationKey?: string;
-  license?: string;
-  doi?: string;
-  description?: string;
-  citation?: { text?: string };
-}
-
 export interface Organization {
   key: string;
   title: string;
@@ -177,14 +170,3 @@ export interface Organization {
 
 /** A publishing organisation's key and name. */
 export type OrganizationSuggestion = Pick<Organization, 'key' | 'title'>;
-
-export interface MapCapabilities {
-  minLat: number;
-  maxLat: number;
-  minLng: number;
-  maxLng: number;
-  minYear?: number;
-  maxYear?: number;
-  total: number;
-  generated?: string;
-}

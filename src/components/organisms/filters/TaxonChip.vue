@@ -11,7 +11,7 @@ import { useDragScroll } from '~/composables/useDragScroll';
 import { useScrollFade } from '~/composables/useScrollFade';
 import { FILTER_GROUPS } from '~/lib/filter-groups';
 import { $speciesManifest, speciesPath } from '~/lib/species/links';
-import { $filterPills, type FilterGroupId } from '~/stores/explorer';
+import { type FilterGroupId, $filterPills } from '~/stores/filters';
 import { $taxa, removeTaxon } from '~/stores/taxon';
 
 const taxa = useStore($taxa);

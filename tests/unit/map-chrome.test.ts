@@ -4,7 +4,7 @@ import type { Map as MlMap } from 'maplibre-gl';
 import { busiestInView, coveredEdges, ringBox } from '~/lib/map/chrome';
 import type { Hex, LngLat } from '~/lib/map/occGrid';
 import { PIN_CURSOR } from '~/lib/map/pinCursors';
-import { fillsCanvas, isOnScreen, placeAt } from '~/lib/map/screen';
+import { fillsCanvas, hasCellInView, isOnScreen, placeAt, viewBounds } from '~/lib/map/screen';
 
 const WIDTH = 1000;
 const HEIGHT = 800;
@@ -147,10 +147,59 @@ describe('screen', () => {
     const globe = Object.assign({}, flatMap(), { unproject: () => ({ lng: 0, lat: 0 }) }) as MlMap;
     expect(fillsCanvas(globe)).toBe(false);
   });
+  it('takes the view’s extent from the canvas edges, clamped to the Mercator latitudes', () => {
+    const at = (zoom: number, map = flatMap()) => Object.assign({}, map, { getZoom: () => zoom }) as MlMap;
+    expect(viewBounds(at(4))).toEqual([-50, -40, 50, 40]);
+    const tall = Object.assign({}, flatMap(), {
+      unproject: ([pixelX, pixelY]: [number, number]) => ({ lng: pixelX / 10, lat: 100 - pixelY / 2 }),
+    }) as MlMap;
+    expect(viewBounds(at(4, tall))).toEqual([0, -85, 100, 85]);
+  });
+
+  it('takes the whole world at low zoom or before the canvas has a size', () => {
+    const world = [-180, -85, 180, 85];
+    expect(viewBounds(Object.assign({}, flatMap(), { getZoom: () => 1 }) as MlMap)).toEqual(world);
+    const unsized = Object.assign({}, flatMap(), {
+      getZoom: () => 4,
+      getCanvas: () => ({ clientWidth: 0, clientHeight: 0 }),
+    }) as MlMap;
+    expect(viewBounds(unsized)).toEqual(world);
+  });
+
+  describe('hasCellInView', () => {
+    const polygon = (ring: LngLat[]) => ({ geometry: { type: 'Polygon', coordinates: [ring] } });
+    function withCells(rendered: unknown[], sourced: unknown[], map = flatMap()) {
+      return Object.assign({}, map, {
+        queryRenderedFeatures: () => rendered,
+        getLayer: () => ({ source: 'occ' }),
+        querySourceFeatures: () => sourced,
+      }) as MlMap;
+    }
+    const globe = Object.assign({}, flatMap(), {
+      unproject: ([pixelX, pixelY]: [number, number]) =>
+        pixelX === 0 && pixelY === 0 ? { lng: 90, lat: 0 } : flatMap().unproject([pixelX, pixelY]),
+    }) as MlMap;
+
+    it('trusts a rendered cell', () => {
+      expect(hasCellInView(withCells([{}], []), 'occ-fill')).toBe(true);
+    });
+
+    it('finds none when the map fills the canvas and nothing rendered', () => {
+      expect(hasCellInView(withCells([], [polygon([[0, 0]])]), 'occ-fill')).toBe(false);
+    });
+
+    it('looks for a cell corner on screen when the globe leaves canvas uncovered', () => {
+      expect(hasCellInView(withCells([], [polygon([[0, 0]])], globe), 'occ-fill')).toBe(true);
+      expect(hasCellInView(withCells([], [polygon([[170, 0]])], globe), 'occ-fill')).toBe(false);
+      expect(
+        hasCellInView(withCells([], [{ geometry: { type: 'Point', coordinates: [0, 0] } }], globe), 'occ-fill'),
+      ).toBe(false);
+    });
+  });
 });
 
 describe('PIN_CURSOR', () => {
-  it('is an SVG cursor centred on its hotspot with a crosshair fallback', () => {
-    expect(PIN_CURSOR).toMatch(/^url\("data:image\/svg\+xml,%3Csvg.*"\) 16 16, crosshair$/);
+  it('is an SVG cursor pointing from its stem tip with a crosshair fallback', () => {
+    expect(PIN_CURSOR).toMatch(/^url\("data:image\/svg\+xml,%3Csvg.*"\) 11 29, crosshair$/);
   });
 });

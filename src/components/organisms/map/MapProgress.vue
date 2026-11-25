@@ -7,12 +7,12 @@
  */
 import { useStore } from '@nanostores/vue';
 import { onBeforeUnmount, ref, watch } from 'vue';
-import BusyNotice from '~/components/molecules/BusyNotice.vue';
+import BusyNotice from '~/components/organisms/site/BusyNotice.vue';
 import TilesNotice from '~/components/molecules/TilesNotice.vue';
-import UpdateNotice from '~/components/molecules/UpdateNotice.vue';
+import UpdateNotice from '~/components/organisms/site/UpdateNotice.vue';
 import { $gbifStale } from '~/lib/gbif';
 import { $applyUpdate } from '~/stores/app-update';
-import { $mapLoad, $tilesFailed } from '~/stores/explorer';
+import { $mapLoad, $tilesFailed } from '~/stores/map-messages';
 
 /** Loads quicker than this never show the ring. */
 const SHOW_DELAY = 150;

@@ -20,7 +20,7 @@ const CELL_POINT = [0.5, 0.5, 0] as const;
 async function load() {
   vi.resetModules();
   return {
-    explorer: await import('~/stores/explorer'),
+    explorer: { ...(await import('~/stores/explorer')), ...(await import('~/stores/map-messages')) },
     hex: await import('~/composables/useHexSummary'),
     years: await import('~/composables/useYearHistogram'),
   };
