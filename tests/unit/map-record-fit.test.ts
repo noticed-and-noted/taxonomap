@@ -8,8 +8,8 @@ const motion = vi.hoisted(() => ({ isReduced: true }));
 vi.mock('~/stores/reading', () => ({ prefersReducedMotion: () => motion.isReduced }));
 
 const SIZE_PX = 100;
-/** The zoom the record's layers show from, as sizeRecordLayers last set it. */
-const layerMinZoom = { value: 0 };
+/** The zoom the record's layers show from, as sizeRecordLayers last set it; null before the layers exist. */
+const layerMinZoom = { value: 0 as number | null };
 const NONE_COVERED = { top: 0, right: 0, bottom: 0, left: 0 };
 /** Where the globe's far side starts, as a longitude: past it a point projects on screen but is hidden. */
 const farSide = { fromLng: Infinity };
@@ -24,7 +24,7 @@ function fakeMap() {
     moveEnd,
     getCenter: () => ({ lng: camera.lng, lat: camera.lat }),
     getZoom: () => camera.zoom,
-    getLayer: () => ({ minzoom: layerMinZoom.value }),
+    getLayer: () => (layerMinZoom.value === null ? undefined : { minzoom: layerMinZoom.value }),
     getContainer: () => ({ clientWidth: SIZE_PX, clientHeight: SIZE_PX }),
     /** A far-side point projects through the globe, so it comes back as the near-side point in front of it. */
     unproject: ([pixelX, pixelY]: [number, number]) => {
@@ -102,6 +102,12 @@ describe('createRecordFit', () => {
   it('leaves the map alone when the whole area is in view', () => {
     const { fitBox, follow } = setup();
     follow(square(0, 0, 0.2));
+    expect(fitBox).not.toHaveBeenCalled();
+  });
+
+  it('leaves the map alone for a large area already wholly in view', () => {
+    const { fitBox, follow } = setup();
+    follow(square(-0.7, -0.7, 1.4));
     expect(fitBox).not.toHaveBeenCalled();
   });
 
@@ -241,6 +247,13 @@ describe('createRecordFit', () => {
     const { fitBox, follow } = setup();
     follow(square(0, 0, 0.25));
     expect(fitBox).toHaveBeenCalledWith([0, 0, 0.25, 0.25], 7.5);
+  });
+
+  it('treats an area as shown at every zoom before its layer exists', () => {
+    layerMinZoom.value = null;
+    const { fitBox, follow } = setup();
+    follow(square(0, 0, 0.25));
+    expect(fitBox).not.toHaveBeenCalled();
   });
 
   it('goes to a small area whose middle is off the map', () => {
