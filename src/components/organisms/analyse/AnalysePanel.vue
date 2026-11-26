@@ -1,10 +1,12 @@
 <script setup lang="ts">
 /** Analyse mode's panel: a side panel on desktop, a sheet on phones. The species picker and tabs fill it next. */
-import { ref } from 'vue';
+import { useStore } from '@nanostores/vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
-import { setMapMode } from '~/stores/mode';
+import { $analysePanelOpen } from '~/stores/mode';
 
-const isOpen = ref(true);
+const isOpen = useStore($analysePanelOpen);
+const openPanel = () => $analysePanelOpen.set(true);
+const closePanel = () => $analysePanelOpen.set(false);
 </script>
 
 <template>
@@ -14,10 +16,8 @@ const isOpen = ref(true);
       :open="isOpen"
       collapsible
       tab-label="Analyse"
-      dismissible="Leave Analyse"
-      @close="isOpen = false"
-      @open="isOpen = true"
-      @dismiss="setMapMode('explore')"
+      @close="closePanel"
+      @open="openPanel"
     >
       <p class="text-sm text-muted">
         Pick a species, then show how its records move through the year (Migration) or how it has spread across years

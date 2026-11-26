@@ -617,18 +617,83 @@ onBeforeUnmount(() => {
 
 <style>
 /* MapLibre's own DOM (controls, attribution), so unscoped. */
+/* Zoom and info match the app's floating buttons: 40px squares, --radius corners, the house stroke icons drawn in
+   the theme's text colours through a mask, 0.75rem in from the edge and 0.5rem apart. */
+.map-canvas .maplibregl-ctrl-bottom-right {
+  bottom: 0.25rem;
+}
+.map-canvas .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 0.75rem 0.5rem 0;
+}
+
 .map-canvas .maplibregl-ctrl-group {
-  background: var(--surface);
+  overflow: hidden;
   border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
-
+.map-canvas .maplibregl-ctrl-group button {
+  width: 2.5rem;
+  height: 2.5rem;
+}
 .map-canvas .maplibregl-ctrl-group button + button {
-  border-top-color: var(--border);
+  border-top: 1px solid var(--border);
+}
+/* The house focus ring, only for keyboard focus, in place of MapLibre's blue glow on every tap. */
+.map-canvas .maplibregl-ctrl-group button:focus,
+.map-canvas .maplibregl-ctrl-attrib-button:focus {
+  box-shadow: none;
+}
+.map-canvas .maplibregl-ctrl-group button:focus-visible,
+.map-canvas .maplibregl-ctrl-attrib-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.map-canvas .maplibregl-ctrl-group button:not(:disabled):hover {
+  background: var(--surface-2);
+}
+.map-canvas .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon,
+.map-canvas .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon {
+  background: var(--text);
+  mask: var(--control-icon) center / 1.125rem no-repeat;
+}
+.map-canvas .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M12 6v12M6 12h12'/%3E%3C/svg%3E");
+}
+.map-canvas .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
 }
 
-:root:not([data-theme='light']) .map-canvas .maplibregl-ctrl-icon {
-  filter: invert(1) hue-rotate(180deg);
+/* The folded attribution is the info button: the same square, a stroke "i" in muted text. */
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact {
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button {
+  width: calc(2.5rem - 2px);
+  height: calc(2.5rem - 2px);
+  border-radius: calc(var(--radius) - 1px);
+  background: none;
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--text-muted);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 11v5M12 8h.01'/%3E%3C/svg%3E")
+    center / 1.125rem no-repeat;
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button:hover::before {
+  background: var(--text);
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  padding: 0.5rem 2.75rem 0.5rem 0.75rem;
 }
 
 .map-canvas .maplibregl-ctrl-attrib {
@@ -644,8 +709,8 @@ onBeforeUnmount(() => {
   z-index: 20;
 }
 
-/* Phones and tablets in Explore: the zoom and info buttons sit above the List and Filters row (ExplorerOverlay),
-   info on top so the zoom stays nearest the thumb. */
+/* Phones and tablets: the zoom and info buttons sit above the bottom row of buttons (ExplorerOverlay), info on top so
+   the zoom stays nearest the thumb. */
 @media (max-width: 999.98px) {
   .app-shell:has(.phone-bottom-row) .map-canvas .maplibregl-ctrl-bottom-right {
     bottom: 3.5rem;

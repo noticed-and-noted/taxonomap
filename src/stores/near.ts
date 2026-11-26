@@ -55,17 +55,21 @@ export function setNearLocation(lat: number, lng: number): void {
   $nearAt.set(roundLatLng(lat, lng));
 }
 
-/** Near me's phone sheet is sliding away on the way out, so what it covered can come back now. */
-export const $nearLeaving = atom(false);
+/** Whether Near me's panel is showing; the phone's bottom button opens it again once it's slid away. */
+export const $nearPanelOpen = atom(true);
+
+/** Records within the radius of the pin, for the phone's bottom button; null until an area has loaded. */
+export const $nearTotal = atom<number | null>(null);
 
 /** Leave near-me mode, dropping its params from the URL (one history step). */
 export function exitNearMode(): void {
   $nearMode.set(false);
-  $nearLeaving.set(false);
   $nearAt.set(null);
   $nearRadius.set(radiusCodec.default);
   $nearThisMonth.set(false);
   $nearTab.set('species');
+  $nearPanelOpen.set(true);
+  $nearTotal.set(null);
   // Near me's open record would otherwise stay open in the next cell's record list.
   $openRecord.set(null);
 }

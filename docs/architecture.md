@@ -59,7 +59,7 @@ There are three kinds:
 
 The explorer's URL state is in `src/stores/explorer.ts`, and the filter list built on it in `src/stores/filters.ts`.
 
-The map page has three modes: Explore, Near me and Analyse (`src/stores/mode.ts`). Near me keeps its `?near=1` key so old links work, and Analyse adds `?analyse=1`; `$mapMode` reads the two as one. Switch with `setMapMode`, which resets the mode being left in the same history step.
+The map page has three modes: Explore, Near me and Analyse (`src/stores/mode.ts`). Near me keeps its `?near=1` key so old links work, and Analyse adds `?analyse=1`; `$mode` reads the two as one. Switch with `setMapMode`, which resets the mode being left in the same history step. Entering Analyse clears every filter; Analyse then offers only the How group and Where's location accuracy (`ANALYSE_FILTER_GROUPS`, read by the rail and the phone Filters sheet through `$visibleFilterGroups`), and its migration and spread queries are built from `$occurrenceFilter` like everything else, so those filters narrow them too. Whether Near me's and Analyse's panels are showing (`$nearPanelOpen`, `$analysePanelOpen`) and Near me's record total (`$nearTotal`) are plain atoms, so the phone's bottom button can reopen a panel and show its count.
 
 ## Filters
 

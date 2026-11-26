@@ -573,18 +573,18 @@ test('the legend and the results panel slide away and back, the panel keeping it
   await page.getByRole('button', { name: 'Slide legend away' }).click();
   await page.getByRole('button', { name: 'Show legend' }).click();
   await expect(page.getByRole('button', { name: 'Slide legend away' })).toBeVisible();
-  await page.getByRole('button', { name: 'List panel' }).click();
+  await page.getByRole('button', { name: 'Explore panel' }).click();
   await expect(page).not.toHaveURL(/panel=/);
   await expect(page).toHaveURL(/hex=/);
-  await page.getByRole('button', { name: 'List panel' }).click();
+  await page.getByRole('button', { name: 'Explore panel' }).click();
   await expect(page).toHaveURL(/panel=hex/);
 });
 
-test('List shows every matching record when no cell is selected', { tag: '@mobile' }, async ({ page }) => {
+test('Explore lists every matching record when no cell is selected', { tag: '@mobile' }, async ({ page }) => {
   await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0');
-  // The phone's List button, or the side panel's List tab on wider screens.
+  // The phone's Explore button (with its record count), or the side panel's Explore tab on wider screens.
   await page
-    .getByRole('button', { name: /^List( panel)?$/ })
+    .getByRole('button', { name: /^Explore( panel)?( [0-9,]+ records)?$/ })
     .filter({ visible: true })
     .click();
   await expect(page).toHaveURL(/panel=results/);

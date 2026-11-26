@@ -12,7 +12,10 @@ test(
     await expect(page).toHaveURL(/near=1/);
     await expect(page.getByText('About your location')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Use my location' })).toBeVisible();
-    await page.getByRole('button', { name: 'Leave near me' }).click();
+    // Closing the panel only tucks it away; the mode switch leaves Near me.
+    await page.getByRole('button', { name: 'Close panel' }).filter({ visible: true }).click();
+    await expect(page).toHaveURL(/near=1/);
+    await chooseMode(page, 'Explore');
     await expect(page).not.toHaveURL(/near=1/);
   },
 );

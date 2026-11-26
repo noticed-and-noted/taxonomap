@@ -3,8 +3,8 @@
  * Desktop (≥768px): 400px right SidePanel. Mobile: BottomSheet.
  * `collapsible`: on desktop, closing slides the panel aside to a strip
  * instead of removing it; `open` asks for it back.
- * `dismissible` (with collapsible): a close button that emits `dismiss`,
- * for leaving the whole mode rather than tucking the panel away.
+ * `dismissible` (with collapsible): the close button emits `dismiss` instead,
+ * for undoing what the panel shows (the selected cell) rather than tucking it away.
  * `tabLabel` (with collapsible): a word written up the tucked panel's tab.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
@@ -68,10 +68,10 @@ onBeforeUnmount(() => {
     open
     collapsible
     :collapsed="!open"
-    :closable="!!dismissible"
+    closable
     :close-label="dismissible"
     :tab-label="tabLabel"
-    @close="emit('dismiss')"
+    @close="dismissible ? emit('dismiss') : emit('close')"
     @collapse="emit('close')"
     @expand="emit('open')"
   >

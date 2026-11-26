@@ -1,18 +1,20 @@
 <script setup lang="ts">
-/** The phone Filters sheet's tabs: one per filter group, as on the desktop rail, plus the map settings. */
+/** The phone Filters sheet's tabs: one per filter group the mode offers, as on the desktop rail, plus the map settings. */
 import { useStore } from '@nanostores/vue';
-import { $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from '~/lib/filter-groups';
+import { computed } from 'vue';
+import { $groupCounts, $visibleFilterGroups, SETTINGS, type FilterGroupId } from '~/lib/filter-groups';
 
 const tab = defineModel<FilterGroupId | 'settings'>({ required: true });
 
 const groupCounts = useStore($groupCounts);
-const TABS = [...FILTER_GROUPS, { ...SETTINGS, label: 'Map' }];
+const groups = useStore($visibleFilterGroups);
+const tabs = computed(() => [...groups.value, { ...SETTINGS, label: 'Map' }]);
 </script>
 
 <template>
   <div role="tablist" aria-label="Filter groups" class="flex border-b border-border">
     <button
-      v-for="option in TABS"
+      v-for="option in tabs"
       :key="option.id"
       role="tab"
       type="button"

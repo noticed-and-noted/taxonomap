@@ -131,7 +131,7 @@ onBeforeUnmount(() => resize.disconnect());
   gap: 0.375rem;
   height: 2rem;
   padding: 0 0.75rem;
-  border-radius: 999px;
+  border-radius: var(--radius);
   border: 1px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
   color: var(--text);

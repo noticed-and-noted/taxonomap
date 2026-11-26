@@ -27,6 +27,7 @@ import {
   $taxonKeys,
   UNCERTAINTY_STEPS_M,
 } from '~/stores/explorer';
+import { $mode } from '~/stores/mode';
 import { markDone } from '~/stores/onboarding';
 import { TAXON_GROUPS, toggleTaxa, type TaxonGroup } from '~/stores/taxon';
 import PublisherPicker from './PublisherPicker.vue';
@@ -39,6 +40,7 @@ defineProps<{ group: FilterGroupId }>();
 
 // Unique per instance: the rail and the sheet can both render a group.
 const uniqueId = useId();
+const mode = useStore($mode);
 
 const iucn = useStore($iucn);
 const exact = useStore($exactTaxon);
@@ -46,6 +48,8 @@ const dateRange = useStore($dateRange);
 const months = useStore($months);
 const monthsOn = computed(() => monthsAllowed(dateRange.value));
 const continents = useStore($continents);
+// Analyse keeps only Where's location accuracy: its maps already cover the whole world.
+const isAnalyse = computed(() => mode.value === 'analyse');
 const uncert = useStore($maxUncertainty);
 const basis = useStore($basisOfRecord);
 const photo = useStore($hasPhoto);
@@ -175,7 +179,7 @@ const clearDates = () => $dateRange.set(null);
     </template>
 
     <template v-else-if="group === 'where'">
-      <fieldset>
+      <fieldset v-if="!isAnalyse">
         <legend class="group-label">Continent</legend>
         <label v-for="continent in CONTINENTS" :key="continent" class="check-row">
           <input type="checkbox" :checked="continents.includes(continent)" @change="toggleContinent(continent)" />
@@ -288,7 +292,7 @@ const clearDates = () => $dateRange.set(null);
   justify-content: center;
   height: 1.875rem;
   padding: 0 0.625rem;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);

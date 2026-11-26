@@ -123,7 +123,7 @@ onBeforeUnmount(() => clearTimeout(timer));
   gap: 0.375rem;
   height: 2rem;
   padding: 0 0.75rem 0 0.375rem;
-  border-radius: 999px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);

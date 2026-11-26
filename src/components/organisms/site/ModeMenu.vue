@@ -6,9 +6,9 @@
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { MODE_OPTIONS } from '~/lib/map-modes';
-import { $mapMode, setMapMode, type MapMode } from '~/stores/mode';
+import { $mode, setMapMode, type MapMode } from '~/stores/mode';
 
-const mode = useStore($mapMode);
+const mode = useStore($mode);
 const isOpen = ref(false);
 const root = ref<HTMLElement>();
 
@@ -68,23 +68,25 @@ onBeforeUnmount(() => {
         <path d="m6 9 6 6 6-6" />
       </svg>
     </button>
-    <ul v-show="isOpen" id="mode-menu-list" class="mode-list">
-      <li v-for="option in others" :key="option.value">
-        <button type="button" class="mode-btn" @click="pick(option.value)">
-          <svg
-            viewBox="0 0 24 24"
-            class="size-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            aria-hidden="true"
-          >
-            <path :d="option.icon" />
-          </svg>
-          {{ option.label }}
-        </button>
-      </li>
-    </ul>
+    <Transition name="drop">
+      <ul v-show="isOpen" id="mode-menu-list" class="mode-list">
+        <li v-for="option in others" :key="option.value">
+          <button type="button" class="mode-btn" @click="pick(option.value)">
+            <svg
+              viewBox="0 0 24 24"
+              class="size-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              aria-hidden="true"
+            >
+              <path :d="option.icon" />
+            </svg>
+            {{ option.label }}
+          </button>
+        </li>
+      </ul>
+    </Transition>
   </div>
 </template>
 
@@ -127,5 +129,32 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: flex-end;
   gap: 0.5rem;
+}
+
+/* The options drop out one after another and fade back up together. The durations are tokens, so reduced motion
+   turns both off. */
+.drop-enter-active li {
+  animation: drop-in var(--dur-fast) var(--ease) both;
+}
+.drop-enter-active li:nth-child(2) {
+  animation-delay: calc(var(--dur-fast) / 3);
+}
+.drop-enter-active {
+  transition: opacity 0s calc(var(--dur-fast) * 2);
+}
+.drop-leave-active {
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.drop-leave-to {
+  opacity: 0;
+  transform: translateY(-0.375rem);
+}
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
 }
 </style>
