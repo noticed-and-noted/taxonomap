@@ -1,5 +1,5 @@
 /** "What's near me" journeys, against the fake world (see fixtures.ts). */
-import { expect, test } from './fixtures';
+import { chooseMode, expect, test } from './fixtures';
 
 const LONDON = '/?near=1&at=51.507,-0.128&r=2';
 
@@ -8,7 +8,7 @@ test(
   { tag: '@mobile' },
   async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Near me' }).filter({ visible: true }).click();
+    await chooseMode(page, 'Near me');
     await expect(page).toHaveURL(/near=1/);
     await expect(page.getByText('About your location')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Use my location' })).toBeVisible();

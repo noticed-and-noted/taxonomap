@@ -59,6 +59,8 @@ There are three kinds:
 
 The explorer's URL state is in `src/stores/explorer.ts`, and the filter list built on it in `src/stores/filters.ts`.
 
+The map page has three modes: Explore, Near me and Analyse (`src/stores/mode.ts`). Near me keeps its `?near=1` key so old links work, and Analyse adds `?analyse=1`; `$mapMode` reads the two as one. Switch with `setMapMode`, which resets the mode being left in the same history step.
+
 ## Filters
 
 Every filter is one entry in `FILTERS` in `src/stores/filters.ts`. From that list the store derives:

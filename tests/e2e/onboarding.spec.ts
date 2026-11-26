@@ -1,5 +1,5 @@
 /** First-visit onboarding: the guided tour, then the "Try this" checklist. */
-import { expect, test } from './fixtures';
+import { chooseMode, expect, test } from './fixtures';
 
 test.use({ showTour: true });
 
@@ -114,7 +114,7 @@ test('finishing the last item grows the fern, then the list is gone for good', a
 test('Near me keeps the checklist and the legend, and ticks the list', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Skip' }).click();
-  await page.getByRole('button', { name: 'Near me' }).click();
+  await chooseMode(page, 'Near me');
   const checklist = page.getByRole('region', { name: 'Try this' });
   await expect(checklist).toContainText('1 of 7');
   await expect(page.getByText('Records per cell')).toBeVisible();
