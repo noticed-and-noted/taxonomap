@@ -644,6 +644,17 @@ onBeforeUnmount(() => {
   z-index: 20;
 }
 
+/* Phones and tablets in Explore: the zoom and info buttons sit above the List and Filters row (ExplorerOverlay),
+   info on top so the zoom stays nearest the thumb. */
+@media (max-width: 999.98px) {
+  .app-shell:has(.phone-bottom-row) .map-canvas .maplibregl-ctrl-bottom-right {
+    bottom: 3.5rem;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+  }
+}
+
 .map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
   background: var(--surface);
 }

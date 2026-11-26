@@ -193,33 +193,11 @@ onBeforeUnmount(() => {
           data-tour="near"
         />
       </div>
-      <!-- Phone: List, Filters and the mode menu (the rail is hidden), grouped at the right. List opens all results;
-           wider screens have the results panel's own tab. -->
+      <!-- Phone: the mode menu (the rail is hidden), and in Near me the Filters pill. In Explore, List and Filters sit in
+           the bottom row instead. -->
       <div class="phone-row ml-auto flex shrink-0 rail:hidden">
-        <Transition name="fade">
-          <button
-            v-if="isExplore"
-            type="button"
-            class="pill-btn phone-btn explore-btn"
-            :aria-expanded="allResultsOpen"
-            @click="toggleAllResults"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              class="size-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path :d="listIcon" />
-            </svg>
-            List
-          </button>
-        </Transition>
         <!-- One pill: Filters with its count, and once any are set, a × that clears them all. -->
-        <span v-if="!isAnalyse" class="filters-pill" :class="{ active: activeFilters }">
+        <span v-if="near" class="filters-pill" :class="{ active: activeFilters }">
           <button
             type="button"
             class="filters-btn"
@@ -256,6 +234,60 @@ onBeforeUnmount(() => {
       </div>
       <!-- From tablet width up; Near me draws its own beside its panel. -->
       <div v-if="!near" class="hidden shrink-0 max-rail:ml-2 sm:block"><BasemapSwitcher /></div>
+    </div>
+
+    <!-- Phones and tablets in Explore: List and Filters along the bottom, within a thumb's reach. List opens all results;
+         from tablet width the results panel's own List tab does that, so the row keeps just Filters. -->
+    <div
+      v-if="isExplore"
+      class="phone-bottom-row pointer-events-auto absolute bottom-3 left-3 right-3 flex gap-2 rail:hidden"
+    >
+      <button
+        type="button"
+        class="bottom-btn list-btn explore-btn"
+        :aria-expanded="allResultsOpen"
+        @click="toggleAllResults"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-[1.125rem]"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path :d="listIcon" />
+        </svg>
+        List
+        <svg
+          viewBox="0 0 24 24"
+          class="ml-auto size-4 text-subtle"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 15 6-6 6 6" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="bottom-btn filters-square"
+        data-tour="filters"
+        :aria-label="activeFilters ? `Filters, ${activeFilters} active` : 'Filters'"
+        :aria-expanded="filtersOpen"
+        @click="openFilters"
+      >
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+        <span v-if="activeFilters" class="count-badge corner-badge tabular-nums" aria-hidden="true">{{
+          activeFilters
+        }}</span>
+      </button>
     </div>
 
     <!-- Stays in Near me too, on wider screens; on phones an open sheet slides it away (sheetCoversDock). -->
@@ -331,25 +363,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-  box-shadow: var(--shadow);
-  cursor: pointer;
-}
-.pill-btn:hover {
-  color: var(--text);
-}
-
 /* Floats over the map like the other pills; the selected mode takes the accent fill (SegmentedControl). */
 .mode-switch {
   box-shadow: var(--shadow);
@@ -359,7 +372,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-/* Styled as a pill-btn, split in two: the × only shows while filters are set. */
+/* Near me on phones: Filters as a pill, split in two; the × only shows while filters are set. */
 .filters-pill {
   display: inline-flex;
   flex-shrink: 0;
@@ -409,7 +422,7 @@ onBeforeUnmount(() => {
   font-size: 0.6875rem;
 }
 
-/* List, Filters and the mode menu share a 360px phone's row, so they sit closer there. */
+/* The Filters pill and the mode menu share a 360px phone's row, so they sit closer there. */
 .phone-row {
   gap: 0.5rem;
 }
@@ -418,11 +431,43 @@ onBeforeUnmount(() => {
   .phone-row {
     gap: 0.25rem;
   }
-  .top-bar .pill-btn,
   .filters-btn {
     gap: 0.25rem;
     padding: 0 0.4375rem;
   }
+}
+
+/* Phones and tablets in Explore: List and Filters, 44px tall for thumbs, squared like the design's buttons. */
+.bottom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  box-shadow: var(--shadow);
+}
+.list-btn {
+  flex: 1;
+  justify-content: flex-start;
+  padding: 0 0.875rem;
+}
+.filters-square {
+  position: relative;
+  width: 2.75rem;
+  flex-shrink: 0;
+}
+.filters-square[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+.corner-badge {
+  position: absolute;
+  top: -0.375rem;
+  right: -0.375rem;
 }
 
 .bottom-dock {
@@ -482,6 +527,13 @@ onBeforeUnmount(() => {
   .filters-pill,
   .phone-btn {
     display: none;
+  }
+}
+
+/* The legend dock sits above the List and Filters row (0.75rem margin + 2.75rem row + 0.5rem gap). */
+@media (max-width: 999.98px) {
+  .explorer-overlay:has(.phone-bottom-row) .bottom-dock {
+    bottom: 4rem;
   }
 }
 
