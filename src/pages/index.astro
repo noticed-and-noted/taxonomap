@@ -10,7 +10,7 @@ const STRUCTURED_DATA = {
   '@id': 'https://app.taxonomap.com/#app',
   name: 'Taxonomap',
   url: 'https://app.taxonomap.com/',
-  description: 'Explore species records from around the world',
+  description: 'The Taxonomap application',
   applicationCategory: 'ReferenceApplication',
   operatingSystem: 'Web',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'GBP' },
@@ -24,7 +24,7 @@ const STRUCTURED_DATA = {
 };
 ---
 
-<BaseLayout title="Taxonomap: Explore species records from around the world">
+<BaseLayout title="Taxonomap app" description="The Taxonomap application">
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c')} />
   <AppShell map="full" search="map">
     <h1 class="sr-only">Global map of species occurrence records</h1>
