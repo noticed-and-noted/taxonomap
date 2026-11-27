@@ -5,9 +5,11 @@
  */
 import { useStore } from '@nanostores/vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
+import { useSpreadCells } from '~/composables/useSpreadCells';
 import { $analyseTaxon, $analyseView, ANALYSE_VIEWS } from '~/stores/analyse';
 import { $analysePanelOpen } from '~/stores/mode';
 import AnalyseMigration from './AnalyseMigration.vue';
+import AnalyseSpread from './AnalyseSpread.vue';
 import AnalyseSpeciesCard from './AnalyseSpeciesCard.vue';
 import AnalyseSpeciesTable from './AnalyseSpeciesTable.vue';
 import AnalyseYears from './AnalyseYears.vue';
@@ -17,6 +19,9 @@ const VIEW_LABELS = { migration: 'Migration', spread: 'Spread' } as const;
 const isOpen = useStore($analysePanelOpen);
 const taxon = useStore($analyseTaxon);
 const view = useStore($analyseView);
+
+// Loaded here, not in the Spread tab, so the map keeps the spread while the phone sheet is closed.
+const spreadLoad = useSpreadCells();
 
 const openPanel = () => $analysePanelOpen.set(true);
 const closePanel = () => $analysePanelOpen.set(false);
@@ -55,9 +60,7 @@ const closePanel = () => $analysePanelOpen.set(false);
 
         <div role="tabpanel" :aria-label="VIEW_LABELS[view]">
           <AnalyseMigration v-if="view === 'migration'" />
-          <p v-else class="text-sm text-muted">
-            Where it was recorded for the first time, cell by cell, as the years go by.
-          </p>
+          <AnalyseSpread v-else :loading="spreadLoad.loading.value" :error="spreadLoad.error.value" />
         </div>
       </div>
     </ResponsivePanel>

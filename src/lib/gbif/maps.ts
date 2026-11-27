@@ -68,6 +68,11 @@ export function occurrenceTileTemplate(filter: TileFilter, style: TileStyle = {}
   return `${GBIF_TILE_BASE}/v2/map/occurrence/${kind}/{z}/{x}/{y}${suffix(format)}${queryString ? `?${queryString}` : ''}`;
 }
 
+/** One tile covering the whole world (zoom 0) as hex cells, for a whole-world summary such as Analyse's spread. */
+export function worldTileUrl(filter: TileFilter, hexPerTile: number): string {
+  return occurrenceTileTemplate(filter, { hexPerTile }, 'mvt').replace('{z}/{x}/{y}', '0/0/0');
+}
+
 /** GBIF's own raster basemap (CORS-enabled), used by the static mini-map. */
 export function gbifBasemapTile(zoom: number, tileX: number, tileY: number, theme: 'dark' | 'light' = 'dark'): string {
   return `https://tile.gbif.org/3857/omt/${zoom}/${tileX}/${tileY}@1x.png?style=gbif-${theme === 'dark' ? 'dark' : 'light'}`;

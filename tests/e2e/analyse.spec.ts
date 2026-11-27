@@ -51,3 +51,20 @@ test('migration shows records by month and steps through the year', { tag: '@mob
   await expect(months.nth(6)).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Pause' }).click();
 });
+
+test('spread shows cells first recorded by year and steps through the years', { tag: '@mobile' }, async ({ page }) => {
+  await page.goto('/?analyse=1&ak=2490719&av=spread&ayr=2015-2020');
+  const years = page.getByRole('group', { name: 'Cells first recorded, by year' }).getByRole('button');
+  await expect(years).toHaveCount(6);
+  await expect(years.last()).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: 'Next year' }).click();
+  await expect(years.first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(page).toHaveURL(/ay=2015/);
+  await years.nth(2).click();
+  await expect(page).toHaveURL(/ay=2017/);
+
+  await page.locator('.segmented label', { hasText: 'New only' }).click();
+  await expect(page.getByText('Recorded before 2017')).toBeHidden();
+  await expect(page.getByText('First record in each country')).toBeVisible();
+});

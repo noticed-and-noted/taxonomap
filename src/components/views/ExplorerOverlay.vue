@@ -34,6 +34,7 @@ import { occurrenceCount } from '~/lib/gbif';
 import { MODE_OPTIONS } from '~/lib/map-modes';
 import { clearHexSelection, $panel, $selectedHex } from '~/stores/explorer';
 import { $occurrenceFilter, clearFilters } from '~/stores/filters';
+import { $spreadMap } from '~/stores/spread';
 import { $mapUnsupported, $railOpen, $viewCheck } from '~/stores/map-messages';
 import { $analysePanelOpen, $mode, ANALYSE_FILTER_GROUPS, setMapMode } from '~/stores/mode';
 import { $nearMode, $nearPanelOpen, $nearTotal } from '~/stores/near';
@@ -113,6 +114,7 @@ const nearPanelOpen = useStore($nearPanelOpen);
 const nearTotal = useStore($nearTotal);
 const analysePanelOpen = useStore($analysePanelOpen);
 const filter = useStore($occurrenceFilter);
+const spreadMap = useStore($spreadMap);
 const currentMode = computed(() => MODE_OPTIONS.find((option) => option.value === mode.value)!);
 
 /** Records matching the filters, for the phone's Explore button; fetched only while that button shows. */
@@ -319,7 +321,8 @@ onBeforeUnmount(() => {
         </svg>
       </button>
       <TryThis />
-      <MapLegend class="w-full max-w-60" data-tour="legend" />
+      <!-- Spread colours its cells by first year, keyed in its own panel. -->
+      <MapLegend v-if="!spreadMap" class="w-full max-w-60" data-tour="legend" />
     </div>
 
     <div

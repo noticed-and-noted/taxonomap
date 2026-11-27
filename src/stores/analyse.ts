@@ -1,6 +1,7 @@
 /**
  * Analyse mode's choices, in the URL so an analysis can be shared: the species (`ak`), the view (`av`, Migration or
- * Spread), the years included (`ayr`, its own range, apart from the When filter) and Migration's month (`am`).
+ * Spread), the years included (`ayr`, its own range, apart from the When filter), Migration's month (`am`) and
+ * Spread's year (`ay`).
  */
 import { $fitOnSearch } from './fit-search';
 import { flyToRecords } from './fly-to-taxa';
@@ -51,12 +52,24 @@ const monthCodec: UrlCodec<number> = {
   serialize: (month) => String(month),
 };
 
+const yearCodec: UrlCodec<number | null> = {
+  key: 'ay',
+  default: null,
+  scope: 'map',
+  history: 'replace',
+  parse: (raw) => (/^\d{4}$/.test(raw) ? Number(raw) : undefined),
+  // Never asked for the default (null): it is left out of the URL.
+  serialize: (year) => String(year),
+};
+
 /** The species being analysed, by GBIF key; null shows the picker. */
 export const $analyseTaxon = urlAtom(codecs.int('ak', null, { scope: 'map' }));
 export const $analyseView = urlAtom(codecs.enumOf('av', ANALYSE_VIEWS, 'migration', { scope: 'map' }));
 export const $analyseYears = urlAtom(yearsCodec);
 /** Migration's month, 1 (January) to 12. */
 export const $analyseMonth = urlAtom(monthCodec);
+/** Spread's year; null is the last year included. */
+export const $analyseYear = urlAtom(yearCodec);
 
 /** The years a span covers, filling in every year Analyse offers for null. */
 export function yearsIncluded(span: YearSpan): readonly [number, number] {
@@ -76,4 +89,5 @@ export function resetAnalyse(): void {
   $analyseView.set('migration');
   $analyseYears.set(null);
   $analyseMonth.set(monthCodec.default);
+  $analyseYear.set(null);
 }

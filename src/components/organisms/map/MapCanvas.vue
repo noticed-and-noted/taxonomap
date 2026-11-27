@@ -31,6 +31,7 @@ import {
   geometryOf,
   nearGeoJson,
   selectedGeoJson,
+  spreadFillColor,
   type MapColors,
 } from '~/lib/map/style';
 import type { ScreenBox } from '~/lib/tour';
@@ -44,6 +45,8 @@ import {
   $selectedHex,
 } from '~/stores/explorer';
 import { $mapFilter } from '~/stores/map-filter';
+import { $spreadMap } from '~/stores/spread';
+import { $analyseYears, yearsIncluded } from '~/stores/analyse';
 import { $mode } from '~/stores/mode';
 import {
   $busiestHexBox,
@@ -111,6 +114,17 @@ const MIN_ZOOM = 1;
 /** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
   if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', fillColor(level));
+  if (map?.getLayer(SPREAD_LAYER)) map.setPaintProperty(SPREAD_LAYER, 'fill-color', spreadFillColor());
+}
+
+/** Analyse's spread cells. */
+const SPREAD_LAYER = 'spread-fill';
+
+/** Spread's cells in place of the occurrence hexes while Analyse's Spread view has them; the hexes otherwise. */
+function drawSpread(collection = $spreadMap.get()) {
+  setData('spread', collection ?? EMPTY);
+  if (map?.getLayer(HEX_LAYER)) map.setLayoutProperty(HEX_LAYER, 'visibility', collection ? 'none' : 'visible');
+  clearHover();
 }
 
 /** Cells arriving or leaving as you pan, sent to MapLibre's worker as one diff (no fade-in: that sent each cell twice). */
@@ -134,6 +148,7 @@ function syncOverlays() {
   paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
   setData('near', nearData());
+  drawSpread();
   sizeRecordPlace();
 }
 
@@ -252,6 +267,10 @@ function onMove(event: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   // Dragging: the tooltip stays hidden until the drag ends (dragstart clears it).
   if ($mapMode.get() === 'pin' || map!.dragPan.isActive()) return;
+  if ($spreadMap.get()) {
+    showSpreadTip(event.point);
+    return;
+  }
   const feature = hexAt(event.point);
   const geometry = feature && geometryOf(feature);
   if (!geometry) {
@@ -272,6 +291,21 @@ function onMove(event: MapMouseEvent) {
     exact === undefined ? records(geometry.tileTotal, `~${compact(geometry.tileTotal)}`) : records(exact, full(exact));
   tooltip.value = { x: event.point.x, y: event.point.y, text, wkt: geometry.wkt };
   hoverCounter.hover(filter, geometry.wkt);
+  map!.getCanvas().style.cursor = 'pointer';
+}
+
+/** Spread's tip: the year the cell under the pointer was first recorded. */
+function showSpreadTip(point: { x: number; y: number }) {
+  const cell = map!.queryRenderedFeatures([point.x, point.y], { layers: [SPREAD_LAYER] })[0];
+  const firstYear = Number(cell?.properties['firstYear']);
+  if (!cell || !Number.isFinite(firstYear)) {
+    tooltip.value = null;
+    map!.getCanvas().style.cursor = '';
+    return;
+  }
+  const [firstIncluded] = yearsIncluded($analyseYears.get());
+  const text = firstYear < firstIncluded ? `Recorded before ${firstIncluded}` : `First recorded in ${firstYear}`;
+  tooltip.value = { x: point.x, y: point.y, text, wkt: String(cell.properties['id']) };
   map!.getCanvas().style.cursor = 'pointer';
 }
 
@@ -418,6 +452,7 @@ function listenToStores() {
     $mapLoad.listen(onLoadChange),
     // A new density ramp only repaints the hexes.
     $ramp.listen(() => paintHexes()),
+    $spreadMap.listen((collection) => drawSpread(collection)),
     $mapView.listen((view) => {
       if (!map) return;
       const center = map.getCenter();

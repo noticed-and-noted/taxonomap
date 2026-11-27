@@ -69,6 +69,12 @@ export function fillColor(level: number): ExpressionSpecification {
   return step as ExpressionSpecification;
 }
 
+/** Analyse's spread cells: those first recorded in the year light, those recorded before it dark (see lib/ramp.ts). */
+export function spreadFillColor(): ExpressionSpecification {
+  const colors = rampColors();
+  return ['match', ['get', 'state'], 'new', colors[colors.length - 1]!, colors[1]!];
+}
+
 /** Our data sources, shared by every basemap. */
 function overlaySources(data: OverlayData): StyleSpecification['sources'] {
   return {
@@ -79,6 +85,7 @@ function overlaySources(data: OverlayData): StyleSpecification['sources'] {
       promoteId: 'id',
       attribution: 'Occurrence data © <a href="https://www.gbif.org">GBIF.org</a> and data publishers',
     },
+    spread: { type: 'geojson', data: EMPTY },
     hover: { type: 'geojson', data: EMPTY },
     selected: { type: 'geojson', data: data.selected },
     near: { type: 'geojson', data: data.near },
@@ -96,6 +103,15 @@ function dataLayers(level: number): LayerSpecification[] {
         'fill-color': fillColor(level),
         'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, occOpacity(0), 8, occOpacity(8)],
         'fill-antialias': true,
+      },
+    },
+    {
+      id: 'spread-fill',
+      type: 'fill',
+      source: 'spread',
+      paint: {
+        'fill-color': spreadFillColor(),
+        'fill-opacity': ['interpolate', ['linear'], ['zoom'], 0, occOpacity(0), 8, occOpacity(8)],
       },
     },
   ];
