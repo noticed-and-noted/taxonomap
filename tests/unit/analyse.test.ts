@@ -127,7 +127,7 @@ describe('the starting species', () => {
     expect(filterStartingSpecies('beetle').map((species) => species.commonName)).toEqual(['Harlequin ladybird']);
     expect(filterStartingSpecies('invasive').every((species) => species.tags.includes('Invasive'))).toBe(true);
     expect(filterStartingSpecies('balsàm').map((species) => species.commonName)).toEqual(['Himalayan balsam']);
-    expect(filterStartingSpecies('zebra')).toEqual([]);
+    expect(filterStartingSpecies('platypus')).toEqual([]);
   });
 });
 
@@ -221,5 +221,24 @@ describe('usePlayback', () => {
     playback.toggle();
     scope.stop();
     expect(playback.isPlaying.value).toBe(false);
+  });
+});
+
+describe('migration tags', () => {
+  it('tags migrants and fish patterns, partial migrants apart, and leaves the rest untagged', async () => {
+    const { migrationTag } = await import('~/lib/analyse/migration');
+    expect(migrationTag('migratory')).toBe('Migrates');
+    expect(migrationTag('anadromous')).toBe('Migrates');
+    expect(migrationTag('partial')).toBe('Partly migrates');
+    expect(migrationTag('nonmigratory')).toBeUndefined();
+    expect(migrationTag(undefined)).toBeUndefined();
+  });
+
+  it('looks species up in the EOL table, loading it once', async () => {
+    const { migrationTags } = await import('~/lib/analyse/migration');
+    // The barn swallow migrates, the osprey partly, the grey squirrel doesn't; 1 isn't in the table.
+    const tags = await migrationTags([9515886, 2480726, 5219681, 1]);
+    expect(Object.fromEntries(tags)).toEqual({ 9515886: 'Migrates', 2480726: 'Partly migrates' });
+    expect((await migrationTags([9515886])).get(9515886)).toBe('Migrates');
   });
 });

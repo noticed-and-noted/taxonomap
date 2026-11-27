@@ -6,7 +6,7 @@
 import { normalise } from '~/lib/data/name-index';
 
 /** Why a species is on the list. */
-export type AnalyseTag = 'Migrates' | 'Introduced' | 'Invasive';
+export type AnalyseTag = 'Migrates' | 'Partly migrates' | 'Introduced' | 'Invasive';
 
 /** A row in Analyse's species picker. */
 export interface AnalyseSpecies {
@@ -31,11 +31,26 @@ export const STARTING_SPECIES: readonly AnalyseSpecies[] = [
     group: 'Bird',
     tags: ['Migrates'],
   },
+  { key: 2474950, commonName: 'Common crane', scientificName: 'Grus grus', group: 'Bird', tags: ['Migrates'] },
+  {
+    key: 2481681,
+    commonName: 'Bar-tailed godwit',
+    scientificName: 'Limosa lapponica',
+    group: 'Bird wader',
+    tags: ['Migrates'],
+  },
   {
     key: 5220086,
     commonName: 'Humpback whale',
     scientificName: 'Megaptera novaeangliae',
     group: 'Mammal whale',
+    tags: ['Migrates'],
+  },
+  {
+    key: 7595433,
+    commonName: 'Atlantic salmon',
+    scientificName: 'Salmo salar',
+    group: 'Fish',
     tags: ['Migrates'],
   },
   {
@@ -88,10 +103,31 @@ export const STARTING_SPECIES: readonly AnalyseSpecies[] = [
     tags: ['Invasive'],
   },
   {
+    key: 4532122,
+    commonName: 'Box tree moth',
+    scientificName: 'Cydalima perspectalis',
+    group: 'Insect moth',
+    tags: ['Invasive'],
+  },
+  {
     key: 5157899,
     commonName: 'Spotted lanternfly',
     scientificName: 'Lycorma delicatula',
     group: 'Insect bug',
+    tags: ['Invasive'],
+  },
+  {
+    key: 2226990,
+    commonName: 'Signal crayfish',
+    scientificName: 'Pacifastacus leniusculus',
+    group: 'Crustacean crayfish',
+    tags: ['Invasive'],
+  },
+  {
+    key: 2287072,
+    commonName: 'Zebra mussel',
+    scientificName: 'Dreissena polymorpha',
+    group: 'Mollusc mussel',
     tags: ['Invasive'],
   },
   {

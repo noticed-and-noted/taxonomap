@@ -10,7 +10,7 @@ test(
     await expect(page).toHaveURL(/analyse=1/);
 
     const panel = page.getByRole('list', { name: 'Species' });
-    await page.getByRole('searchbox', { name: 'Filter species' }).fill('beetle');
+    await page.getByRole('searchbox', { name: 'Search species' }).fill('beetle');
     await expect(panel.getByRole('listitem')).toHaveCount(1);
     await page.getByRole('button', { name: 'Show spread for Harlequin ladybird' }).click();
     await expect(page).toHaveURL(/ak=4989904/);
@@ -68,3 +68,20 @@ test('spread shows cells first recorded by year and steps through the years', { 
   await expect(page.getByText('Recorded before 2017')).toBeHidden();
   await expect(page.getByText('First record in each country')).toBeVisible();
 });
+
+test(
+  'typing searches every species in GBIF, with migration tags and the data credit',
+  { tag: '@mobile' },
+  async ({ page }) => {
+    await page.goto('/?analyse=1');
+    const filter = page.getByRole('searchbox', { name: 'Search species' });
+    await filter.fill('Turdus merula');
+    // GBIF is searched as you type, below the picked species: no Enter needed.
+    const row = page
+      .getByRole('list', { name: 'More species in GBIF' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Turdus merula' });
+    await expect(row).toContainText('Migrates');
+    await expect(page.getByText(/Encyclopedia of Life/)).toBeVisible();
+  },
+);

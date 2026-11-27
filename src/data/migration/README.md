@@ -1,6 +1,6 @@
 # Migration data
 
-Whether a species migrates, matched once to GBIF backbone keys and kept in the repo. It changes rarely, so it isn't fetched or baked: the app reads `migration.json` as a static file. Nothing reads it yet; it's for the Analyse picker's "Migrates" tag.
+Whether a species migrates, matched once to GBIF backbone keys and kept in the repo. It changes rarely, so it isn’t fetched or baked: the app reads `migration.json` as a static file, loaded on first use (`src/lib/analyse/migration.ts`), for the "Migrates" tag on species found by searching in Analyse.
 
 | File                | Holds                                                                                  |
 | ------------------- | -------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ When a species has several values, a fish pattern wins, then "migratory" plus "n
 
 ## Before shipping it
 
-- **Licences are not confirmed.** The export doesn't carry them per record. Check each source's terms; Animal Diversity Web's content is published for non-commercial use. Credit the sources on the data credits.
+- **Licences**: the export doesn't carry them per record. Animal Diversity Web's rows (published for non-commercial use) are kept, by decision on 2026-11-27. The terms of Sibly et al. 2012, Polytraits and EOL's unsourced fish set are still to be confirmed. Analyse credits the sources under its search results.
 - **Gaps**: the monarch, painted lady and Arctic tern aren't in it. AVONET (every bird) can be matched the same way and merged in; species with no entry get no tag.
 - Nothing a visitor does is sent to EOL or Zenodo; GBIF's matcher was called once, while preparing the file.
 
