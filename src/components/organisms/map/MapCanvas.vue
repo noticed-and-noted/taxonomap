@@ -31,6 +31,7 @@ import {
   geometryOf,
   nearGeoJson,
   selectedGeoJson,
+  shareFillColor,
   spreadFillColor,
   type MapColors,
 } from '~/lib/map/style';
@@ -44,9 +45,10 @@ import {
   sameView,
   $selectedHex,
 } from '~/stores/explorer';
-import { $mapFilter } from '~/stores/map-filter';
+import { formatShare } from '~/lib/analyse/effort';
+import { $mapBaseline, $mapFilter } from '~/stores/map-filter';
 import { $spreadMap } from '~/stores/spread';
-import { $analyseYears, yearsIncluded } from '~/stores/analyse';
+import { $analyseGroup, $analyseYears, yearsIncluded } from '~/stores/analyse';
 import { $mode } from '~/stores/mode';
 import {
   $busiestHexBox,
@@ -113,7 +115,9 @@ const MIN_ZOOM = 1;
 
 /** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
-  if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', fillColor(level));
+  // Compared with a baseline, cells are coloured by their share of its records rather than their own count.
+  const hexColour = $mapBaseline.get() ? shareFillColor() : fillColor(level);
+  if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', hexColour);
   if (map?.getLayer(SPREAD_LAYER)) map.setPaintProperty(SPREAD_LAYER, 'fill-color', spreadFillColor());
 }
 
@@ -284,6 +288,18 @@ function onMove(event: MapMouseEvent) {
       type: 'FeatureCollection',
       features: [{ type: 'Feature', properties: {}, geometry: feature.geometry }],
     });
+  const share = feature.properties.share;
+  const group = $analyseGroup.get();
+  if (share !== undefined && group) {
+    tooltip.value = {
+      x: event.point.x,
+      y: event.point.y,
+      text: `${formatShare(share)} of ${group.name} records`,
+      wkt: geometry.wkt,
+    };
+    map!.getCanvas().style.cursor = 'pointer';
+    return;
+  }
   // The tile's count is an estimate (~) until the exact one is known.
   const filter = $mapFilter.get();
   const exact = knownCount(filter, geometry.wkt);
@@ -369,7 +385,11 @@ async function loadMapLibre(): Promise<MapLibre> {
 function occLayerOptions(): OccLayerOptions {
   return {
     filter: () => $mapFilter.get(),
-    listenFilter: (onChange) => $mapFilter.listen(onChange),
+    baseline: () => $mapBaseline.get(),
+    listenFilter: (onChange) => {
+      const stops = [$mapFilter.listen(onChange), $mapBaseline.listen(onChange)];
+      return () => stops.forEach((stop) => stop());
+    },
     isEmpty: knownEmpty,
     onCells: replaceHexes,
     onChanges: changeHexes,
@@ -450,8 +470,8 @@ function listenToStores() {
   cleanups.push(
     $basemap.listen(() => void rebuildStyle()),
     $mapLoad.listen(onLoadChange),
-    // A new density ramp only repaints the hexes.
-    $ramp.listen(() => paintHexes()),
+    // A new density ramp, or comparing with a baseline or not, only repaints the hexes.
+    ...[$ramp, $mapBaseline].map((store) => store.listen(() => paintHexes())),
     $spreadMap.listen((collection) => drawSpread(collection)),
     $mapView.listen((view) => {
       if (!map) return;

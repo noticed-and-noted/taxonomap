@@ -64,9 +64,29 @@ test('spread shows cells first recorded by year and steps through the years', { 
   await years.nth(2).click();
   await expect(page).toHaveURL(/ay=2017/);
 
-  await page.locator('.segmented label', { hasText: 'New only' }).click();
-  await expect(page.getByText('Recorded before 2017')).toBeHidden();
-  await expect(page.getByText('First record in each country')).toBeVisible();
+  // Dragging along the bars moves through the years.
+  const box = (await page.getByRole('group', { name: 'Cells first recorded, by year' }).boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.1, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.95, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(years.last()).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'About Spread' }).hover();
+  await expect(page.getByRole('tooltip')).toContainText('A cell counts once it has 2 records');
+  await expect(page.getByRole('table', { name: 'First record in each country' })).toBeVisible();
+  // Countries count every year, whatever the range: the fake world's records start in 1900.
+  const countries = page.getByRole('table', { name: 'First record in each country' });
+  const unitedKingdom = countries.getByRole('row').filter({ hasText: 'United Kingdom' });
+  await expect(unitedKingdom).toContainText('1900');
+  await countries.getByRole('button', { name: 'Records' }).click();
+  await expect(countries.getByRole('columnheader', { name: 'Records' })).toHaveAttribute('aria-sort', 'descending');
+  await countries.getByRole('button', { name: 'Country' }).click();
+  await expect(countries.getByRole('row').nth(1)).toContainText('France');
+
+  // A country moves the map to the species' records there.
+  const view = new URL(page.url()).searchParams.get('view');
+  await unitedKingdom.getByRole('button', { name: /Show United Kingdom on the map/ }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get('view')).not.toBe(view);
 });
 
 test(
@@ -85,3 +105,30 @@ test(
     await expect(page.getByText(/Encyclopedia of Life/)).toBeVisible();
   },
 );
+
+test("the years reach back to the species' earliest record", async ({ page }) => {
+  await page.goto('/?analyse=1&ak=2490719');
+  await page.getByRole('button', { name: /^Years/ }).click();
+  // The fake world's records start in 1900; the default range starts in 2000.
+  await expect(page.getByRole('slider', { name: 'First year included' })).toHaveAttribute('min', '1900');
+  await page.getByRole('button', { name: 'All years' }).click();
+  await expect(page).toHaveURL(/ayr=1900-\d{4}/);
+  await expect(page.getByText(/takes a little longer to load/)).toBeVisible();
+  await page.getByRole('button', { name: 'Since 2000' }).click();
+  await expect(page).not.toHaveURL(/ayr=/);
+});
+
+test('both views can adjust for recording effort', { tag: '@mobile' }, async ({ page }) => {
+  await page.goto('/?analyse=1&ak=2490719');
+  // Migration: the blackbird as a share of all birds' records, on the bars and the map's legend.
+  await page.getByRole('checkbox', { name: 'Adjust for how many people record' }).check();
+  await expect(page).toHaveURL(/ame=1/);
+  await expect(page.getByRole('group', { name: 'Share of records by month' })).toBeVisible();
+  await expect(page.getByText(/% of bird records/).first()).toBeVisible();
+
+  // Spread: new cells per million records of everything that year.
+  await page.getByRole('tab', { name: 'Spread' }).click();
+  await page.getByRole('checkbox', { name: 'Adjust for how much is recorded' }).check();
+  await expect(page).toHaveURL(/ase=1/);
+  await expect(page.getByText(/per million records/).first()).toBeVisible();
+});

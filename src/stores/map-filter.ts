@@ -4,7 +4,15 @@
  */
 import { computed } from 'nanostores';
 import type { OccurrenceFilter } from '~/lib/gbif';
-import { $analyseMonth, $analyseTaxon, $analyseView, $analyseYears, yearsIncluded } from './analyse';
+import {
+  $analyseGroup,
+  $analyseMonth,
+  $analyseTaxon,
+  $analyseView,
+  $analyseYears,
+  $migrationEffort,
+  yearsIncluded,
+} from './analyse';
 import { $occurrenceFilter } from './filters';
 import { $mode } from './mode';
 
@@ -25,5 +33,17 @@ export const $mapFilter = computed(
   (analyse, view, month, filter): OccurrenceFilter => {
     if (!analyse) return filter;
     return view === 'migration' ? { ...analyse, months: [month] } : analyse;
+  },
+);
+
+/**
+ * What the map compares its records with when Migration adjusts for how many people record: the same records of the
+ * species' whole group (all birds, say), cell by cell. Null when the map draws plain record counts.
+ */
+export const $mapBaseline = computed(
+  [$mapFilter, $analyseFilter, $analyseView, $migrationEffort, $analyseGroup],
+  (filter, analyse, view, isAdjusted, group): OccurrenceFilter | null => {
+    if (!analyse || view !== 'migration' || !isAdjusted || !group) return null;
+    return { ...filter, taxonKey: group.key };
   },
 );

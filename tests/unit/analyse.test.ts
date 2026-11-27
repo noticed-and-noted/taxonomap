@@ -47,9 +47,10 @@ describe('Analyse state', () => {
     expect(stores.$analyseYears.get()).toEqual([2010, 2020]);
   });
 
-  it('ignores a malformed year range, and keeps a range inside the years offered', async () => {
+  it('ignores a malformed year range, and keeps a range inside the years GBIF holds', async () => {
     expect((await loadAnalyseStores('?ayr=soon')).$analyseYears.get()).toBeNull();
-    expect((await loadAnalyseStores('?ayr=1990-2015')).$analyseYears.get()).toEqual([2000, 2015]);
+    expect((await loadAnalyseStores('?ayr=1990-2015')).$analyseYears.get()).toEqual([1990, 2015]);
+    expect((await loadAnalyseStores('?ayr=1400-2015')).$analyseYears.get()).toEqual([1500, 2015]);
     const stores = await loadAnalyseStores('?ayr=2020-2010');
     expect(stores.$analyseYears.get()).toEqual([2020, 2020]);
   });

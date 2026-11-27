@@ -4,8 +4,10 @@ import type { Hex } from '~/lib/map/occGrid';
 
 const gbif = vi.hoisted(() => ({
   tileStatus: 200,
-  countryFacets: new Map<string, { name: string; count: number }[]>(),
+  countryYears: new Map<string, { count: number; years: Map<number, number> }>(),
   tileYears: [] as string[],
+  yearFacets: null as { name: string; count: number }[] | null,
+  facetFilters: [] as unknown[],
 }));
 
 /** A cell with a total, its id standing for its place. */
@@ -40,13 +42,14 @@ vi.mock('~/lib/map/hexDecoder', () => ({
 
 vi.mock('~/lib/gbif', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/lib/gbif')>()),
-  occurrenceFacets: async (filter: { year: [number, number] }) => ({
-    count: 0,
-    // A year with no records comes back with no country facet at all.
-    facets: gbif.countryFacets.has(filter.year.join(','))
-      ? { country: gbif.countryFacets.get(filter.year.join(',')) }
-      : {},
-  }),
+  occurrenceFacets: async (filter: unknown) => {
+    gbif.facetFilters.push(filter);
+    return { count: 0, facets: gbif.yearFacets ? { year: gbif.yearFacets } : {} };
+  },
+  countryYearCounts: async (filter: unknown) => {
+    gbif.facetFilters.push(filter);
+    return gbif.countryYears;
+  },
 }));
 
 beforeEach(() => {
@@ -119,16 +122,11 @@ describe('spreadCollection', () => {
 
   it('draws the cells first recorded in the year as new and earlier ones as before', async () => {
     const { spreadCollection } = await import('~/lib/analyse/spread');
-    const states = spreadCollection(cells, 2005, false).features.map((feature) => feature.properties);
+    const states = spreadCollection(cells, 2005).features.map((feature) => feature.properties);
     expect(states).toEqual([
       { id: 'old', firstYear: 2001, state: 'before' },
       { id: 'new', firstYear: 2005, state: 'new' },
     ]);
-  });
-
-  it('draws only the new cells when asked', async () => {
-    const { spreadCollection } = await import('~/lib/analyse/spread');
-    expect(spreadCollection(cells, 2005, true).features.map((feature) => feature.properties?.['id'])).toEqual(['new']);
   });
 });
 
@@ -162,15 +160,27 @@ describe('loading the spread', () => {
     await expect(loadSpreadCells({}, [2000, 2000], new AbortController().signal)).rejects.toThrow('429');
   });
 
-  it("dates each country from GBIF's country counts year by year", async () => {
-    gbif.countryFacets = new Map([
-      ['1500,1999', [{ name: 'GB', count: 3 }]],
-      ['2000,2000', [{ name: 'FR', count: 1 }]],
-      ['2001,2001', [{ name: 'FR', count: 4 }]],
+  it("lists each country's records and first year from one request, over all years", async () => {
+    gbif.countryYears = new Map([
+      [
+        'GB',
+        {
+          count: 40,
+          years: new Map([
+            [1995, 2],
+            [1990, 1],
+          ]),
+        },
+      ],
+      ['FR', { count: 3, years: new Map() }],
     ]);
-    const { loadCountryFirstYears } = await import('~/lib/analyse/spread');
-    const found = await loadCountryFirstYears({ taxonKey: 5 }, [2000, 2002], new AbortController().signal);
-    expect(Object.fromEntries(found)).toEqual({ GB: 1999, FR: 2001 });
+    const { loadCountryRecords } = await import('~/lib/analyse/spread');
+    const found = await loadCountryRecords({ taxonKey: 5, year: [2000, 2002] }, new AbortController().signal);
+    expect(found).toEqual([
+      { code: 'GB', count: 40, firstYear: 1990 },
+      { code: 'FR', count: 3, firstYear: null },
+    ]);
+    expect(gbif.facetFilters.at(-1)).toEqual({ taxonKey: 5 });
   });
 
   it('builds the world tile from the filter', async () => {
@@ -204,11 +214,25 @@ describe('Spread on the map', () => {
     expect(stores.$spreadMap.get()).toBeNull();
     stores.$spreadCells.set(cells);
     expect(stores.$spreadMap.get()?.features).toHaveLength(1);
-    stores.$spreadOnlyNew.set(true);
+    // In a later year the cell is still drawn, as recorded before it.
     stores.$analyseYear.set(2006);
-    expect(stores.$spreadMap.get()?.features).toHaveLength(0);
+    expect(stores.$spreadMap.get()?.features[0]?.properties).toMatchObject({ state: 'before' });
     stores.$analyseView.set('migration');
     expect(stores.$spreadMap.get()).toBeNull();
+  });
+
+  it('starts at the first year a cell appears, leaving off empty years before it', async () => {
+    const stores = await loadSpreadStores('?analyse=1&av=spread&ayr=1990-2010&ay=1995');
+    expect(stores.$spreadRange.get()).toEqual([1990, 2010]);
+    stores.$spreadCells.set(cells);
+    expect(stores.$spreadRange.get()).toEqual([2005, 2010]);
+    expect(stores.$spreadYear.get()).toBe(2005);
+    // A cell recorded before the range means Spread starts with the range.
+    stores.$spreadCells.set({ ...cells, firstYears: new Map([['a', 1989]]) });
+    expect(stores.$spreadRange.get()).toEqual([1990, 2010]);
+    // A cell later than the range still leaves the last year to show.
+    stores.$spreadCells.set({ ...cells, firstYears: new Map([['a', 2020]]) });
+    expect(stores.$spreadRange.get()).toEqual([2010, 2010]);
   });
 
   it('forgets the year when Analyse is left', async () => {
@@ -261,5 +285,41 @@ describe('useSpreadCells', () => {
     await flush();
     expect($spreadCells.get()).not.toBeNull();
     scope.stop();
+  });
+});
+
+describe('allRecordsByYear', () => {
+  it("counts every species' records each year, keeping the filter's other conditions", async () => {
+    const { allRecordsByYear } = await import('~/lib/analyse/years');
+    gbif.yearFacets = [
+      { name: '2004', count: 90 },
+      { name: '2005', count: 12 },
+    ];
+    const found = await allRecordsByYear(
+      { taxonKey: 5, taxonKeys: [6], year: [1990, 2000], maxUncertaintyM: 100 },
+      [2004, 2005],
+      new AbortController().signal,
+    );
+    expect(Object.fromEntries(found)).toEqual({ 2004: 90, 2005: 12 });
+    expect(gbif.facetFilters.at(-1)).toEqual({ maxUncertaintyM: 100, year: [2004, 2005] });
+    gbif.yearFacets = null;
+    expect((await allRecordsByYear({}, [2004, 2005], new AbortController().signal)).size).toBe(0);
+  });
+});
+
+describe('earliestRecordYear', () => {
+  it('finds the year mapped records first add up to two, whatever years the filter holds', async () => {
+    const { earliestRecordYear } = await import('~/lib/analyse/years');
+    gbif.yearFacets = [
+      { name: '2004', count: 90 },
+      { name: '1871', count: 1 },
+      { name: '1990', count: 12 },
+    ];
+    expect(await earliestRecordYear({ taxonKey: 5, year: [2010, 2020] }, new AbortController().signal)).toBe(1990);
+    expect(gbif.facetFilters.at(-1)).toEqual({ taxonKey: 5, georeferenced: true });
+    gbif.yearFacets = [{ name: '1871', count: 1 }];
+    expect(await earliestRecordYear({ taxonKey: 5 }, new AbortController().signal)).toBeNull();
+    gbif.yearFacets = null;
+    expect(await earliestRecordYear({ taxonKey: 5 }, new AbortController().signal)).toBeNull();
   });
 });

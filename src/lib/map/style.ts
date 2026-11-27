@@ -13,6 +13,7 @@ import type {
 import { BASEMAPS, plainStyleUrl, type BasemapId, type RasterDef, type Theme } from '~/lib/basemaps';
 import { polygonToWkt } from '~/lib/gbif';
 import { circleRing } from '~/lib/gbif/params';
+import { SHARE_THRESHOLDS } from '~/lib/analyse/effort';
 import { rampColors, thresholdsAt } from '~/lib/ramp';
 import type { HexGeometry } from '~/stores/map-messages';
 import type { RecordPlace } from './recordPlace';
@@ -66,6 +67,14 @@ export function fillColor(level: number): ExpressionSpecification {
   const colors = rampColors();
   const step: unknown[] = ['step', ['get', 'total'], colors[0]];
   thresholdsAt(level).forEach((threshold, index) => step.push(threshold, colors[index + 1]));
+  return step as ExpressionSpecification;
+}
+
+/** Bins for cells coloured by their share of a baseline's records (Migration adjusted for recording effort). */
+export function shareFillColor(): ExpressionSpecification {
+  const colors = rampColors();
+  const step: unknown[] = ['step', ['coalesce', ['get', 'share'], 0], colors[0]];
+  SHARE_THRESHOLDS.forEach((threshold, index) => step.push(threshold, colors[index + 1]));
   return step as ExpressionSpecification;
 }
 

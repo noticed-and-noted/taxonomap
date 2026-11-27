@@ -1,10 +1,11 @@
 /**
  * Spread: where and when a species was first recorded. GBIF's tiles hold one total per cell with no years, so the
  * spread is built from one whole-world tile per year (plus one for every year before the range): a cell's first year
- * is the year its running total reaches `MIN_RECORDS`. Countries work the same way from per-year country counts.
+ * is the year its running total reaches `MIN_RECORDS`. Each country's records over all years come from one GraphQL
+ * request.
  */
 import pLimit from 'p-limit';
-import { $gbifStale, countRequest, occurrenceFacets, worldTileUrl, type OccurrenceFilter } from '~/lib/gbif';
+import { $gbifStale, countRequest, countryYearCounts, worldTileUrl, type OccurrenceFilter } from '~/lib/gbif';
 import { MIN_YEAR } from '~/lib/dates';
 import { decodeOffThread } from '~/lib/map/hexDecoder';
 import { mergeHexes, type Hex } from '~/lib/map/occGrid';
@@ -15,8 +16,6 @@ export const MIN_RECORDS = 2;
 const WORLD_HEX_PER_TILE = 200;
 /** Requests in flight at once. */
 const CONCURRENCY = 6;
-/** Countries a facet can return (there are about 250). */
-const COUNTRY_FACET_LIMIT = 300;
 
 /** Counts per place (a cell id or a country code). */
 export type PlaceCounts = ReadonlyMap<string, number>;
@@ -66,12 +65,12 @@ export function yearlyArrivals(found: ReadonlyMap<string, number>, first: number
   });
 }
 
-/** The cells to draw for a year: those first recorded in it ("new") and, unless only new ones are wanted, before it. */
-export function spreadCollection(cells: SpreadCells, year: number, onlyNew: boolean): GeoJSON.FeatureCollection {
+/** The cells to draw for a year: those first recorded in it ("new") and those recorded before it. */
+export function spreadCollection(cells: SpreadCells, year: number): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const [id, firstYear] of cells.firstYears) {
     const isNew = firstYear === year;
-    if (firstYear > year || (onlyNew && !isNew)) continue;
+    if (firstYear > year) continue;
     const hex = cells.hexes.get(id)!;
     features.push({ ...hex, properties: { id, firstYear, state: isNew ? 'new' : 'before' } });
   }
@@ -90,43 +89,44 @@ async function cellCounts(filter: OccurrenceFilter, signal: AbortSignal) {
   return decodeOffThread(await response.arrayBuffer(), { x: 0, y: 0 }, 0);
 }
 
-/** Records per country for `filter`. */
-async function countryCounts(filter: OccurrenceFilter, signal: AbortSignal): Promise<PlaceCounts> {
-  const result = await occurrenceFacets(filter, ['country'], { facetLimit: COUNTRY_FACET_LIMIT, signal });
-  return new Map((result.facets['country'] ?? []).map((facet) => [facet.name, facet.count]));
+/** Records per cell id from a world tile's cells, each cell counted once. */
+function cellTotals(cells: Hex[]): PlaceCounts {
+  return new Map([...mergeHexes([cells]).values()].map((hex) => [hex.properties.id, hex.properties.total]));
 }
 
-/** Runs `count` for the years before the range and for each year in it, a few at a time. */
-async function countByYear<Counts>(
-  filter: OccurrenceFilter,
-  [first, last]: readonly [number, number],
-  count: (yearFilter: OccurrenceFilter) => Promise<Counts>,
-) {
+/** The world tiles for the years before the range and for each year in it, a few at a time. */
+async function cellsByYear(filter: OccurrenceFilter, [first, last]: readonly [number, number], signal: AbortSignal) {
   const limit = pLimit(CONCURRENCY);
   const years = Array.from({ length: last - first + 1 }, (_unused, index) => first + index);
   const [before, ...perYear] = await Promise.all([
-    limit(() => count({ ...filter, year: [MIN_YEAR, first - 1] })),
-    ...years.map((year) => limit(() => count({ ...filter, year: [year, year] }))),
+    limit(() => cellCounts({ ...filter, year: [MIN_YEAR, first - 1] }, signal)),
+    ...years.map((year) => limit(() => cellCounts({ ...filter, year: [year, year] }, signal))),
   ]);
   return { before: before!, byYear: new Map(years.map((year, index) => [year, perYear[index]!])) };
 }
 
 /** Each cell's first year in the range, for a filter without years. */
 export async function loadSpreadCells(filter: OccurrenceFilter, range: readonly [number, number], signal: AbortSignal) {
-  const { before, byYear } = await countByYear(filter, range, (yearFilter) => cellCounts(yearFilter, signal));
+  const { before, byYear } = await cellsByYear(filter, range, signal);
   const hexes = mergeHexes([before, ...byYear.values()]);
-  const totals = (cells: Hex[]): PlaceCounts =>
-    new Map([...mergeHexes([cells]).values()].map((hex) => [hex.properties.id, hex.properties.total]));
-  const yearTotals = new Map([...byYear].map(([year, cells]) => [year, totals(cells)]));
-  return { hexes, firstYears: firstYears(totals(before), yearTotals, range[0]) } satisfies SpreadCells;
+  const yearTotals = new Map([...byYear].map(([year, cells]) => [year, cellTotals(cells)]));
+  return { hexes, firstYears: firstYears(cellTotals(before), yearTotals, range[0]) } satisfies SpreadCells;
 }
 
-/** Each country's first year in the range (ISO codes), for a filter without years. */
-export async function loadCountryFirstYears(
-  filter: OccurrenceFilter,
-  range: readonly [number, number],
-  signal: AbortSignal,
-) {
-  const { before, byYear } = await countByYear(filter, range, (yearFilter) => countryCounts(yearFilter, signal));
-  return firstYears(before, byYear, range[0]);
+/** A country's records of the species: how many, and the year of the first (null when none has a year). */
+export interface CountryRecords {
+  code: string;
+  count: number;
+  firstYear: number | null;
+}
+
+/** Every country's records matching a filter, over all years whatever the filter's own (ISO codes). */
+export async function loadCountryRecords(filter: OccurrenceFilter, signal: AbortSignal): Promise<CountryRecords[]> {
+  const { year: _years, ...allYears } = filter;
+  const counts = await countryYearCounts(allYears, { signal });
+  return [...counts].map(([code, { count, years }]) => ({
+    code,
+    count,
+    firstYear: years.size ? Math.min(...years.keys()) : null,
+  }));
 }

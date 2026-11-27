@@ -4,9 +4,12 @@
  * the species, the years included and the Migration and Spread tabs.
  */
 import { useStore } from '@nanostores/vue';
+import { watch } from 'vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import { useSpreadCells } from '~/composables/useSpreadCells';
-import { $analyseTaxon, $analyseView, ANALYSE_VIEWS } from '~/stores/analyse';
+import { recordingGroup } from '~/lib/analyse/effort';
+import { getSpecies } from '~/lib/gbif';
+import { $analyseGroup, $analyseTaxon, $analyseView, ANALYSE_VIEWS } from '~/stores/analyse';
 import { $analysePanelOpen } from '~/stores/mode';
 import AnalyseMigration from './AnalyseMigration.vue';
 import AnalyseSpread from './AnalyseSpread.vue';
@@ -19,6 +22,21 @@ const VIEW_LABELS = { migration: 'Migration', spread: 'Spread' } as const;
 const isOpen = useStore($analysePanelOpen);
 const taxon = useStore($analyseTaxon);
 const view = useStore($analyseView);
+
+// The group Migration's effort setting compares the species with (its class, as GBIF files it).
+watch(
+  taxon,
+  async (key, _previous, onCleanup) => {
+    $analyseGroup.set(null);
+    if (key === null) return;
+    const controller = new AbortController();
+    onCleanup(() => controller.abort());
+    // Without it the setting has nothing to compare with, so it stays off (see AnalyseMigration).
+    const usage = await getSpecies(key, controller.signal).catch(() => undefined);
+    if (usage && !controller.signal.aborted) $analyseGroup.set(recordingGroup(usage));
+  },
+  { immediate: true },
+);
 
 // Loaded here, not in the Spread tab, so the map keeps the spread while the phone sheet is closed.
 const spreadLoad = useSpreadCells();

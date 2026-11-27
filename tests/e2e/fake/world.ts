@@ -300,8 +300,8 @@ function facetLabel(field: string, key: string) {
 
 /**
  * GBIF's GraphQL API, answered by the REST fake: facet counts with names
- * (namedOccurrenceFacets), or a taxon facet with each value's first records
- * (firstRecordsByTaxon).
+ * (namedOccurrenceFacets), a taxon facet with each value's first records
+ * (firstRecordsByTaxon), or each country's records by year (countryYearCounts).
  */
 /** Publishing organisations, biggest first, for the How filter's publisher search. */
 const PUBLISHERS = [
@@ -340,6 +340,8 @@ function search(query: string, predicate: PredicatePart) {
     size: Number(size),
   }));
   const perTaxon = /documents\(size: (\d+)\) \{ results/.exec(query)?.[1];
+  // A facet nested in each bucket (countryYearCounts: each country's records by year).
+  const nested = /occurrences \{ facet \{ (\w+)\(size: (\d+)\)/.exec(query);
   const facet: Record<string, unknown[]> = {};
   for (const { field, size } of fields) {
     const rest = REST_FACET[field] ?? field;
@@ -349,6 +351,7 @@ function search(query: string, predicate: PredicatePart) {
     const counts = occurrenceSearch(facetSearch).facets[0]?.counts ?? [];
     facet[field] = counts.map(({ name, count }) => {
       const bucket = { key: name, count, ...facetLabel(field, name) };
+      if (nested && field !== nested[1]) return { ...bucket, occurrences: nestedFacet(search, rest, name, nested) };
       if (!perTaxon) return bucket;
       const recordSearch = new URLSearchParams(search);
       recordSearch.set('taxonKey', name);
@@ -357,6 +360,16 @@ function search(query: string, predicate: PredicatePart) {
     });
   }
   return { documents: { total: occurrenceSearch(search).count, ...datedRecords(query, search) }, facet };
+}
+
+/** One bucket's nested facet: the search narrowed to the bucket's value, faceted by the nested field. */
+function nestedFacet(search: URLSearchParams, field: string, value: string, [, nestedField, size]: RegExpExecArray) {
+  const bucketSearch = new URLSearchParams(search);
+  bucketSearch.set(field, value);
+  bucketSearch.set('facet', nestedField!);
+  bucketSearch.set(`${nestedField}.facetLimit`, size!);
+  const counts = occurrenceSearch(bucketSearch).facets[0]?.counts ?? [];
+  return { facet: { [nestedField!]: counts.map(({ name, count }) => ({ key: Number(name), count })) } };
 }
 
 /** The ranks a fake record carries flat, as GraphQL lists them under `classification`. */

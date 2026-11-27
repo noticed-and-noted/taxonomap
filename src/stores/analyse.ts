@@ -3,6 +3,9 @@
  * Spread), the years included (`ayr`, its own range, apart from the When filter), Migration's month (`am`) and
  * Spread's year (`ay`).
  */
+import { atom } from 'nanostores';
+import type { RecordingGroup } from '~/lib/analyse/effort';
+import { MIN_YEAR } from '~/lib/dates';
 import { $fitOnSearch } from './fit-search';
 import { flyToRecords } from './fly-to-taxa';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
@@ -10,10 +13,13 @@ import { codecs, urlAtom, type UrlCodec } from './url-sync';
 export const ANALYSE_VIEWS = ['migration', 'spread'] as const;
 export type AnalyseView = (typeof ANALYSE_VIEWS)[number];
 
-/** The earliest year Analyse offers: older records are too few and too patchy to show a pattern. */
+/**
+ * The first year Analyse includes until the viewer picks another. Earlier years can be picked, back to a species'
+ * first record, but Spread asks GBIF once per year, so the default starts here.
+ */
 export const ANALYSE_FIRST_YEAR = 2000;
 
-/** Years included, first and last; null is every year Analyse offers. */
+/** Years included, first and last; null is the default, `ANALYSE_FIRST_YEAR` to this year. */
 export type YearSpan = readonly [first: number, last: number] | null;
 
 /** The last year Analyse offers: this one. */
@@ -21,10 +27,10 @@ export function analyseLastYear(): number {
   return new Date().getFullYear();
 }
 
-/** Clamps a span to the years Analyse offers, or null when it covers them all. */
+/** Clamps a span to the years GBIF holds up to this one, or null when it is the default. */
 export function clampYears(first: number, last: number): YearSpan {
   const lastYear = analyseLastYear();
-  const from = Math.min(Math.max(first, ANALYSE_FIRST_YEAR), lastYear);
+  const from = Math.min(Math.max(first, MIN_YEAR), lastYear);
   const to = Math.min(Math.max(last, from), lastYear);
   return from === ANALYSE_FIRST_YEAR && to === lastYear ? null : [from, to];
 }
@@ -70,6 +76,13 @@ export const $analyseYears = urlAtom(yearsCodec);
 export const $analyseMonth = urlAtom(monthCodec);
 /** Spread's year; null is the last year included. */
 export const $analyseYear = urlAtom(yearCodec);
+/** Migration as a share of the species' group's records, for how many people record (`ame`). */
+export const $migrationEffort = urlAtom(codecs.bool('ame', { scope: 'map', history: 'replace' }));
+/** Spread as new cells per million records of everything each year (`ase`). */
+export const $spreadEffort = urlAtom(codecs.bool('ase', { scope: 'map', history: 'replace' }));
+
+/** The group the species being analysed is compared with; null until looked up, or with none. */
+export const $analyseGroup = atom<RecordingGroup | null>(null);
 
 /** The years a span covers, filling in every year Analyse offers for null. */
 export function yearsIncluded(span: YearSpan): readonly [number, number] {
@@ -90,4 +103,7 @@ export function resetAnalyse(): void {
   $analyseYears.set(null);
   $analyseMonth.set(monthCodec.default);
   $analyseYear.set(null);
+  $migrationEffort.set(false);
+  $spreadEffort.set(false);
+  $analyseGroup.set(null);
 }

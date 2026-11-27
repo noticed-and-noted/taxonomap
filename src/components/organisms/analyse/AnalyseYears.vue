@@ -1,33 +1,67 @@
 <script setup lang="ts">
 /**
  * Analyse's "Years" setting: a closed summary row that opens to a two-handle slider and presets.
- * It is Analyse's own range, apart from the When filter.
+ * It is Analyse's own range, apart from the When filter, and reaches back to the species' earliest record.
  */
 import { useStore } from '@nanostores/vue';
-import { computed, ref, useId } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import { useLatestLoad } from '~/composables/useLatestLoad';
+import { earliestRecordYear } from '~/lib/analyse/years';
 import { $analyseYears, ANALYSE_FIRST_YEAR, analyseLastYear, clampYears } from '~/stores/analyse';
+import { $analyseFilter } from '~/stores/map-filter';
 
 const LAST_YEAR = analyseLastYear();
-const SPAN = LAST_YEAR - ANALYSE_FIRST_YEAR;
-
-const PRESETS = [
-  { label: 'All years', first: ANALYSE_FIRST_YEAR },
-  { label: 'Last 10 years', first: LAST_YEAR - 9 },
-  { label: 'Last 5 years', first: LAST_YEAR - 4 },
-] as const;
 
 const years = useStore($analyseYears);
 const first = computed(() => years.value?.[0] ?? ANALYSE_FIRST_YEAR);
 const last = computed(() => years.value?.[1] ?? LAST_YEAR);
 
+const analyseFilter = useStore($analyseFilter);
+/** The species' earliest record, where the slider starts; null until known. */
+const earliest = ref<number | null>(null);
+const { run } = useLatestLoad();
+watch(
+  // Its own years don't change when the species' first record was.
+  () => {
+    const { year: _years, ...rest } = analyseFilter.value ?? {};
+    return analyseFilter.value ? JSON.stringify(rest) : '';
+  },
+  () => {
+    earliest.value = null;
+    const current = analyseFilter.value;
+    if (!current) return;
+    void run(async (signal) => {
+      const found = await earliestRecordYear(current, signal);
+      if (!signal.aborted) earliest.value = found;
+    });
+  },
+  { immediate: true },
+);
+
+/** Where the slider starts: the earliest record, or the default first year until that's known. */
+const minYear = computed(() => Math.min(earliest.value ?? ANALYSE_FIRST_YEAR, LAST_YEAR));
+const span = computed(() => Math.max(1, LAST_YEAR - minYear.value));
+
+const presets = computed(() => [
+  { label: 'All years', first: minYear.value },
+  ...(minYear.value < ANALYSE_FIRST_YEAR ? [{ label: `Since ${ANALYSE_FIRST_YEAR}`, first: ANALYSE_FIRST_YEAR }] : []),
+  { label: 'Last 10 years', first: LAST_YEAR - 9 },
+  { label: 'Last 5 years', first: LAST_YEAR - 4 },
+]);
+
 const isOpen = ref(false);
 const bodyId = useId();
 
-const trackStyle = computed(() => ({
-  left: `${((first.value - ANALYSE_FIRST_YEAR) * 100) / SPAN}%`,
-  width: `${((last.value - first.value) * 100) / SPAN}%`,
-}));
+const trackStyle = computed(() => {
+  const shownFirst = Math.max(first.value, minYear.value);
+  return {
+    left: `${((shownFirst - minYear.value) * 100) / span.value}%`,
+    width: `${((last.value - shownFirst) * 100) / span.value}%`,
+  };
+});
+/** Spread asks GBIF once per year, so a long range takes a while. */
+const isLongRange = computed(() => last.value - first.value + 1 > LAST_YEAR - ANALYSE_FIRST_YEAR + 1);
 
 /** Stores a new span (null when it covers every year, so it stays out of the URL). */
 const setYears = (from: number, to: number) => $analyseYears.set(clampYears(from, to));
@@ -62,7 +96,7 @@ const isPreset = (presetFirst: number) => first.value === presetFirst && last.va
         <span class="absolute top-[9px] h-1 rounded-full bg-accent" :style="trackStyle" aria-hidden="true" />
         <input
           type="range"
-          :min="ANALYSE_FIRST_YEAR"
+          :min="minYear"
           :max="LAST_YEAR"
           step="1"
           :value="first"
@@ -71,7 +105,7 @@ const isPreset = (presetFirst: number) => first.value === presetFirst && last.va
         />
         <input
           type="range"
-          :min="ANALYSE_FIRST_YEAR"
+          :min="minYear"
           :max="LAST_YEAR"
           step="1"
           :value="last"
@@ -81,7 +115,7 @@ const isPreset = (presetFirst: number) => first.value === presetFirst && last.va
       </div>
       <div class="flex flex-wrap gap-1.5">
         <button
-          v-for="preset in PRESETS"
+          v-for="preset in presets"
           :key="preset.label"
           type="button"
           class="h-7 rounded-sm border px-2.5 text-xs"
@@ -92,6 +126,9 @@ const isPreset = (presetFirst: number) => first.value === presetFirst && last.va
           {{ preset.label }}
         </button>
       </div>
+      <p v-if="isLongRange" class="text-xs text-subtle">
+        Spread looks up each year on its own, so a long range takes a little longer to load.
+      </p>
     </div>
   </div>
 </template>

@@ -1,20 +1,24 @@
 <script setup lang="ts">
 /**
  * Migration: the species' records in each month (all of Analyse's years added together) as bars, one month picked
- * and drawn on the map, with play, back and on to step through the year.
+ * and drawn on the map, with play, back and on to step through the year. Adjusted for how many people record, the
+ * bars and the map show the species' share of its group's records instead (all birds, say).
  */
 import { useStore } from '@nanostores/vue';
 import { computed, ref, watch } from 'vue';
 import SkeletonBlock from '~/components/atoms/SkeletonBlock.vue';
 import UiIcon from '~/components/atoms/UiIcon.vue';
+import InfoTip from '~/components/molecules/InfoTip.vue';
 import { useLatestLoad } from '~/composables/useLatestLoad';
 import { usePlayback } from '~/composables/usePlayback';
+import { formatShare, shareOf } from '~/lib/analyse/effort';
 import { wrapStep } from '~/lib/analyse/timeline';
 import { full, MONTH_NAMES } from '~/lib/format';
-import { monthCounts, MONTHS_IN_YEAR, occurrenceFacets } from '~/lib/gbif';
-import { $analyseMonth } from '~/stores/analyse';
+import { monthCounts, MONTHS_IN_YEAR, occurrenceFacets, type OccurrenceFilter } from '~/lib/gbif';
+import { $analyseGroup, $analyseMonth, $migrationEffort } from '~/stores/analyse';
 import { $analyseFilter } from '~/stores/map-filter';
 import { $mapLoad } from '~/stores/map-messages';
+import AnalyseEffortSetting from './AnalyseEffortSetting.vue';
 
 /** The tallest bar's height in px; every bar keeps a sliver so a month with no records still shows. */
 const BAR_MAX_PX = 88;
@@ -22,32 +26,65 @@ const BAR_MIN_PX = 3;
 
 const filter = useStore($analyseFilter);
 const month = useStore($analyseMonth);
+const group = useStore($analyseGroup);
+const effortStore = useStore($migrationEffort);
+const isAdjusted = computed({
+  get: () => effortStore.value && group.value !== null,
+  set: (value: boolean) => $migrationEffort.set(value),
+});
+
 const counts = ref<number[]>([]);
+/** The group's records each month, for the adjusted bars; empty until asked for. */
+const groupCounts = ref<number[]>([]);
 const { loading, error, run } = useLatestLoad();
 
+/** Records per month for a filter, January first. */
+async function countByMonth(monthFilter: OccurrenceFilter, signal: AbortSignal) {
+  const result = await occurrenceFacets(monthFilter, ['month'], { facetLimit: MONTHS_IN_YEAR, signal });
+  return monthCounts(result.facets['month'] ?? []);
+}
+
 watch(
-  () => JSON.stringify(filter.value),
+  () => JSON.stringify([filter.value, isAdjusted.value && group.value?.key]),
   () => {
     const current = filter.value;
     if (!current) return;
+    const groupKey = isAdjusted.value ? group.value?.key : undefined;
     void run(async (signal) => {
-      const result = await occurrenceFacets(current, ['month'], { facetLimit: MONTHS_IN_YEAR, signal });
-      if (!signal.aborted) counts.value = monthCounts(result.facets['month'] ?? []);
+      const [species, everything] = await Promise.all([
+        countByMonth(current, signal),
+        groupKey === undefined ? [] : countByMonth({ ...current, taxonKey: groupKey }, signal),
+      ]);
+      if (signal.aborted) return;
+      counts.value = species;
+      groupCounts.value = everything;
     });
   },
   { immediate: true },
 );
 
-const peak = computed(() => Math.max(1, ...counts.value));
+/** What each bar stands for: records, or the share of the group's records when adjusted. */
+const values = computed(() =>
+  isAdjusted.value && groupCounts.value.length
+    ? counts.value.map((count, index) => shareOf(count, groupCounts.value[index] ?? 0))
+    : counts.value,
+);
+const isShowingShares = computed(() => isAdjusted.value && groupCounts.value.length > 0);
+const peak = computed(() => Math.max(Number.MIN_VALUE, ...values.value));
 const bars = computed(() =>
-  counts.value.map((count, index) => ({
+  values.value.map((value, index) => ({
     month: index + 1,
-    count,
-    height: BAR_MIN_PX + Math.round((count / peak.value) * BAR_MAX_PX),
-    label: `${MONTH_NAMES[index]}, ${full(count)} record${count === 1 ? '' : 's'}`,
+    height: BAR_MIN_PX + Math.round((value / peak.value) * BAR_MAX_PX),
+    label: `${MONTH_NAMES[index]}, ${valueText(value)}`,
   })),
 );
-const monthCount = computed(() => counts.value[month.value - 1]);
+const monthValue = computed(() => values.value[month.value - 1]);
+
+/** A bar's value in words: its records, or its share of the group's. */
+function valueText(value: number): string {
+  if (isShowingShares.value) return `${formatShare(value)} of ${group.value!.name} records`;
+  return `${full(value)} record${value === 1 ? '' : 's'}`;
+}
 
 const setMonth = (value: number) => $analyseMonth.set(value);
 const stepMonth = (delta: number) => setMonth(wrapStep(month.value, delta, 1, MONTHS_IN_YEAR));
@@ -59,12 +96,20 @@ const { isPlaying, toggle } = usePlayback(
 
 <template>
   <div class="flex flex-col gap-4 text-sm">
-    <p class="text-muted">Where it was recorded in each month, with all the years above added together.</p>
-
-    <div class="flex items-baseline justify-between" aria-live="polite">
-      <span class="font-display text-2xl font-semibold">{{ MONTH_NAMES[month - 1] }}</span>
-      <span v-if="monthCount !== undefined" class="text-muted tabular-nums">
-        <strong class="font-medium text-text">{{ full(monthCount) }}</strong> record{{ monthCount === 1 ? '' : 's' }}
+    <div class="flex items-baseline justify-between">
+      <span class="flex items-center gap-1">
+        <span class="font-display text-2xl font-semibold" aria-live="polite">{{ MONTH_NAMES[month - 1] }}</span>
+        <InfoTip label="About Migration">
+          Where it was recorded in each month, with all the years above added together.
+        </InfoTip>
+      </span>
+      <span v-if="monthValue !== undefined" class="text-muted tabular-nums" aria-live="polite">
+        <template v-if="isShowingShares">
+          <strong class="font-medium text-text">{{ formatShare(monthValue) }}</strong> of {{ group!.name }} records
+        </template>
+        <template v-else>
+          <strong class="font-medium text-text">{{ full(monthValue) }}</strong> record{{ monthValue === 1 ? '' : 's' }}
+        </template>
       </span>
     </div>
 
@@ -73,7 +118,11 @@ const { isPlaying, toggle } = usePlayback(
     </p>
     <SkeletonBlock v-else-if="loading && !counts.length" height="7rem" label="Loading records by month" />
     <div v-else :class="{ 'opacity-60': loading }">
-      <div role="group" aria-label="Records by month" class="grid h-24 grid-cols-12 items-end gap-1">
+      <div
+        role="group"
+        :aria-label="isShowingShares ? 'Share of records by month' : 'Records by month'"
+        class="grid h-24 grid-cols-12 items-end gap-1"
+      >
         <button
           v-for="bar in bars"
           :key="bar.month"
@@ -124,6 +173,11 @@ const { isPlaying, toggle } = usePlayback(
       </button>
       <span class="ml-auto text-xs text-subtle">Plays a month a second, on a loop</span>
     </div>
+
+    <AnalyseEffortSetting v-model="isAdjusted" label="Adjust for how many people record" :disabled="!group">
+      More records can mean more people looking, not more of the species. This shows it as a share of all
+      {{ group?.name ?? 'its group’s' }} records each month, on the bars and the map.
+    </AnalyseEffortSetting>
   </div>
 </template>
 
