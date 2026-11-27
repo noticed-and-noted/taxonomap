@@ -337,10 +337,8 @@ onBeforeUnmount(() => {
         :open="resultsOpen"
         collapsible
         tab-label="Explore"
-        :dismissible="hex ? 'Unselect cell' : undefined"
         @close="hideResults"
         @open="showResults"
-        @dismiss="clearHexSelection"
       >
         <HexPanel v-if="resultsOpen" />
       </ResponsivePanel>
