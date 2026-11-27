@@ -4,6 +4,7 @@
  */
 import { atom, computed } from 'nanostores';
 import { SIDE_PANEL_QUERY } from '~/lib/breakpoints';
+import { resetAnalyse } from './analyse';
 import { $panel, clearHexSelection } from './explorer';
 import { clearFilters, type FilterGroupId } from './filters';
 import { $railOpen } from './map-messages';
@@ -44,6 +45,7 @@ export function setMapMode(mode: MapMode): void {
     $panel.set('none');
   }
   if (mode === 'analyse') enterAnalyse();
+  else resetAnalyse();
   if (mode === 'explore' && window.matchMedia(SIDE_PANEL_QUERY).matches) $panel.set('results');
   $analysePanelOpen.set(true);
   $analyseMode.set(mode === 'analyse');
