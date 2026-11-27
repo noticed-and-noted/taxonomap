@@ -31,3 +31,23 @@ test(
     await expect(page).not.toHaveURL(/analyse=1|ayr=/);
   },
 );
+
+test('migration shows records by month and steps through the year', { tag: '@mobile' }, async ({ page }) => {
+  await page.goto('/?analyse=1&ak=2490719');
+  const months = page.getByRole('group', { name: 'Records by month' }).getByRole('button');
+  await expect(months).toHaveCount(12);
+  await expect(months.first()).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: 'Next month' }).click();
+  await expect(months.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Previous month' }).click();
+  await page.getByRole('button', { name: 'Previous month' }).click();
+  await expect(months.last()).toHaveAttribute('aria-pressed', 'true');
+  await months.nth(5).click();
+  await expect(page).toHaveURL(/am=6/);
+
+  await page.getByRole('button', { name: 'Play' }).click();
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  await expect(months.nth(6)).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Pause' }).click();
+});

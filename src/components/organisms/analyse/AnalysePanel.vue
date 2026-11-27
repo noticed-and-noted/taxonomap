@@ -7,6 +7,7 @@ import { useStore } from '@nanostores/vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import { $analyseTaxon, $analyseView, ANALYSE_VIEWS } from '~/stores/analyse';
 import { $analysePanelOpen } from '~/stores/mode';
+import AnalyseMigration from './AnalyseMigration.vue';
 import AnalyseSpeciesCard from './AnalyseSpeciesCard.vue';
 import AnalyseSpeciesTable from './AnalyseSpeciesTable.vue';
 import AnalyseYears from './AnalyseYears.vue';
@@ -52,11 +53,11 @@ const closePanel = () => $analysePanelOpen.set(false);
           </button>
         </div>
 
-        <div role="tabpanel" :aria-label="VIEW_LABELS[view]" class="text-sm text-muted">
-          <p v-if="view === 'migration'">
-            Where it was recorded in each month, with all the years above added together.
+        <div role="tabpanel" :aria-label="VIEW_LABELS[view]">
+          <AnalyseMigration v-if="view === 'migration'" />
+          <p v-else class="text-sm text-muted">
+            Where it was recorded for the first time, cell by cell, as the years go by.
           </p>
-          <p v-else>Where it was recorded for the first time, cell by cell, as the years go by.</p>
         </div>
       </div>
     </ResponsivePanel>

@@ -43,7 +43,8 @@ import {
   sameView,
   $selectedHex,
 } from '~/stores/explorer';
-import { $occurrenceFilter } from '~/stores/filters';
+import { $mapFilter } from '~/stores/map-filter';
+import { $mode } from '~/stores/mode';
 import {
   $busiestHexBox,
   $busiestHexRequest,
@@ -234,7 +235,7 @@ const hoverCounter = createHoverCounter((wkt, count) => {
 
 /** A cell whose exact count is known to be 0. */
 function knownEmpty(hex: Hex): boolean {
-  const filter = $occurrenceFilter.get();
+  const filter = $mapFilter.get();
   // Asked of every cell on every draw: skip building its WKT when no cell is known to be empty.
   if (!hasKnownEmpty(filter)) return false;
   const geometry = geometryOf(hex);
@@ -265,7 +266,7 @@ function onMove(event: MapMouseEvent) {
       features: [{ type: 'Feature', properties: {}, geometry: feature.geometry }],
     });
   // The tile's count is an estimate (~) until the exact one is known.
-  const filter = $occurrenceFilter.get();
+  const filter = $mapFilter.get();
   const exact = knownCount(filter, geometry.wkt);
   const text =
     exact === undefined ? records(geometry.tileTotal, `~${compact(geometry.tileTotal)}`) : records(exact, full(exact));
@@ -278,6 +279,11 @@ function onClick(event: MapMouseEvent) {
   if (!map || offGlobe(event.point)) return;
   if ($mapMode.get() === 'pin') {
     setNearLocation(event.lngLat.lat, event.lngLat.lng);
+    return;
+  }
+  // Analyse has no cell panel: a click (a tap on phones) shows the cell's count, as hovering does.
+  if ($mode.get() === 'analyse') {
+    onMove(event);
     return;
   }
   selectAt(event.point, event.lngLat);
@@ -328,8 +334,8 @@ async function loadMapLibre(): Promise<MapLibre> {
 /** How the occurrence layer reads the filter and reports cells, level, progress and failure. */
 function occLayerOptions(): OccLayerOptions {
   return {
-    filter: () => $occurrenceFilter.get(),
-    listenFilter: (onChange) => $occurrenceFilter.listen(onChange),
+    filter: () => $mapFilter.get(),
+    listenFilter: (onChange) => $mapFilter.listen(onChange),
     isEmpty: knownEmpty,
     onCells: replaceHexes,
     onChanges: changeHexes,

@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures';
 
 for (const theme of ['dark', 'light']) {
-  for (const path of ['/', '/tree?focus=1', '/?near=1']) {
+  for (const path of ['/', '/tree?focus=1', '/?near=1', '/?analyse=1', '/?analyse=1&ak=2490719']) {
     test(`${path} has no axe violations in the ${theme} theme`, async ({ page }) => {
       await page.addInitScript((value) => localStorage.setItem('theme', value), theme);
       await page.goto(path);

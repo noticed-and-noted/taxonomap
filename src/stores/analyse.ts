@@ -1,7 +1,9 @@
 /**
  * Analyse mode's choices, in the URL so an analysis can be shared: the species (`ak`), the view (`av`, Migration or
- * Spread) and the years included (`ayr`, its own range, apart from the When filter).
+ * Spread), the years included (`ayr`, its own range, apart from the When filter) and Migration's month (`am`).
  */
+import { $fitOnSearch } from './fit-search';
+import { flyToRecords } from './fly-to-taxa';
 import { codecs, urlAtom, type UrlCodec } from './url-sync';
 
 export const ANALYSE_VIEWS = ['migration', 'spread'] as const;
@@ -40,15 +42,32 @@ const yearsCodec: UrlCodec<YearSpan> = {
   serialize: (span) => `${span![0]}-${span![1]}`,
 };
 
+const monthCodec: UrlCodec<number> = {
+  key: 'am',
+  default: 1,
+  scope: 'map',
+  history: 'replace',
+  parse: (raw) => (/^(?:[1-9]|1[0-2])$/.test(raw) ? Number(raw) : undefined),
+  serialize: (month) => String(month),
+};
+
 /** The species being analysed, by GBIF key; null shows the picker. */
 export const $analyseTaxon = urlAtom(codecs.int('ak', null, { scope: 'map' }));
 export const $analyseView = urlAtom(codecs.enumOf('av', ANALYSE_VIEWS, 'migration', { scope: 'map' }));
 export const $analyseYears = urlAtom(yearsCodec);
+/** Migration's month, 1 (January) to 12. */
+export const $analyseMonth = urlAtom(monthCodec);
 
-/** Picks a species and the view to open it in. */
+/** The years a span covers, filling in every year Analyse offers for null. */
+export function yearsIncluded(span: YearSpan): readonly [number, number] {
+  return span ?? [ANALYSE_FIRST_YEAR, analyseLastYear()];
+}
+
+/** Picks a species and the view to open it in, and moves the map to its records when search does too. */
 export function analyseSpecies(key: number, view: AnalyseView): void {
   $analyseTaxon.set(key);
   $analyseView.set(view);
+  if ($fitOnSearch.get()) void flyToRecords({ taxonKey: key, year: yearsIncluded($analyseYears.get()) });
 }
 
 /** Drops Analyse's choices, so leaving it leaves nothing of it in the URL. */
@@ -56,4 +75,5 @@ export function resetAnalyse(): void {
   $analyseTaxon.set(null);
   $analyseView.set('migration');
   $analyseYears.set(null);
+  $analyseMonth.set(monthCodec.default);
 }
