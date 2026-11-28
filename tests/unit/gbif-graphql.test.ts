@@ -46,6 +46,37 @@ describe('toPredicate', () => {
   });
 });
 
+describe('countryYearCounts', () => {
+  it("asks once for every country's records by year, nested in the country facet", async () => {
+    const calls = stubNetwork(() => ({
+      data: {
+        occurrenceSearch: {
+          facet: {
+            countryCode: [
+              { key: 'GB', count: 4, occurrences: { facet: { year: [{ key: 2004, count: 3 }] } } },
+              { key: 'FR', count: 1, occurrences: { facet: { year: null } } },
+            ],
+          },
+        },
+      },
+    }));
+    const { countryYearCounts } = await gbif();
+    const counts = await countryYearCounts({ taxonKey: 5, year: [1500, 2010] });
+    expect(counts.get('GB')).toEqual({ count: 4, years: new Map([[2004, 3]]) });
+    expect(counts.get('FR')).toEqual({ count: 1, years: new Map() });
+    expect(calls).toHaveLength(1);
+    const { query, variables } = sent(calls[0]!);
+    expect(query).toContain('countryCode(size: 300) { key count occurrences { facet { year(size: 600)');
+    expect(JSON.stringify(variables)).toContain('1500,2010');
+  });
+
+  it('reads no countries as none', async () => {
+    stubNetwork(() => ({ data: { occurrenceSearch: { facet: { countryCode: null } } } }));
+    const { countryYearCounts } = await gbif();
+    expect((await countryYearCounts({ taxonKey: 5 })).size).toBe(0);
+  });
+});
+
 describe('namedOccurrenceFacets', () => {
   it('names taxa and datasets, under REST field names and string keys', async () => {
     const calls = stubNetwork(() => ({

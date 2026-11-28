@@ -179,6 +179,55 @@ export async function namedOccurrenceFacets<Field extends FacetField>(
   return { count: documents.total, facets: Object.fromEntries(byField) as Record<Field, NamedFacetCount[]> };
 }
 
+/** Countries a facet can return (there are about 250). */
+const COUNTRY_FACET_SIZE = 300;
+/** More than every year GBIF holds a record in (1500 to now). */
+const YEAR_FACET_SIZE = 600;
+
+/** One country's records by year, as GraphQL nests them. */
+interface CountryYearsBucket {
+  key: string;
+  count: number;
+  occurrences: { facet: { year: FacetBucket[] | null } };
+}
+
+/** A country's records matching a filter: how many, and how many in each year (records without a year aren't). */
+export interface CountryYears {
+  count: number;
+  years: Map<number, number>;
+}
+
+/**
+ * Each country's records (ISO codes) matching a filter, by year, from one request: the year facet nested in
+ * each country's bucket, where the REST API needs a search per year.
+ */
+export async function countryYearCounts(
+  filter: OccurrenceFilter,
+  options: { signal?: AbortSignal } = {},
+): Promise<Map<string, CountryYears>> {
+  const query = `
+    query CountryYears($predicate: Predicate) {
+      occurrenceSearch(predicate: $predicate) {
+        facet { countryCode(size: ${COUNTRY_FACET_SIZE}) { key count occurrences { facet { year(size: ${YEAR_FACET_SIZE}) { key count } } } } }
+      }
+    }`;
+  const data = await runQuery<{ occurrenceSearch: { facet: { countryCode: CountryYearsBucket[] | null } } }>(
+    query,
+    { predicate: toPredicate(filterToParams(filter)) },
+    { signal: options.signal },
+  );
+  const countries = data.occurrenceSearch.facet.countryCode ?? [];
+  return new Map(
+    countries.map((country) => [
+      country.key,
+      {
+        count: country.count,
+        years: new Map((country.occurrences.facet.year ?? []).map((bucket) => [Number(bucket.key), bucket.count])),
+      },
+    ]),
+  );
+}
+
 /** Whether firstRecordsByTaxon can batch taxa of this rank. */
 export function canBatchRank(rank: Rank): boolean {
   return rank in RANK_FACET;

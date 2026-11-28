@@ -4,13 +4,15 @@
  * switcher, legend, and the results and filters panels (side panel / bottom sheet).
  * On small screens the filters move into the sheet behind a Filters button, and
  * the chips give way to a count and a clear button on it.
- * "Near me" (`?near=1`) swaps these controls for the NearExplorer panel.
+ * The mode switch picks Explore (these controls), Near me (`?near=1`, the NearExplorer panel)
+ * or Analyse (`?analyse=1`, the AnalysePanel).
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import UiIcon from '~/components/atoms/UiIcon.vue';
+import SegmentedControl from '~/components/atoms/SegmentedControl.vue';
 import BasemapSwitcher from '~/components/organisms/settings/BasemapSwitcher.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
+import AnalysePanel from '~/components/organisms/analyse/AnalysePanel.vue';
 import HexPanel from '~/components/organisms/cell/HexPanel.vue';
 import FilterGroup from '~/components/organisms/filters/FilterGroup.vue';
 import FilterRail from '~/components/organisms/filters/FilterRail.vue';
@@ -23,12 +25,19 @@ import NearExplorer from '~/components/organisms/near/NearExplorer.vue';
 import ChecklistHint from '~/components/organisms/onboarding/ChecklistHint.vue';
 import OnboardingTour from '~/components/organisms/onboarding/OnboardingTour.vue';
 import TryThis from '~/components/organisms/onboarding/TryThis.vue';
+import ModeMenu from '~/components/organisms/site/ModeMenu.vue';
+import { useLatestLoad } from '~/composables/useLatestLoad';
 import { NO_RAIL_QUERY, SHEET_QUERY } from '~/lib/breakpoints';
 import { $activeFilterCount, type FilterGroupId } from '~/lib/filter-groups';
+import { full } from '~/lib/format';
+import { occurrenceCount } from '~/lib/gbif';
+import { MODE_OPTIONS } from '~/lib/map-modes';
 import { clearHexSelection, $panel, $selectedHex } from '~/stores/explorer';
-import { clearFilters } from '~/stores/filters';
+import { $occurrenceFilter, clearFilters } from '~/stores/filters';
+import { $spreadMap } from '~/stores/spread';
 import { $mapUnsupported, $railOpen, $viewCheck } from '~/stores/map-messages';
-import { $nearLeaving, $nearMode, exitNearMode } from '~/stores/near';
+import { $analysePanelOpen, $mode, ANALYSE_FILTER_GROUPS, setMapMode } from '~/stores/mode';
+import { $nearMode, $nearPanelOpen, $nearTotal } from '~/stores/near';
 import { $checklistHint, $tourSeen } from '~/stores/onboarding';
 
 const panel = useStore($panel);
@@ -39,7 +48,6 @@ const activeFilters = useStore($activeFilterCount);
 /** Phone Filters sheet: one tab per group (as the desktop rail), plus map settings. */
 const filterTab = ref<FilterGroupId | 'settings'>('what');
 const near = useStore($nearMode);
-const nearLeaving = useStore($nearLeaving);
 const mapUnsupported = useStore($mapUnsupported);
 
 /** Slide the dock off to the left to see the map behind it. */
@@ -66,23 +74,15 @@ watch(
   },
 );
 
-/** Enters or leaves Near me; entering drops the selected cell, in the same history step. */
-function toggleNear() {
-  if (near.value) {
-    exitNearMode();
-    return;
-  }
-  clearHexSelection();
-  $panel.set('none');
-  $nearMode.set(true);
-}
-
-const pinIcon = 'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z';
-const listIcon = 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01';
+const mode = useStore($mode);
+const isExplore = computed(() => mode.value === 'explore');
+const isAnalyse = computed(() => mode.value === 'analyse');
+/** The desktop switch's two-way binding onto the mode store. */
+const modeModel = computed({ get: () => mode.value, set: setMapMode });
 
 const allResultsOpen = computed(() => panel.value === 'results');
 const resultsOpen = computed(
-  () => !near.value && (allResultsOpen.value || (panel.value === 'hex' && hex.value !== null)),
+  () => isExplore.value && (allResultsOpen.value || (panel.value === 'hex' && hex.value !== null)),
 );
 const filtersOpen = computed(() => panel.value === 'filters');
 const panelOpen = computed(() => resultsOpen.value || filtersOpen.value);
@@ -109,10 +109,52 @@ function toggleAllResults() {
 }
 
 const hasSheets = ref(false);
+
+const nearPanelOpen = useStore($nearPanelOpen);
+const nearTotal = useStore($nearTotal);
+const analysePanelOpen = useStore($analysePanelOpen);
+const filter = useStore($occurrenceFilter);
+const spreadMap = useStore($spreadMap);
+const currentMode = computed(() => MODE_OPTIONS.find((option) => option.value === mode.value)!);
+
+/** Records matching the filters, for the phone's Explore button; fetched only while that button shows. */
+const exploreTotal = ref<number | null>(null);
+const { run: runExploreTotal, cancel: cancelExploreTotal } = useLatestLoad();
+watch(
+  [filter, isExplore, hasSheets],
+  ([currentFilter, isExploring, isSheetLayout]) => {
+    exploreTotal.value = null;
+    if (!isExploring || !isSheetLayout) return cancelExploreTotal();
+    void runExploreTotal(async (signal) => {
+      const total = await occurrenceCount(currentFilter, signal);
+      if (!signal.aborted) exploreTotal.value = total;
+    });
+  },
+  { immediate: true },
+);
+
+/** Explore and Near me show their record count on the phone's mode button; Analyse has none yet. */
+const modeTotal = computed(() => {
+  if (isExplore.value) return exploreTotal.value;
+  return near.value ? nearTotal.value : null;
+});
+const modeListOpen = computed(() => {
+  if (isExplore.value) return allResultsOpen.value;
+  return near.value ? nearPanelOpen.value : analysePanelOpen.value;
+});
+
+/** The phone's mode button: Explore toggles all results; Near me and Analyse bring their panel back. */
+function openModeList() {
+  if (isExplore.value) return toggleAllResults();
+  if (near.value) return $nearPanelOpen.set(true);
+  $analysePanelOpen.set(true);
+}
 /** An open sheet slides the dock away; closing it brings the dock back as the viewer left it. */
 const sheetCoversDock = ref(false);
 watch(
-  () => hasSheets.value && (panelOpen.value || (near.value && !nearLeaving.value)),
+  () =>
+    hasSheets.value &&
+    (panelOpen.value || (isAnalyse.value && analysePanelOpen.value) || (near.value && nearPanelOpen.value)),
   (covers) => (sheetCoversDock.value = covers),
 );
 const dockHidden = computed(() => dockStashed.value || sheetCoversDock.value);
@@ -128,8 +170,12 @@ const onSheetQuery = (event: MediaQueryListEvent) => (hasSheets.value = event.ma
 
 /** The phone Filters button: opens the sheet, or closes it back to the cell panel if one is selected. */
 function openFilters() {
-  if (filtersOpen.value) closeFilters();
-  else $panel.set('filters');
+  if (filtersOpen.value) return closeFilters();
+  // Analyse offers only some groups; open on one it has.
+  const isTabOffered =
+    filterTab.value === 'settings' || !isAnalyse.value || ANALYSE_FILTER_GROUPS.includes(filterTab.value);
+  if (!isTabOffered) filterTab.value = 'where';
+  $panel.set('filters');
 }
 
 /** Closes the filters, back to the cell panel if one is selected. */
@@ -172,113 +218,88 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="explorer-overlay pointer-events-none absolute inset-0 z-10"
-    :class="{ 'panel-open': panelOpen && !near, near }"
+    :class="{ 'panel-open': panelOpen && isExplore, near, analyse: isAnalyse }"
   >
     <NearExplorer v-if="near" />
-    <OnboardingTour v-if="!tourSeen && !near && !mapUnsupported" />
-    <ChecklistHint v-if="hintId && !near" :id="hintId" :key="hintId" />
+    <AnalysePanel v-if="isAnalyse" />
+    <OnboardingTour v-if="!tourSeen && isExplore && !mapUnsupported" />
+    <ChecklistHint v-if="hintId && isExplore" :id="hintId" :key="hintId" />
     <div
       class="top-bar pointer-events-none absolute left-3 right-3 top-3 flex items-start justify-between gap-2 *:pointer-events-auto"
     >
-      <div class="hidden min-w-0 rail:block rail:flex-auto"><TaxonChip /></div>
+      <div v-if="!isAnalyse" class="chip-area hidden min-w-0 rail:block rail:flex-auto"><TaxonChip /></div>
       <!-- Below the row, centred on the page, so the chips can fill the row. -->
-      <MapProgress v-if="!near" class="absolute left-1/2 top-9 -translate-x-1/2 rail:top-11" />
-      <div class="ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap rail:flex rail:flex-1">
-        <button type="button" class="pill-btn near-btn" data-tour="near" :aria-pressed="near" @click="toggleNear">
-          <svg
-            viewBox="0 0 24 24"
-            class="size-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            aria-hidden="true"
-          >
-            <path :d="pinIcon" />
-          </svg>
-          Near me
-        </button>
-      </div>
-      <!-- Phone: Explore, Filters and Near me (the rail is hidden), grouped at the right. Explore opens all results;
-           wider screens have the results panel's own tab. -->
-      <div class="phone-row ml-auto flex shrink-0 rail:hidden">
-        <Transition name="fade">
-          <button
-            v-if="!near"
-            type="button"
-            class="pill-btn phone-btn explore-btn"
-            :aria-expanded="allResultsOpen"
-            @click="toggleAllResults"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              class="size-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path :d="listIcon" />
-            </svg>
-            Explore
-          </button>
-        </Transition>
-        <!-- One pill: Filters with its count, and once any are set, a × that clears them all. -->
-        <span class="filters-pill" :class="{ active: activeFilters }">
-          <button
-            type="button"
-            class="filters-btn"
-            data-tour="filters"
-            :aria-expanded="filtersOpen"
-            @click="openFilters"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              class="size-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path d="M4 6h16M7 12h10M10 18h4" />
-            </svg>
-            Filters
-            <span v-if="activeFilters" class="count-badge tabular-nums"
-              >{{ activeFilters }}<span class="sr-only"> active</span></span
-            >
-          </button>
-          <button
-            v-if="activeFilters"
-            type="button"
-            class="filters-clear"
-            aria-label="Clear filters"
-            @click="clearFilters"
-          >
-            <UiIcon name="close" size="0.875rem" />
-          </button>
-        </span>
-        <button
-          type="button"
-          class="pill-btn phone-btn near-btn"
+      <MapProgress v-if="!near" class="bar-status absolute left-1/2 top-9 -translate-x-1/2 rail:top-11" />
+      <div
+        class="bar-end ml-auto hidden shrink-0 items-start justify-end gap-2 whitespace-nowrap rail:flex rail:flex-1"
+      >
+        <SegmentedControl
+          v-model="modeModel"
+          legend="Map mode"
+          :options="MODE_OPTIONS"
+          class="mode-switch"
           data-tour="near"
-          :aria-pressed="near"
-          @click="toggleNear"
+        />
+      </div>
+      <!-- Phone: the mode menu (the rail is hidden); Filters sits in the bottom row. -->
+      <div class="bar-end phone-row ml-auto flex shrink-0 rail:hidden">
+        <ModeMenu class="phone-btn" />
+      </div>
+      <!-- From tablet width up, in every mode, so changing mode never redraws it. -->
+      <div class="bar-end hidden shrink-0 max-rail:ml-2 sm:block"><BasemapSwitcher /></div>
+    </div>
+
+    <!-- Phones and tablets: the mode's own list and Filters along the bottom, within a thumb's reach. The first button
+         opens Explore's results, Near me's list or Analyse's panel, with a record count where the mode has one; from
+         tablet width the side panel's own tab does that, so the row keeps just Filters. -->
+    <div class="phone-bottom-row pointer-events-auto absolute bottom-3 left-3 right-3 flex gap-2 rail:hidden">
+      <button type="button" class="bottom-btn list-btn explore-btn" :aria-expanded="modeListOpen" @click="openModeList">
+        <svg
+          viewBox="0 0 24 24"
+          class="size-[1.125rem]"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
         >
+          <path :d="currentMode.icon" />
+        </svg>
+        {{ currentMode.label }}
+        <span class="ml-auto flex items-center gap-1.5 text-subtle">
+          <span v-if="modeTotal !== null" class="text-[0.8125rem] tabular-nums"
+            >{{ full(modeTotal) }}<span class="sr-only"> records</span></span
+          >
           <svg
             viewBox="0 0 24 24"
             class="size-4"
             fill="none"
             stroke="currentColor"
-            stroke-width="1.8"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             aria-hidden="true"
           >
-            <path :d="pinIcon" />
+            <path d="m6 15 6-6 6 6" />
           </svg>
-          Near me
-        </button>
-      </div>
-      <!-- From tablet width up; Near me draws its own beside its panel. -->
-      <div v-if="!near" class="hidden shrink-0 max-rail:ml-2 sm:block"><BasemapSwitcher /></div>
+        </span>
+      </button>
+      <button
+        type="button"
+        class="bottom-btn filters-square"
+        data-tour="filters"
+        :aria-label="activeFilters ? `Filters, ${activeFilters} active` : 'Filters'"
+        :aria-expanded="filtersOpen"
+        @click="openFilters"
+      >
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+        <span v-if="activeFilters" class="count-badge corner-badge tabular-nums" aria-hidden="true">{{
+          activeFilters
+        }}</span>
+      </button>
     </div>
 
     <!-- Stays in Near me too, on wider screens; on phones an open sheet slides it away (sheetCoversDock). -->
@@ -300,7 +321,8 @@ onBeforeUnmount(() => {
         </svg>
       </button>
       <TryThis />
-      <MapLegend class="w-full max-w-60" data-tour="legend" />
+      <!-- Spread colours its cells by first year, keyed in its own panel. -->
+      <MapLegend v-if="!spreadMap" class="w-full max-w-60" data-tour="legend" />
     </div>
 
     <div
@@ -313,15 +335,13 @@ onBeforeUnmount(() => {
     <div class="pointer-events-auto">
       <!-- Only fills while open, so a tucked panel makes no requests. -->
       <ResponsivePanel
-        v-if="!near"
+        v-if="isExplore"
         :title="resultsTitle"
         :open="resultsOpen"
         collapsible
         tab-label="Explore"
-        :dismissible="hex ? 'Unselect cell' : undefined"
         @close="hideResults"
         @open="showResults"
-        @dismiss="clearHexSelection"
       >
         <HexPanel v-if="resultsOpen" />
       </ResponsivePanel>
@@ -353,77 +373,22 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
+/* Floats over the map like the other pills, as tall as the basemap switch beside it (2rem); the selected mode takes
+   the accent fill (SegmentedControl). */
+.mode-switch {
   height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  white-space: nowrap;
   box-shadow: var(--shadow);
-  cursor: pointer;
+  font-size: 0.8125rem;
 }
-.pill-btn:hover {
-  color: var(--text);
-}
-
-/* Near me is the page's other way in, so it stands out from the plain pills. */
-.near-btn,
-.near-btn:hover {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-.near-btn:hover {
-  background: color-mix(in srgb, var(--accent) 88%, var(--text));
+.mode-switch :deep(label) {
+  display: flex;
+  align-items: center;
+  padding-block: 0;
 }
 .phone-btn {
   flex-shrink: 0;
 }
 
-/* Styled as a pill-btn, split in two: the × only shows while filters are set. */
-.filters-pill {
-  display: inline-flex;
-  flex-shrink: 0;
-  height: 2rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-.filters-pill.active {
-  border-color: var(--accent);
-}
-.filters-btn,
-.filters-clear {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0 0.75rem;
-  border-radius: inherit;
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
-.filters-pill.active .filters-btn,
-.filters-btn:hover,
-.filters-clear:hover {
-  color: var(--text);
-}
-/* Squared at the join, so the divider is a straight line. */
-.filters-btn:has(+ .filters-clear) {
-  border-radius: 999px 0 0 999px;
-}
-.filters-clear {
-  padding: 0 0.625rem;
-  border-left: 1px solid var(--accent);
-  border-radius: 0 999px 999px 0;
-}
 .count-badge {
   display: inline-grid;
   place-items: center;
@@ -436,20 +401,44 @@ onBeforeUnmount(() => {
   font-size: 0.6875rem;
 }
 
-/* Explore, Filters and Near me share a 360px phone's row, so they sit closer there. */
-.phone-row {
-  gap: 0.5rem;
-}
+/* A 360px phone's top row is tight, so its pieces sit closer there. */
 @media (max-width: 399.98px) {
-  .top-bar,
-  .phone-row {
+  .top-bar {
     gap: 0.25rem;
   }
-  .top-bar .pill-btn,
-  .filters-btn {
-    gap: 0.25rem;
-    padding: 0 0.4375rem;
-  }
+}
+
+/* Phones and tablets: the mode's list button and Filters, 44px tall for thumbs, squared like the design's buttons. */
+.bottom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  box-shadow: var(--shadow);
+}
+.list-btn {
+  flex: 1;
+  justify-content: flex-start;
+  padding: 0 0.875rem;
+}
+.filters-square {
+  position: relative;
+  width: 2.75rem;
+  flex-shrink: 0;
+}
+.filters-square[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+.corner-badge {
+  position: absolute;
+  top: -0.375rem;
+  right: -0.375rem;
 }
 
 .bottom-dock {
@@ -506,9 +495,15 @@ onBeforeUnmount(() => {
 
 /* Phone-only controls (scoped display would otherwise beat a rail:hidden utility). */
 @media (min-width: 1000px) {
-  .filters-pill,
   .phone-btn {
     display: none;
+  }
+}
+
+/* The legend dock sits above the List and Filters row (0.75rem margin + 2.75rem row + 0.5rem gap). */
+@media (max-width: 999.98px) {
+  .explorer-overlay:has(.phone-bottom-row) .bottom-dock {
+    bottom: 4rem;
   }
 }
 
@@ -540,35 +535,29 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Keep the dock, flyout and map notes clear of the desktop side panel. */
+/* Desktop: the switches sit left of an open side panel and slide with it when it's tucked aside, the same distance
+   and timing as SidePanel's .collapsed, so they move as one. The chips stay at the left and stop short of the panel;
+   the status note stays centred on the map beside it. A panel that appears or goes (a mode change) moves nothing. */
 @media (min-width: 768px) {
-  .top-bar {
-    transition: right var(--dur-slow) var(--ease);
+  .bar-end {
+    transition: transform var(--dur-slow) var(--ease);
   }
-  .panel-open .top-bar {
-    right: calc(var(--panel-width) + 1.5rem);
-    /* MapProgress centres in this narrowed bar; this keeps a long note from running under the panel or rail. */
+  .bar-status {
+    transition: margin-left var(--dur-slow) var(--ease);
+  }
+  .explorer-overlay:has(.side-panel:not(.collapsed)) .bar-end {
+    transform: translateX(calc(-1 * (var(--panel-width) + 0.75rem)));
+  }
+  .explorer-overlay:has(.side-panel:not(.collapsed)) .chip-area {
+    margin-right: calc(var(--panel-width) + 0.75rem);
+  }
+  .explorer-overlay:has(.side-panel:not(.collapsed)) .bar-status {
+    margin-left: calc(-1 * (var(--panel-width) + 0.75rem) / 2);
+    /* Keeps a long note from running under the panel or rail. */
     --map-status-max-width: calc(100vw - var(--panel-width) - 8rem);
   }
   .panel-open .rail-region {
     --flyout-max: calc(100vw - var(--panel-width) - 7.5rem);
-  }
-}
-
-/* Near me: the chips stop short of NearExplorer's basemap switcher (about 7.6rem wide) and side panel. */
-@media (min-width: 640px) {
-  .near .top-bar {
-    padding-right: 8.25rem;
-  }
-}
-@media (min-width: 768px) {
-  .near .top-bar {
-    right: calc(var(--panel-width) + 1.5rem);
-    transition: right var(--dur-slow) var(--ease);
-  }
-  /* Follows NearExplorer's basemap switcher to the screen edge when the list is tucked away (its .near-bar.tucked). */
-  .near:has(.near-bar.tucked) .top-bar {
-    right: 0.75rem;
   }
 }
 

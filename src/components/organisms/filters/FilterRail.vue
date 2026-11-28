@@ -14,7 +14,13 @@ import MapSettings from '~/components/organisms/settings/MapSettings.vue';
 import OnboardingSettings from '~/components/organisms/settings/OnboardingSettings.vue';
 import ReadingSettings from '~/components/organisms/settings/ReadingSettings.vue';
 import SearchFitSetting from '~/components/organisms/settings/SearchFitSetting.vue';
-import { $activeFilterCount, $groupCounts, FILTER_GROUPS, SETTINGS, type FilterGroupId } from '~/lib/filter-groups';
+import {
+  $activeFilterCount,
+  $groupCounts,
+  $visibleFilterGroups,
+  SETTINGS,
+  type FilterGroupId,
+} from '~/lib/filter-groups';
 import { clearFilters } from '~/stores/filters';
 import { $railOpen } from '~/stores/map-messages';
 import { $tourOpen } from '~/stores/onboarding';
@@ -26,8 +32,10 @@ const counts = useStore($groupCounts);
 const total = useStore($activeFilterCount);
 // Shared, so the legend can open a group and a resize can hand it to the phone sheet.
 const open = useStore($railOpen);
+// Analyse offers fewer groups than Explore and Near me.
+const groups = useStore($visibleFilterGroups);
 const current = computed(() =>
-  open.value === 'settings' ? SETTINGS : (FILTER_GROUPS.find((group) => group.id === open.value) ?? null),
+  open.value === 'settings' ? SETTINGS : (groups.value.find((group) => group.id === open.value) ?? null),
 );
 const buttons = ref<Record<string, HTMLButtonElement>>({});
 
@@ -74,7 +82,7 @@ function label(name: string, count: number) {
   <div class="filter-rail-wrap" :style="{ '--rail-height': `${railHeight}px` }" @keydown="onKey">
     <nav ref="rail" class="rail" aria-label="Filters" data-tour="filters">
       <button
-        v-for="group in FILTER_GROUPS"
+        v-for="group in groups"
         :key="group.id"
         :ref="(element) => element && (buttons[group.id] = element as HTMLButtonElement)"
         :data-tour="`rail-${group.id}`"

@@ -1,6 +1,15 @@
 /** The map's style: our layers spliced into each kind of basemap, and the GeoJSON helpers. */
 import type { MapGeoJSONFeature, StyleSpecification } from 'maplibre-gl';
-import { buildStyle, EMPTY, fetchStyle, fillColor, geometryOf, nearGeoJson, selectedGeoJson } from '~/lib/map/style';
+import {
+  buildStyle,
+  EMPTY,
+  fetchStyle,
+  fillColor,
+  geometryOf,
+  nearGeoJson,
+  selectedGeoJson,
+  spreadFillColor,
+} from '~/lib/map/style';
 import { thresholdsAt } from '~/lib/ramp';
 import { json, stubNetwork } from './helpers/network';
 
@@ -41,6 +50,7 @@ describe('buildStyle', () => {
       'road_major',
       'water',
       'occ-fill',
+      'spread-fill',
       'place_city',
       'place_country',
       'hover-line',
@@ -52,7 +62,7 @@ describe('buildStyle', () => {
       'record-edge',
       'selected-record',
     ]);
-    expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'hover', 'selected', 'near']);
+    expect(Object.keys(style.sources)).toEqual(['omt', 'occ', 'spread', 'hover', 'selected', 'near']);
     // Cell ids let arriving tiles update the hexes in place.
     expect(style.sources['occ']).toMatchObject({ promoteId: 'id' });
     expect(style.projection).toEqual({ type: 'globe' });
@@ -106,7 +116,14 @@ describe('buildStyle', () => {
     const asked: string[] = [];
     const style = await buildStyle('satellite', 'dark', COLORS, DATA, async (url) => (asked.push(url), vectorBase));
     expect(asked).toEqual(['https://tiles.openfreemap.org/styles/dark']);
-    expect(ids(style).slice(0, 5)).toEqual(['background', 'base', 'occ-fill', 'place_city', 'place_country']);
+    expect(ids(style).slice(0, 6)).toEqual([
+      'background',
+      'base',
+      'occ-fill',
+      'spread-fill',
+      'place_city',
+      'place_country',
+    ]);
     expect(style.sources['base']).toMatchObject({ type: 'raster', tileSize: 256 });
     expect(layer(style, 'place_city')['paint']).toMatchObject({ 'text-color': '#t', 'text-halo-color': '#b' });
   });
@@ -241,5 +258,12 @@ describe('fetchStyle', () => {
     vi.stubGlobal('fetch', () => Promise.reject(new TypeError('offline')));
     await expect(fetchStyle('https://style.test/down')).resolves.toBeNull();
     expect(calls.filter((url) => url.pathname === '/ok')).toHaveLength(1);
+  });
+});
+
+describe('spreadFillColor', () => {
+  it('colours new cells with the lightest ramp stop and earlier ones with a dark one', () => {
+    const [, , , newColour, beforeColour] = spreadFillColor() as unknown[];
+    expect(newColour).not.toBe(beforeColour);
   });
 });

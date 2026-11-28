@@ -4,7 +4,7 @@
  * iNaturalist or the basemaps being up, or on what they hold today. The site
  * is built against the same fake (`pnpm build:e2e`).
  */
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
 import { MCR } from 'monocart-coverage-reports';
 import { coverageOptions, isCoverageOn, startCoverage } from './coverage';
 import { answer } from './fake/world';
@@ -81,3 +81,18 @@ export const test = base.extend<{ external: string[]; showTour: boolean; seenTou
 });
 
 export { expect };
+
+const RAIL_BREAKPOINT_PX = 1000;
+
+/** Picks a map mode: from the mode menu on phones, the segmented switch on wider screens. */
+export async function chooseMode(page: Page, mode: 'Explore' | 'Near me' | 'Analyse'): Promise<void> {
+  // Below the rail breakpoint (1000px) the switch gives way to the mode menu.
+  const isPhoneLayout = (page.viewportSize()?.width ?? 0) < RAIL_BREAKPOINT_PX;
+  if (isPhoneLayout) {
+    await page.getByRole('button', { name: /Change mode/ }).click();
+    await page.getByRole('button', { name: mode, exact: true }).click();
+    return;
+  }
+  // The switch's radios are visually hidden, so Playwright clicks their label instead.
+  await page.locator('.segmented label', { hasText: mode }).click();
+}

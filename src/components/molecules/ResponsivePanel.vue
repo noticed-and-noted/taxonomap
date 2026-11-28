@@ -3,8 +3,6 @@
  * Desktop (≥768px): 400px right SidePanel. Mobile: BottomSheet.
  * `collapsible`: on desktop, closing slides the panel aside to a strip
  * instead of removing it; `open` asks for it back.
- * `dismissible` (with collapsible): a close button that emits `dismiss`,
- * for leaving the whole mode rather than tucking the panel away.
  * `tabLabel` (with collapsible): a word written up the tucked panel's tab.
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
@@ -12,30 +10,13 @@ import BottomSheet from '~/components/atoms/BottomSheet.vue';
 import SidePanel from '~/components/atoms/SidePanel.vue';
 import { SIDE_PANEL_QUERY } from '~/lib/breakpoints';
 
-const props = defineProps<{
+defineProps<{
   title: string;
   open: boolean;
   collapsible?: boolean;
-  dismissible?: string | undefined;
   tabLabel?: string;
 }>();
-/** `closing`: a dismissed sheet has started sliding away; `dismiss` follows once it's gone. */
-const emit = defineEmits<{ close: []; open: []; dismiss: []; closing: [] }>();
-/**
- * The sheet has one close button: with `dismissible` it dismisses, once the sheet has slid away (dismissing
- * removes the panel at once, which would cut the slide short).
- */
-const isDismissing = ref(false);
-function closeSheet() {
-  if (!props.dismissible) return emit('close');
-  isDismissing.value = true;
-  emit('closing');
-}
-function onSheetClosed() {
-  if (!isDismissing.value) return;
-  isDismissing.value = false;
-  emit('dismiss');
-}
+const emit = defineEmits<{ close: []; open: [] }>();
 
 const desktop = ref(true);
 let mediaQuery: MediaQueryList | undefined;
@@ -68,10 +49,9 @@ onBeforeUnmount(() => {
     open
     collapsible
     :collapsed="!open"
-    :closable="!!dismissible"
-    :close-label="dismissible"
+    closable
     :tab-label="tabLabel"
-    @close="emit('dismiss')"
+    @close="emit('close')"
     @collapse="emit('close')"
     @expand="emit('open')"
   >
@@ -84,14 +64,7 @@ onBeforeUnmount(() => {
     <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />
   </SidePanel>
-  <BottomSheet
-    v-else
-    :title="title"
-    :open="open && !isDismissing"
-    :close-label="dismissible"
-    @close="closeSheet"
-    @closed="onSheetClosed"
-  >
+  <BottomSheet v-else :title="title" :open="open" @close="emit('close')">
     <template v-if="$slots.top" #top><slot name="top" /></template>
     <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     <slot />

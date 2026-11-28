@@ -97,8 +97,13 @@ export interface OccLayerOptions {
   isEmpty?: (hex: Hex) => boolean;
   /** GBIF could not be reached at all. */
   onFailed: () => void;
-  /** Subscribe to filter changes; returns an unsubscribe. */
+  /** Subscribe to filter changes (the baseline's too); returns an unsubscribe. */
   listenFilter: (onChange: () => void) => () => void;
+  /**
+   * Records to compare each cell with, such as all birds for a bird: each cell then also carries its `share` of the
+   * baseline's records in the same cell. Null for plain counts.
+   */
+  baseline?: () => TileFilter | null;
 }
 
 /** Latitude in Mercator y (clamped short of the poles, where it diverges). */
@@ -186,6 +191,16 @@ function offsetPixels(offset: PointLike): [number, number] {
   return Array.isArray(offset) ? [offset[0], offset[1]] : [(offset as { x: number }).x, (offset as { y: number }).y];
 }
 
+/** Cells with their share of the baseline's records in the same cell (a cell the baseline lacks counts as all). */
+export function withShares(hexes: Hex[], baselineHexes: Hex[]): Hex[] {
+  const baselineTotals = new Map(baselineHexes.map((hex) => [hex.properties.id, hex.properties.total]));
+  return hexes.map((hex) => {
+    const baselineTotal = baselineTotals.get(hex.properties.id) ?? hex.properties.total;
+    const share = baselineTotal > 0 ? Math.min(1, hex.properties.total / baselineTotal) : 1;
+    return { ...hex, properties: { ...hex.properties, share } };
+  });
+}
+
 /** Loads GBIF hex tiles for a map and keeps the drawn cells in step with the view; see the file comment. */
 class OccLayerController {
   readonly #map: MlMap;
@@ -251,9 +266,12 @@ class OccLayerController {
     return needsAdhoc(this.#options.filter()) ? adhocLevel(hexLevel) : hexLevel;
   }
 
-  /** Which hexes: the filters (the tile path and query, whichever host serves it). */
+  /** Which hexes: the filters, and the baseline they're compared with (the tile paths and queries, whichever host). */
   #filterKey() {
-    return occurrenceTileTemplate(this.#options.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt').split('/v2/map/')[1]!;
+    const keyOf = (filter: TileFilter) =>
+      occurrenceTileTemplate(filter, { hexPerTile: HEX_PER_TILE }, 'mvt').split('/v2/map/')[1]!;
+    const baseline = this.#options.baseline?.();
+    return baseline ? `${keyOf(this.#options.filter())}|${keyOf(baseline)}` : keyOf(this.#options.filter());
   }
 
   /** Points across the view, centre first, skipping any off the globe. */
@@ -290,8 +308,21 @@ class OccLayerController {
     return view;
   }
 
+  /** A tile's cells, each with its share of the baseline's records when there is a baseline. */
   async #fetchTile(tile: TileId, level: number, signal: AbortSignal): Promise<Hex[] | undefined> {
-    const url = occurrenceTileTemplate(this.#options.filter(), { hexPerTile: HEX_PER_TILE }, 'mvt')
+    const baseline = this.#options.baseline?.();
+    const [hexes, baselineHexes] = await Promise.all([
+      this.#fetchHexes(this.#options.filter(), tile, level, signal),
+      baseline ? this.#fetchHexes(baseline, tile, level, signal) : undefined,
+    ]);
+    if (!hexes || !baseline) return hexes;
+    // Without the baseline's tile there's nothing to divide by: left unloaded, asked for again next plan.
+    if (!baselineHexes) return undefined;
+    return withShares(hexes, baselineHexes);
+  }
+
+  async #fetchHexes(filter: TileFilter, tile: TileId, level: number, signal: AbortSignal): Promise<Hex[] | undefined> {
+    const url = occurrenceTileTemplate(filter, { hexPerTile: HEX_PER_TILE }, 'mvt')
       .replace('{z}', String(level))
       .replace('{x}', String(tile.x))
       .replace('{y}', String(tile.y));

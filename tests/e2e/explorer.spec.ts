@@ -582,9 +582,9 @@ test('the legend and the results panel slide away and back, the panel keeping it
 
 test('Explore lists every matching record when no cell is selected', { tag: '@mobile' }, async ({ page }) => {
   await page.goto('/?taxon=2492462&view=-1.50,52.50,5.0');
-  // The phone's Explore button, or the side panel's Explore tab on wider screens.
+  // The phone's Explore button (with its record count), or the side panel's Explore tab on wider screens.
   await page
-    .getByRole('button', { name: /^Explore( panel)?$/ })
+    .getByRole('button', { name: /^Explore( panel)?( [0-9,]+ records)?$/ })
     .filter({ visible: true })
     .click();
   await expect(page).toHaveURL(/panel=results/);

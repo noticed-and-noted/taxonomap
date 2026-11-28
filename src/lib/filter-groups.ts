@@ -4,6 +4,7 @@
  */
 import { computed } from 'nanostores';
 import { type FilterGroupId, $groupCounts } from '~/stores/filters';
+import { $mode, ANALYSE_FILTER_GROUPS } from '~/stores/mode';
 
 export { $groupCounts, type FilterGroupId };
 
@@ -43,6 +44,11 @@ export const FILTER_GROUPS: readonly FilterGroupMeta[] = [
     icon: 'M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0M21 12c-2.4 4-5.4 6-9 6s-6.6-2-9-6c2.4-4 5.4-6 9-6s6.6 2 9 6',
   },
 ];
+
+/** The groups the rail and the phone's Filters sheet offer in the current mode: Analyse keeps only some. */
+export const $visibleFilterGroups = computed($mode, (mode) =>
+  mode === 'analyse' ? FILTER_GROUPS.filter((group) => ANALYSE_FILTER_GROUPS.includes(group.id)) : FILTER_GROUPS,
+);
 
 /** Map settings: the rail's foot button and the phone sheet's last tab. */
 export const SETTINGS = {

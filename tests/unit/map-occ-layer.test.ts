@@ -633,6 +633,28 @@ describe('occurrence layer', () => {
     expect(asked.filter((request) => request.z === level)).toHaveLength(18);
   });
 
+  it("gives each cell its share of a baseline's records, and leaves a tile unloaded without the baseline's", async () => {
+    let isBaselineDown = false;
+    vi.stubGlobal('fetch', async (url: string) => {
+      const isBaseline = new URL(url).searchParams.get('taxonKey') === '212';
+      if (isBaseline && isBaselineDown) return new Response(null, { status: 500 });
+      // The species has 1 record in the cell (GBIF's hex totals count twice), the baseline 4.
+      return new Response(mvt([{ ring: hexAt(2048, 2048), total: isBaseline ? 8 : 2 }]));
+    });
+    const map = fakeMap();
+    const { o } = callbacks({ taxonKey: 5 });
+    const layer = createOccLayer(map.map, { ...o, baseline: () => ({ taxonKey: 212 }) });
+    await settle();
+    const shares = layer.collection().features.map((feature) => (feature.properties as { share?: number }).share);
+    expect(shares.length).toBeGreaterThan(0);
+    expect(new Set(shares)).toEqual(new Set([0.25]));
+
+    isBaselineDown = true;
+    const unloaded = createOccLayer(fakeMap({ center: [100, 40] }).map, { ...o, baseline: () => ({ taxonKey: 212 }) });
+    await settle();
+    expect(unloaded.collection().features).toHaveLength(0);
+  });
+
   it('lets go of the map when destroyed', async () => {
     const asked = network(() => new ArrayBuffer(0));
     const map = fakeMap();

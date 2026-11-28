@@ -8,6 +8,9 @@ import { $activeFilterCount, FILTER_GROUPS } from '~/lib/filter-groups';
 import { zoomDrop } from '~/lib/map/occGrid';
 import { nearestRecords, type NearestRecords } from '~/lib/map/taxonView';
 import { binLabels, rampColors } from '~/lib/ramp';
+import { formatShare, SHARE_THRESHOLDS } from '~/lib/analyse/effort';
+import { $analyseGroup } from '~/stores/analyse';
+import { $mapBaseline } from '~/stores/map-filter';
 import { DEFAULT_VIEW, $mapView, $panel } from '~/stores/explorer';
 import { $groupCounts, $occurrenceFilter } from '~/stores/filters';
 import { $flyTo, $gridLevel, $mapLoad, $railOpen, $viewCheck } from '~/stores/map-messages';
@@ -24,8 +27,13 @@ const view = useStore($mapView);
 const filter = useStore($occurrenceFilter);
 const isNearMode = useStore($nearMode);
 const colors = ref<string[]>(rampColors());
-// Bins follow the hex grid level (cells cover more ground when zoomed out).
-const labels = computed(() => binLabels(level.value));
+const baseline = useStore($mapBaseline);
+const group = useStore($analyseGroup);
+/** Cells coloured by their share of the group's records (Migration adjusted for recording effort). */
+const isShare = computed(() => baseline.value !== null && group.value !== null);
+// Bins follow the hex grid level (cells cover more ground when zoomed out); shares have fixed bins.
+const labels = computed(() => (isShare.value ? ['0%', ...SHARE_THRESHOLDS.map(formatShare)] : binLabels(level.value)));
+const title = computed(() => (isShare.value ? `Share of ${group.value!.name} records` : 'Records per cell'));
 
 /** The nearest records once looked up; null when nothing matches anywhere. */
 const nearest = ref<NearestRecords | null>();
@@ -83,11 +91,11 @@ const nearestDistance = computed(() => {
   return `about ${(Math.round(distanceKm / 100) * 100).toLocaleString('en')} km`;
 });
 
-const ariaLabel = computed(() =>
-  isEmpty.value
-    ? 'No records per hexagon in this view'
-    : `Records per hexagon, on a logarithmic scale from ${labels.value[0]} to over ${labels.value[labels.value.length - 1]} at this zoom`,
-);
+const ariaLabel = computed(() => {
+  if (isEmpty.value) return 'No records per hexagon in this view';
+  const range = `on a logarithmic scale from ${labels.value[0]} to over ${labels.value[labels.value.length - 1]}`;
+  return isShare.value ? `${title.value} per hexagon, ${range}` : `Records per hexagon, ${range} at this zoom`;
+});
 
 /** Turn the globe to the nearest records, zoomed out to the whole globe so they're seen in context. */
 function flyToNearest() {
@@ -128,7 +136,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="map-legend" data-testid="map-legend">
     <div role="img" :aria-label="ariaLabel">
-      <p class="mb-1 text-xs font-medium text-muted">Records per cell</p>
+      <p class="mb-1 text-xs font-medium text-muted">{{ title }}</p>
       <SkeletonBlock v-if="isChecking" height="0.625rem" rounded="sm" />
       <div v-else class="flex h-2.5 overflow-hidden rounded-sm">
         <span

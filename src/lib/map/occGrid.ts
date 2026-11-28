@@ -29,6 +29,8 @@ export interface HexProps {
   total: number;
   /** The cell's centre is in the tile it came from: that tile's count is the one to trust (see mergeHexes). */
   home: boolean;
+  /** Its records' share of a baseline's records in the cell, when the map compares with one (occLayer `baseline`). */
+  share?: number;
 }
 export type Hex = GeoJSON.Feature<GeoJSON.Polygon, HexProps>;
 

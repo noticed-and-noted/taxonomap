@@ -7,7 +7,6 @@
  */
 import { useStore } from '@nanostores/vue';
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
-import BasemapSwitcher from '~/components/organisms/settings/BasemapSwitcher.vue';
 import InlineAlert from '~/components/molecules/InlineAlert.vue';
 import ResponsivePanel from '~/components/molecules/ResponsivePanel.vue';
 import HexRecords from '~/components/organisms/cell/HexRecords.vue';
@@ -33,12 +32,12 @@ import { $occurrenceFilter } from '~/stores/filters';
 import { $flyTo, $mapMode } from '~/stores/map-messages';
 import {
   $nearAt,
-  $nearLeaving,
+  $nearPanelOpen,
   $nearRadius,
   $nearTab,
   $nearThisMonth,
+  $nearTotal,
   DEFAULT_RADIUS_KM,
-  exitNearMode,
   setNearLocation,
   zoomForRadius,
 } from '~/stores/near';
@@ -53,13 +52,9 @@ const filter = useStore($occurrenceFilter);
 const MONTH = new Date().getMonth() + 1;
 const monthName = new Date().toLocaleString('en', { month: 'long' });
 
-const panelOpen = ref(true);
-/**
- * The basemap switcher starts tucked at the screen edge, where the map page's own switcher was, then slides out
- * beside the panel, so the top bar's pills slide along with it.
- */
-const hasSlidIn = ref(false);
-const startLeaving = () => $nearLeaving.set(true);
+const panelOpen = useStore($nearPanelOpen);
+const openPanel = () => $nearPanelOpen.set(true);
+const closePanel = () => $nearPanelOpen.set(false);
 const geoState = ref<'idle' | 'asking' | 'denied' | 'unavailable'>('idle');
 const { loading, error, run: runArea, cancel: cancelArea } = useLatestLoad();
 const total = ref(0);
@@ -130,6 +125,7 @@ async function loadArea() {
   species.value = [];
   group.value = null;
   if (!searchArea) {
+    $nearTotal.set(null);
     cancelArea();
     error.value = null;
     return;
@@ -138,6 +134,7 @@ async function loadArea() {
     const [summary, rows] = await Promise.all([classesNear(searchArea, signal), speciesNear(searchArea, null, signal)]);
     if (signal.aborted) return;
     total.value = summary.records;
+    $nearTotal.set(summary.records);
     classes.value = summary.classes;
     species.value = rows;
   });
@@ -177,8 +174,6 @@ watch(area, () => void loadArea(), { deep: true });
 watch([at, radius], flyToArea);
 
 onMounted(() => {
-  // Two frames, so the tucked position is drawn before it slides.
-  requestAnimationFrame(() => requestAnimationFrame(() => (hasSlidIn.value = true)));
   $mapMode.set('pin');
   void loadSpeciesManifest();
   flyToArea();
@@ -194,22 +189,6 @@ onBeforeUnmount(() => {
   <div class="near-explorer pointer-events-none absolute inset-0 z-10">
     <!-- Below the top row of pills, so a note never runs under the basemap switch; over the map, not the panel. -->
     <MapProgress class="absolute left-1/2 top-12 -translate-x-1/2" :class="{ 'beside-panel': panelOpen }" />
-    <button
-      v-if="!panelOpen"
-      type="button"
-      class="pointer-events-auto absolute left-3 top-3 rounded-full md:hidden border border-border bg-surface px-4 py-2 text-sm shadow-panel"
-      @click="panelOpen = true"
-    >
-      Show list
-    </button>
-
-    <!-- Basemap stays in near me; it slides with the panel when it's tucked away. -->
-    <div
-      class="near-bar pointer-events-none absolute right-3 top-3 *:pointer-events-auto"
-      :class="{ tucked: !panelOpen || !hasSlidIn }"
-    >
-      <div class="hidden sm:block"><BasemapSwitcher /></div>
-    </div>
 
     <div class="pointer-events-auto">
       <ResponsivePanel
@@ -217,11 +196,8 @@ onBeforeUnmount(() => {
         :open="panelOpen"
         collapsible
         tab-label="Near me"
-        dismissible="Leave near me"
-        @close="panelOpen = false"
-        @open="panelOpen = true"
-        @closing="startLeaving"
-        @dismiss="exitNearMode"
+        @close="closePanel"
+        @open="openPanel"
       >
         <!-- No location yet: explainer -->
         <section v-if="!at" class="space-y-4 text-sm">
@@ -352,16 +328,7 @@ onBeforeUnmount(() => {
     height: 75dvh;
   }
 }
-/* Desktop: beside the panel while it's open, at the screen edge once it's tucked away. */
 @media (min-width: 768px) {
-  .near-bar {
-    right: calc(var(--panel-width) + 1.5rem);
-    transition: transform var(--dur-slow) var(--ease);
-  }
-  /* The same distance SidePanel's .collapsed moves the panel, so they slide together. */
-  .near-bar.tucked {
-    transform: translateX(calc(var(--panel-width) + 0.75rem));
-  }
   /* Centred on the map left of the open panel, and narrow enough to clear the rail and the panel. */
   .beside-panel {
     left: calc((100% - var(--panel-width) - 0.75rem) / 2);

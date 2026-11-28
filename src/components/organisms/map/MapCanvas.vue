@@ -31,6 +31,8 @@ import {
   geometryOf,
   nearGeoJson,
   selectedGeoJson,
+  shareFillColor,
+  spreadFillColor,
   type MapColors,
 } from '~/lib/map/style';
 import type { ScreenBox } from '~/lib/tour';
@@ -43,7 +45,11 @@ import {
   sameView,
   $selectedHex,
 } from '~/stores/explorer';
-import { $occurrenceFilter } from '~/stores/filters';
+import { formatShare } from '~/lib/analyse/effort';
+import { $mapBaseline, $mapFilter } from '~/stores/map-filter';
+import { $spreadMap } from '~/stores/spread';
+import { $analyseGroup, $analyseYears, yearsIncluded } from '~/stores/analyse';
+import { $mode } from '~/stores/mode';
 import {
   $busiestHexBox,
   $busiestHexRequest,
@@ -109,7 +115,20 @@ const MIN_ZOOM = 1;
 
 /** Colour the hexes with the bins for this grid level. */
 function paintHexes(level = $gridLevel.get()) {
-  if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', fillColor(level));
+  // Compared with a baseline, cells are coloured by their share of its records rather than their own count.
+  const hexColour = $mapBaseline.get() ? shareFillColor() : fillColor(level);
+  if (map?.getLayer(HEX_LAYER)) map.setPaintProperty(HEX_LAYER, 'fill-color', hexColour);
+  if (map?.getLayer(SPREAD_LAYER)) map.setPaintProperty(SPREAD_LAYER, 'fill-color', spreadFillColor());
+}
+
+/** Analyse's spread cells. */
+const SPREAD_LAYER = 'spread-fill';
+
+/** Spread's cells in place of the occurrence hexes while Analyse's Spread view has them; the hexes otherwise. */
+function drawSpread(collection = $spreadMap.get()) {
+  setData('spread', collection ?? EMPTY);
+  if (map?.getLayer(HEX_LAYER)) map.setLayoutProperty(HEX_LAYER, 'visibility', collection ? 'none' : 'visible');
+  clearHover();
 }
 
 /** Cells arriving or leaving as you pan, sent to MapLibre's worker as one diff (no fade-in: that sent each cell twice). */
@@ -133,6 +152,7 @@ function syncOverlays() {
   paintHexes();
   setData('selected', selectedGeoJson($hexGeometry.get(), $recordPlace.get()));
   setData('near', nearData());
+  drawSpread();
   sizeRecordPlace();
 }
 
@@ -234,7 +254,7 @@ const hoverCounter = createHoverCounter((wkt, count) => {
 
 /** A cell whose exact count is known to be 0. */
 function knownEmpty(hex: Hex): boolean {
-  const filter = $occurrenceFilter.get();
+  const filter = $mapFilter.get();
   // Asked of every cell on every draw: skip building its WKT when no cell is known to be empty.
   if (!hasKnownEmpty(filter)) return false;
   const geometry = geometryOf(hex);
@@ -251,6 +271,10 @@ function onMove(event: MapMouseEvent) {
   // Pin mode: no cell hover, the cursor says a click drops the pin.
   // Dragging: the tooltip stays hidden until the drag ends (dragstart clears it).
   if ($mapMode.get() === 'pin' || map!.dragPan.isActive()) return;
+  if ($spreadMap.get()) {
+    showSpreadTip(event.point);
+    return;
+  }
   const feature = hexAt(event.point);
   const geometry = feature && geometryOf(feature);
   if (!geometry) {
@@ -264,8 +288,20 @@ function onMove(event: MapMouseEvent) {
       type: 'FeatureCollection',
       features: [{ type: 'Feature', properties: {}, geometry: feature.geometry }],
     });
+  const share = feature.properties.share;
+  const group = $analyseGroup.get();
+  if (share !== undefined && group) {
+    tooltip.value = {
+      x: event.point.x,
+      y: event.point.y,
+      text: `${formatShare(share)} of ${group.name} records`,
+      wkt: geometry.wkt,
+    };
+    map!.getCanvas().style.cursor = 'pointer';
+    return;
+  }
   // The tile's count is an estimate (~) until the exact one is known.
-  const filter = $occurrenceFilter.get();
+  const filter = $mapFilter.get();
   const exact = knownCount(filter, geometry.wkt);
   const text =
     exact === undefined ? records(geometry.tileTotal, `~${compact(geometry.tileTotal)}`) : records(exact, full(exact));
@@ -274,10 +310,30 @@ function onMove(event: MapMouseEvent) {
   map!.getCanvas().style.cursor = 'pointer';
 }
 
+/** Spread's tip: the year the cell under the pointer was first recorded. */
+function showSpreadTip(point: { x: number; y: number }) {
+  const cell = map!.queryRenderedFeatures([point.x, point.y], { layers: [SPREAD_LAYER] })[0];
+  const firstYear = Number(cell?.properties['firstYear']);
+  if (!cell || !Number.isFinite(firstYear)) {
+    tooltip.value = null;
+    map!.getCanvas().style.cursor = '';
+    return;
+  }
+  const [firstIncluded] = yearsIncluded($analyseYears.get());
+  const text = firstYear < firstIncluded ? `Recorded before ${firstIncluded}` : `First recorded in ${firstYear}`;
+  tooltip.value = { x: point.x, y: point.y, text, wkt: String(cell.properties['id']) };
+  map!.getCanvas().style.cursor = 'pointer';
+}
+
 function onClick(event: MapMouseEvent) {
   if (!map || offGlobe(event.point)) return;
   if ($mapMode.get() === 'pin') {
     setNearLocation(event.lngLat.lat, event.lngLat.lng);
+    return;
+  }
+  // Analyse has no cell panel: a click (a tap on phones) shows the cell's count, as hovering does.
+  if ($mode.get() === 'analyse') {
+    onMove(event);
     return;
   }
   selectAt(event.point, event.lngLat);
@@ -328,8 +384,12 @@ async function loadMapLibre(): Promise<MapLibre> {
 /** How the occurrence layer reads the filter and reports cells, level, progress and failure. */
 function occLayerOptions(): OccLayerOptions {
   return {
-    filter: () => $occurrenceFilter.get(),
-    listenFilter: (onChange) => $occurrenceFilter.listen(onChange),
+    filter: () => $mapFilter.get(),
+    baseline: () => $mapBaseline.get(),
+    listenFilter: (onChange) => {
+      const stops = [$mapFilter.listen(onChange), $mapBaseline.listen(onChange)];
+      return () => stops.forEach((stop) => stop());
+    },
     isEmpty: knownEmpty,
     onCells: replaceHexes,
     onChanges: changeHexes,
@@ -410,8 +470,9 @@ function listenToStores() {
   cleanups.push(
     $basemap.listen(() => void rebuildStyle()),
     $mapLoad.listen(onLoadChange),
-    // A new density ramp only repaints the hexes.
-    $ramp.listen(() => paintHexes()),
+    // A new density ramp, or comparing with a baseline or not, only repaints the hexes.
+    ...[$ramp, $mapBaseline].map((store) => store.listen(() => paintHexes())),
+    $spreadMap.listen((collection) => drawSpread(collection)),
     $mapView.listen((view) => {
       if (!map) return;
       const center = map.getCenter();
@@ -617,18 +678,83 @@ onBeforeUnmount(() => {
 
 <style>
 /* MapLibre's own DOM (controls, attribution), so unscoped. */
+/* Zoom and info match the app's floating buttons: 40px squares, --radius corners, the house stroke icons drawn in
+   the theme's text colours through a mask, 0.75rem in from the edge and 0.5rem apart. */
+.map-canvas .maplibregl-ctrl-bottom-right {
+  bottom: 0.25rem;
+}
+.map-canvas .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 0.75rem 0.5rem 0;
+}
+
 .map-canvas .maplibregl-ctrl-group {
-  background: var(--surface);
+  overflow: hidden;
   border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
-
+.map-canvas .maplibregl-ctrl-group button {
+  width: 2.5rem;
+  height: 2.5rem;
+}
 .map-canvas .maplibregl-ctrl-group button + button {
-  border-top-color: var(--border);
+  border-top: 1px solid var(--border);
+}
+/* The house focus ring, only for keyboard focus, in place of MapLibre's blue glow on every tap. */
+.map-canvas .maplibregl-ctrl-group button:focus,
+.map-canvas .maplibregl-ctrl-attrib-button:focus {
+  box-shadow: none;
+}
+.map-canvas .maplibregl-ctrl-group button:focus-visible,
+.map-canvas .maplibregl-ctrl-attrib-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.map-canvas .maplibregl-ctrl-group button:not(:disabled):hover {
+  background: var(--surface-2);
+}
+.map-canvas .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon,
+.map-canvas .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon {
+  background: var(--text);
+  mask: var(--control-icon) center / 1.125rem no-repeat;
+}
+.map-canvas .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M12 6v12M6 12h12'/%3E%3C/svg%3E");
+}
+.map-canvas .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon {
+  --control-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
 }
 
-:root:not([data-theme='light']) .map-canvas .maplibregl-ctrl-icon {
-  filter: invert(1) hue-rotate(180deg);
+/* The folded attribution is the info button: the same square, a stroke "i" in muted text. */
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact {
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button {
+  width: calc(2.5rem - 2px);
+  height: calc(2.5rem - 2px);
+  border-radius: calc(var(--radius) - 1px);
+  background: none;
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--text-muted);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M12 11v5M12 8h.01'/%3E%3C/svg%3E")
+    center / 1.125rem no-repeat;
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button:hover::before {
+  background: var(--text);
+}
+.map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  padding: 0.5rem 2.75rem 0.5rem 0.75rem;
 }
 
 .map-canvas .maplibregl-ctrl-attrib {
@@ -642,6 +768,17 @@ onBeforeUnmount(() => {
   .map-canvas
   .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
   z-index: 20;
+}
+
+/* Phones and tablets: the zoom and info buttons sit above the bottom row of buttons (ExplorerOverlay), info on top so
+   the zoom stays nearest the thumb. */
+@media (max-width: 999.98px) {
+  .app-shell:has(.phone-bottom-row) .map-canvas .maplibregl-ctrl-bottom-right {
+    bottom: 3.5rem;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+  }
 }
 
 .map-canvas .maplibregl-ctrl-attrib.maplibregl-compact-show {
